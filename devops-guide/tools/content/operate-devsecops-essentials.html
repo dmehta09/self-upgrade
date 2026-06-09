@@ -1,0 +1,141 @@
+<section class="hero reveal">
+  <span class="eyebrow">Operate · DevSecOps</span>
+  <h1>DevSecOps essentials.</h1>
+  <p class="lead">Security isn't a gate at the end — it's baked into the pipeline. <b>Scan early, store secrets safely, grant least privilege, and prove what you ship</b> — so vulnerabilities die in CI, not in a breach report.</p>
+</section>
+
+<section class="section reveal" id="shift-left">
+  <h2><span class="section-num">01</span> Shift-left security</h2>
+  <p class="takeaway">"Shift left" means moving security checks <b>earlier</b> — into the developer's PR and the CI run — instead of a security review the week before launch. The earlier a flaw is caught, the cheaper and safer it is to fix.</p>
+  <p>It's the same logic as CI testing: a vulnerable dependency flagged on the PR is a one-line bump; the same flaw found in prod is an incident, a patch scramble, and maybe a disclosure.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Shift-left is catching contraband at the <em>factory door</em>, not at the airport gate. Screening every part as it enters the assembly line is cheap and routine; discovering a smuggled bomb in a finished plane full of passengers is a catastrophe. Earlier is cheaper <em>and</em> safer.</p></div></div>
+
+  <div class="diagram"><div class="dg-title">Security gates along the pipeline</div>
+    <div class="flow">
+      <div class="flow-node"><div class="fn-k">CI</div><div class="fn-t">Scan</div><div class="fn-d">deps + image + IaC</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">gate</div><div class="fn-t">Block on critical</div><div class="fn-d">fail the build</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">sign</div><div class="fn-t">Signed artifact</div><div class="fn-d">cosign + SBOM</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">deploy</div><div class="fn-t">Verify + ship</div><div class="fn-d">only signed images</div></div>
+    </div>
+    <div class="cap">Scan in CI, block on critical CVEs, sign the artifact + emit an SBOM, then deploy only verified images.</div>
+  </div>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>Pipeline stage</th><th>Security control</th></tr></thead>
+    <tbody>
+      <tr><td>Code / PR</td><td>Secret scanning (block commits with keys); SAST on changed code.</td></tr>
+      <tr><td>Build (CI)</td><td>Dependency + image scan (Trivy/Grype); fail on critical CVEs.</td></tr>
+      <tr><td>Artifact</td><td>Generate an SBOM; sign the image (cosign); record provenance.</td></tr>
+      <tr><td>Deploy</td><td>Verify the signature; pin by digest; assume a least-privilege role via OIDC.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="section reveal" id="secrets">
+  <h2><span class="section-num">02</span> Secrets management</h2>
+  <p class="takeaway"><b>Secrets never belong in Git or in an image.</b> Store them in a vault — <b>AWS Secrets Manager</b> / SSM Parameter Store or HashiCorp <b>Vault</b> — and inject them at runtime. Better still: skip long-lived keys entirely with <b>short-lived credentials via OIDC</b>.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Anti-pattern</div>
+      <ul><li>AWS keys hardcoded in source.</li><li><code>.env</code> baked into the image layers.</li><li>Long-lived <code>AWS_SECRET_ACCESS_KEY</code> in CI.</li><li>Same static key, shared, never rotated.</li></ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Better</div>
+      <ul><li>Secrets in Secrets Manager / Vault.</li><li>Injected at runtime, never built in.</li><li>CI assumes an IAM role via <b>OIDC</b>.</li><li>Short-lived, auto-expiring, auto-rotated.</li></ul>
+    </div>
+  </div>
+
+  <p>Short-lived creds shrink the blast radius: an OIDC-issued token expires in minutes, so a leak is worthless within the hour. A static key is valid until a human remembers to rotate it — which is to say, often never.</p>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>A secret committed to Git <b>lives in history forever</b> — deleting it in the next commit does nothing; it's still in the log and every clone. <b>Rotate it immediately</b> (assume it's compromised), then purge history. Don't just <code>git rm</code> and hope.</p></div></div>
+</section>
+
+<section class="section reveal" id="least-privilege-scanning">
+  <h2><span class="section-num">03</span> Least privilege &amp; scanning</h2>
+  <p>Two foundations that limit damage: grant only the permissions actually needed, and let machines find known vulnerabilities for you — and <b>block</b> on the bad ones.</p>
+
+  <dl class="kv">
+    <dt>Least privilege</dt><dd>Every identity gets the minimum it needs — scoped <b>IAM</b> policies, <b>K8s RBAC</b> roles, one role per workload. A compromised component can only reach what its role allows.</dd>
+    <dt>Dependency / image scanning</dt><dd><b>Trivy</b>, <b>Grype</b>, and <code>npm audit</code> / <code>pip audit</code> match your packages and image layers against CVE databases.</dd>
+    <dt>Policy that blocks</dt><dd>Critical findings <b>fail the build</b>, not just print a warning. Lower severities can warn-and-track.</dd>
+  </dl>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">.github/workflows/scan.yml</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="yaml">- name: Scan image with Trivy
+  uses: aquasecurity/trivy-action@v0
+  with:
+    image-ref: myapp:${{ github.sha }}
+    severity: CRITICAL,HIGH
+    exit-code: "1"        # fail the build on a hit
+    ignore-unfixed: true  # don't block on CVEs with no patch yet</code></pre>
+  </div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>A scanner that only <b>warns and never blocks gets ignored</b> — the warnings scroll past in green builds and rot. If a finding can't fail the build, it isn't a control, it's noise. Pick a severity threshold that blocks, and tune false positives via an allowlist rather than disabling the gate.</p></div></div>
+</section>
+
+<section class="section reveal" id="supply-chain">
+  <h2><span class="section-num">04</span> Supply-chain security</h2>
+  <p class="takeaway">You don't just ship your code — you ship every dependency and base image too. Supply-chain controls answer "<b>what exactly is in this artifact, and can I prove it's the one we built?</b>"</p>
+
+  <dl class="kv">
+    <dt>SBOM</dt><dd><b>Software Bill of Materials</b> — a manifest of every component/version in the artifact (formats: <b>SPDX</b>, <b>CycloneDX</b>). When the next Log4j drops, you grep the SBOM instead of guessing.</dd>
+    <dt>Signing</dt><dd>Cryptographically sign artifacts (<b>Sigstore / cosign</b>) so deploy can verify "this image came from our pipeline, untampered."</dd>
+    <dt>Provenance (SLSA)</dt><dd>Tamper-evident proof of <em>how/where</em> an artifact was built — which commit, which builder.</dd>
+    <dt>Pin by digest</dt><dd>Reference images by immutable <code>@sha256:…</code> digest, not a moving tag like <code>latest</code>.</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>The <code>latest</code> tag is an <b>unpinned supply-chain risk</b>: it's mutable, so the bytes behind it can change under you — two deploys of "<code>latest</code>" can run different (or compromised) images, and rollback becomes guesswork. Pin by digest so what you tested is exactly what runs.</p></div></div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Why pin a base image by its <code>@sha256:</code> digest instead of the <code>latest</code> tag?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A digest is immutable, so the exact bytes you scanned and tested are guaranteed to be what deploys — builds are reproducible and tamper-evident.</button>
+      <button class="quiz-opt"><span class="mark"></span>Digests pull faster than tags from the registry.</button>
+      <button class="quiz-opt"><span class="mark"></span>The <code>latest</code> tag is deprecated and no longer supported by OCI registries.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> A tag is a movable pointer; a digest is a content hash. Pinning the digest means a poisoned upstream "latest" can't silently swap your base image, and a rebuild produces the same artifact.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Where do secrets belong, and why prefer short-lived credentials?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>In a secrets manager — <b>AWS Secrets Manager</b>/SSM or <b>Vault</b> — injected at runtime, <b>never</b> in Git or baked into an image. Prefer short-lived creds (OIDC-issued tokens, IAM role assumption) over long-lived keys because they auto-expire: a leaked token is worthless within minutes, while a static key stays valid until someone remembers to rotate it.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Secrets live in a vault, injected at runtime — never in Git or an image. And I'd rather hand out tokens that expire in minutes than keys that live forever and have to be rotated."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you secure a CI/CD pipeline?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Layer controls by stage: secret scanning on commits; dependency + image scans in CI that <b>block on critical CVEs</b>; no long-lived cloud keys — the pipeline assumes a least-privilege IAM role via <b>OIDC</b>; then generate an SBOM, sign the artifact (cosign), and deploy only verified, digest-pinned images. The theme is shift-left plus least privilege at every step.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Scan early and block on criticals, give the pipeline a scoped OIDC role instead of static keys, and sign what you ship so deploy only runs verified, digest-pinned images."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>What if a critical CVE has no fix yet? (Ignore-unfixed so it doesn't block forever, but track it and add a compensating control.)</li><li>How do you stop the pipeline itself from being the weak link? (Least-privilege runners, pinned action versions by SHA, protected branches and required reviews.)</li></ul></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What's an SBOM, and why sign artifacts?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>An <b>SBOM</b> (SPDX/CycloneDX) is an ingredient list of every component and version in an artifact — so when the next critical CVE drops, you query the SBOM to find what's affected instead of guessing. <b>Signing</b> (Sigstore/cosign) cryptographically proves the artifact came from your pipeline untampered; deploy verifies the signature so a swapped or poisoned image is rejected. Together with SLSA provenance, that's supply-chain integrity.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"An SBOM is the ingredient list — when the next Log4j hits I grep it instead of guessing. Signing proves the image is ours and untampered, so deploy only trusts what our pipeline actually built."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">A key leaked in a public repo — what limits the blast radius?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>First, <b>rotate/revoke it immediately</b> — assume it's already scraped (bots watch public GitHub in seconds). What limits the damage beforehand: <b>least privilege</b> (the key could only touch its narrow scope), <b>short-lived OIDC creds</b> (so there's no long-lived key to leak in the first place), and secret scanning that blocks the commit. Then purge the history and audit for misuse.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Rotate it now — assume it's already stolen. The real blast-radius limiter is upstream: least privilege so the key barely could do anything, and short-lived creds so there's no permanent key to leak at all."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

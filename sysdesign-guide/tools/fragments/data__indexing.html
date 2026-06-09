@@ -1,0 +1,87 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Data at scale · indexing</span>
+  <h1>Indexing.</h1>
+  <p class="lead">An index is a separate, sorted data structure that lets the database <em>jump</em> to the rows you want instead of scanning every one. It's the difference between flipping to a word in a book's index and reading the whole book. Indexes make reads fast — but each one slows writes and costs storage, so the skill is indexing exactly what you query and nothing more.</p>
+</section>
+
+<section class="section reveal" id="why">
+  <h2><span class="section-num">01</span> &nbsp;Full scan vs lookup</h2>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Finding every mention of "caching" in a 500-page book: without an index you read all 500 pages (a full table scan). With the index at the back, you flip to "caching → p. 142, 287" and go straight there. The book's index is sorted alphabetically so you can binary-search it — exactly what a database index does.</p>
+    </div>
+  </div>
+  <p>Without an index, <span class="mono">WHERE email = 'x'</span> on 100&nbsp;million rows reads all 100&nbsp;million. With an index on <span class="mono">email</span>, it's a handful of jumps — <strong>O(log n)</strong> instead of O(n).</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">index.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">-- Slow on a big table: scans every row
+SELECT * FROM users WHERE email = 'ada@x.com';
+
+-- Create an index once; lookups become ~O(log n)
+CREATE INDEX idx_users_email ON users(email);
+
+-- Composite index: order matters — this serves
+-- WHERE user_id = ? ORDER BY created_at DESC
+CREATE INDEX idx_posts_user_time ON posts(user_id, created_at);</code></pre></div>
+  </div>
+  <p>Because the index is kept <strong>sorted</strong>, a lookup is a binary search — halve the search space each step instead of scanning every row:</p>
+  <figure class="viz" data-viz aria-label="Index lookup via binary search">
+    <figcaption class="viz-title">An index lookup is a jump, not a scan</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "array",
+      "meta": { "values": [3,9,14,21,28,33,42,55] },
+      "frames": [
+        { "caption": "A sorted index of 8 keys. Find 33 — without reading all of them." },
+        { "pointers": [{"name":"lo","at":0},{"name":"hi","at":7}], "active": [3], "caption": "Jump to the middle (21). 33 > 21 → the answer must be to the right." },
+        { "pointers": [{"name":"lo","at":4},{"name":"hi","at":7}], "dim": [0,1,2,3], "active": [5], "caption": "Discard the left half. The middle of what's left is 33." },
+        { "dim": [0,1,2,3], "match": [5], "caption": "Found in 2 comparisons, not 8 — that's O(log n). On a billion rows it's ~30 steps, not a billion." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="how">
+  <h2><span class="section-num">02</span> &nbsp;How indexes work — B-trees &amp; friends</h2>
+  <div class="kv">
+    <dt>B-tree (the default)</dt><dd>A balanced, sorted tree. Great for equality <em>and</em> range queries (<span class="mono">&gt;</span>, <span class="mono">&lt;</span>, <span class="mono">BETWEEN</span>, <span class="mono">ORDER BY</span>). What most relational indexes use.</dd>
+    <dt>LSM-tree</dt><dd>The B-tree's write-optimised mirror image: buffer writes in memory, flush them to immutable sorted files, and merge those in the background (compaction). Turns random writes into fast sequential ones — the engine behind write-heavy stores like Cassandra, RocksDB &amp; LevelDB, at the cost of extra read and compaction work.</dd>
+    <dt>Hash index</dt><dd>O(1) equality lookups, but no ranges or ordering. Good for exact-match key-value access.</dd>
+    <dt>Composite index</dt><dd>An index on several columns, e.g. <span class="mono">(user_id, created_at)</span>. Works left-to-right — it helps queries filtering on <span class="mono">user_id</span> (optionally plus <span class="mono">created_at</span>), but not ones filtering only on <span class="mono">created_at</span>.</dd>
+    <dt>Covering index</dt><dd>Includes every column a query needs, so the DB answers from the index alone without touching the table — the fastest reads.</dd>
+    <dt>Inverted index</dt><dd>Maps each <em>term</em> → the documents containing it. The engine behind full-text search (Elasticsearch). See the <a href="../core/web-crawler.html">crawler</a> and search designs.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="cost">
+  <h2><span class="section-num">03</span> &nbsp;The cost of an index</h2>
+  <p>Indexes aren't free, and naming the cost is what separates a thoughtful answer from a reflexive "add an index":</p>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✍️</span><h4>Slower writes</h4><p>Every <span class="mono">INSERT</span>/<span class="mono">UPDATE</span>/<span class="mono">DELETE</span> must update every index on the table. Ten indexes = ten extra little writes per row change.</p></div>
+    <div class="card feature"><span class="f-ic fx">💾</span><h4>More storage</h4><p>Indexes can rival the table itself in size. On a write-heavy table, fewer, well-chosen indexes win.</p></div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Index for your queries, not your columns</div><p>Look at the actual <span class="mono">WHERE</span>, <span class="mono">JOIN</span>, and <span class="mono">ORDER BY</span> clauses you run, and index those. A composite index ordered to match your most common query often replaces several single-column ones.</p></div></div>
+  <div class="quiz" data-quiz>
+    <p class="q">You add an index on <span class="mono">(user_id, created_at)</span>. Which query does it <em>not</em> help much?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span><span class="mono">WHERE user_id = 7 ORDER BY created_at</span></button>
+      <button class="quiz-opt"><span class="mark"></span><span class="mono">WHERE user_id = 7</span></button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span><span class="mono">WHERE created_at &gt; '2026-01-01'</span> (no user_id)</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> a composite index is used left-to-right. Filtering only on the second column (<span class="mono">created_at</span>) can't use it efficiently — you'd want a separate index on <span class="mono">created_at</span>, or reorder the composite to match.</div>
+  </div>
+</section>

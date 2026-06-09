@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design a notification system | The System Design Field Guide</title>
+  <meta name="description" content="Multi-channel delivery (push/SMS/email) with queues, fan-out, retries, and idempotency." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="core" data-page="core-notification" data-lesson="core-notification">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Core designs</span><span class="sep">/</span><span class="current">Design a notification system</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Core · notifications</span>
+  <h1>Design a notification system.</h1>
+  <p class="lead">A shared pipe that takes "notify user X about Y" and reliably delivers it across push, SMS, email, and in-app — fast, deduplicated, and without each team rebuilding queues and retries. It's a masterclass in asynchronous, decoupled design, and the two ideas that separate a real answer from a toy are the <strong>transactional outbox</strong> (so a notification is never silently lost) and the fact that <strong>SMS throughput is carrier-gated</strong>, not yours to scale.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Accept a request from any service; resolve template + user preferences/opt-outs; deliver via the right channel(s); expose delivery status (provider webhooks).</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>High throughput with spiky load (a blast = millions at once), at-least-once delivery with retries, <strong>no duplicates</strong>, and one slow channel must not block the others.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="estimate">
+  <h2><span class="section-num">02</span> &nbsp;Capacity estimation</h2>
+  <p>Model a 10M-user blast you want drained in an hour, fanning out push + email:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Ingest rate</td><td>10M ÷ 3,600 s, peak 3–5×</td><td>~2,800/s avg → size ingest for <strong>~10–14k/s</strong></td></tr>
+        <tr><td>Channel fan-out</td><td>push + email per user</td><td>10M recipients → <strong>~20M channel sends</strong></td></tr>
+        <tr><td>Push ceiling (FCM)</td><td>600,000 msg/min per project</td><td>= <strong>10k/s</strong> — fine for the blast</td></tr>
+        <tr><td>SMS ceiling (A2P 10DLC)</td><td>best registered brand ≈ 225 MPS</td><td>10M ÷ 225 ≈ <strong>~12.3 hours</strong> (long code: ~116 days!)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The headline: <strong>SMS is the bottleneck, and it's carrier-gated</strong> — you physically cannot blast 10M SMS in an hour through one brand. SMS campaigns are planned over hours/days; the queue absorbs the rest. Your queues are never the limit — the providers are.</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">03</span> &nbsp;API</h2>
+  <p>Accept fast (<span class="mono">202</span>), do all real work async behind queues:</p>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/v1/notifications</span><span class="ep-note">Idempotency-Key: … · { user_id, template_id, data, channels?, priority } → 202 { id, status:queued }</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/v1/notifications/{id}</span><span class="ep-note">→ per-channel delivery status (updated by provider webhooks)</span></div>
+  <div class="endpoint"><span class="verb post">PUT</span><span class="path">/v1/users/{id}/preferences</span><span class="ep-note">per-category × per-channel matrix + quiet hours + frequency caps</span></div>
+  <p>Templates are versioned and server-side, rendered <em>after</em> preference resolution into channel-specific variants (short SMS vs rich HTML email vs push title/body). Providers push state transitions (sent → delivered → opened, bounces) via webhooks into the audit log.</p>
+</section>
+
+<section class="section reveal" id="model">
+  <h2><span class="section-num">04</span> &nbsp;Data model</h2>
+  <div class="kv">
+    <dt><span class="mono">notification</span></dt><dd>id, user_id, template_id, priority, payload, status, dedup_key.</dd>
+    <dt><span class="mono">outbox</span></dt><dd>id, event, payload, published_at — written in the <em>same transaction</em> as the notification (see §6).</dd>
+    <dt><span class="mono">delivery_attempt</span></dt><dd>append-only audit log: notification_id, channel, provider, provider_msg_id, status, error_code, attempt_no — keyed to <span class="mono">provider_msg_id</span> so webhooks reconcile.</dd>
+    <dt><span class="mono">user_preference</span> / <span class="mono">device_token</span></dt><dd>per-category/channel opt-in + quiet hours; push tokens per (user, platform), pruned on invalid-token feedback.</dd>
+    <dt><span class="mono">dedup_keys</span></dt><dd>unique key + TTL — the idempotency backstop (§6).</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="architecture">
+  <h2><span class="section-num">05</span> &nbsp;Queues all the way down</h2>
+  <p>A thin API persists + enqueues; a router resolves preferences/templates and fans out to <strong>per-channel queues</strong> (with priority sub-lanes); channel workers call the providers. Per-channel isolation matters because providers have wildly different ceilings — a shared queue lets the slowest (SMS) head-of-line-block the fastest (push).</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Event → outbox → router → per-channel workers</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Event → queue → channel workers",
+      "nodes": [
+        { "id": "svc", "label": "Source service", "type": "producer", "col": 0, "row": 1 },
+        { "id": "api", "label": "Notif API + outbox", "type": "validate", "col": 1, "row": 1 },
+        { "id": "q", "label": "Router → per-channel Q", "type": "buffer", "col": 2, "row": 1 },
+        { "id": "push", "label": "Push worker", "type": "APNs/FCM", "col": 3, "row": 0 },
+        { "id": "sms", "label": "SMS worker", "type": "Twilio", "col": 3, "row": 1 },
+        { "id": "email", "label": "Email worker", "type": "SES", "col": 3, "row": 2 }
+      ],
+      "edges": [
+        { "from": "svc", "to": "api", "label": "notify(X, Y)" },
+        { "from": "api", "to": "q" },
+        { "from": "q", "to": "push" },
+        { "from": "q", "to": "sms" },
+        { "from": "q", "to": "email" }
+      ],
+      "steps": [
+        { "edge": ["svc","api"], "caption": "A service asks: notify user X about event Y." },
+        { "node": "api", "caption": "Persist notification + outbox row in ONE transaction; return 202 instantly." },
+        { "edge": ["api","q"], "caption": "A relay publishes the outbox row; the router resolves preferences/template and fans out per channel." },
+        { "edge": ["q","push"], "caption": "A push worker consumes and calls APNs/FCM (idempotency-keyed)." },
+        { "edge": ["q","email"], "caption": "Email handled in parallel — a slow provider only backs up its own queue.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="reliability">
+  <h2><span class="section-num">06</span> &nbsp;Reliability: idempotency, retries &amp; the outbox</h2>
+  <p>Delivery is <strong>at-least-once, never exactly-once</strong> (impossible across a network — the two-generals problem). So make the consumer idempotent: <strong>claim a dedup key before calling the provider</strong>, with a TTL bounding the window.</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">idempotent_send.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">-- Atomically claim the dedup key; only the first caller proceeds.
+INSERT INTO dedup_keys (dedup_key, notification_id, created_at)
+VALUES ($1, $2, now())
+ON CONFLICT (dedup_key) DO NOTHING
+RETURNING notification_id;
+-- 1 row  -> first time: call the provider, then record provider_msg_id
+-- 0 rows -> duplicate: skip the provider call (already sent / in flight)
+
+-- Redis equivalent: SET dedup:&lt;key&gt; &lt;id&gt; NX EX &lt;ttl&gt;   (false = duplicate)</code></pre></div>
+  </div>
+  <div class="kv">
+    <dt>Retries with backoff + jitter</dt><dd>Retry only retryable errors (5xx, 429, timeouts) — never 4xx. Honor <span class="mono">Retry-After</span>; ~5–8 attempts over ~20 min with jitter (so retries don't synchronize), then drop to a DLQ. FCM's own rule: drop after ~60 min.</dd>
+    <dt>Dead-letter queue</dt><dd>Exhausted messages move to a per-channel DLQ for inspection/redrive — a poison message can't block the live queue.</dd>
+    <dt>Transactional outbox</dt><dd>"Write DB, then publish to queue" is a <strong>dual write</strong>: a crash between them loses a notification or orphans a message. Fix: commit the business row <em>and</em> an <span class="mono">outbox</span> row in one local transaction, then a relay (poller or Debezium CDC) publishes it. The relay is still at-least-once → loops back to needing idempotent consumers.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="channels">
+  <h2><span class="section-num">07</span> &nbsp;Per-channel concerns &amp; prioritization</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">📲</span><h4>Push (APNs/FCM)</h4><p>Tokens rotate — prune on invalid-token feedback. APNs payload ≤4 KB over persistent HTTP/2. FCM per-device throttle: 240/min, 5,000/hr.</p></div>
+    <div class="card feature"><span class="f-ic fx">✉️</span><h4>Email deliverability</h4><p>Authenticate with SPF + DKIM (+ DMARC). <strong>Bounce/complaint handling is reputation-critical</strong>: SES reviews at ≥5% bounce / ≥0.1% complaint and may pause sending — process bounce webhooks and suppress immediately.</p></div>
+    <div class="card feature"><span class="f-ic fx">💬</span><h4>SMS (A2P 10DLC)</h4><p>Carrier-gated MPS + mandatory brand/campaign registration in the US; dominant per-message cost. Honor STOP opt-out at the platform level.</p></div>
+    <div class="card feature"><span class="f-ic fx">⚡</span><h4>Priority &amp; quiet hours</h4><p>OTP/2FA → dedicated urgent lane, bypass batching + quiet hours. Marketing/digest → bulk lane, throttled, quiet-hours-aware. Per-user frequency caps fight notification fatigue.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">08</span> &nbsp;Failure, multi-region, observability &amp; cost</h2>
+  <div class="kv">
+    <dt>Failure modes</dt><dd>Provider outage → a <strong>secondary provider per channel</strong> + circuit breaker (push is harder — APNs/FCM are sole upstreams, so degrade gracefully). Backlog → monitor consumer lag, shed/queue marketing to protect transactional.</dd>
+    <dt>Multi-region</dt><dd>Route via in-region provider endpoints; keep PII (phone, email, body) in the user's home region for data residency, replicating only non-PII metadata.</dd>
+    <dt>Observability</dt><dd>Funnel rates (accepted→sent→delivered→opened) and failure rate per channel/provider; queue depth + consumer lag; <strong>DLQ depth, arrival rate, oldest-message age</strong>. Alert on error-budget burn: DLQ arrival &gt;1% of main volume, or oldest DLQ message &gt;5× SLO → page.</dd>
+    <dt>Cost</dt><dd>SMS dominates by ~100×: 10M emails on SES ≈ <strong>$1,000</strong>; 10M SMS ≈ <strong>$128,000</strong> (~$0.013 each incl. carrier). Push is effectively free. Prefer push/email/in-app for bulk; reserve SMS for high-value transactional.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">09</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why give each channel (push/SMS/email) its own queue and worker pool rather than one shared pipeline?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>It looks more complex, which impresses interviewers</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>So one slow or rate-limited provider only backs up its own channel instead of head-of-line-blocking the others</button>
+      <button class="quiz-opt"><span class="mark"></span>Because each channel needs a different programming language</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> providers have very different ceilings (SES thousands/s vs SMS ~hundreds/s). Isolating channels means a slow SMS provider can't stall push, and you scale + rate-limit each channel independently.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"Thin API returns 202 and writes the notification + an outbox row in one transaction, so a crash never loses it. A relay publishes to per-channel queues with priority lanes; workers are idempotent — they claim a dedup key before calling the provider, so at-least-once + idempotency gives effectively-once. Retries use backoff + jitter into a DLQ. The real constraint isn't my system, it's SMS: carrier-gated MPS means blasts span hours, and SMS costs ~100× email, so I route bulk to push/email and reserve SMS for OTP and critical alerts."</p></div></div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../core/web-crawler.html"><span class="pn-k">‹ Back</span><span class="pn-t">Design a web crawler</span></a>
+            <a class="next" href="../core/news-feed.html"><span class="pn-k">Next ›</span><span class="pn-t">Design a news feed (Twitter)</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements & scale</a>
+          <a href="#estimate">Capacity estimation</a>
+          <a href="#api">API</a>
+          <a href="#model">Data model</a>
+          <a href="#architecture">Queues all the way down</a>
+          <a href="#reliability">Reliability: idempotency, retries & the outbox</a>
+          <a href="#channels">Per-channel concerns & prioritization</a>
+          <a href="#ops">Failure, multi-region, observability & cost</a>
+          <a href="#recap">Trade-offs & interview recap</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Core designs · Design a notification system</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+</body>
+</html>

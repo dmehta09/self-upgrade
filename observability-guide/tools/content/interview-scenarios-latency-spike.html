@@ -1,0 +1,146 @@
+<section class="hero reveal">
+  <span class="eyebrow">Scenario &middot; latency</span>
+  <h1>Scenario: p99 latency spike.</h1>
+  <p class="lead">Your multi-burn-rate alert fires at 2 a.m. p99 for <code>POST /checkout</code> has crossed the SLO threshold. Walk through the investigation exactly as you'd narrate it in an interview.</p>
+</section>
+
+<section class="section reveal" id="situation">
+  <h2><span class="section-num">01</span> The situation</h2>
+  <p class="takeaway"><b>SLO:</b> p99 latency &le; 500 ms for <code>POST /checkout</code>. The alert fired at a 14.4× burn rate on the 1-hour window.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>14.4× burn rate means at the current rate you'd exhaust the entire 30-day error budget in one hour. It's the equivalent of a fire alarm — something is badly wrong and users are experiencing it right now.</p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>SLO</dt><dd>99.9% of <code>POST /checkout</code> requests complete within 500 ms</dd>
+    <dt>Burn rate</dt><dd>14.4× — the threshold that triggers an immediate page</dd>
+    <dt>Time window</dt><dd>1-hour fast window + 6-hour slow window both elevated (multi-window alert)</dd>
+    <dt>First question</dt><dd>Is the user actually impacted? Check the RED dashboard before digging further.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="investigation">
+  <h2><span class="section-num">02</span> Step-by-step investigation</h2>
+
+  <div class="steps">
+    <div class="step">
+      <span class="step-num">1</span>
+      <div class="step-body">
+        <h4>Confirm impact on the RED dashboard</h4>
+        <p>Open the Grafana RED panel for the checkout service. p99 latency is sitting at ~2 400 ms — nearly 5× the SLO threshold. Error rate is normal. Traffic is normal. This is a pure latency problem, not errors.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="step-num">2</span>
+      <div class="step-body">
+        <h4>Click the exemplar — jump to the slow trace</h4>
+        <p>The latency histogram panel shows a cluster of exemplar dots at ~2 400 ms. Click one. Grafana opens the correlated trace in Tempo. The trace waterfall appears below.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="step-num">3</span>
+      <div class="step-body">
+        <h4>Read the trace waterfall — find the critical path</h4>
+        <p>The gateway span is 2 350 ms end-to-end. Expanding it: a Redis cache read completes in 12 ms (not the issue); the <code>createOrder</code> span runs 2 310 ms; inside it, <code>INSERT orders</code> (Postgres) takes 2 100 ms and sits on the critical path. The DB write is the smoking gun.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="step-num">4</span>
+      <div class="step-body">
+        <h4>Jump to logs — confirm the DB hypothesis</h4>
+        <p>From the slow span, click "View logs" (Tempo &rarr; Loki, filtered by <code>trace_id</code>). The log line reads: <code>{"event": "db_query_slow", "table": "orders", "duration_ms": 2089, "query_type": "INSERT", "plan": "sequential_scan"}</code>. The orders table is doing a sequential scan — a missing index.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="step-num">5</span>
+      <div class="step-body">
+        <h4>Fix — add index; watch SLO recover</h4>
+        <p>A concurrent index creation runs against the orders table. p99 drops to 180 ms within minutes. The burn rate falls back below 1×. Error budget starts recovering.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="trace">
+  <h2><span class="section-num">03</span> The smoking-gun trace</h2>
+  <p>This is the trace that the exemplar linked to. The <code>INSERT orders</code> span is on the critical path — it directly determines the end-to-end latency of the checkout request.</p>
+
+  <figure class="viz tracewf" data-tracewf>
+    <figcaption class="viz-title">POST /checkout — 2 350 ms (p99 during incident)</figcaption>
+    <script type="application/json" class="twf-config">
+    { "title":"POST /checkout — 2 350 ms end-to-end", "scaleMs":2350, "legend":true,
+      "caption":"The INSERT orders span dominates — sequential scan on orders table. It's on the critical path.",
+      "spans":[
+        {"service":"gateway","name":"POST /checkout","t":[0,2350],"kind":"server","depth":0,"critical":true},
+        {"service":"redis","name":"GET cart:session","t":[5,17],"kind":"cache","depth":1},
+        {"service":"orders","name":"createOrder","t":[20,2330],"kind":"http","depth":1,"critical":true},
+        {"service":"postgres","name":"INSERT orders (seq scan)","t":[40,2140],"kind":"db","depth":2,"critical":true},
+        {"service":"postgres","name":"UPDATE inventory","t":[2145,2310],"kind":"db","depth":2,"critical":true},
+        {"service":"email","name":"sendConfirmation","t":[2315,2345],"kind":"http","depth":1}
+      ] }
+    </script>
+    <p class="viz-fallback">Trace waterfall: gateway span (2 350 ms) contains a Redis cache read (12 ms, parallel), a createOrder call (2 310 ms, critical path), inside which an INSERT orders span takes 2 100 ms due to a sequential scan — this is the root cause. An inventory UPDATE and email confirmation follow but are not the bottleneck.</p>
+  </figure>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+      <p>The average latency looked fine for most of the day — ~220 ms. Averages hid the slow tail. Only p99 revealed that 1% of checkouts were taking 2+ seconds. <strong>Always alert on percentiles, never on mean.</strong></p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="narration">
+  <h2><span class="section-num">04</span> How to narrate this in an interview</h2>
+  <p>Use the STAR structure. Keep it under 3 minutes — the interviewer will probe deeper where they want detail.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>STAR</th><th>What to say</th></tr></thead>
+      <tbody>
+        <tr><td><strong>S</strong>ituation</td><td>"Our checkout p99 SLO is 500 ms. A 14× multi-burn alert fired at 2 a.m."</td></tr>
+        <tr><td><strong>T</strong>ask</td><td>"Confirm user impact, find the root cause, resolve before the budget was exhausted."</td></tr>
+        <tr><td><strong>A</strong>ction</td><td>"RED dashboard confirmed high p99 only — no error spike. Exemplar jumped me to the slow trace. Waterfall showed INSERT orders on the critical path at 2 100 ms. Loki logs for that trace_id showed a sequential scan. Added a concurrent index."</td></tr>
+        <tr><td><strong>R</strong>esult</td><td>"p99 dropped to 180 ms within 5 minutes. Burn rate fell below 1×. Budget recovered."</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">The Redis cache span in the trace takes 12 ms. Should you optimize it to fix the p99?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Yes — every millisecond saved on the critical path helps.</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>No — the Redis span runs in parallel and is not on the critical path. Only the DB span matters.</button>
+      <button class="quiz-opt"><span class="mark"></span>Maybe — it depends on the scrape interval.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> The critical path is the longest sequential chain. Redis runs in parallel with the createOrder flow, so optimizing it changes nothing about the 2 350 ms end-to-end time. Fix the DB span — that's what's on the critical path.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How did you get from the metric to the trace without manual searching?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Via a histogram exemplar — a data point on the histogram that carries a <code>trace_id</code> from a real request in that latency bucket. Clicking it in Grafana opens the exact trace in Tempo. This is the key integration between the metrics layer and the traces layer, and it's why you instrument histograms with exemplars in production.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"The histogram had an exemplar — a data point with a trace_id embedded in it. I clicked it and Grafana jumped me directly to the slow trace in Tempo. Zero manual correlation."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What would you have done if the trace had no obvious slow span?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>First, check if the slow time is between spans (network overhead or serialization), not within a single span. Second, look for missing spans — a service that wasn't instrumented. Third, aggregate: use TraceQL in Tempo to query all traces in the spike window where total duration &gt; 1 s and group by service — you might see a pattern that a single trace hides. Finally, check infra metrics (CPU, network I/O) alongside the trace window.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"I'd look at gaps between spans first — those are network time. Then I'd run a TraceQL query to find all slow traces in the window and group by service. Maybe one service is slow across all of them."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

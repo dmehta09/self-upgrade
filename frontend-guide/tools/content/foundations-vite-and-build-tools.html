@@ -1,0 +1,142 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Foundations &middot; tooling</span>
+            <h1>Vite &amp; the build toolchain</h1>
+            <p class="lead">Vite gives you a near-instant dev server and a lean production build &mdash; two different machines wearing one CLI. Knowing what each does (and when Vite isn&rsquo;t the right tool) is table stakes for a pro.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">Dev and build are <b>two pipelines</b>. Dev serves <b>native ESM</b> on demand; build emits an <b>optimized bundle</b>. Vite 8 ships <b>Rolldown</b> as its bundler.</p>
+            <p>In development, the browser&rsquo;s own ES-module support means Vite only transforms files you actually request &mdash; so startup doesn&rsquo;t scale with app size. For production it bundles, tree-shakes, and minifies into a handful of cache-friendly files.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>The dev server is a made-to-order kitchen &mdash; it cooks only the dish you order, the moment you order it, so service starts instantly. The build is a mass-production line &mdash; slower to set up, but it packages everything for shipping at scale. Same restaurant, two very different machines.</p>
+              </div>
+            </div>
+
+            <div class="diagram"><div class="dg-title">One CLI, two pipelines</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">dev</div><div class="fn-t">Native ESM</div><div class="fn-d">browser imports modules; no bundling</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">edit</div><div class="fn-t">HMR</div><div class="fn-d">swap one module, keep state</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">build</div><div class="fn-t">Rolldown bundle</div><div class="fn-d">tree-shake, minify, hash, split</div></div>
+              </div>
+            </div>
+
+            <dl class="kv">
+              <dt>Dev server</dt><dd>Serves source over <b>native ESM</b>; transforms on request via <b>esbuild</b>; <b>HMR</b> hot-swaps a changed module without a full reload.</dd>
+              <dt>Production build</dt><dd>Bundles with <b>Rolldown</b> (the Rust bundler that&rsquo;s default in Vite 8): tree-shaking, code-splitting, minification, content hashes.</dd>
+              <dt>Transforms</dt><dd><b>esbuild</b> (Go) and <b>SWC</b> (Rust) do the fast TS/JSX-to-JS work in place of a slower JS-based transpiler.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="config">
+            <h2><span class="section-num">01</span> A minimal setup</h2>
+            <p>A React + Vite config is tiny &mdash; one plugin. The CLI is three commands you&rsquo;ll use daily. Package managers (pnpm, bun) just install and run; the build tool is Vite.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">vite.config.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()], // JSX/Fast Refresh; uses Rolldown to build
+});</code></pre>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="bash"># scaffold, then the three you live in
+pnpm create vite my-app --template react-ts
+pnpm dev      # native-ESM dev server + HMR
+pnpm build    # Rolldown production bundle → dist/</code></pre>
+            </div>
+          </section>
+
+          <section class="section reveal" id="vite-vs-next">
+            <h2><span class="section-num">02</span> Vite or Next.js?</h2>
+            <p>This is the real interview fork. Vite is a <b>build tool</b> for client apps and libraries; Next.js is a <b>full-stack framework</b> with routing, SSR, and React Server Components. Pick by what the app needs &mdash; not by habit.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Need</th><th>Reach for</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Client-only SPA</strong> (dashboard, internal tool)</td><td>Vite + React Router</td></tr>
+                  <tr><td><strong>Publishing a component library</strong></td><td>Vite (library mode)</td></tr>
+                  <tr><td><strong>SSR / SSG / RSC, file-based routing</strong></td><td>Next.js (App Router)</td></tr>
+                  <tr><td><strong>SEO pages, server data, edge/server functions</strong></td><td>Next.js</td></tr>
+                  <tr><td><strong>Fastest possible dev startup, full control</strong></td><td>Vite</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>Next.js has its own bundler, <b>Turbopack</b> (now stable and the default for <code>next dev</code> and <code>next build</code>). Vite&rsquo;s equivalent is Rolldown. Both replace older JS bundlers with Rust for speed.</p>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>Vite is a <b>build tool</b>, not a server framework. Out of the box it produces a static client bundle &mdash; there&rsquo;s no built-in SSR rendering layer or React Server Components. If you need server rendering, RSC, or file-based server routing, that&rsquo;s a job for Next.js, not raw Vite.</p>
+              </div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">You&rsquo;re building a public marketing site that needs server-side rendering for SEO and React Server Components. Which tool fits?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Next.js &mdash; it provides SSR, RSC, and file-based routing out of the box.</button>
+                <button class="quiz-opt"><span class="mark"></span>Vite &mdash; it ships an SSR + RSC framework by default.</button>
+                <button class="quiz-opt"><span class="mark"></span>Either; they&rsquo;re the same kind of tool.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> SSR and RSC are framework features. Next.js gives them out of the box; Vite is a build tool that produces a client bundle, so you&rsquo;d be assembling a server framework yourself.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Vite vs Next.js &mdash; when do you pick which?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Vite for client-side SPAs and libraries where I want a fast, minimal build tool and full control over routing. Next.js when I need server rendering, RSC, file-based routing, or server data &mdash; it&rsquo;s a full-stack framework, not just a bundler. The deciding question is &ldquo;do I need a server?&rdquo;</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Vite is a build tool for SPAs and libraries; Next is a full-stack framework with SSR and RSC. If I need a server, I reach for Next.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What does Vite do differently in dev vs build?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>In dev it skips bundling: it serves source over native ES modules and only transforms files the browser requests, with HMR for instant updates &mdash; so startup doesn&rsquo;t grow with app size. For production it bundles with Rolldown: tree-shaking, code-splitting, minification, and hashed filenames for caching.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Dev serves native ESM on demand with HMR &mdash; no bundling, instant startup. Build bundles everything with Rolldown for an optimized, cache-friendly output.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is Rolldown, and why does it matter?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Rolldown is Vite&rsquo;s Rust-based bundler, the default in Vite 8. It replaces the older Rollup/esbuild split for production with a single fast, Rollup-compatible bundler &mdash; so big apps build noticeably faster while keeping the plugin ecosystem. It&rsquo;s Vite&rsquo;s answer to Next&rsquo;s Turbopack.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Rolldown is Vite 8&rsquo;s default Rust bundler &mdash; Rollup-compatible but much faster for production builds. Think of it as Vite&rsquo;s Turbopack.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="typescript-for-react.html"><span class="pn-k">Previous</span><span class="pn-t">TypeScript for React</span></a>
+            <a class="next" href="../react/index.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">React &mdash; the pro mental model</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#config">A minimal setup</a>
+          <a href="#vite-vs-next">Vite or Next.js?</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

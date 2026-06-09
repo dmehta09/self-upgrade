@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced case — Ride-hailing match | The Design Field Guide</title>
+  <meta name="description" content="Designing a ride-hailing matcher in Python — a geospatial grid index for fast nearby-driver lookup, a pluggable matching Strategy, and atomic driver assignment to avoid double-booking a driver." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="adv" data-page="adv-ride-hailing" data-lesson="adv-ride-hailing">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../advanced/index.html" style="color:var(--accent)">Advanced</a><span class="sep">/</span><span class="current">Ride-hailing</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Advanced case · capstone</span>
+            <h1>Case study: ride-hailing matching.</h1>
+            <p class="lead">A rider taps "find me a ride." We need the <em>nearest free driver</em>, fast — even with thousands of drivers on the map. That's three problems at once: find candidates quickly (a <strong>geospatial grid index</strong>), pick one by a swappable rule (a matching <strong>Strategy</strong>), and assign them <strong>atomically</strong> so no driver gets handed to two riders. This is the capstone — it pulls together Strategy, the grid, and the concurrency from the earlier cases.</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Step 1 — Requirements &amp; assumptions</h2>
+            <p>Drivers move around the map and report a live <code>(x, y)</code> position. A rider requests a ride at some location, and we must <strong>match the nearest available driver</strong> — fast, even when there are many drivers — and <strong>never assign one driver to two riders</strong>.</p>
+            <p><strong>Clarifying questions I'd ask:</strong> What scale — hundreds of drivers, or millions across a city? Do we match on raw <em>distance</em> or on <em>ETA</em> (which respects roads and traffic)? Is there <em>surge</em> pricing that should bias the match? How do driver positions reach us — a stream of updates, or do we read them on demand?</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Assumptions, so the core is clear</div><p>We work on a <strong>flat 2-D plane with simple coordinates</strong> instead of real lat/long — straight-line distance, no map projection. Everything is <strong>in-memory</strong> in <strong>one process</strong>. Driver <strong>positions are passed in</strong> (we don't model the GPS pipeline). Those simplifications let the design's three ideas — grid, strategy, atomic assignment — stand on their own.</p></div></div>
+            <div class="grid grid-2">
+              <div class="card"><h4>In scope</h4><p>A grid index for fast "who's near here?" lookup, a pluggable matching strategy (nearest first), and a dispatcher that claims a driver atomically so two riders can't grab the same one.</p></div>
+              <div class="card"><h4>Out of scope</h4><p>Real road networks and ETA routing, surge pricing, the GPS ingestion pipeline, persistence across restarts, multi-process sharding, and payments — all noted as extensions, not built here.</p></div>
+            </div>
+          </section>
+
+          <!-- 2. THE GRID -->
+          <section class="section reveal" id="grid">
+            <h2><span class="section-num">02</span> &nbsp;Step 2 — The geospatial grid index</h2>
+            <p>The naive answer to "who's near <code>(x, y)</code>?" is to measure the distance to <em>every</em> driver and keep the closest. That's <strong>O(n)</strong> per request — fine for ten drivers, hopeless when thousands of riders each scan thousands of drivers every second.</p>
+            <p>A <strong>grid index</strong> fixes this. Carve the plane into square <em>cells</em> of a fixed size and bucket each driver into the cell their position falls in. Now "who's near <code>(x, y)</code>?" only has to look at the rider's own cell <strong>plus its 8 neighbours</strong> — the closest driver can't be hiding more than one cell away if the cell is sized to your search radius. Instead of scanning <code>n</code> drivers you inspect a handful, so nearby lookup becomes roughly <strong>O(1)</strong>.</p>
+            <div class="kv">
+              <dt>Cell size</dt><dd>The width of each square. Bigger cells mean fewer, fatter buckets (more drivers to check per cell); smaller cells mean more, thinner buckets. Tune it to the typical search radius.</dd>
+              <dt>The bucket map</dt><dd>A <code>dict</code> from <code>(cx, cy)</code> cell coordinates to the set of drivers in that cell. Empty cells simply don't appear — no wasted space for the empty map.</dd>
+              <dt>The 9-cell scan</dt><dd>Given a query point, compute its cell, then gather drivers from that cell and the eight around it. Anything truly nearby is guaranteed to live in one of those nine.</dd>
+            </div>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A city divided into blocks <span class="tag">analogy</span></div><p>Think of the map as a city laid out in blocks. To hail a nearby cab you don't survey the whole city — you look down your own block and the ones touching it. The grid is exactly that: the cell is your block, the 8 neighbours are the blocks next door, and everything beyond is too far to bother checking.</p></div></div>
+          </section>
+
+          <!-- 3. STRATEGY + ATOMIC -->
+          <section class="section reveal" id="strategy">
+            <h2><span class="section-num">03</span> &nbsp;Step 3 — The matching Strategy + atomic assignment</h2>
+            <p>Once the grid hands us a small list of candidate drivers, <em>which one</em> do we pick? That rule shouldn't be wired into the dispatcher — today it's "nearest available," but tomorrow the business might want rating-weighted matching, or ETA-based (account for traffic), or a surge-aware choice. So we make it a <strong>Strategy</strong>: an interface with one <code>choose(drivers, x, y)</code> method, and a <code>NearestDriver</code> implementation to start. Swapping the rule never touches the dispatcher.</p>
+            <p>But picking a driver isn't the whole story — we have to <strong>claim</strong> them, and that's where concurrency bites. Two riders near the same corner can both have their requests in flight at once. Both call the grid, both see the same free driver, both pick them, and both think they won. The driver gets <em>double-assigned</em>. This is the classic check-then-act race: "find a free driver" and "mark them taken" must happen as <strong>one indivisible step</strong>. We wrap exactly those two lines in a single <code>threading.Lock</code> so only one rider can be inside the choose-and-claim section at a time (the same critical-section idea from the <a href="../advanced/index.html#concurrency">concurrency primer</a>).</p>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Choose and claim are one operation, not two</div><p>If you only lock the "mark taken" line but choose outside the lock, you've fixed nothing — both threads already chose the same driver before either claimed. The lock must span <em>both</em> the selection and the <code>available = False</code> write. Lock, choose, mark, release.</p></div></div>
+          </section>
+
+          <!-- 4. IMPLEMENTATION -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">04</span> &nbsp;Step 4 — The implementation</h2>
+            <p>Three small files. <code>grid.py</code> is the spatial index; <code>matching.py</code> is the pluggable rule; <code>dispatcher.py</code> ties them together and owns the atomic claim.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">grid.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import threading
+
+class Driver:
+    def __init__(self, id, x, y):
+        self.id = id
+        self.x = x
+        self.y = y
+        self.available = True
+
+class GridIndex:                            # bucket drivers into square cells
+    def __init__(self, cell=1.0):
+        self.cell = cell
+        self.cells = {}                     # (cx, cy) -> set of drivers
+        self._lock = threading.Lock()
+
+    def _key(self, x, y):
+        return (int(x // self.cell), int(y // self.cell))
+
+    def add(self, driver):
+        with self._lock:
+            bucket = self.cells.setdefault(self._key(driver.x, driver.y), set())
+            bucket.add(driver)
+
+    def nearby(self, x, y):                 # this cell + its 8 neighbours
+        cx, cy = self._key(x, y)
+        found = []
+        with self._lock:
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    found += list(self.cells.get((cx + dx, cy + dy), set()))
+        return found</code></pre></div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">matching.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from math import dist
+from typing import Protocol
+
+class MatchStrategy(Protocol):
+    def choose(self, drivers, x, y): ...        # return a Driver or None
+
+class NearestDriver:
+    def choose(self, drivers, x, y):
+        free = [d for d in drivers if d.available]
+        if not free:
+            return None
+        return min(free, key=lambda d: dist((d.x, d.y), (x, y)))</code></pre></div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">dispatcher.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import threading
+
+class Dispatcher:
+    def __init__(self, index, strategy):
+        self.index = index
+        self.strategy = strategy
+        self._lock = threading.Lock()
+
+    def request_ride(self, x, y):
+        candidates = self.index.nearby(x, y)
+        with self._lock:                        # claim a driver atomically
+            driver = self.strategy.choose(candidates, x, y)
+            if driver is None:
+                return None
+            driver.available = False            # mark taken INSIDE the lock
+            return driver</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why the lock wraps both lines</div><p>Notice the dispatcher reads candidates from the grid <em>before</em> taking the lock — that's fine, the snapshot can be slightly stale. What must be inside the lock is <code>choose</code> <strong>and</strong> the <code>available = False</code> write together. That pair is the critical section: between selecting a driver and marking them taken, no other thread may run, so the same driver can never be handed out twice.</p></div></div>
+          </section>
+
+          <!-- 5. WALKTHROUGH -->
+          <section class="section reveal" id="walkthrough">
+            <h2><span class="section-num">05</span> &nbsp;Walk a scenario</h2>
+            <p>Three drivers on the map; a rider waits at the origin. <code>D2</code> sits far away in a different cell, so the grid never even returns it — and between the two nearby drivers, the closer one wins.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">demo.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">index = GridIndex(cell=1.0)
+index.add(Driver("D1", 0.2, 0.2))
+index.add(Driver("D2", 5.0, 5.0))            # far away, different cell
+index.add(Driver("D3", 0.8, 0.1))
+dispatcher = Dispatcher(index, NearestDriver())
+
+driver = dispatcher.request_ride(0.0, 0.0)   # rider at the origin
+print(f"Matched {driver.id}")
+print(f"{driver.id} available now: {driver.available}")</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>Matched D1
+D1 available now: False</div>
+            <p>The grid's <code>nearby(0, 0)</code> returns <code>D1</code> and <code>D3</code> — both fall in the origin cell — but not <code>D2</code>, five units away in another cell. <code>NearestDriver</code> then measures: <code>D1</code> at distance ~0.28 beats <code>D3</code> at ~0.81. The dispatcher claims <code>D1</code> inside the lock and flips its <code>available</code> to <code>False</code>, so the next rider can't be matched to it.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">Why a grid index instead of scanning every driver for each request?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Grids store driver data more compactly in memory</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Nearby lookup becomes ~O(1) — you only inspect the rider's cell and its 8 neighbours, not all n drivers.</button>
+                <button class="quiz-opt"><span class="mark"></span>A grid guarantees the very nearest driver without measuring any distances</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> the grid buckets drivers by location, so a request only gathers candidates from 9 cells — independent of how many drivers exist overall. You still measure distances, but only on a handful of candidates, not the whole fleet. Scanning all <code>n</code> per request is the O(n)-per-request trap the grid avoids.</div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why wrap "choose a driver" and "mark them unavailable" in one lock?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>To make the distance calculation run faster</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Otherwise two riders can both select the same free driver before either marks them taken — a double-assignment race.</button>
+                <button class="quiz-opt"><span class="mark"></span>So the grid can re-bucket the driver while it is being chosen</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> choose-then-mark is a read-modify-write on shared state. If selection happens outside the lock, two threads can both pick the same driver before either writes <code>available = False</code>. Locking the pair makes it indivisible, so exactly one rider claims any given driver.</div>
+            </div>
+          </section>
+
+          <!-- 6. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">06</span> &nbsp;Extensions — your turn</h2>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 1 · a new strategy</div>
+              <p class="ex-q">Add a <code>RatingWeightedStrategy</code> (or a surge-aware one) that prefers closer <em>and</em> higher-rated drivers. The point: it should drop in without editing <code>Dispatcher</code> at all.</p>
+              <p>Hint: it implements the same <code>choose(drivers, x, y)</code> method. Combine distance and rating into a single score and pick the minimum — the dispatcher neither knows nor cares which strategy it holds.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">rating_strategy.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python">from math import dist
+
+class RatingWeightedStrategy:                # same choose() contract
+    def __init__(self, w=0.5):
+        self.w = w                          # how much rating counts
+
+    def choose(self, drivers, x, y):
+        free = [d for d in drivers if d.available]
+        if not free:
+            return None
+        # lower is better: distance, minus a bonus for high rating
+        def score(d):
+            return dist((d.x, d.y), (x, y)) - self.w * d.rating
+        return min(free, key=score)
+
+# dispatcher = Dispatcher(index, RatingWeightedStrategy(w=0.3))</code></pre></div>
+                  </div>
+                  <p>Because <code>Dispatcher</code> depends only on the <code>MatchStrategy</code> contract, the new rule plugs straight in — that's the Open/Closed payoff. Surge pricing would be the same shape: another strategy that weights the score by a per-cell surge multiplier.</p>
+                </div>
+              </div>
+            </div>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 2 · batch vs greedy, and live positions</div>
+              <p class="ex-q">Two design questions. (a) We match greedily — first request served, first driver claimed. What does <strong>batch matching</strong> (collect a tick's worth of requests, then assign globally) buy you, and what does it cost? (b) Drivers move constantly. How would you keep the grid fresh as positions change?</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <p><strong>(a) Batch vs greedy.</strong> Greedy assigns each request the instant it arrives — lowest latency, but a locally optimal choice can be globally poor (rider A grabs the only driver that was perfect for rider B, who now waits much longer). <strong>Batch matching</strong> buffers all requests in a short window (a "tick"), then solves the assignment <em>together</em> — minimising total wait across everyone (a bipartite-matching / assignment problem). The trade-off is plain: batching is more <em>efficient</em> globally but adds <em>latency</em> equal to the window, since the first request waits for the tick to close. Real systems pick a window small enough that riders don't notice.</p>
+                  <p><strong>(b) Live positions as an Observer.</strong> Treat a driver's location update as an event the grid <em>observes</em>. When a driver moves, the grid checks whether the new position falls in a different cell; if so it removes the driver from the old bucket and adds it to the new one — a <em>re-bucket</em>. The driver is the subject; the grid is the observer that reacts to each move. Most updates stay within the same cell and cost nothing, so re-bucketing is cheap and keeps "who's near here?" always correct.</p>
+                </div>
+              </div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">What this design used — the toolkit recap</div><p><strong>Geospatial grid index</strong> — bucket by cell so nearby lookup is ~O(1) instead of scanning the fleet. <strong>Strategy</strong> — a pluggable <code>choose</code> rule (nearest now, rating- or surge-weighted later) the dispatcher never has to know about. <strong>Atomic assignment</strong> — a single <code>Lock</code> around choose-and-claim kills the double-booking race. <strong>Observer</strong> — driver moves re-bucket their grid cell. And it <em>composes the earlier advanced cases</em>: Strategy from the rate limiter and Splitwise, the critical-section locking from movie booking and the concurrency primer, the Observer from the Pub/Sub queue — one design, every tool.</p></div></div>
+            <p>That's the capstone. You've now built a matcher that's fast, swappable, and correct under concurrency — the three things that separate a toy from a real dispatcher. From here, keep the whole toolkit at hand in the <a href="../reference/glossary.html">glossary &amp; cheatsheet</a>.</p>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../advanced/pubsub-queue.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: Pub/Sub queue</span></a>
+            <a class="next" href="../reference/glossary.html"><span class="pn-k">Next ›</span><span class="pn-t">Glossary &amp; cheatsheet</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements</a>
+          <a href="#grid">The grid index</a>
+          <a href="#strategy">Strategy &amp; atomic claim</a>
+          <a href="#code">Implementation</a>
+          <a href="#walkthrough">Walkthrough</a>
+          <a href="#extensions">Extensions</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Advanced · Ride-hailing</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

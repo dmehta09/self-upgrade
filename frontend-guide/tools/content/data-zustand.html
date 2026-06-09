@@ -1,0 +1,140 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Data &amp; state &middot; global client</span>
+            <h1>Zustand for client state</h1>
+            <p class="lead">When many components need the same client value &mdash; theme, the logged-in user, a sidebar toggle &mdash; Zustand gives you one tiny store they read directly. No providers to nest, no prop-drilling, almost no boilerplate.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">Zustand is a <b>hook-shaped global store</b>. You <code>create</code> it once; any component reads a <b>slice</b> with a selector and re-renders only when that slice changes.</p>
+            <p>The store lives outside React, so there&rsquo;s no Context Provider and no prop chain. Components subscribe with a selector function; pick the smallest slice you need and that component ignores every other update.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>A shared whiteboard on the wall. Any component can walk up and read it or write on it &mdash; no one has to pass a clipboard hand-to-hand down the hallway (prop-drilling). And you only glance at the corner you care about: change the date in the top-left and people watching the bottom-right don&rsquo;t look up.</p>
+              </div>
+            </div>
+
+            <div class="table-wrap"><table>
+              <thead><tr><th>&nbsp;</th><th>Context</th><th>Redux Toolkit</th><th>Zustand</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Boilerplate</strong></td><td>Provider + custom hook</td><td>store, slices, providers</td><td>one <code>create</code> call</td></tr>
+                <tr><td><strong>Re-render scope</strong></td><td>all consumers on any change</td><td>per-selector</td><td>per-selector</td></tr>
+                <tr><td><strong>Provider needed?</strong></td><td>yes, must wrap tree</td><td>yes</td><td>no &mdash; store is external</td></tr>
+                <tr><td><strong>Best for</strong></td><td>low-churn cross-cutting values</td><td>large, audited app state</td><td>most global UI/session state</td></tr>
+              </tbody>
+            </table></div>
+          </section>
+
+          <section class="section reveal" id="store">
+            <h2><span class="section-num">01</span> Create a store, read a slice</h2>
+            <p>The store holds state <em>and</em> the actions that change it. A component subscribes by selecting exactly the field it renders &mdash; not the whole store.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">useBearStore.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">import { create } from 'zustand';
+
+const useBearStore = create&lt;{ bears: number; add: () =&gt; void }&gt;((set) =&gt; ({
+  bears: 0,
+  add: () =&gt; set((s) =&gt; ({ bears: s.bears + 1 })),
+}));</code></pre>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">Counter.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">// selects ONE field -> re-renders only when `bears` changes
+const bears = useBearStore((s) =&gt; s.bears);
+const add = useBearStore((s) =&gt; s.add); // actions are stable refs</code></pre>
+            </div>
+          </section>
+
+          <section class="section reveal" id="useshallow">
+            <h2><span class="section-num">02</span> Multiple fields &rarr; useShallow</h2>
+            <p>Selecting several fields means returning a new object each render. By default Zustand compares with <code>Object.is</code>, so a fresh object always looks &ldquo;changed&rdquo; &mdash; an infinite render loop in v5. <code>useShallow</code> shallow-compares the object so it only re-renders when a field actually differs.</p>
+            <div class="versus">
+              <div class="vs-col vs-bad">
+                <div class="vs-h">v5 infinite loop</div>
+                <div class="codeblock"><pre><code data-lang="tsx">// new object every render -&gt; never equal -&gt; loops
+const { bears, add } = useBearStore((s) =&gt; ({
+  bears: s.bears,
+  add: s.add,
+}));</code></pre></div>
+              </div>
+              <div class="vs-col vs-good">
+                <div class="vs-h">useShallow</div>
+                <div class="codeblock"><pre><code data-lang="tsx">import { useShallow } from 'zustand/react/shallow';
+
+const { bears, add } = useBearStore(
+  useShallow((s) =&gt; ({ bears: s.bears, add: s.add }))
+);</code></pre></div>
+              </div>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>In Zustand <b>v5</b>, a selector that returns a <em>new object or array</em> without <code>useShallow</code> can cause an infinite render loop &mdash; the snapshot is never reference-equal, so React re-renders forever. Either select one primitive per call, or wrap multi-field selectors in <code>useShallow</code>.</p>
+              </div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Which of these belongs in a Zustand store?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>The list of products fetched from <code>/api/products</code>.</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Whether the command palette is open and the current theme.</button>
+                <button class="quiz-opt"><span class="mark"></span>The active table filters that should survive a page reload via the URL.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Theme and an open/closed UI flag are true client state. Fetched products are <em>server</em> state (TanStack Query); shareable filters belong in the <em>URL</em>. Zustand is for client/UI/session only.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Zustand vs Redux vs Context &mdash; when each?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Context is for low-frequency cross-cutting values (theme, locale) &mdash; but every consumer re-renders on change. Redux Toolkit suits large, heavily-audited state with middleware needs. Zustand is the lightweight default for most global client state: one store, selector-scoped re-renders, no provider.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Context for rarely-changing cross-cutting values, Redux for big audited state, Zustand as the low-boilerplate default with per-selector re-renders.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What state actually belongs in Zustand?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>True client/UI/session state that multiple components share: theme, sidebar open/closed, the authenticated user object, a multi-step wizard&rsquo;s cross-step data. <em>Not</em> server data (that&rsquo;s TanStack Query) and <em>not</em> shareable/bookmarkable state (that&rsquo;s the URL).</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Global client state only &mdash; theme, session, UI toggles. Server data goes to Query; bookmarkable state goes in the URL.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why do you need useShallow in Zustand v5?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Zustand compares the selector&rsquo;s output with <code>Object.is</code> to decide whether to re-render. A selector returning a new object/array is never reference-equal, so in v5 it triggers an infinite re-render loop. <code>useShallow</code> swaps in a shallow comparison, so it re-renders only when a selected field truly changes.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Multi-field selectors return a fresh object that&rsquo;s never Object.is-equal, so v5 loops. useShallow shallow-compares it and stops the loop.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="tanstack-query.html"><span class="pn-k">Previous</span><span class="pn-t">TanStack Query: server-state</span></a>
+            <a class="next" href="forms-rhf-zod.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Forms: react-hook-form + Zod</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#store">Create a store, read a slice</a>
+          <a href="#useshallow">Multiple fields &rarr; useShallow</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

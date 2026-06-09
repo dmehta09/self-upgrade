@@ -1,0 +1,118 @@
+<section class="hero reveal">
+  <span class="eyebrow">Kubernetes · running workloads</span>
+  <h1>Workloads, health &amp; scaling.</h1>
+  <p class="lead">Once pods run, Kubernetes manages them for you: it <b>rolls out</b> new versions without downtime, <b>probes</b> health to restart or shield pods, packs them by <b>resource requests</b>, and <b>autoscales</b> to load. Pick the right workload type for the job.</p>
+</section>
+
+<section class="section reveal" id="rollouts">
+  <h2><span class="section-num">01</span> Rolling updates &amp; rollback</h2>
+  <p class="takeaway">A Deployment ships a new version by a <b>rolling update</b>: it swaps pods a few at a time, governed by <code>maxSurge</code> (extra pods allowed) and <code>maxUnavailable</code> (how many can be down) — so the Service never goes dark.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p><b>Resource requests</b> are the table you <em>reserve</em> at a restaurant — the host plans seating around it (this is how the scheduler places you). <b>Limits</b> are the hard spending cap on your card — blow past the memory cap and you're cut off (<code>OOMKilled</code>); push CPU past it and the kitchen just slows your orders (throttling).</p></div></div>
+
+  <div class="steps">
+    <div class="step"><span class="step-num">1</span><div class="step-body"><h4>New ReplicaSet</h4><p>The Deployment creates a fresh ReplicaSet for v2 and starts a few v2 pods (up to <code>maxSurge</code>).</p></div></div>
+    <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Wait for ready</h4><p>It waits until new pods pass their <b>readiness</b> probe before sending them traffic, then retires the same number of v1 pods.</p></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Repeat</h4><p>Step by step, v1 shrinks and v2 grows. <code>maxUnavailable</code> caps how many can be missing — capacity holds throughout.</p></div></div>
+    <div class="step"><span class="step-num">4</span><div class="step-body"><h4>Rollback</h4><p>Bad release? <code>kubectl rollout undo</code> flips back to the previous ReplicaSet from <b>revision history</b> — fast, because v1 pods just scale back up.</p></div></div>
+  </div>
+
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">Heads up <span class="tag">scope</span></div><p>Fancier strategies (canary, blue-green with metric analysis via Argo Rollouts/Flagger) live on the <strong>release-strategies</strong> page. The judging signal behind them — error rates, latency, dashboards — is covered in the companion <strong>Observability guide</strong>; here we stay on the rollout mechanics.</p></div></div>
+</section>
+
+<section class="section reveal" id="probes">
+  <h2><span class="section-num">02</span> Health probes</h2>
+  <p>The kubelet checks each container with up to three probes. They answer different questions — confusing them causes outages.</p>
+
+  <dl class="kv">
+    <dt>Liveness</dt><dd>"Is it <b>dead/stuck</b>?" Fails → <b>restart the container</b>. For deadlocks a restart can't-not-fix-itself out of.</dd>
+    <dt>Readiness</dt><dd>"Can it <b>serve right now</b>?" Fails → <b>pull the pod out of the Service</b> (no traffic) but leave it running. For warm-up, full caches, or a busy dependency.</dd>
+    <dt>Startup</dt><dd>"Has it <b>finished booting</b>?" Holds off liveness/readiness for <b>slow starters</b> so they aren't killed mid-boot.</dd>
+  </dl>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">probes.yaml</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="yaml">livenessProbe:                # restart if dead
+  httpGet: { path: /healthz, port: 8080 }
+  periodSeconds: 10
+readinessProbe:               # gate traffic until ready
+  httpGet: { path: /ready, port: 8080 }
+  periodSeconds: 5</code></pre>
+  </div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>An <b>over-aggressive liveness probe</b> (short timeout, no startup probe, or pointed at a slow dependency) kills a perfectly healthy-but-busy pod — it restarts, fails again, and you get a <code>CrashLoopBackOff</code> spiral. Rule of thumb: liveness checks only <em>itself</em> (cheap, local); readiness checks whether it can serve; use a startup probe for slow boots.</p></div></div>
+</section>
+
+<section class="section reveal" id="resources">
+  <h2><span class="section-num">03</span> Requests, limits &amp; autoscaling</h2>
+  <p><b>Requests</b> guide scheduling (the seat you reserve); <b>limits</b> cap consumption (the hard ceiling). The <b>Horizontal Pod Autoscaler (HPA)</b> then adds or removes replicas based on CPU or custom metrics.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Requests — for the scheduler</div>
+      <ul><li>What the pod is <b>guaranteed</b>; the scheduler sums requests to place pods on nodes.</li><li>Too low → over-packed nodes, noisy neighbors.</li><li>Missing → scheduler flies blind.</li></ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Limits — the hard cap</div>
+      <ul><li>The ceiling a container may use.</li><li>Memory over limit → <b><code>OOMKilled</code></b> (terminated).</li><li>CPU over limit → <b>throttled</b> (slowed, not killed).</li></ul>
+    </div>
+  </div>
+
+  <p class="takeaway"><b>HPA</b> watches a metric (e.g. avg CPU) and scales the replica count between <code>min</code> and <code>max</code> to hit a target — more load, more pods; quiet, fewer. It needs <b>requests set</b> to compute CPU utilization at all.</p>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Omitting <b>resource requests</b> wrecks everything downstream: the scheduler can't bin-pack, pods land on already-stuffed nodes (noisy-neighbor contention), and the HPA can't compute utilization so it never scales. Always set requests; set limits deliberately (memory limit = OOM protection, but a too-tight CPU limit silently throttles you).</p></div></div>
+</section>
+
+<section class="section reveal" id="workload-types">
+  <h2><span class="section-num">04</span> Beyond Deployment</h2>
+  <p>Deployment is for <b>stateless</b> apps where any replica is interchangeable. When pods need identity, run per-node, or run-to-completion, reach for a different workload object.</p>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>Workload</th><th>Use it for</th><th>Key property</th></tr></thead>
+    <tbody>
+      <tr><td><b>Deployment</b></td><td>Stateless services (web/API).</td><td>Interchangeable pods; easy rolling updates + rollback.</td></tr>
+      <tr><td><b>StatefulSet</b></td><td>Databases, queues, clustered stores.</td><td><b>Stable identity</b> (<code>db-0</code>, <code>db-1</code>) + its own persistent volume per pod; ordered start.</td></tr>
+      <tr><td><b>DaemonSet</b></td><td>Per-node agents (log shipper, CNI, node exporter).</td><td><b>One pod on every node</b> (auto-added to new nodes).</td></tr>
+      <tr><td><b>Job / CronJob</b></td><td>Batch tasks / scheduled tasks.</td><td>Run <b>to completion</b> (Job) or on a <b>cron schedule</b> (CronJob), then stop.</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">You're deploying a 3-node PostgreSQL cluster where each node needs a stable name and its own durable disk. Which workload?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>StatefulSet — stable network identity per pod plus a dedicated PersistentVolume each.</button>
+      <button class="quiz-opt"><span class="mark"></span>Deployment — it keeps 3 replicas running, which is all a database needs.</button>
+      <button class="quiz-opt"><span class="mark"></span>DaemonSet — it guarantees exactly one database pod per node.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Deployment pods are interchangeable and share nothing stable — wrong for a DB. A StatefulSet gives each pod a sticky identity (<code>pg-0</code>…) and its own volume, which clustered, stateful systems require.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Liveness vs readiness probe — what's the difference?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>Liveness</b> asks "is it dead/stuck?" — if it fails, Kubernetes <b>restarts the container</b>. <b>Readiness</b> asks "can it serve right now?" — if it fails, Kubernetes <b>removes the pod from the Service</b> (stops sending traffic) but leaves it running. Use readiness for warm-up or a temporarily-unavailable dependency; use liveness only for unrecoverable hangs. A startup probe protects slow boots.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Liveness restarts a dead container; readiness just pulls a busy pod out of rotation until it can serve. Mixing them up — a strict liveness probe on a slow dependency — causes restart loops."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Requests vs limits — and what's OOMKilled?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>Requests</b> are what a pod is guaranteed and what the <b>scheduler</b> uses to place it on a node. <b>Limits</b> are the hard ceiling. Exceed the <b>memory limit</b> and the kernel kills the container — that's <b><code>OOMKilled</code></b>. Exceed the <b>CPU limit</b> and it's <b>throttled</b>, not killed. Always set requests (or scheduling and the HPA break); set memory limits to contain leaks.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Requests guide scheduling, limits cap usage. Blow the memory limit and you're OOMKilled; blow the CPU limit and you're just throttled. Skipping requests breaks the scheduler and the autoscaler."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>What does the HPA need? (Requests set, so it can compute CPU % utilization.)</li><li>QoS classes? (Guaranteed = requests == limits; Burstable; BestEffort = none — the first evicted under pressure.)</li></ul></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How does a rolling update and rollback work? When would you use a StatefulSet instead?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>A Deployment spins up a new ReplicaSet and swaps pods incrementally — bounded by <code>maxSurge</code>/<code>maxUnavailable</code>, waiting for readiness before shifting traffic — so there's no downtime. <b>Rollback</b> is <code>kubectl rollout undo</code>, which scales the previous ReplicaSet back up from revision history. Use a <b>StatefulSet</b> instead of a Deployment when pods need <b>stable identity and their own persistent storage</b> — databases and clustered stateful systems — rather than being interchangeable.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Rolling update swaps pods a few at a time and waits for readiness, so no downtime; rollback just scales the old ReplicaSet back up. I reach for a StatefulSet when pods need sticky identity and their own volumes — like a database."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

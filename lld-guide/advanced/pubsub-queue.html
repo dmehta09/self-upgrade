@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced case — Pub/Sub message queue | The Design Field Guide</title>
+  <meta name="description" content="Designing an in-process pub/sub message queue in Python — topics, subscribers, and async fan-out using thread-safe queue.Queue plus a worker thread per subscriber so a slow consumer can't block others." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="adv" data-page="adv-pubsub-queue" data-lesson="adv-pubsub-queue">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../advanced/index.html" style="color:var(--accent)">Advanced</a><span class="sep">/</span><span class="current">Pub/Sub queue</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Advanced case · async Observer</span>
+            <h1>Case study: a pub/sub message queue.</h1>
+            <p class="lead">A publisher should be able to shout "order placed!" without knowing — or waiting for — anyone who's listening. We'll <em>decouple</em> publishers from subscribers and deliver <strong>asynchronously</strong>, so one slow subscriber can't stall the publisher or its peers. It's the <a href="../lld/notification-service.html">notification service</a>'s Observer, grown up: each listener gets its own thread-safe queue and a worker thread to drain it.</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Step 1 — Requirements &amp; assumptions</h2>
+            <p>Publishers send messages to a <strong>named topic</strong>. Any number of subscribers can register on that topic, and every one of them receives <em>every</em> message. The catch that makes this advanced: delivery is <strong>asynchronous</strong> — publishing returns immediately, and a slow subscriber never blocks the publisher or the other subscribers.</p>
+            <p><strong>Clarifying questions I'd ask:</strong> Do messages need to arrive <em>in order</em> per subscriber? Is delivery at-least-once, at-most-once, or best-effort? Do we need <strong>persistence</strong> (survive a crash) or is in-memory fine? How many subscribers, and how fast do they consume? Should a subscriber that joins late see old messages?</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Assumptions I'll lock in</div><p><strong>In-process</strong> (one Python program, not a network broker like Kafka). <strong>In-memory</strong> (no persistence — a crash loses undelivered messages). <strong>Best-effort delivery</strong> (we don't track acks or retries yet). <strong>Threads, not processes</strong> — we lean on shared memory and a thread-safe queue, which is exactly where the GIL caveats from the <a href="../advanced/index.html#concurrency">concurrency primer</a> matter.</p></div></div>
+            <div class="grid grid-2">
+              <div class="card"><h4>In scope</h4><ul><li>Named topics with many subscribers</li><li>Async fan-out (publish returns instantly)</li><li>Per-subscriber ordering (FIFO)</li><li>One slow subscriber can't stall peers</li></ul></div>
+              <div class="card"><h4>Out of scope (for now)</h4><ul><li>Persistence / durability across crashes</li><li>Acks, retries, exactly-once delivery</li><li>Cross-process / network distribution</li><li>Replay of history for late joiners</li></ul></div>
+            </div>
+          </section>
+
+          <!-- 2. DESIGN -->
+          <section class="section reveal" id="design">
+            <h2><span class="section-num">02</span> &nbsp;Step 2 — From Observer to async pub/sub</h2>
+            <p>The <a href="../lld/notification-service.html">notification service</a> taught the <strong>Observer</strong> pattern: a subject keeps a list of observers and calls each one when something happens. The simplest version is <em>synchronous</em> — the publisher loops over subscribers and calls each handler directly:</p>
+            <div class="kv">
+              <dt>Synchronous Observer</dt><dd><code>for sub in subscribers: sub.handle(message)</code> — the publisher does the work, in its own thread, one subscriber at a time.</dd>
+              <dt>The failure</dt><dd>If one handler is slow (a 2-second HTTP call) or <em>throws</em>, everyone behind it waits — or the loop dies and later subscribers never get the message. The publisher is held hostage by its slowest, flakiest listener.</dd>
+            </div>
+            <p>The fix is to <strong>decouple delivery from handling</strong>. Give each subscriber its own <strong>queue</strong> and a dedicated <strong>worker thread</strong>. Publishing now just drops a copy of the message into each subscriber's queue and returns — fan-out is a few non-blocking <code>put</code> calls. Each worker drains its own queue at its own pace:</p>
+            <div class="kv">
+              <dt>Per-subscriber queue</dt><dd>A thread-safe <code>queue.Queue</code> buffers messages for that one subscriber. Publishing is <code>queue.put(message)</code> — it returns immediately and never blocks the publisher.</dd>
+              <dt>Per-subscriber worker</dt><dd>A background thread loops on <code>queue.get()</code> (which blocks until a message arrives) and calls the handler. A slow handler only backs up <em>its own</em> queue — the publisher and other subscribers are untouched.</dd>
+            </div>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">The office mailroom <span class="tag">analogy</span></div><p>The publisher is a mail carrier with a stack of identical letters. Instead of waiting at each desk for the person to read their letter, the carrier just drops one copy into each person's <strong>pigeonhole</strong> and walks off. Each person checks their own pigeonhole and reads at their own pace — the slowpoke who lets letters pile up doesn't hold up the carrier or anyone else. The pigeonhole is the queue; the person reading is the worker thread.</p></div></div>
+          </section>
+
+          <!-- 3. DIAGRAM -->
+          <section class="section reveal" id="diagram">
+            <h2><span class="section-num">03</span> &nbsp;Step 3 — The fan-out</h2>
+            <div class="diagram">
+              <div class="dg-title">Publisher → Topic → one inbox + worker per subscriber</div>
+              <div class="flow">
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">publisher</div><div class="fn-t">publish(msg)</div><div class="fn-d">returns instantly</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">topic</div><div class="fn-t">"orders"</div><div class="fn-d">fan-out</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">emailer</div><div class="fn-t">inbox → worker</div><div class="fn-d">own queue + thread</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">analytics</div><div class="fn-t">inbox → worker</div><div class="fn-d">own queue + thread</div></div>
+              </div>
+              <div class="cap">The publisher hands the message to the <code>Topic</code>, which drops a copy into <strong>each subscriber's own queue</strong>. Every subscriber owns a separate <code>queue.Queue</code> <em>and</em> a separate worker thread, so the emailer and analytics consume independently — a stall in one never reaches the other.</div>
+            </div>
+          </section>
+
+          <!-- 4. IMPLEMENTATION -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">04</span> &nbsp;Step 4 — The implementation</h2>
+            <p>Two small classes. <code>Subscriber</code> owns the queue + worker and exposes a non-blocking <code>deliver</code>; <code>Topic</code> keeps the subscriber list (guarded by a lock) and fans a message out to each one.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">subscriber.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import threading
+import queue
+
+class Subscriber:
+    def __init__(self, name, handler):
+        self.name = name
+        self.handler = handler                  # callable(name, message)
+        self.inbox = queue.Queue()              # thread-safe per-subscriber buffer
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def deliver(self, message):
+        self.inbox.put(message)                 # returns immediately, never blocks
+
+    def _run(self):
+        while True:
+            message = self.inbox.get()          # blocks until a message arrives
+            self.handler(self.name, message)
+            self.inbox.task_done()</code></pre></div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">topic.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import threading
+
+class Topic:
+    def __init__(self, name):
+        self.name = name
+        self.subscribers = []
+        self._lock = threading.Lock()
+
+    def subscribe(self, sub):
+        with self._lock:
+            self.subscribers.append(sub)
+
+    def publish(self, message):
+        with self._lock:
+            subs = list(self.subscribers)       # snapshot under the lock
+        for sub in subs:                        # fan out OUTSIDE the lock
+            sub.deliver(message)</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why snapshot the list, then fan out <em>outside</em> the lock</div><p><code>publish</code> copies the subscriber list under the lock, then releases it before calling <code>deliver</code>. We hold the lock only for the tiny, shared-state read — keeping the critical section small, exactly as the primer urges. We must guard the list because <code>subscribe</code> can append from another thread mid-publish; iterating a list while it mutates is undefined. And since <code>deliver</code> is just a non-blocking <code>put</code>, doing it outside the lock costs nothing and avoids holding the lock during the (potentially many) fan-out calls.</p></div></div>
+          </section>
+
+          <!-- 5. WALKTHROUGH -->
+          <section class="section reveal" id="walkthrough">
+            <h2><span class="section-num">05</span> &nbsp;Walk a scenario</h2>
+            <p>Two subscribers on the <code>"orders"</code> topic. We publish two messages; each subscriber's worker drains its own inbox and records what it got. Because the workers run on <em>separate threads</em>, the natural arrival order of lines varies run-to-run — so the demo <strong>sorts</strong> the collected lines before printing, making the output deterministic to read.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">demo.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import time
+
+received = []
+def handle(name, msg):
+    received.append(f"{name} got: {msg}")       # list.append is atomic in CPython
+
+topic = Topic("orders")
+topic.subscribe(Subscriber("emailer", handle))
+topic.subscribe(Subscriber("analytics", handle))
+
+topic.publish("order #42 placed")
+topic.publish("order #43 placed")
+
+time.sleep(0.1)                                  # let the workers drain their inboxes
+for line in sorted(received):                    # sort so the demo is deterministic
+    print(line)</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>analytics got: order #42 placed
+analytics got: order #43 placed
+emailer got: order #42 placed
+emailer got: order #43 placed</div>
+            <p>Both subscribers received both messages, in order, and <code>publish</code> returned the instant it had dropped each message into the two inboxes — it never waited for a handler to run.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">Why give each subscriber its own queue and worker thread instead of the publisher calling each subscriber directly?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>It uses less memory than a direct call</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>So a slow or blocking subscriber can't stall the publisher or the other subscribers — delivery is decoupled and asynchronous</button>
+                <button class="quiz-opt"><span class="mark"></span>Threads guarantee messages arrive in a global total order</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> the per-subscriber queue absorbs the message instantly and the worker handles it independently. A subscriber that takes two seconds (or throws) only backs up its <em>own</em> inbox — the publisher returns at once and the other subscribers keep flowing.</div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">How does pub/sub differ from a plain method call to each listener?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>It doesn't — a topic is just syntactic sugar over a for-loop of calls</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>The publisher doesn't know its subscribers and doesn't wait for them — they're decoupled and notified asynchronously via the topic</button>
+                <button class="quiz-opt"><span class="mark"></span>Pub/sub can only ever have one subscriber per topic</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> with a direct call the publisher holds a reference to each listener and blocks until it returns. With pub/sub the publisher only knows the <em>topic</em>; the topic owns the subscriber list and fan-out, and delivery happens asynchronously through each subscriber's queue. That indirection is what lets you add or remove subscribers without touching the publisher.</div>
+            </div>
+          </section>
+
+          <!-- 6. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">06</span> &nbsp;Extensions — your turn</h2>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 1 · a dead-letter queue</div>
+              <p class="ex-q">Right now, if a handler raises an exception, the worker's <code>_run</code> loop dies and that subscriber silently stops receiving messages. Add a <strong>dead-letter queue</strong> (DLQ): if <code>handler(...)</code> throws, route the message to a DLQ instead of crashing the worker. Where do you wrap it?</p>
+              <p>Hint: wrap the <code>handler(...)</code> call in a <code>try/except</code> inside <code>_run</code>, so the loop keeps running. On failure, push the message (and maybe the error) onto a separate <code>self.dlq</code> queue for later inspection or retry.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">subscriber_dlq.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python"># in __init__:  self.dlq = queue.Queue()
+
+def _run(self):
+    while True:
+        message = self.inbox.get()
+        try:
+            self.handler(self.name, message)
+        except Exception as exc:              # one bad message can't kill the worker
+            self.dlq.put((message, exc))      # park it for inspection / retry
+        finally:
+            self.inbox.task_done()</code></pre></div>
+                  </div>
+                  <p>The <code>try/except</code> turns a fatal crash into a logged, recoverable event: the worker survives, this subscriber keeps consuming, and the poison message sits in the DLQ where you can inspect it. The <code>finally</code> ensures <code>task_done</code> always fires so a <code>join</code> on the inbox can't hang.</p>
+                </div>
+              </div>
+            </div>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 2 · backpressure with a bounded queue</div>
+              <p class="ex-q">An unbounded inbox can grow without limit if a subscriber falls permanently behind — eventually you run out of memory. Bound it with <code>queue.Queue(maxsize=...)</code>. What does <code>put</code> do when the queue is full, and how does that change <code>publish</code>?</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <p>Construct the inbox as <code>queue.Queue(maxsize=1000)</code>. Now a plain <code>put(message)</code> <em>blocks</em> when the queue is full — it waits until a worker pulls something off. That's <strong>backpressure</strong>: a slow subscriber slows the publisher down (for that one <code>deliver</code>) rather than letting memory grow unbounded. That re-couples them, though, so you choose per call:</p>
+                  <div class="kv">
+                    <dt><code>put(msg)</code> &nbsp;(block)</dt><dd>Wait for room. Lossless, but a stuck subscriber can now stall the publisher — backpressure all the way up.</dd>
+                    <dt><code>put_nowait(msg)</code></dt><dd>Raise <code>queue.Full</code> immediately. Lets you <em>drop</em> the message (or DLQ it) and keep the publisher fast — choosing availability over completeness.</dd>
+                  </div>
+                  <p>For <strong>at-least-once</strong> delivery you'd go the other way: keep the message until the subscriber <em>acks</em> it (calls <code>task_done</code> after a successful handle), and re-deliver on timeout. Bounded queue versus acks is the classic availability-vs-durability trade-off — name it out loud in the interview.</p>
+                </div>
+              </div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">What this design used — the toolkit recap</div><p><strong>Observer / pub-sub decoupling</strong> — the publisher knows only the topic, never the subscribers, so listeners come and go freely. <strong>Async fan-out</strong> turns a synchronous Observer into a non-blocking one. <strong>Thread-safe <code>queue.Queue</code></strong> hands messages between threads with no locks of your own — one buffer per subscriber. <strong>A worker thread per subscriber</strong> drains each queue independently, so a slow consumer is isolated. <strong>Daemon threads</strong> let the program exit without waiting on the workers. And the senior move: snapshot shared state under a tiny lock, then do the slow work outside it.</p></div></div>
+            <p>Next, the capstone: a <a href="../advanced/ride-hailing.html">ride-hailing system</a> that combines a matching Strategy, this same Observer fan-out, and a geospatial grid.</p>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../advanced/movie-booking.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: Movie booking</span></a>
+            <a class="next" href="../advanced/ride-hailing.html"><span class="pn-k">Next ›</span><span class="pn-t">Case: Ride-hailing</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements</a>
+          <a href="#design">Observer to async</a>
+          <a href="#diagram">The fan-out</a>
+          <a href="#code">Implementation</a>
+          <a href="#walkthrough">Walkthrough</a>
+          <a href="#extensions">Extensions</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Advanced · Pub/Sub queue</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

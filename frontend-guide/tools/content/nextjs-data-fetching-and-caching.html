@@ -1,0 +1,149 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Next.js &middot; Data fetching &amp; caching</span>
+            <h1>Data fetching &amp; caching</h1>
+            <p class="lead">In the App Router you fetch data right inside async server components &mdash; no client round-trip. Caching is the big shift: it&rsquo;s now opt-in via the <code>"use cache"</code> directive, with tag-based revalidation when data changes.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">Fetch inline with <code>await</code>; everything is <b>dynamic by default</b>; opt into caching with <code>"use cache"</code> and invalidate by <b>tag</b>.</p>
+            <p>A server component can <code>await</code> its data directly. Nothing is cached unless you ask: wrap a function or component in <code>"use cache"</code> and Next derives a cache key for you. When the underlying data changes, you revalidate the matching tag.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>A kitchen pass with labeled tickets. Each cached result gets a <em>tag</em> (&ldquo;products&rdquo;, &ldquo;user-42&rdquo;). When something changes, you don&rsquo;t throw out the whole pass &mdash; you pull just the tickets with that label and have them re-made. <code>revalidateTag</code> is &ldquo;re-make everything tagged X.&rdquo;</p>
+              </div>
+            </div>
+
+            <div class="diagram"><div class="dg-title">Cache lifecycle</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">1</div><div class="fn-t">request</div><div class="fn-d">render server component</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">2</div><div class="fn-t">"use cache"</div><div class="fn-d">key derived, tag set</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">3</div><div class="fn-t">serve</div><div class="fn-d">cached HTML/data</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">4</div><div class="fn-t">revalidateTag</div><div class="fn-d">mark stale</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">5</div><div class="fn-t">fresh</div><div class="fn-d">re-rendered on next read</div></div>
+              </div>
+            </div>
+
+            <dl class="kv">
+              <dt>Where you fetch</dt><dd>Inside <code>async</code> server components; <code>await</code> the data directly.</dd>
+              <dt>Request memoization</dt><dd>Identical <code>fetch</code>es in one render are deduped automatically &mdash; fetch the same data in two components, one request.</dd>
+              <dt>Default</dt><dd>Dynamic. Add <code>"use cache"</code> to persist a result across requests.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="cache">
+            <h2><span class="section-num">01</span> Caching with <code>"use cache"</code></h2>
+            <p>Put <code>"use cache"</code> at the top of a function (or file/component) and its result is cached. Tune lifetime with a <code>cacheLife</code> profile and label it with <code>cacheTag</code> so you can invalidate it later.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">lib/products.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">import { cacheLife, cacheTag } from "next/cache";
+
+export async function getProducts() {
+  "use cache";                 // opt this result into the cache
+  cacheLife("hours");          // a built-in freshness profile
+  cacheTag("products");        // label it so we can revalidate later
+  const res = await fetch("https://api.shop.com/products");
+  return res.json();
+}</code></pre>
+            </div>
+            <div class="callout note">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Heads up <span class="tag">note</span></div>
+                <p>The compiler derives the cache key from the function&rsquo;s arguments and closed-over values, so <code>getProducts()</code> and <code>getProduct(id)</code> cache independently per argument &mdash; no manual key strings.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="revalidate">
+            <h2><span class="section-num">02</span> Revalidating after a write</h2>
+            <p>After a mutation, tell Next which cache to refresh. <code>revalidateTag</code> now takes a <b>cacheLife profile as a 2nd arg</b>; <code>updateTag()</code> gives <b>read-your-writes</b> inside a Server Action; <code>refresh()</code> re-fetches uncached data. <code>revalidatePath</code> still works for path-based invalidation.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">app/actions.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">"use server";
+import { revalidateTag, updateTag } from "next/cache";
+
+export async function publishProduct(data: FormData) {
+  await db.product.create(data);
+  // invalidate everything tagged "products", with a profile arg
+  revalidateTag("products", "max");
+  // ...or updateTag for read-your-writes within this action
+  // updateTag("products");
+}</code></pre>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>Two shifts from older Next. <code>unstable_cache</code> is <b>superseded by <code>"use cache"</code></b> &mdash; stop reaching for it. And caching is now <b>opt-in</b>: a plain <code>fetch</code> isn&rsquo;t cached by default anymore, so don&rsquo;t assume your data is being reused unless you added the directive.</p>
+              </div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">You cached <code>getProducts()</code> with <code>cacheTag("products")</code>. An admin adds a product. How do you make the list show it?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Call <code>revalidateTag("products")</code> in the mutation &mdash; it marks that cache stale.</button>
+                <button class="quiz-opt"><span class="mark"></span>Nothing &mdash; the cache auto-detects the DB write.</button>
+                <button class="quiz-opt"><span class="mark"></span>Wrap it in <code>unstable_cache</code> and lower the TTL.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Tag-based invalidation: you labeled the cache <code>"products"</code>, so <code>revalidateTag("products")</code> (optionally with a profile) refreshes exactly that entry on the next read.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you cache data in Next 16?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Caching is opt-in: add the <code>"use cache"</code> directive to a function or component and Next caches its result, deriving the key from the arguments. Tune lifetime with <code>cacheLife</code> and label it with <code>cacheTag</code>. <code>unstable_cache</code> is superseded by this.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Add &lsquo;use cache&rsquo; to the function. It&rsquo;s opt-in now &mdash; the compiler derives the key, and I set cacheLife and cacheTag to control freshness and invalidation.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you revalidate after a mutation?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Tag the cache, then call <code>revalidateTag(tag, profile)</code> in the Server Action after the write &mdash; the profile is the new 2nd arg. For read-your-writes within the same action use <code>updateTag()</code>; for uncached data use <code>refresh()</code>. <code>revalidatePath</code> still handles path-based invalidation.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;revalidateTag with the tag and a profile after the write. updateTag if I need to read my own write in the same action; refresh for uncached data.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What makes a route static vs. dynamic here?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>It&rsquo;s dynamic by default. Wrapping data access in <code>"use cache"</code> makes that part static/cached; reading request data like <code>cookies()</code> or dynamic <code>searchParams</code> forces it dynamic. Within a single render, identical fetches are memoized so they hit the network once.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Dynamic unless you opt in with &lsquo;use cache&rsquo;. Reading request data forces dynamic; identical fetches in one render are deduped automatically.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="rendering-strategies.html"><span class="pn-k">Previous</span><span class="pn-t">Rendering strategies: SSR/SSG/ISR/PPR</span></a>
+            <a class="next" href="server-actions.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Server Actions &amp; mutations</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#cache">Caching with "use cache"</a>
+          <a href="#revalidate">Revalidating after a write</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced case — Elevator system | The Design Field Guide</title>
+  <meta name="description" content="Designing a multi-elevator system in Python — direction as State (idle/up/down), a SCAN sweep, and a pluggable Strategy for choosing which car answers a call." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="adv" data-page="adv-elevator-system" data-lesson="adv-elevator-system">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../advanced/index.html" style="color:var(--accent)">Advanced</a><span class="sep">/</span><span class="current">Elevator system</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Advanced case · State + Strategy</span>
+            <h1>Case study: an elevator system.</h1>
+            <p class="lead">A bank of elevators is two design problems in one. Each car's behaviour <em>depends on which way it's going</em> — that's the <strong>State</strong> pattern, with direction as the state. And the question of <em>which</em> car should answer a call is a rule that changes from building to building — so we make it a pluggable <strong>Strategy</strong>. Build the single car first, then the controller that dispatches between many.</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Step 1 — Requirements &amp; assumptions</h2>
+            <p>There are several elevators serving a tall building. A person presses a <strong>hall button</strong> on some floor; the system picks a car and sends it. Once a car has work, it serves requests along a <strong>SCAN sweep</strong> — it keeps moving one direction, stopping at floors on the way, until nothing's left ahead, then it reverses. That one rule (don't thrash back and forth — finish the sweep) is the heart of how real elevators feel efficient.</p>
+            <p><strong>Clarifying questions I'd ask:</strong> How many cars? Do we model in-car (destination) buttons separately from hall buttons? Is a hall call directional (up vs down) or just "a floor"? What rule chooses the car — nearest, same-direction, least-busy? Single-threaded simulation or many cars stepping concurrently?</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">My stated assumptions</div><p>Floors are plain <strong>integers</strong>, so the math stays exact and deterministic. The demo is <strong>single-threaded</strong> — one car steps at a time so the output is reproducible. The <strong>SCAN is simplified</strong>: a call is just a target floor (we don't track its up/down intent), and a car serves every target in its set as it passes, reversing when nothing remains in the current direction.</p></div></div>
+            <div class="grid grid-2">
+              <div class="card feature"><span class="f-ic">✅</span><h4>Functional (in scope)</h4><p>Several elevators · accept a hall call for a floor and dispatch a car · a car serves its targets along a SCAN sweep · reverse direction when nothing remains ahead · return to idle when there's no work · a swappable rule for choosing the car.</p></div>
+              <div class="card feature"><span class="f-ic">📐</span><h4>Out of scope (noted extensions)</h4><p>Directional hall calls (separate up/down buttons), in-car destination buttons, weight/capacity limits, door timing, real concurrency across cars, and emergency/maintenance modes. Each is a clean add-on rather than a rewrite.</p></div>
+            </div>
+          </section>
+
+          <!-- 2. STATE -->
+          <section class="section reveal" id="state">
+            <h2><span class="section-num">02</span> &nbsp;Step 2 — Direction as State</h2>
+            <p>A single car is a little state machine, and the state is its <strong>direction of travel</strong>. There are exactly three:</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>State</th><th>Meaning</th><th>How it leaves</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>IDLE</strong></td><td>No targets, parked, going nowhere</td><td>A target arrives → start UP or DOWN, whichever points at the work</td></tr>
+                  <tr><td><strong>MOVING UP</strong></td><td>Climbing, serving stops as it passes</td><td>Nothing left above → flip to DOWN; nothing left at all → IDLE</td></tr>
+                  <tr><td><strong>MOVING DOWN</strong></td><td>Descending, serving stops as it passes</td><td>Nothing left below → flip to UP; nothing left at all → IDLE</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>The transitions are the whole behaviour: <em>idle → up or down</em> when a target arrives (pick the direction that has work); <em>up → down</em> when nothing remains above the car; <em>down → up</em> by symmetry; and <em>→ idle</em> whenever the target set empties. Notice the car never asks "what should I do?" with a tangle of flags — it simply <em>is</em> a direction, and each direction knows when to flip. That is the same insight behind the <a href="../lld/vending-machine.html">vending machine's State pattern</a>: behaviour that "depends on the current state" becomes a named state plus its transitions.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A waiter clearing tables <span class="tag">analogy</span></div><p>A good waiter doesn't zig-zag across the room. They sweep <em>down</em> one side of the restaurant clearing every table that's ready, reach the end, then sweep <em>back</em> up the other side — never doubling back mid-row. That single "finish the direction you're going before you reverse" rule is exactly the SCAN sweep, and "which way am I currently sweeping" is the elevator's direction state.</p></div></div>
+          </section>
+
+          <!-- 3. DIAGRAM -->
+          <section class="section reveal" id="diagram">
+            <h2><span class="section-num">03</span> &nbsp;The state machine + the dispatch</h2>
+            <p>First, a single car's direction state machine. Each arrow is a transition the car makes on its own as it steps along the sweep:</p>
+            <div class="diagram">
+              <div class="dg-title">IDLE → UP → DOWN → IDLE (the SCAN sweep, one car)</div>
+              <div class="flow">
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">state</div><div class="fn-t">IDLE</div><div class="fn-d">no targets</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">state</div><div class="fn-t">MOVING UP</div><div class="fn-d">target above</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">state</div><div class="fn-t">MOVING DOWN</div><div class="fn-d">nothing left above</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">state</div><div class="fn-t">IDLE</div><div class="fn-d">set empty</div></div>
+              </div>
+              <div class="cap">A target arriving moves IDLE → UP (or DOWN). When nothing remains above, UP flips to DOWN to serve the lower stops; when the target set empties, the car settles back to IDLE. Each flip is decided <em>inside</em> the car's <code>step()</code>, not by an external scheduler.</div>
+            </div>
+            <p>Second, the dispatch seam. The controller never hard-codes <em>which</em> car answers — it asks a <code>SelectionStrategy</code>, which is interchangeable:</p>
+            <div class="kv">
+              <dt>ElevatorController</dt><dd>Owns the list of cars. On a hall call it delegates the choice, then hands the chosen car the new target. It contains <em>no</em> selection logic itself.</dd>
+              <dt>SelectionStrategy <code>«interface»</code></dt><dd>One job: <code>pick(elevators, floor)</code> → the chosen <code>Elevator</code>. The varying part of the design lives here.</dd>
+              <dt>NearestStrategy</dt><dd>The default rule — pick the car with the smallest <code>abs(car.floor - call_floor)</code>. Swap it for same-direction or least-busy without touching the controller.</dd>
+            </div>
+          </section>
+
+          <!-- 4. CODE -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">04</span> &nbsp;Step 4 — The implementation</h2>
+            <p>The car owns its own movement. <code>Direction</code> is an enum whose value (<code>+1 / -1 / 0</code>) doubles as the floor delta per step, so <code>step()</code> just adds it. <code>add_target</code> wakes an idle car; <code>step</code> advances one floor and decides whether to keep going, reverse the sweep, or stop.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">elevator.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from enum import Enum
+
+class Direction(Enum):
+    UP = 1
+    DOWN = -1
+    IDLE = 0
+
+class Elevator:
+    def __init__(self, id, floor=0):
+        self.id = id
+        self.floor = floor
+        self.direction = Direction.IDLE
+        self.targets = set()             # floors this car still must visit
+
+    def add_target(self, floor):
+        if floor != self.floor:
+            self.targets.add(floor)
+        if self.direction is Direction.IDLE and self.targets:
+            self.direction = (Direction.UP if max(self.targets) > self.floor
+                              else Direction.DOWN)
+
+    def step(self):                      # advance one floor along the SCAN sweep
+        if not self.targets:
+            self.direction = Direction.IDLE
+            return
+        self.floor += self.direction.value
+        self.targets.discard(self.floor)            # doors open if it was a stop
+        above = any(t > self.floor for t in self.targets)
+        below = any(t &lt; self.floor for t in self.targets)
+        if not self.targets:
+            self.direction = Direction.IDLE
+        elif self.direction is Direction.UP and not above:
+            self.direction = Direction.DOWN         # reverse the sweep
+        elif self.direction is Direction.DOWN and not below:
+            self.direction = Direction.UP</code></pre></div>
+            </div>
+            <p>Now the dispatch half. <code>SelectionStrategy</code> is a <code>Protocol</code> — a structural interface — so a strategy class just needs a <code>pick</code> method, no inheritance required. <code>ElevatorController</code> takes the cars and a strategy in its constructor and forwards every call.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">dispatch.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from typing import Protocol
+
+class SelectionStrategy(Protocol):
+    def pick(self, elevators, floor): ...      # return the chosen Elevator
+
+class NearestStrategy:
+    def pick(self, elevators, floor):
+        return min(elevators, key=lambda e: abs(e.floor - floor))
+
+class ElevatorController:
+    def __init__(self, elevators, strategy):
+        self.elevators = elevators
+        self.strategy = strategy               # injected — swappable dispatch rule
+    def request(self, floor):
+        car = self.strategy.pick(self.elevators, floor)
+        car.add_target(floor)
+        return car</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why the enum value is the step delta</div><p><code>Direction.UP.value</code> is <code>+1</code>, <code>DOWN</code> is <code>-1</code>, <code>IDLE</code> is <code>0</code>. So <code>self.floor += self.direction.value</code> moves the car one floor the right way with no <code>if</code> branch — and an idle car that somehow stepped wouldn't move at all. Small touch, but it keeps <code>step()</code> almost branch-free except for the sweep-reversal logic.</p></div></div>
+          </section>
+
+          <!-- 5. WALKTHROUGH -->
+          <section class="section reveal" id="walkthrough">
+            <h2><span class="section-num">05</span> &nbsp;Walk a scenario</h2>
+            <p>Two cars: car 1 parked at floor 0, car 2 at floor 8. A call comes from floor 3. Under <code>NearestStrategy</code>, car 1 (distance 3) beats car 2 (distance 5), so car 1 is dispatched and climbs to floor 3, settling to <code>IDLE</code> the moment it arrives and the target set empties:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">demo.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">ctrl = ElevatorController(
+    [Elevator(1, floor=0), Elevator(2, floor=8)],
+    NearestStrategy(),
+)
+car = ctrl.request(3)                      # nearest to 3 is car 1
+print(f"Car {car.id} dispatched to floor 3")
+for _ in range(3):
+    car.step()
+    print(f"Car {car.id} at floor {car.floor}, dir {car.direction.name}")</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>Car 1 dispatched to floor 3
+Car 1 at floor 1, dir UP
+Car 1 at floor 2, dir UP
+Car 1 at floor 3, dir IDLE</div>
+            <p>Car 1 climbs floor by floor while it still has a target above, then drops to <code>IDLE</code> exactly when it reaches floor 3 and the set empties — the state machine doing its job with no external scheduler.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">Two cars at floors 0 and 8; a call comes from floor 3 under <code>NearestStrategy</code>. Which car is dispatched?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Car 2 (at floor 8) — it's already higher up</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Car 1 (at floor 0) — |0-3|=3 is less than |8-3|=5.</button>
+                <button class="quiz-opt"><span class="mark"></span>Either — both are equally far from floor 3</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> <code>NearestStrategy.pick</code> takes the <code>min</code> by <code>abs(car.floor - floor)</code>. Car 1 is 3 floors away, car 2 is 5 — so car 1 wins. Distance, not current height, is what the rule compares.</div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why model the dispatch rule as a Strategy object instead of an <code>if</code> inside the controller?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>It makes the controller class shorter, with no other benefit</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>You can swap NearestStrategy for SameDirection/LeastBusy without editing the controller (Open/Closed).</button>
+                <button class="quiz-opt"><span class="mark"></span>Python can't express dispatch logic with an <code>if</code> statement</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> the choosing rule is the part that varies between buildings. Isolating it behind <code>pick(elevators, floor)</code> means a new rule is a new class — the controller stays <strong>closed to modification, open to extension</strong>. See the <a href="../lld/parking-lot.html">parking lot's pricing Strategy</a> for the same move.</div>
+            </div>
+          </section>
+
+          <!-- 6. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">06</span> &nbsp;Extensions — your turn</h2>
+            <p>The payoff of splitting State (the car) from Strategy (the dispatch) is that each grows on its own. Try these before peeking.</p>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 1 · a SameDirectionStrategy</div>
+              <p class="ex-q">Add a <code>SameDirectionStrategy</code> that prefers a car already <strong>heading toward</strong> the caller — a car moving up below the call, or moving down above it — and only falls back to nearest when no car is conveniently aligned. Where does it plug in, and what stays untouched?</p>
+              <p>Hint: it's a new class with the same <code>pick(elevators, floor)</code> shape. Filter the cars to those whose direction points at <code>floor</code>; if any qualify, pick the nearest of <em>those</em>; otherwise pick the nearest overall. The controller and the <code>Elevator</code> never change.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <p>One new class implementing the same protocol. A car "matches" if it's moving up and sits at or below the call, or moving down and sits at or above it; among matches we take the nearest, and if there are none we fall back to nearest overall.</p>
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">same_direction.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python">from elevator import Direction
+
+def _heading_toward(car, floor):
+    if car.direction is Direction.UP:
+        return car.floor &lt;= floor          # caller is ahead, going up
+    if car.direction is Direction.DOWN:
+        return car.floor >= floor          # caller is ahead, going down
+    return True                            # idle cars are always available
+
+class SameDirectionStrategy:
+    def pick(self, elevators, floor):
+        aligned = [e for e in elevators if _heading_toward(e, floor)]
+        pool = aligned or elevators        # fall back to nearest overall
+        return min(pool, key=lambda e: abs(e.floor - floor))</code></pre></div>
+                  </div>
+                  <p>Because it satisfies the same <code>SelectionStrategy</code> protocol, you hand it to the controller exactly like <code>NearestStrategy()</code> — <code>ElevatorController(cars, SameDirectionStrategy())</code> — and nothing else in the system moves.</p>
+                </div>
+              </div>
+            </div>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 2 · capacity, or internal vs external calls</div>
+              <p class="ex-q">Pick one: (a) give each car a <strong>weight / occupancy limit</strong> so a full car is skipped by the dispatcher, or (b) split <strong>internal</strong> (in-car destination) requests from <strong>external</strong> (hall) calls. What does each need, and which class owns the new data?</p>
+              <p>Hint for (a): the car gains a <code>load</code> and <code>capacity</code>, and a <code>LeastBusyStrategy</code> (or any strategy) filters out cars where <code>load >= capacity</code> before ranking. For (b): both kinds still become entries in <code>targets</code> — the difference is only in <em>who</em> creates them (a passenger inside vs the controller outside), so the SCAN logic is reused verbatim.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <p>For the capacity variant, the new state lives on the <code>Elevator</code> (it owns its own occupancy), and the skipping rule lives in a strategy (selection is the controller's concern). The two responsibilities stay cleanly separated.</p>
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">capacity.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python"># Elevator gains: self.load = 0  and  self.capacity = 8
+class CapacityAwareStrategy:
+    def pick(self, elevators, floor):
+        free = [e for e in elevators if e.load &lt; e.capacity]
+        pool = free or elevators           # if every car is full, accept anyway
+        return min(pool, key=lambda e: abs(e.floor - floor))
+
+# Internal vs external: both just call the same entry point —
+#   car.add_target(dest)     # passenger pressed a button inside
+#   ctrl.request(hall_floor) # someone pressed a hall button outside
+# so the SCAN sweep in step() serves them identically.</code></pre></div>
+                  </div>
+                  <p>Whichever you chose, the shape is the same: car-owned state (load) stays on the <code>Elevator</code>; the choosing rule stays a swappable <code>SelectionStrategy</code>. Adding capacity-awareness never touched <code>step()</code> or the controller.</p>
+                </div>
+              </div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">What this design used — the toolkit recap</div><p><strong>State pattern</strong> — a car's direction (IDLE / UP / DOWN) is its state, and each <code>step()</code> decides its own transition (keep going, reverse the sweep, or stop). <strong>Strategy pattern</strong> — the dispatch rule lives behind <code>pick(elevators, floor)</code>, so <code>NearestStrategy</code>, <code>SameDirectionStrategy</code>, and <code>CapacityAwareStrategy</code> are interchangeable with the controller untouched (Open/Closed). <strong>Enums</strong> for the direction vocabulary, with the value doubling as the step delta. <strong>Single Responsibility</strong> — the <code>Elevator</code> owns its movement and occupancy; the <code>ElevatorController</code> owns selection. Two jobs, two classes.</p></div></div>
+            <p>One thing we kept out: real <strong>concurrency</strong>. In production many cars step in parallel and a hall call mutates a car's shared <code>targets</code> set, so each car would need its own lock around <code>add_target</code> and <code>step</code> to avoid corrupting that set — the same discipline as the <a href="../advanced/index.html#concurrency">concurrency primer</a>. Next, a different flavour of modelling: splitting shared expenses in <a href="../advanced/splitwise.html">Splitwise</a>.</p>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../advanced/file-system.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: File system</span></a>
+            <a class="next" href="../advanced/splitwise.html"><span class="pn-k">Next ›</span><span class="pn-t">Case: Splitwise</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements</a>
+          <a href="#state">Direction as State</a>
+          <a href="#diagram">State machine + dispatch</a>
+          <a href="#code">Implementation</a>
+          <a href="#walkthrough">Walkthrough</a>
+          <a href="#extensions">Extensions</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Advanced · Elevator system</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

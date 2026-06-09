@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FastAPI — Auth &amp; security | FastAPI Field Guide</title>
+  <meta name="description" content="Secure FastAPI: hash passwords with pwdlib, log in via the OAuth2 password flow, issue and verify JWTs with PyJWT, and protect routes with a current-user dependency." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13 2 4 14h6l-1 8 9-12h-6z' fill='%231ec9b0'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="auth" data-page="fa-auth" data-lesson="fastapi-auth">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="FastAPI Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="#06140f" stroke="#06140f" stroke-width="1.2" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>
+        <span class="brand-text"><b>FastAPI Field Guide</b><span>Runnable visual guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here"><h4>Start here</h4><a class="nav-link" href="../index.html">Home</a></nav>
+      <nav class="nav-group is-py" aria-label="Python">
+        <h4><span class="dot"></span>Python</h4>
+        <a class="nav-link" href="../python/index.html">Setup &amp; tooling</a>
+        <a class="nav-link" href="../python/concepts.html">The refresher</a>
+        <a class="nav-link" href="../python/oop.html">Classes &amp; OOP</a>
+        <a class="nav-link" href="../python/decorators.html">Decorators &amp; closures</a>
+        <a class="nav-link" href="../python/errors.html">Errors &amp; exceptions</a>
+        <a class="nav-link" href="../python/generators.html">Generators &amp; context</a>
+        <a class="nav-link" href="../python/typing.html">Typing in depth</a>
+        <a class="nav-link" href="../python/async.html">Async in depth</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="FastAPI core">
+        <h4><span class="dot"></span>FastAPI core</h4>
+        <a class="nav-link" href="../fastapi/index.html">Overview</a>
+        <a class="nav-link" href="../fastapi/routing.html">Routing &amp; params</a>
+        <a class="nav-link" href="../fastapi/request-body.html">Request body &amp; models</a>
+        <a class="nav-link" href="../fastapi/validation.html">Validation &amp; errors</a>
+        <a class="nav-link" href="../fastapi/dependencies.html">Dependency injection</a>
+      </nav>
+      <nav class="nav-group is-db" aria-label="Databases"><h4><span class="dot"></span>Databases</h4><a class="nav-link" href="../fastapi/databases.html">SQLModel &amp; CRUD</a></nav>
+      <nav class="nav-group is-auth" aria-label="Auth">
+        <h4><span class="dot"></span>Auth &amp; security</h4>
+        <a class="nav-link" href="../fastapi/auth.html">OAuth2 &amp; JWT</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#authz">Authn vs authz</a>
+          <a class="nav-link" href="#hashing">Password hashing</a>
+          <a class="nav-link" href="#flow">OAuth2 password flow</a>
+          <a class="nav-link" href="#jwt">JWT with PyJWT</a>
+          <a class="nav-link" href="#protect">Protecting routes</a>
+        </div>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced"><h4><span class="dot"></span>Advanced</h4><a class="nav-link" href="../fastapi/advanced.html">Async &amp; structure</a></nav>
+      <nav class="nav-group" aria-label="Ship it"><h4>Ship it</h4><a class="nav-link" href="../deploy/index.html">Testing &amp; deployment</a></nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span class="current">Auth &amp; security</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">FastAPI · auth &amp; security</span>
+            <h1>Logins, tokens, and protected routes.</h1>
+            <p class="lead">Real apps need to know <em>who</em> is calling and <em>what</em> they're allowed to do. We'll hash passwords safely, implement the standard <strong>OAuth2 password flow</strong>, issue signed <strong>JWT</strong> tokens, and gate endpoints behind a “current user” dependency.</p>
+          </section>
+
+          <section class="section reveal" id="authz">
+            <h2><span class="section-num">01</span> &nbsp;Authentication vs authorization</h2>
+            <div class="kv">
+              <dt>Authentication</dt><dd><em>Who are you?</em> Proving identity — logging in with a username and password.</dd>
+              <dt>Authorization</dt><dd><em>What may you do?</em> Checking permissions — “is this user an admin?”</dd>
+            </div>
+            <p>The flow we build: the user logs in once (authentication) and gets a <strong>token</strong>; every later request carries that token, and a dependency turns it back into a user (and can then check authorization).</p>
+          </section>
+
+          <section class="section reveal" id="hashing">
+            <h2><span class="section-num">02</span> &nbsp;Never store plain passwords — hash them</h2>
+            <p>You must never save a password as-is. Instead store a one-way <strong>hash</strong>; on login you hash the attempt and compare. Use <strong>pwdlib</strong> (the currently recommended library) with a strong algorithm like Argon2.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">security.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python"># pip install "pwdlib[argon2]"
+from pwdlib import PasswordHash
+
+password_hash = PasswordHash.recommended()
+
+hashed = password_hash.hash("s3cret")          # store THIS, never the plaintext
+print(password_hash.verify("s3cret", hashed))  # True
+print(password_hash.verify("wrong", hashed))   # False</code></pre></div>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Old tutorials use <code>passlib</code> + <code>python-jose</code></div><p>Both are effectively unmaintained now. This guide uses <strong>pwdlib</strong> for hashing and <strong>PyJWT</strong> for tokens — the libraries FastAPI's current docs recommend. If you copy old code using <code>passlib</code> or <code>jose</code>, expect breakage on modern Python.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="flow">
+            <h2><span class="section-num">03</span> &nbsp;The OAuth2 password flow</h2>
+            <p>FastAPI ships helpers for the standard flow. <code>OAuth2PasswordBearer</code> tells FastAPI where the login endpoint is and how to read the token; <code>OAuth2PasswordRequestForm</code> parses the username/password the client posts as form data.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">login.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from typing import Annotated
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+
+app = FastAPI()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")   # the login URL
+
+@app.post("/token")
+def login(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
+    user = get_user(form.username)
+    if not user or not password_hash.verify(form.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    token = create_access_token({"sub": user.username})
+    return {"access_token": token, "token_type": "bearer"}</code></pre></div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="jwt">
+            <h2><span class="section-num">04</span> &nbsp;JWT with PyJWT</h2>
+            <p>A <strong>JWT</strong> (JSON Web Token) is a signed string that encodes a small payload (like the username) plus an expiry. Because it's signed with your secret key, the server can trust it without a database lookup. Use <strong>PyJWT</strong> to create and verify them.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">tokens.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python"># pip install "pyjwt[crypto]"
+import jwt
+from datetime import datetime, timedelta, timezone
+
+SECRET_KEY = "change-me-and-load-from-env"   # NEVER hard-code in real apps
+ALGORITHM = "HS256"
+
+def create_access_token(data: dict, minutes: int = 30) -> str:
+    payload = data.copy()
+    payload["exp"] = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+def decode_access_token(token: str) -> dict:
+    # raises jwt.ExpiredSignatureError / jwt.InvalidTokenError on bad tokens
+    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])</code></pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">A JWT is signed, not encrypted</div><p>Anyone can read a JWT's payload — so never put secrets in it. The signature only guarantees it wasn't <em>tampered with</em>. Always set an <code>exp</code> so tokens don't live forever, and keep <code>SECRET_KEY</code> out of your code (load it from an environment variable).</p></div></div>
+          </section>
+
+          <section class="section reveal" id="protect">
+            <h2><span class="section-num">05</span> &nbsp;Protecting routes</h2>
+            <p>Tie it together with a dependency that reads the token, decodes it, and returns the user — or raises <code>401</code>. Any endpoint that asks for <code>CurrentUser</code> is now protected.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">protect.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">TokenDep = Annotated[str, Depends(oauth2_scheme)]
+
+def get_current_user(token: TokenDep):
+    creds_error = HTTPException(
+        status_code=401, detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = decode_access_token(token)
+        username = payload.get("sub")
+        if username is None:
+            raise creds_error
+    except jwt.InvalidTokenError:        # covers expired + malformed
+        raise creds_error
+    user = get_user(username)
+    if user is None:
+        raise creds_error
+    return user
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
+
+@app.get("/users/me")
+def read_me(user: CurrentUser):          # 401 unless a valid token is sent
+    return {"username": user.username}</code></pre></div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why is it safe for the server to trust a JWT without looking it up in a database?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because the payload is encrypted and unreadable</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Because it's signed with the server's secret key, so tampering is detectable</button>
+                <button class="quiz-opt"><span class="mark"></span>Because tokens never expire</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> The signature proves the token was issued by your server and hasn't been altered. It isn't encrypted (the payload is readable), and good tokens <em>do</em> expire via <code>exp</code>.</div>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../fastapi/databases.html"><span class="pn-k">‹ Back</span><span class="pn-t">Databases (SQLModel)</span></a>
+            <a class="next" href="../fastapi/advanced.html"><span class="pn-k">Next ›</span><span class="pn-t">Async &amp; structure</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#authz">Authn vs authz</a>
+          <a href="#hashing">Password hashing</a>
+          <a href="#flow">OAuth2 password flow</a>
+          <a href="#jwt">JWT with PyJWT</a>
+          <a href="#protect">Protecting routes</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">FastAPI · Auth &amp; security</span>
+        <span class="fmono">FastAPI Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/runpad.js"></script>
+  <script src="../assets/js/playground.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

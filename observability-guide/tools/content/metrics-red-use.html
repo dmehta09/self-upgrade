@@ -1,0 +1,183 @@
+<section class="hero reveal">
+  <span class="eyebrow">Metrics · RED &amp; USE</span>
+  <h1>RED &amp; USE methods.</h1>
+  <p class="lead">Two complementary checklists tell you exactly <em>which</em> metrics to look at first. RED watches your services from the user's perspective; USE watches your infrastructure from the inside. Together they map to Google's Four Golden Signals.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The mental model</h2>
+  <p class="takeaway"><b>RED</b> = "is the service doing its job?" &nbsp; <b>USE</b> = "is the resource holding up?"</p>
+  <p>Neither framework replaces the other. A database can be saturated (USE) before any user-facing error appears (RED). Conversely, high error rates in RED rarely show up in CPU utilisation.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p><b>RED</b> = the front-of-house: are diners being seated quickly, are they getting the right food, how long is the wait? <b>USE</b> = the kitchen equipment: is the oven at 100% capacity, is the fridge queue backing up, are appliances throwing errors?</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="red">
+  <h2><span class="section-num">02</span> RED — for request-driven services</h2>
+  <p>Coined by Tom Wilkie (Grafana Labs). Apply it to every microservice or API endpoint.</p>
+
+  <div class="diagram">
+    <div class="dg-title">RED checklist</div>
+    <div class="flow">
+      <div class="flow-node">
+        <div class="fn-k">R</div>
+        <div class="fn-t">Rate</div>
+        <div class="fn-d">Requests/sec arriving at this service</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">E</div>
+        <div class="fn-t">Errors</div>
+        <div class="fn-d">Fraction of requests returning an error</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">D</div>
+        <div class="fn-t">Duration</div>
+        <div class="fn-d">Latency distribution (p50 / p95 / p99)</div>
+      </div>
+    </div>
+    <div class="cap">Start here for every service alert or incident triage.</div>
+  </div>
+
+  <dl class="kv">
+    <dt>Rate</dt><dd><code>rate(http_requests_total[5m])</code> — tells you load and whether a drop means traffic fell or the service is rejecting requests.</dd>
+    <dt>Errors</dt><dd><code>rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])</code> — the fraction that failed.</dd>
+    <dt>Duration</dt><dd><code>histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))</code> — the felt latency.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="use">
+  <h2><span class="section-num">03</span> USE — for resource health</h2>
+  <p>Coined by Brendan Gregg. Apply it to every resource: CPU, memory, disk I/O, network, connection pools, queues.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Letter</th>
+          <th>Meaning</th>
+          <th>Example metric</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>U</b>tilization</td>
+          <td>% of time the resource is busy (0–100%)</td>
+          <td>CPU usage %, disk busy %</td>
+        </tr>
+        <tr>
+          <td><b>S</b>aturation</td>
+          <td>Extra work queued that the resource can't serve yet</td>
+          <td>CPU run-queue depth, disk I/O wait, thread pool queue length</td>
+        </tr>
+        <tr>
+          <td><b>E</b>rrors</td>
+          <td>Error events from the resource itself</td>
+          <td>Network packet drops, disk I/O errors, OOM kills</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Saturation is the leading signal — a resource can hit 100% utilisation and still serve requests, but once the queue grows, latency degrades and the service is on borrowed time.</p>
+</section>
+
+<section class="section reveal" id="golden-signals">
+  <h2><span class="section-num">04</span> Four Golden Signals — the overlap</h2>
+  <p>Google's SRE book defined four signals: <b>Latency</b>, <b>Traffic</b>, <b>Errors</b>, <b>Saturation</b>. They overlap heavily with RED and USE.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Golden Signal</th>
+          <th>Maps to RED</th>
+          <th>Maps to USE</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Latency</td>
+          <td>Duration (D)</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>Traffic</td>
+          <td>Rate (R)</td>
+          <td>Utilization (U)</td>
+        </tr>
+        <tr>
+          <td>Errors</td>
+          <td>Errors (E)</td>
+          <td>Errors (E)</td>
+        </tr>
+        <tr>
+          <td>Saturation</td>
+          <td>—</td>
+          <td>Saturation (S)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>In practice: use <b>RED</b> to build service dashboards and alerts; use <b>USE</b> for infra runbooks and capacity planning; treat the Four Golden Signals as the vocabulary when talking to SREs.</p>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+      <p>Alerting on <b>causes</b> (CPU 80%) instead of <b>symptoms</b> (latency &gt; SLO, error rate &gt; threshold). A CPU alert fires at 2 AM for batch jobs nobody cares about. A latency alert fires when users are actually hurting. Alert on user-facing symptoms; use resource metrics for diagnosis after the alert fires.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="quiz-red-use">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Your checkout service returns 500s for 3% of requests. Which letter in RED does this map to?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>E — Errors: the fraction of requests that failed.</button>
+      <button class="quiz-opt"><span class="mark"></span>D — Duration: high error rates slow things down.</button>
+      <button class="quiz-opt"><span class="mark"></span>Both R and E — rate includes errors.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Errors in RED is specifically the error ratio. Rate is volume; Duration is latency. They can correlate, but each is a distinct signal.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">06</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Explain RED and USE and when you'd use each.</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>RED (Rate, Errors, Duration) applies to every request-driven microservice — it tells you how well the service is serving users. USE (Utilization, Saturation, Errors) applies to every underlying resource — CPU, memory, queues — and tells you whether the resource is healthy. In an incident I reach for RED first to confirm there's a user-facing symptom, then use USE to identify which resource is the root cause.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"RED = front-of-house — are users being served? USE = kitchen — is the equipment holding up? I triage with RED and diagnose with USE."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why should you alert on symptoms rather than causes?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Cause-based alerts (CPU &gt; 80%) fire constantly for workloads that never hurt users, causing alert fatigue. Symptom-based alerts (latency &gt; SLO, error rate &gt; threshold) fire only when users are impacted, making every alert actionable. Resource metrics are invaluable for post-alert diagnosis, not for the alert predicate itself.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Alert on user pain — latency and errors. Use CPU and queue depth to explain why after you've been paged, not as the page itself."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do RED and USE relate to Google's Four Golden Signals?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>The Four Golden Signals (Latency, Traffic, Errors, Saturation) span both frameworks. Latency maps to RED's Duration; Traffic maps to RED's Rate and USE's Utilization; Errors appear in both; Saturation maps to USE's Saturation. They're the same ideas under two lenses — service-centric (RED) and resource-centric (USE).</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Golden Signals is Google's vocabulary; RED and USE are Brendan Gregg and Tom Wilkie's implementations. They largely cover the same ground — I use whatever vocabulary the team already speaks."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Testing &amp; deployment | FastAPI Field Guide</title>
+  <meta name="description" content="Test FastAPI with TestClient and pytest, override dependencies for a test database, then deploy with uvicorn/gunicorn workers, a Dockerfile, and environment variables." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13 2 4 14h6l-1 8 9-12h-6z' fill='%231ec9b0'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-page="deploy" data-lesson="deploy">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="FastAPI Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="#06140f" stroke="#06140f" stroke-width="1.2" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>
+        <span class="brand-text"><b>FastAPI Field Guide</b><span>Runnable visual guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here"><h4>Start here</h4><a class="nav-link" href="../index.html">Home</a></nav>
+      <nav class="nav-group is-py" aria-label="Python">
+        <h4><span class="dot"></span>Python</h4>
+        <a class="nav-link" href="../python/index.html">Setup &amp; tooling</a>
+        <a class="nav-link" href="../python/concepts.html">The refresher</a>
+        <a class="nav-link" href="../python/oop.html">Classes &amp; OOP</a>
+        <a class="nav-link" href="../python/decorators.html">Decorators &amp; closures</a>
+        <a class="nav-link" href="../python/errors.html">Errors &amp; exceptions</a>
+        <a class="nav-link" href="../python/generators.html">Generators &amp; context</a>
+        <a class="nav-link" href="../python/typing.html">Typing in depth</a>
+        <a class="nav-link" href="../python/async.html">Async in depth</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="FastAPI core">
+        <h4><span class="dot"></span>FastAPI core</h4>
+        <a class="nav-link" href="../fastapi/index.html">Overview</a>
+        <a class="nav-link" href="../fastapi/routing.html">Routing &amp; params</a>
+        <a class="nav-link" href="../fastapi/request-body.html">Request body &amp; models</a>
+        <a class="nav-link" href="../fastapi/validation.html">Validation &amp; errors</a>
+        <a class="nav-link" href="../fastapi/dependencies.html">Dependency injection</a>
+      </nav>
+      <nav class="nav-group is-db" aria-label="Databases"><h4><span class="dot"></span>Databases</h4><a class="nav-link" href="../fastapi/databases.html">SQLModel &amp; CRUD</a></nav>
+      <nav class="nav-group is-auth" aria-label="Auth"><h4><span class="dot"></span>Auth &amp; security</h4><a class="nav-link" href="../fastapi/auth.html">OAuth2 &amp; JWT</a></nav>
+      <nav class="nav-group is-adv" aria-label="Advanced"><h4><span class="dot"></span>Advanced</h4><a class="nav-link" href="../fastapi/advanced.html">Async &amp; structure</a></nav>
+      <nav class="nav-group" aria-label="Ship it">
+        <h4>Ship it</h4>
+        <a class="nav-link" href="../deploy/index.html">Testing &amp; deployment</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#testing">Testing basics</a>
+          <a class="nav-link" href="#testdb">A test database</a>
+          <a class="nav-link" href="#run">Running in production</a>
+          <a class="nav-link" href="#docker">Docker</a>
+          <a class="nav-link" href="#checklist">Ship checklist</a>
+        </div>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span class="current">Testing &amp; deployment</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Ship it · testing &amp; deployment</span>
+            <h1>Prove it works, then put it online.</h1>
+            <p class="lead">The final mile: write automated tests so you can change code with confidence, then run your app in production. FastAPI makes testing genuinely pleasant, and deployment is just “run uvicorn somewhere.”</p>
+          </section>
+
+          <section class="section reveal" id="testing">
+            <h2><span class="section-num">01</span> &nbsp;Testing with TestClient</h2>
+            <p>FastAPI's <code>TestClient</code> calls your app in-process — no running server, no network — so tests are fast and reliable. It's backed by <strong>httpx</strong>, and you run the suite with <strong>pytest</strong>.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">test_main.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python"># pip install pytest httpx
+from fastapi.testclient import TestClient
+from main import app
+
+client = TestClient(app)
+
+def test_read_root():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"message": "Hello, FastAPI"}
+
+def test_create_item():
+    response = client.post("/items", json={"name": "Wand", "price": 9.99})
+    assert response.status_code == 201
+    assert response.json()["name"] == "Wand"
+
+def test_validation_error():
+    response = client.post("/items", json={"price": 9.99})   # missing name
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "name"]</code></pre></div>
+            </div>
+            <p>Run them with <code>pytest</code>. Each <code>test_*</code> function is a test; an <code>assert</code> that fails marks it red.</p>
+          </section>
+
+          <section class="section reveal" id="testdb">
+            <h2><span class="section-num">02</span> &nbsp;A throwaway test database</h2>
+            <p>Tests shouldn't touch your real database. Use <code>app.dependency_overrides</code> to swap the session dependency for one backed by a fresh in-memory SQLite — this is where the <code>yield</code> dependency from earlier pays off.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">test_heroes.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from sqlmodel import SQLModel, Session, create_engine
+from sqlmodel.pool import StaticPool
+from fastapi.testclient import TestClient
+from main import app, get_session
+
+# a private in-memory database for the test
+test_engine = create_engine(
+    "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
+)
+SQLModel.metadata.create_all(test_engine)
+
+def override_get_session():
+    with Session(test_engine) as session:
+        yield session
+
+app.dependency_overrides[get_session] = override_get_session   # swap it
+client = TestClient(app)
+
+def test_create_hero():
+    r = client.post("/heroes", json={"name": "Deadpond"})
+    assert r.status_code == 201
+    assert r.json()["name"] == "Deadpond"</code></pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">This is why dependencies matter</div><p>Because your routes ask for the database via <code>Depends(get_session)</code> instead of reaching for a global, you can replace it in one line for tests. Loose coupling pays off.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="run">
+            <h2><span class="section-num">03</span> &nbsp;Running in production</h2>
+            <p>In development you used <code>fastapi dev</code> (auto-reload). In production you want multiple worker processes and no reload:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="bash"># simplest: the FastAPI CLI in production mode
+fastapi run main.py --workers 4
+
+# or call uvicorn directly
+uvicorn main:app --host 0.0.0.0 --port 80 --workers 4
+
+# classic combo: gunicorn managing uvicorn workers
+gunicorn main:app -k uvicorn.workers.UvicornWorker -w 4 -b 0.0.0.0:80</code></pre></div>
+            </div>
+            <p>Workers = roughly your number of CPU cores. Put a reverse proxy (nginx, or your platform's load balancer) in front for TLS and static files.</p>
+          </section>
+
+          <section class="section reveal" id="docker">
+            <h2><span class="section-num">04</span> &nbsp;A Dockerfile</h2>
+            <p>Containerizing makes “works on my machine” work everywhere. A minimal image:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">Dockerfile</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="text">FROM python:3.13-slim
+
+WORKDIR /code
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+
+EXPOSE 80
+CMD ["fastapi", "run", "main.py", "--port", "80"]</code></pre></div>
+            </div>
+            <p>Build and run: <code>docker build -t hero-api .</code> then <code>docker run -p 80:80 hero-api</code>.</p>
+          </section>
+
+          <section class="section reveal" id="checklist">
+            <h2><span class="section-num">05</span> &nbsp;Before you ship — a checklist</h2>
+            <div class="kv">
+              <dt>Secrets in env</dt><dd>No keys in code. Load <code>SECRET_KEY</code>, DB URLs, etc. from environment variables / a secrets manager.</dd>
+              <dt>Real database</dt><dd>Swap SQLite for PostgreSQL (just the connection string), and manage schema changes with Alembic migrations.</dd>
+              <dt>CORS</dt><dd>Set <code>allow_origins</code> to your actual front-end domains — not <code>"*"</code> in production.</dd>
+              <dt>Disable reload</dt><dd>Run with workers, no <code>--reload</code>. Set log level appropriately.</dd>
+              <dt>HTTPS</dt><dd>Terminate TLS at a proxy or your platform. Never serve auth over plain HTTP.</dd>
+              <dt>Tests green</dt><dd><code>pytest</code> passes in CI before every deploy.</dd>
+            </div>
+
+            <div class="exercise reveal">
+              <div class="ex-tag">Exercise</div>
+              <p class="ex-q">Write a test asserting that <code>GET /items/999</code> on a fresh database returns <code>404</code>.</p>
+              <p>Assume the route raises <code>HTTPException(404, "Item not found")</code> when the id is unknown.</p>
+              <details class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">test_404.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python">def test_missing_item_is_404():
+    response = client.get("/items/999")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Item not found"}</code></pre></div>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">You've built a backend 🎉</div><p>From a Python refresher to a tested, deployable API with validation, a database, and auth. Mark this lesson learned, then revisit any topic with search (<kbd>/</kbd>). Great work.</p></div></div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../fastapi/advanced.html"><span class="pn-k">‹ Back</span><span class="pn-t">Async &amp; structure</span></a>
+            <a class="next" href="../index.html"><span class="pn-k">Next ›</span><span class="pn-t">Back to the start</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#testing">Testing basics</a>
+          <a href="#testdb">A test database</a>
+          <a href="#run">Running in production</a>
+          <a href="#docker">Docker</a>
+          <a href="#checklist">Ship checklist</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Testing &amp; deployment</span>
+        <span class="fmono">FastAPI Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/runpad.js"></script>
+  <script src="../assets/js/playground.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Load balancing | The System Design Field Guide</title>
+  <meta name="description" content="Spreading traffic across servers: L4 vs L7, algorithms, health checks, and stateless design." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="blocks" data-page="blocks-lb" data-lesson="blocks-lb">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../blocks/index.html" style="color:var(--accent)">Building blocks</a><span class="sep">/</span><span class="current">Load balancing</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Building blocks · load balancing</span>
+  <h1>Load balancing.</h1>
+  <p class="lead">A load balancer sits in front of a pool of identical servers and spreads requests across them — so no single server is overwhelmed, and a dead one is quietly skipped. It's the component that turns "add more servers" into actual extra capacity, and it's the first box you draw on almost every whiteboard.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> &nbsp;The idea</h2>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>It's the host at a busy restaurant directing arrivals to whichever waiter is free. Diners (requests) don't pick a waiter; the host (load balancer) does — keeping everyone evenly busy and steering people away from a waiter who's gone home (a failed server).</p>
+    </div>
+  </div>
+  <p>Watch a load balancer hand four requests to a pool of servers, round-robin. If one died, it would simply be skipped.</p>
+  <figure class="viz" data-viz aria-label="Round-robin load balancing">
+    <figcaption class="viz-title">Round-robin across 4 servers</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "array",
+      "meta": { "values": ["S1","S2","S3","S4"] },
+      "frames": [
+        { "caption": "Four identical, stateless servers behind the load balancer." },
+        { "active": [0], "caption": "Request 1 → S1." },
+        { "active": [1], "caption": "Request 2 → S2." },
+        { "active": [2], "caption": "Request 3 → S3." },
+        { "active": [3], "caption": "Request 4 → S4." },
+        { "active": [0], "caption": "Request 5 wraps back to S1 — round-robin. Add a 5th server and it joins the rotation." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="l4l7">
+  <h2><span class="section-num">02</span> &nbsp;Layer 4 vs Layer 7</h2>
+  <p>Two flavours, named after the OSI layer they understand:</p>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔌</span><h4>L4 — transport</h4><p>Routes by IP + port, blind to content. Extremely fast and cheap; can't make decisions based on the URL or headers. Good for raw TCP/UDP throughput.</p></div>
+    <div class="card feature"><span class="f-ic fx">🧠</span><h4>L7 — application</h4><p>Understands HTTP: can route by path (<span class="mono">/api</span> vs <span class="mono">/img</span>), terminate TLS, do sticky sessions, and rate-limit. Slightly more work per request, far more flexible. The common default.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="algos">
+  <h2><span class="section-num">03</span> &nbsp;Algorithms &amp; health checks</h2>
+  <div class="kv">
+    <dt>Round robin</dt><dd>Next server in rotation. Simple, great when servers are equal and requests are uniform.</dd>
+    <dt>Least connections</dt><dd>Send to the server with the fewest in-flight requests. Better when request durations vary.</dd>
+    <dt>Weighted</dt><dd>Bigger servers get a larger share. Handy with mixed hardware.</dd>
+    <dt>Hash (by IP / key)</dt><dd>Same client always lands on the same server — a poor man's stickiness. (For data, prefer <a href="../data/consistent-hashing.html">consistent hashing</a>.)</dd>
+  </div>
+  <p>Crucially, the load balancer runs <strong>health checks</strong> — pinging each server and removing any that stop responding, so traffic only goes to live boxes. The LB itself must be redundant (two of them, or a managed one) so it isn't a single point of failure.</p>
+  <div class="quiz" data-quiz>
+    <p class="q">Why do we insist app servers be <em>stateless</em> for load balancing to work well?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Stateless servers use less memory</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>So any server can handle any request — letting the LB freely spread load and survive a server dying</button>
+      <button class="quiz-opt"><span class="mark"></span>Because TCP requires it</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> if a user's session lived only in one server's memory, the LB couldn't freely route them and a server crash would lose their state. Keep state in a shared cache/DB and every server is interchangeable.</div>
+  </div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../blocks/index.html"><span class="pn-k">‹ Back</span><span class="pn-t">The building blocks</span></a>
+            <a class="next" href="../blocks/api-gateway.html"><span class="pn-k">Next ›</span><span class="pn-t">API gateway & reverse proxies</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#l4l7">Layer 4 vs Layer 7</a>
+          <a href="#algos">Algorithms & health checks</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Building blocks · Load balancing</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+  <script src="../assets/js/visualizer.js"></script>
+</body>
+</html>

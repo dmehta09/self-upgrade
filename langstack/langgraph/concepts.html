@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LangGraph — Core concepts | The Lang Stack</title>
+  <meta name="description" content="Deep dive into LangGraph: graphs, nodes & edges, state, reducers, conditional edges, compile & stream, checkpointers & threads, human-in-the-loop, memory & the Store, multi-agent, and prebuilt agents. With diagrams and Python." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.4' fill='%2334d399'/><circle cx='19' cy='6' r='2.4' fill='%23818cf8'/><circle cx='12' cy='18' r='2.4' fill='%23fbbf24'/></svg>" />
+</head>
+<body data-tool="langgraph" data-page="lg-concepts">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Lang Stack home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06140f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M6.8 7.4 10.4 16M17.2 7.4 13.6 16M7 6h10"/></svg></span>
+        <span class="brand-text"><b>The Lang Stack</b><span>Visual field guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../ecosystem/index.html">The big picture</a>
+        <a class="nav-link" href="../ecosystem/glossary.html">Glossary</a>
+      </nav>
+      <nav class="nav-group is-lc" aria-label="LangChain">
+        <h4><span class="dot"></span>LangChain</h4>
+        <a class="nav-link" href="../langchain/index.html">Overview</a>
+        <a class="nav-link" href="../langchain/concepts.html">Core concepts</a>
+      </nav>
+      <nav class="nav-group is-lg" aria-label="LangGraph">
+        <h4><span class="dot"></span>LangGraph</h4>
+        <a class="nav-link" href="../langgraph/index.html">Overview</a>
+        <a class="nav-link" href="../langgraph/concepts.html">Core concepts</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#graph">Graphs &amp; edges</a>
+          <a class="nav-link" href="#state">State</a>
+          <a class="nav-link" href="#reducers">Reducers</a>
+          <a class="nav-link" href="#edges">Conditional edges</a>
+          <a class="nav-link" href="#compile">Compile &amp; run</a>
+          <a class="nav-link" href="#persistence">Checkpointers</a>
+          <a class="nav-link" href="#hitl">Human-in-the-loop</a>
+          <a class="nav-link" href="#memory">Memory &amp; Store</a>
+          <a class="nav-link" href="#multiagent">Multi-agent</a>
+          <a class="nav-link" href="#prebuilt">Prebuilt</a>
+          <a class="nav-link" href="#gotchas">Gotchas</a>
+        </div>
+      </nav>
+      <nav class="nav-group is-ls" aria-label="LangSmith">
+        <h4><span class="dot"></span>LangSmith</h4>
+        <a class="nav-link" href="../langsmith/index.html">Overview</a>
+        <a class="nav-link" href="../langsmith/concepts.html">Core concepts</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../langgraph/index.html" style="color:var(--accent)">LangGraph</a><span class="sep">/</span><span class="current">Core concepts</span></nav>
+        <div class="topbar-spacer"></div>
+        <span class="pill"><span class="dot"></span>Python · v1.2</span>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">LangGraph · core concepts</span>
+            <h1>From one node to a stateful agent.</h1>
+            <p class="lead">Eleven ideas take you from "what's a node?" to a persistent, human-in-the-loop, multi-agent system. Each comes with a picture, runnable Python, and the gotcha that trips up beginners.</p>
+          </section>
+
+          <!-- 1. GRAPH -->
+          <section class="section reveal" id="graph">
+            <h2><span class="section-num">01</span> &nbsp;Graphs, nodes &amp; edges</h2>
+            <p>A LangGraph app is a <strong>graph</strong>: a set of <strong>nodes</strong> (boxes that do work) connected by <strong>edges</strong> (arrows that decide what runs next). You add nodes and edges to a <code>StateGraph</code>, then <code>.compile()</code> it into something runnable.</p>
+            <p>Two rules make the whole model work:</p>
+            <div class="kv">
+              <dt>a node returns</dt><dd>A <strong>dict of state updates</strong> — never a mutated copy of the whole state. LangGraph merges that dict back in for you.</dd>
+              <dt>an edge decides</dt><dd>What runs after a node. Edges can be <strong>fixed</strong> (always go to B) or <strong>dynamic</strong> (a function picks the next node at runtime).</dd>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">graph.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langgraph.graph import StateGraph, START, END
+
+builder = StateGraph(State)        # State defined in the next section
+builder.add_node("step_a", step_a)
+builder.add_node("step_b", step_b)
+
+builder.add_edge(START, "step_a") # entry point
+builder.add_edge("step_a", "step_b")
+builder.add_edge("step_b", END)   # exit point
+
+graph = builder.compile()</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">START and END are special</div><p><code>START</code> is where execution begins; <code>END</code> is where it stops. They aren't nodes you write — they're built-in markers you connect your real nodes to.</p></div></div>
+          </section>
+
+          <!-- 2. STATE -->
+          <section class="section reveal" id="state">
+            <h2><span class="section-num">02</span> &nbsp;State &amp; the StateGraph</h2>
+            <p>The <strong>state</strong> is the shared notebook that flows through the graph. You define its shape with a <code>TypedDict</code>. Each key is called a <strong>channel</strong>, and a node returns a <em>partial</em> update — just the channels it wants to change.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">state.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from typing_extensions import TypedDict
+from langchain_core.messages import AnyMessage
+
+class State(TypedDict):
+    messages: list[AnyMessage]   # the conversation so far
+    user_name: str               # anything else you want to carry
+
+# A node only returns the channels it changes:
+def greet(state: State):
+    return {"user_name": "Sam"}  # 'messages' is left untouched</code></pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title"><code>MessagesState</code> is the chat-app shortcut</div><p>Nearly every chat agent needs a growing list of messages. LangGraph ships <code>MessagesState</code> — a prebuilt state with a <code>messages</code> channel that already knows to <em>append</em> new messages instead of replacing them. Subclass it and add your own fields.</p></div></div>
+          </section>
+
+          <!-- 3. REDUCERS -->
+          <section class="section reveal" id="reducers">
+            <h2><span class="section-num">03</span> &nbsp;Reducers: how updates merge <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p>When a node returns <code>{"answer": "hi"}</code>, what happens to the old value of <code>answer</code>? By default it gets <strong>replaced</strong>. A <strong>reducer</strong> changes that rule for a specific channel — most commonly, to <strong>append</strong> instead.</p>
+            <p>Wrap a channel's type in <code>Annotated[..., reducer]</code>. This is essential for accumulating a message list, and it's <em>required</em> when two parallel nodes might write the same channel (otherwise LangGraph can't decide whose value wins).</p>
+            <div class="diagram">
+              <div class="dg-title">A reducer merges parallel writes</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">node A</div><div class="fn-t">returns logs: ["a"]</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">reducer · add</div><div class="fn-t">logs = ["a", "b"]</div><div class="fn-d">both writes appended</div></div>
+                <div class="flow-arrow" style="transform:rotate(180deg)"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">node B</div><div class="fn-t">returns logs: ["b"]</div></div>
+              </div>
+              <div class="cap">Without a reducer, A and B both writing <code>logs</code> is a conflict. The <code>add</code> reducer merges them into one combined list.</div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">reducers.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from typing import Annotated
+from operator import add
+from typing_extensions import TypedDict
+
+class State(TypedDict):
+    answer: str                       # default: new value REPLACES old
+    logs: Annotated[list, add]        # reducer: new value is APPENDED</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">This is exactly what <code>MessagesState</code> does</div><p>Its <code>messages</code> channel is annotated with a reducer (<code>add_messages</code>) so every node's reply gets appended to the conversation instead of overwriting it.</p></div></div>
+          </section>
+
+          <!-- 4. EDGES -->
+          <section class="section reveal" id="edges">
+            <h2><span class="section-num">04</span> &nbsp;Conditional edges &amp; routing <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p>A <strong>conditional edge</strong> is how a graph makes decisions. Instead of always going to the same next node, you give LangGraph a <strong>routing function</strong>: it reads the state and <em>returns the name of the next node</em>. This is what lets a graph branch — and, crucially, <strong>loop back</strong> to an earlier node.</p>
+            <div class="diagram">
+              <div class="dg-title">One node, two possible destinations</div>
+              <div class="flow">
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">node</div><div class="fn-t">agent</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">route()</div><div class="fn-t">needs a tool?</div><div class="fn-d">reads the state</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">yes →</div><div class="fn-t">tools</div><div class="fn-d">loops back to agent</div></div>
+              </div>
+              <div class="cap">If the model asked for a tool, route to <strong>tools</strong> (which loops back). If it's done, route to <strong>END</strong>.</div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">routing.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">def route(state: State) -&gt; str:
+    if state["needs_tool"]:
+        return "tools"
+    return END
+
+builder.add_conditional_edges("agent", route, {"tools": "tools", END: END})
+builder.add_edge("tools", "agent")    # loop back -&gt; this is what makes an agent loop</code></pre></div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">What makes a LangGraph agent able to LOOP (call a tool, then think again)?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>A <code>while True</code> loop inside a single node</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A conditional edge that can route back to an earlier node</button>
+                <button class="quiz-opt"><span class="mark"></span>Setting <code>temperature=1</code> on the model</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> The loop lives in the <em>graph structure</em>, not inside a node. A conditional edge points back to an earlier node (<code>tools → agent</code>), so the agent runs again and again until the router decides to head for <code>END</code>.</div>
+            </div>
+          </section>
+
+          <!-- 5. COMPILE -->
+          <section class="section reveal" id="compile">
+            <h2><span class="section-num">05</span> &nbsp;Compile, invoke &amp; stream</h2>
+            <p>Once nodes and edges are wired, <code>builder.compile()</code> turns the blueprint into a runnable graph. Then you run it:</p>
+            <div class="kv">
+              <dt>.invoke(input)</dt><dd>Run the whole graph to completion and return the final state.</dd>
+              <dt>.stream(input, stream_mode="updates")</dt><dd>Yield each node's <strong>update</strong> as it happens — great for showing progress.</dd>
+              <dt>.stream(input, stream_mode="values")</dt><dd>Yield the <strong>full state</strong> after each step instead of just the change.</dd>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">run.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">graph = builder.compile()
+
+# Run once, get the final state:
+final = graph.invoke({"messages": [{"role": "user", "content": "Hi!"}]})
+
+# Or watch each node finish, live:
+for update in graph.stream({"messages": [{"role": "user", "content": "Hi!"}]},
+                           stream_mode="updates"):
+    print(update)   # -&gt; {'agent': {...}}, then {'tools': {...}}, ...</code></pre></div>
+            </div>
+          </section>
+
+          <!-- 6. PERSISTENCE -->
+          <section class="section reveal" id="persistence">
+            <h2><span class="section-num">06</span> &nbsp;Checkpointers &amp; threads: real memory <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p>This is how production memory actually works. A <strong>checkpointer</strong> saves the state at <em>every step</em> of the graph. A <strong>thread_id</strong> labels one conversation. Pass the same <code>thread_id</code> again and the graph <strong>replays the saved checkpoints</strong> — so it remembers everything. Use a new <code>thread_id</code> and you get a fresh start.</p>
+            <div class="diagram">
+              <div class="dg-title">Same thread_id = the graph remembers</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">turn 1</div><div class="fn-t">"I'm Sam."</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">checkpoint</div><div class="fn-t">state saved</div><div class="fn-d">keyed by thread_id</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">turn 2</div><div class="fn-t">"What's my name?"</div><div class="fn-d">reads saved state → "Sam"</div></div>
+              </div>
+              <div class="cap">The checkpointer also means a <strong>crashed run can resume</strong> from its last saved step instead of starting over.</div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">persistence.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langgraph.checkpoint.memory import InMemorySaver
+
+graph = builder.compile(checkpointer=InMemorySaver())  # or SqliteSaver / PostgresSaver in prod
+
+config = {"configurable": {"thread_id": "user-1"}}
+graph.invoke({"messages": [{"role": "user", "content": "Hi, I'm Sam."}]}, config)
+graph.invoke({"messages": [{"role": "user", "content": "What's my name?"}]}, config)
+# -&gt; remembers "Sam", because the same thread_id replays the saved checkpoints</code></pre></div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">You call the graph twice with the SAME <code>thread_id</code>. What happens on the second call?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>It starts a brand-new, empty conversation</button>
+                <button class="quiz-opt"><span class="mark"></span>It raises an error because the thread already exists</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>It continues the same conversation with all prior state restored</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> The checkpointer reloads every saved step for that <code>thread_id</code>, so the second call picks up exactly where the first left off — that's how the agent "remembers." A <em>different</em> <code>thread_id</code> would start fresh.</div>
+            </div>
+          </section>
+
+          <!-- 7. HITL -->
+          <section class="section reveal" id="hitl">
+            <h2><span class="section-num">07</span> &nbsp;Human-in-the-loop</h2>
+            <p>Sometimes you want a human to approve a step before the agent continues — a draft email, a refund, a database write. Call <code>interrupt(...)</code> inside a node to <strong>pause the graph</strong> and hand control back to you. Later, resume with <code>Command(resume=...)</code> and the graph picks up right where it stopped.</p>
+            <div class="diagram">
+              <div class="dg-title">Pause, let a human decide, resume</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">step 1</div><div class="fn-t">run</div><div class="fn-d">graph executes</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">interrupt</div><div class="fn-t">paused</div><div class="fn-d">control returns to you</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">resume</div><div class="fn-t">human reviews</div><div class="fn-d">Command(resume=…)</div></div>
+              </div>
+              <div class="cap">The graph state was checkpointed at the pause, so it waits as long as you need — seconds or days.</div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">hitl.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langgraph.types import interrupt, Command
+
+def review(state: State):
+    decision = interrupt({"draft": state["draft"]})   # graph pauses, returns the draft to you
+    return {"approved": decision["approved"]}
+
+# ...much later, after a human decides:
+graph.invoke(Command(resume={"approved": True}), config)</code></pre></div>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Don't put side effects before <code>interrupt()</code></div><p>When the graph resumes, the node runs again <em>from the top</em>. Any code before <code>interrupt()</code> — sending an email, charging a card — will run a second time. Do side effects <strong>after</strong> the interrupt, once you have the human's decision.</p></div></div>
+          </section>
+
+          <!-- 8. MEMORY -->
+          <section class="section reveal" id="memory">
+            <h2><span class="section-num">08</span> &nbsp;Short-term vs long-term memory &amp; the Store</h2>
+            <p>LangGraph has two kinds of memory, and they answer different questions:</p>
+            <div class="grid grid-2">
+              <div class="card"><h4 class="mt-0">Short-term</h4><p class="mb-0">The per-thread <strong>state and checkpoints</strong> — everything about <em>this</em> conversation. It lives and dies with the <code>thread_id</code>.</p></div>
+              <div class="card"><h4 class="mt-0">Long-term</h4><p class="mb-0">Facts that should <strong>outlive any single conversation</strong> — a user's preferences, things they told you last week. Kept in a <strong>Store</strong> and queried across threads.</p></div>
+            </div>
+            <p>The <code>Store</code> is a simple key-value memory you can read and write from any node, independent of the current thread:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">store.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langgraph.store.memory import InMemoryStore
+
+store = InMemoryStore()                       # SqliteStore / PostgresStore in prod
+graph = builder.compile(checkpointer=InMemorySaver(), store=store)
+# nodes can now store.put(...) and store.search(...) facts that persist across threads</code></pre></div>
+            </div>
+          </section>
+
+          <!-- 9. MULTIAGENT -->
+          <section class="section reveal" id="multiagent">
+            <h2><span class="section-num">09</span> &nbsp;Subgraphs &amp; multi-agent patterns</h2>
+            <p>A graph can be used as a <strong>node inside another graph</strong> — that's a <strong>subgraph</strong>. It's how you build multi-agent systems: each agent is its own little graph, composed into a bigger one. Two patterns dominate:</p>
+            <div class="grid grid-2">
+              <div class="card"><h4 class="mt-0">Supervisor</h4><p class="mb-0">One <strong>router agent</strong> sits on top and delegates each task to the right specialist (a researcher, a coder, a writer), then collects the results.</p></div>
+              <div class="card"><h4 class="mt-0">Swarm</h4><p class="mb-0">Peer agents <strong>hand off directly</strong> to each other — whoever is best suited takes over next, with no central boss.</p></div>
+            </div>
+            <div class="diagram">
+              <div class="dg-title">Supervisor delegating to specialists</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">worker</div><div class="fn-t">researcher</div></div>
+                <div class="flow-arrow" style="transform:rotate(180deg)"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">router</div><div class="fn-t">supervisor</div><div class="fn-d">picks who runs next</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">worker</div><div class="fn-t">writer</div></div>
+              </div>
+              <div class="cap">The supervisor routes to a worker, the worker reports back, and the supervisor decides what's next — a conditional edge at a larger scale.</div>
+            </div>
+          </section>
+
+          <!-- 10. PREBUILT -->
+          <section class="section reveal" id="prebuilt">
+            <h2><span class="section-num">10</span> &nbsp;Prebuilt: create_react_agent &amp; ToolNode</h2>
+            <p>You rarely wire the standard agent loop by hand. LangGraph's <code>langgraph.prebuilt</code> module ships the common pieces:</p>
+            <ul>
+              <li><code>create_react_agent</code> — builds the entire think → act → observe loop from a model and a list of tools.</li>
+              <li><code>ToolNode</code> — a ready-made node that <strong>executes whatever tools the model asked for</strong> and feeds the results back as tool messages. It's the "tools" box in every diagram above.</li>
+            </ul>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">prebuilt.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langgraph.prebuilt import create_react_agent, ToolNode
+
+# 1. The whole agent loop in one line:
+agent = create_react_agent(model="gpt-4o", tools=[search, calculator])
+
+# 2. Or use just the tool-executing node when hand-building a graph:
+tool_node = ToolNode([search, calculator])
+builder.add_node("tools", tool_node)</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Start prebuilt, drop down when needed</div><p>Begin with <code>create_react_agent</code>. When you need a custom branch, an interrupt, or a second agent, you reach for the raw <code>StateGraph</code> — and reuse <code>ToolNode</code> for the tool step.</p></div></div>
+          </section>
+
+          <!-- 11. GOTCHAS -->
+          <section class="section reveal" id="gotchas">
+            <h2><span class="section-num">11</span> &nbsp;Common gotchas</h2>
+            <p>Four mistakes catch nearly every newcomer. Watch for them:</p>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Nodes must RETURN updates</div><p>Don't mutate the state object in place (<code>state["x"] = 1</code>). Return a dict of changes (<code>return {"x": 1}</code>). LangGraph relies on those returned dicts to merge state and to checkpoint correctly.</p></div></div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Parallel writes need a reducer</div><p>If two nodes that run in parallel both write the same channel, you'll get an error unless that channel has a reducer (like <code>Annotated[list, add]</code>) telling LangGraph how to merge the two values.</p></div></div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Side effects before <code>interrupt()</code> can double-run</div><p>Code before an <code>interrupt()</code> re-executes when the graph resumes. Keep emails, charges, and writes <em>after</em> the interrupt so they only fire once.</p></div></div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">A missing <code>thread_id</code> silently starts over</div><p>Forget to pass a consistent <code>thread_id</code> (or change it by accident) and the graph quietly begins a brand-new conversation with no memory. If "it forgot everything," check the thread_id first.</p></div></div>
+          </section>
+
+          <nav class="page-nav reveal">
+            <a href="../langgraph/index.html"><span class="pn-k">‹ Back</span><span class="pn-t">LangGraph · Overview</span></a>
+            <a class="next" href="../langsmith/index.html"><span class="pn-k">Next ›</span><span class="pn-t">LangSmith · Overview</span></a>
+          </nav>
+        </div>
+
+        <!-- On this page -->
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#graph">Graphs &amp; edges</a>
+          <a href="#state">State</a>
+          <a href="#reducers">Reducers</a>
+          <a href="#edges">Conditional edges</a>
+          <a href="#compile">Compile &amp; run</a>
+          <a href="#persistence">Checkpointers</a>
+          <a href="#hitl">Human-in-the-loop</a>
+          <a href="#memory">Memory &amp; Store</a>
+          <a href="#multiagent">Multi-agent</a>
+          <a href="#prebuilt">Prebuilt</a>
+          <a href="#gotchas">Gotchas</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">LangGraph · Core concepts</span>
+        <span class="fmono">The Lang Stack · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

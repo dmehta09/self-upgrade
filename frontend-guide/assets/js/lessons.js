@@ -1,0 +1,60 @@
+/* ============================================================
+   Frontend Field Guide — canonical lesson registry
+   GENERATED from tools/manifest.js by tools/gen.js — edit the
+   manifest, then re-run `node tools/gen.js`. Stable lesson ids;
+   each lesson page sets <body data-lesson="<id>">.
+   ============================================================ */
+window.LESSONS = [
+  { id: "fo-overview", title: "Foundations — the pro baseline", url: "foundations/index.html", module: "foundations", tool: "foundations" },
+  { id: "fo-ts", title: "TypeScript for React", url: "foundations/typescript-for-react.html", module: "foundations", tool: "foundations" },
+  { id: "fo-vite", title: "Vite & the build toolchain", url: "foundations/vite-and-build-tools.html", module: "foundations", tool: "foundations" },
+  { id: "re-overview", title: "React — the pro mental model", url: "react/index.html", module: "react", tool: "react" },
+  { id: "re-render", title: "Render vs re-render", url: "react/render-and-rerender.html", module: "react", tool: "react" },
+  { id: "re-hooks", title: "Hooks, identity & memoization", url: "react/hooks-deep-dive.html", module: "react", tool: "react" },
+  { id: "re-effect", title: "useEffect — the right mental model", url: "react/useeffect-mental-model.html", module: "react", tool: "react" },
+  { id: "re-composition", title: "Composition & context", url: "react/composition-and-context.html", module: "react", tool: "react" },
+  { id: "re-19", title: "React 19: Actions, use(), compiler", url: "react/react-19.html", module: "react", tool: "react" },
+  { id: "nx-overview", title: "Next.js App Router — overview", url: "nextjs/index.html", module: "nextjs", tool: "nextjs" },
+  { id: "nx-router", title: "The App Router model", url: "nextjs/app-router.html", module: "nextjs", tool: "nextjs" },
+  { id: "nx-rsc", title: "Server vs Client Components", url: "nextjs/server-vs-client-components.html", module: "nextjs", tool: "nextjs" },
+  { id: "nx-rendering", title: "Rendering strategies: SSR/SSG/ISR/PPR", url: "nextjs/rendering-strategies.html", module: "nextjs", tool: "nextjs" },
+  { id: "nx-data", title: "Data fetching & caching", url: "nextjs/data-fetching-and-caching.html", module: "nextjs", tool: "nextjs" },
+  { id: "nx-actions", title: "Server Actions & mutations", url: "nextjs/server-actions.html", module: "nextjs", tool: "nextjs" },
+  { id: "st-overview", title: "Styling — Tailwind + shadcn", url: "styling/index.html", module: "styling", tool: "styling" },
+  { id: "st-tailwind", title: "Tailwind v4: CSS-first", url: "styling/tailwind-v4.html", module: "styling", tool: "styling" },
+  { id: "st-shadcn", title: "shadcn/ui & the cn()/cva pattern", url: "styling/shadcn-ui-and-cva.html", module: "styling", tool: "styling" },
+  { id: "da-overview", title: "Data & state — three buckets", url: "data/index.html", module: "data", tool: "data" },
+  { id: "da-query", title: "TanStack Query: server-state", url: "data/tanstack-query.html", module: "data", tool: "data" },
+  { id: "da-zustand", title: "Zustand for client state", url: "data/zustand.html", module: "data", tool: "data" },
+  { id: "da-forms", title: "Forms: react-hook-form + Zod", url: "data/forms-rhf-zod.html", module: "data", tool: "data" },
+  { id: "da-decision", title: "Where should this state live?", url: "data/state-decision-guide.html", module: "data", tool: "data" },
+  { id: "pe-overview", title: "Rendering & performance — overview", url: "perf/index.html", module: "perf", tool: "perf" },
+  { id: "pe-streaming", title: "Streaming SSR & Suspense", url: "perf/streaming-and-suspense.html", module: "perf", tool: "perf" },
+  { id: "pe-hydration", title: "Hydration, explained", url: "perf/hydration.html", module: "perf", tool: "perf" },
+  { id: "pe-vitals", title: "Core Web Vitals: LCP, INP, CLS", url: "perf/core-web-vitals.html", module: "perf", tool: "perf" },
+  { id: "te-overview", title: "Testing — the trophy", url: "testing/index.html", module: "testing", tool: "testing" },
+  { id: "te-vitest", title: "Vitest + React Testing Library", url: "testing/vitest-and-rtl.html", module: "testing", tool: "testing" },
+  { id: "te-playwright", title: "End-to-end with Playwright", url: "testing/playwright-e2e.html", module: "testing", tool: "testing" },
+  { id: "sh-overview", title: "Ship it — tooling, a11y & deploy", url: "ship/index.html", module: "ship", tool: "ship" },
+  { id: "sh-lint", title: "ESLint, Biome & formatting", url: "ship/lint-and-format.html", module: "ship", tool: "ship" },
+  { id: "sh-a11y", title: "Accessibility interviewers test", url: "ship/accessibility.html", module: "ship", tool: "ship" },
+  { id: "sh-deploy", title: "Deploy & CI", url: "ship/deploy-and-ci.html", module: "ship", tool: "ship" },
+  { id: "iv-method", title: "How frontend interviews work", url: "interview/index.html", module: "interview", tool: "interview" },
+  { id: "iv-bank", title: "Frontend question bank", url: "interview/question-bank.html", module: "interview", tool: "interview" },
+  { id: "iv-ds-method", title: "The frontend design round", url: "interview/design-scenarios/index.html", module: "interview", tool: "interview" },
+  { id: "iv-ds-autocomplete", title: "Design an autocomplete", url: "interview/design-scenarios/autocomplete.html", module: "interview", tool: "interview" },
+  { id: "iv-ds-table", title: "Design a data table", url: "interview/design-scenarios/data-table.html", module: "interview", tool: "interview" },
+  { id: "iv-ds-fast", title: "Make this page fast", url: "interview/design-scenarios/make-it-fast.html", module: "interview", tool: "interview" },
+];
+
+window.LESSON_MODULES = [
+  { key: "foundations", label: "Foundations" },
+  { key: "react", label: "React" },
+  { key: "nextjs", label: "Next.js (App Router)" },
+  { key: "styling", label: "Styling" },
+  { key: "data", label: "Data & state" },
+  { key: "perf", label: "Rendering & performance" },
+  { key: "testing", label: "Testing" },
+  { key: "ship", label: "Ship it" },
+  { key: "interview", label: "Interview prep" },
+];

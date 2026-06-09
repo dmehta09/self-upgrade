@@ -1,0 +1,122 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Data &amp; state &middot; decision guide</span>
+            <h1>Where should this state live?</h1>
+            <p class="lead">The senior skill isn&rsquo;t knowing the tools &mdash; it&rsquo;s routing each piece of state to its rightful home. Run every value through one short decision procedure and the choice becomes mechanical.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">Don&rsquo;t ask &ldquo;which library?&rdquo; Ask <b>who owns this value</b> and <b>how far it travels</b> &mdash; the home falls out of the answer.</p>
+            <p>Every value has a natural owner: the server, the URL, the whole app, or one component. Pick the <em>narrowest</em> home that still works; lifting or globalizing prematurely is what creates tangled, stale state.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>Four drawers, labelled. <b>Server cache</b>: photocopies of files the office owns. <b>URL</b>: the address on the envelope &mdash; whatever someone needs to land on this exact view. <b>Global UI</b>: house rules everyone follows (theme, who&rsquo;s home). <b>Local &amp; form</b>: the sticky note on this one screen. Filing a value in the wrong drawer is most state bugs.</p>
+              </div>
+            </div>
+
+            <div class="steps">
+              <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Is it server data?</h4><p>Anything fetched from an API &mdash; lists, profiles, search results. &rarr; <b>TanStack Query</b> (cache + revalidate). Stop here.</p></div></div>
+              <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Should it survive a reload or be shareable?</h4><p>Filters, tabs, page number, a selected id. &rarr; the <b>URL</b> (search params). Bookmarkable and back-button-friendly.</p></div></div>
+              <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Is it cross-cutting client state many screens read?</h4><p>Theme, logged-in user, sidebar. &rarr; <b>Context</b> for low-frequency, or <b>Zustand</b> for anything that changes often.</p></div></div>
+              <div class="step"><span class="step-num">4</span><div class="step-body"><h4>Is it a form?</h4><p>Field values, validation, submit state. &rarr; <b>react-hook-form</b> + a Zod schema.</p></div></div>
+              <div class="step"><span class="step-num">5</span><div class="step-body"><h4>Otherwise &mdash; one component?</h4><p>A toggle, an input draft, a hover flag. &rarr; <code>useState</code>. Lift it only when a sibling genuinely needs it too.</p></div></div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="map">
+            <h2><span class="section-num">01</span> The routing table</h2>
+            <p>The same procedure as a lookup. Match the kind of state to its tool &mdash; and notice each row has a different owner.</p>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Kind of state</th><th>Home</th><th>Example</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Server / fetched</strong></td><td>TanStack Query</td><td>product list, user profile, search results</td></tr>
+                <tr><td><strong>Shareable / bookmarkable</strong></td><td>URL search params</td><td>table filters, active tab, page number</td></tr>
+                <tr><td><strong>Global client (low churn)</strong></td><td>React Context</td><td>theme, locale, feature flags</td></tr>
+                <tr><td><strong>Global client (frequent)</strong></td><td>Zustand</td><td>auth user, sidebar, command palette</td></tr>
+                <tr><td><strong>Form</strong></td><td>react-hook-form + Zod</td><td>signup fields, validation, submit state</td></tr>
+                <tr><td><strong>Local / ephemeral</strong></td><td><code>useState</code> (lift if shared)</td><td>a toggle, an input draft, hover</td></tr>
+              </tbody>
+            </table></div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>Two classics: don&rsquo;t store <b>server data in Redux/Zustand</b> &mdash; it&rsquo;s a remote copy that needs caching/revalidation (use Query). And don&rsquo;t <b>duplicate URL state into <code>useState</code></b> &mdash; you get two sources of truth that drift; read it from the URL and write back to the URL.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="worked">
+            <h2><span class="section-num">02</span> Worked examples</h2>
+            <p>Four real values, run through the procedure:</p>
+            <dl class="kv">
+              <dt>Table filters &amp; sort</dt><dd>Shareable and should survive reload &rarr; <b>URL search params</b>, not <code>useState</code>. A teammate can paste the link and see the same view.</dd>
+              <dt>Logged-in user</dt><dd>Cross-cutting client state many screens read &rarr; <b>Context</b> (low churn) or <b>Zustand</b>. The user <em>record</em> may be fetched, so hydrate it from <b>Query</b> and expose identity globally.</dd>
+              <dt>Fetched list of orders</dt><dd>Server data, full stop &rarr; <b>TanStack Query</b>. Never mirror it into a global store or <code>useState</code>.</dd>
+              <dt>A single form field</dt><dd>Belongs to the form &rarr; <b>react-hook-form</b> (uncontrolled), validated by the shared Zod schema. Not app-global, not URL.</dd>
+            </dl>
+
+            <div class="quiz" data-quiz>
+              <p class="q">A data table&rsquo;s active filters and current page should be shareable via a pasted link. Where do they live?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>In the <b>URL</b> as search params &mdash; bookmarkable, reload-safe, back-button friendly.</button>
+                <button class="quiz-opt"><span class="mark"></span>In a Zustand store so any component can read them.</button>
+                <button class="quiz-opt"><span class="mark"></span>In <code>useState</code> on the table component.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> &ldquo;Shareable / bookmarkable&rdquo; is the tell for URL state. A store or <code>useState</code> would lose the filters on reload and can&rsquo;t be linked &mdash; and duplicating them into <code>useState</code> creates a second source of truth.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you decide where a piece of state should live?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>I ask a short chain: server data? &rarr; TanStack Query. Shareable/bookmarkable? &rarr; URL. Cross-cutting client state? &rarr; Context or Zustand. A form? &rarr; RHF + Zod. Otherwise local <code>useState</code>, lifted only when a sibling needs it. Pick the narrowest home that works.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Server &rarr; Query, shareable &rarr; URL, cross-cutting &rarr; Context/Zustand, form &rarr; RHF, else useState. Narrowest home that works.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When is the URL the right place for state?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Whenever the state should be shareable, bookmarkable, or survive a reload and the back button &mdash; filters, search query, active tab, pagination, a selected id. Put it in search params so the link fully describes the view, and read it back from the URL rather than copying it into <code>useState</code>.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;If a pasted link should reproduce the view &mdash; filters, tabs, pagination &mdash; it&rsquo;s URL state. The address describes the screen.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What&rsquo;s the difference between server state and client state?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Server state is data the backend owns; the client holds a <em>copy</em> that can go stale, so it needs caching and revalidation &mdash; that&rsquo;s TanStack Query. Client state is owned entirely by the app: UI toggles, theme, session, form drafts. Treating fetched data as client state (stuffing it in Redux) is the classic mistake.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Server state is a cached copy of remote data that can go stale &mdash; Query owns it. Client state is the app&rsquo;s own UI/session. Don&rsquo;t mix them.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="forms-rhf-zod.html"><span class="pn-k">Previous</span><span class="pn-t">Forms: react-hook-form + Zod</span></a>
+            <a class="next" href="../perf/index.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Rendering &amp; performance &mdash; overview</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#map">The routing table</a>
+          <a href="#worked">Worked examples</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

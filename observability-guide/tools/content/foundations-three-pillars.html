@@ -1,0 +1,142 @@
+<section class="hero reveal">
+  <span class="eyebrow">Foundations · three pillars</span>
+  <h1>The three pillars + signals.</h1>
+  <p class="lead">Logs, metrics, and traces each answer a different class of question at a different cost. Knowing which pillar to reach for — and when they overlap — is the first mental model every observability interview probes.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> Three tools, three questions</h2>
+  <p class="takeaway"><b>Logs</b> = narrative events. <b>Metrics</b> = cheap aggregatable numbers. <b>Traces</b> = causal path across services.</p>
+  <p>Each pillar answers a different first question: <em>What happened?</em> (logs) → <em>How many / how fast?</em> (metrics) → <em>Why did this request take so long?</em> (traces). A mature system emits all three and correlates them via a shared <code>trace_id</code>.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p><strong>Logs</strong> are your diary — every event recorded in narrative detail. <strong>Metrics</strong> are your dashboard gauges / vital signs — heart rate, blood pressure, a single number you glance at. <strong>Traces</strong> are a package-tracking timeline — "left warehouse → in transit → customs → delivered" for one specific request.</p>
+    </div>
+  </div>
+
+  <div class="diagram"><div class="dg-title">Observability Pipeline</div>
+    <div class="flow">
+      <div class="flow-node"><div class="fn-k">step 1</div><div class="fn-t">Instrument</div><div class="fn-d">OTel SDK emits logs, metrics, spans from app code</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">step 2</div><div class="fn-t">Collect</div><div class="fn-d">OTel Collector / Grafana Alloy receives &amp; processes OTLP</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">step 3</div><div class="fn-t">Store</div><div class="fn-d">Prometheus (metrics) · Loki (logs) · Tempo (traces)</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">step 4</div><div class="fn-t">Query</div><div class="fn-d">PromQL / LogQL / TraceQL</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">step 5</div><div class="fn-t">Visualize / Alert</div><div class="fn-d">Grafana dashboards + Alertmanager rules</div></div>
+    </div>
+    <div class="cap">One pipeline, three signal types. A shared <code>trace_id</code> lets Grafana jump from a trace span directly to its Loki logs.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="pillars-compared">
+  <h2><span class="section-num">02</span> Pillars compared</h2>
+  <p>Each pillar has a different cost driver and a different primary question it answers best. Use the table as a quick decision framework.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Pillar</th>
+          <th>Answers</th>
+          <th>Cost driver</th>
+          <th>Example question</th>
+          <th>Best tool</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Logs</strong></td>
+          <td>What happened &amp; when?</td>
+          <td>Volume × retention</td>
+          <td>"What was in the request body when the error occurred?"</td>
+          <td>Loki, Splunk</td>
+        </tr>
+        <tr>
+          <td><strong>Metrics</strong></td>
+          <td>How many / how fast / trending?</td>
+          <td>Cardinality (unique label combos)</td>
+          <td>"What is p99 latency over the last 7 days?"</td>
+          <td>Prometheus, Datadog</td>
+        </tr>
+        <tr>
+          <td><strong>Traces</strong></td>
+          <td>Why did this specific request slow down?</td>
+          <td>Sampling rate × span size</td>
+          <td>"Which downstream service added the most latency to order #42?"</td>
+          <td>Tempo, Jaeger v2, Honeycomb</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section reveal" id="when-to-use">
+  <h2><span class="section-num">03</span> When to reach for each</h2>
+  <dl class="kv">
+    <dt>Reach for logs when…</dt><dd>You need the raw narrative: payloads, error messages, audit trails. Expensive for high-throughput paths — sample or use structured events.</dd>
+    <dt>Reach for metrics when…</dt><dd>You need aggregates over time: rates, percentiles, counts. Cheap per data point but scale with label cardinality, not request volume.</dd>
+    <dt>Reach for traces when…</dt><dd>You're chasing latency or failure <em>across service boundaries</em>. Distributed tracing is the only tool that shows the causal path end-to-end.</dd>
+  </dl>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+      <p>The three pillars are <strong>converging</strong>. Honeycomb's "wide structured events" model shows that a single rich event can be indexed as a trace span, aggregated like a metric, and queried like a log. OTel's goal is one pipeline for all signals — treat the pillars as conceptual categories, not rigid tool buckets.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="emerging">
+  <h2><span class="section-num">04</span> Emerging signals: beyond the three</h2>
+  <p class="takeaway">Two newer signal types are becoming mainstream: <b>wide structured events</b> and <b>Profiles</b> (continuous profiling).</p>
+  <dl class="kv">
+    <dt>Wide structured events</dt><dd>A single JSON event with 100+ attributes per request — no loss of cardinality, no pre-aggregation. Popularized by Honeycomb. OTel spans are effectively this.</dd>
+    <dt>Profiles (4th OTel signal)</dt><dd>Continuous CPU/memory flame graphs per service, via Pyroscope / OTel Profiles (public alpha, Mar 2026). Answers: "which code path is burning CPU?" without a profiler session.</dd>
+  </dl>
+
+  <div class="quiz" data-quiz>
+    <p class="q">A team says "we don't need traces — we already have detailed logs." What critical capability are they missing?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Nothing — rich logs can fully replace traces.</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The causal path across service boundaries: which downstream call is slow, and what called what in what order.</button>
+      <button class="quiz-opt"><span class="mark"></span>Aggregate statistics like p99 latency.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Logs tell you what happened inside one service. Traces show you the end-to-end causal chain — service A called B which called C — and which hop added latency. You cannot reconstruct that from per-service logs alone.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Walk me through logs vs metrics vs traces — what does each answer?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Logs are discrete narrative events — rich detail, high cost at volume. Metrics are cheap aggregatable numbers over time — great for dashboards and alerts, but limited to pre-defined dimensions. Traces follow a single request across every service it touches — the only way to answer "which hop is slow?" in a distributed system.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Logs answer 'what happened,' metrics answer 'how fast or how many,' traces answer 'why did this request take so long across services.' Different cost model for each."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What drives cost for each pillar?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Logs cost ≈ volume × retention — the more bytes you ship and keep, the more you pay. Metrics cost ≈ cardinality — the number of unique label-value combinations, not the request volume. Traces cost ≈ sampling rate × span size — most teams sample aggressively to keep costs under control.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Logs: bytes in and retained. Metrics: cardinality — it's not request volume that hurts, it's unique label combinations. Traces: how aggressively you sample."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Are the three pillars separate — or is the model changing?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>They're converging. "Wide structured events" — a single rich event per request with many attributes — can be indexed as a trace, aggregated like a metric, and queried like a log. OTel's single-wire protocol (OTLP) reflects this: one pipeline for all signals. Honeycomb pioneered this model; OTel formalizes it. Profiles is now a 4th official signal.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"The boundaries are blurring. A single wide structured event can be treated as a trace, aggregated as a metric, or searched as a log. OTel's one-pipeline model reflects that trend."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

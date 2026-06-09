@@ -1,0 +1,135 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Performance &middot; metrics</span>
+            <h1>Core Web Vitals: LCP, INP, CLS</h1>
+            <p class="lead">Three numbers summarize how a page <em>feels</em>: how fast it loads, how quickly it reacts, and whether it holds still. Google grades real users on them, so they&rsquo;re both a UX signal and an SEO one. Know the thresholds, the culprits, and the fix for each.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">Three gauges: <b>LCP</b> = load, <b>INP</b> = responsiveness, <b>CLS</b> = stability. &ldquo;Good&rdquo; means passing all three at the <b>75th percentile</b> of field data.</p>
+            <p>Core Web Vitals are user-centric: each maps to a felt experience rather than a lab number. They&rsquo;re measured on real visitors (field data), and the bar is the 75th percentile &mdash; so the slowest quarter of your users is what counts.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>It&rsquo;s a car&rsquo;s dashboard with three gauges. One shows how fast you got up to speed (LCP &mdash; load). One shows how sharply the car responds when you touch the pedal (INP &mdash; responsiveness). One shows whether the ride is smooth or the whole thing lurches (CLS &mdash; stability). A great drive needs all three in the green.</p>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Metric</th><th>What it measures</th><th>&ldquo;Good&rdquo; target</th><th>Usual culprit</th><th>Fix</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><strong>LCP</strong><br>Largest Contentful Paint</td>
+                    <td>When the largest element (hero image, headline) finishes painting &mdash; perceived load.</td>
+                    <td>&le; <b>2.5 s</b></td>
+                    <td>Slow server/TTFB, render-blocking JS/CSS, an unoptimized hero image.</td>
+                    <td>Stream/cache the shell, preload the LCP image, prioritize it, trim blocking resources.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>INP</strong><br>Interaction to Next Paint</td>
+                    <td>Latency from a user interaction to the next frame &mdash; overall responsiveness.</td>
+                    <td>&le; <b>200 ms</b></td>
+                    <td>Long main-thread tasks: heavy hydration, big handlers, expensive re-renders.</td>
+                    <td>Cut/split client JS, break up long tasks, defer non-urgent work, ship fewer islands.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>CLS</strong><br>Cumulative Layout Shift</td>
+                    <td>How much visible content jumps around during load &mdash; visual stability.</td>
+                    <td>&le; <b>0.1</b></td>
+                    <td>Images/ads/embeds with no reserved size; late-loading fonts; content injected above.</td>
+                    <td>Set width/height (or aspect-ratio), reserve space for dynamic slots, use <code>font-display</code> wisely.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section reveal" id="field-lab">
+            <h2><span class="section-num">01</span> Field vs lab &mdash; and why INP, not FID</h2>
+            <p><b>Field</b> data (CrUX) is what real users experienced; it&rsquo;s what Search actually ranks on. <b>Lab</b> data (Lighthouse) is a single synthetic run &mdash; great for debugging, but it can&rsquo;t see your real traffic. They disagree, and field wins.</p>
+            <dl class="kv">
+              <dt>Field (CrUX)</dt><dd>Real-user measurements, aggregated at the <b>75th percentile</b>. The basis for &ldquo;passing&rdquo; Core Web Vitals.</dd>
+              <dt>Lab (Lighthouse)</dt><dd>One controlled run on a synthetic device/network. Reproducible for debugging; not a substitute for field.</dd>
+            </dl>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>Don&rsquo;t cite <b>FID</b> &mdash; <b>INP replaced it as a Core Web Vital in March 2024</b>. FID only measured the delay of the <em>first</em> input; INP captures the worst interaction latency across the whole visit, so it&rsquo;s far stricter. Also remember the thresholds are at the <b>75th percentile of field data</b>, not your median.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="fixes">
+            <h2><span class="section-num">02</span> Diagnosing a poor score</h2>
+            <p>Each metric has a different failure mode, so the first move is to identify which gauge is red &mdash; then apply the matching fix rather than optimizing blindly.</p>
+            <div class="steps">
+              <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Poor LCP &rarr; speed up the largest paint</h4><p>Find the LCP element, then attack what delays it: improve TTFB (cache/stream), preload and prioritize that image, and remove render-blocking JS/CSS.</p></div></div>
+              <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Poor INP &rarr; free the main thread</h4><p>Long tasks are the enemy. Ship less client JS, split long handlers, defer non-urgent work, and reduce hydration so the first interactions respond within a frame.</p></div></div>
+              <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Poor CLS &rarr; reserve space</h4><p>Give images and embeds explicit dimensions or <code>aspect-ratio</code>, reserve room for late content (ads, banners), and avoid inserting content above what the user is reading.</p></div></div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Which Core Web Vital replaced First Input Delay (FID), and what does it capture?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>INP &mdash; the latency of interactions across the whole visit, targeting &le; 200 ms.</button>
+                <button class="quiz-opt"><span class="mark"></span>LCP &mdash; the time for the largest element to paint.</button>
+                <button class="quiz-opt"><span class="mark"></span>TTFB &mdash; the server&rsquo;s time to first byte.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> INP became a Core Web Vital in 2024, replacing FID. FID only timed the <em>first</em> input&rsquo;s delay; INP measures responsiveness across all interactions, so it&rsquo;s the stricter, more representative metric.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What are the three Core Web Vitals and their thresholds?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>LCP &mdash; largest element paints &mdash; should be &le; 2.5 s. INP &mdash; interaction responsiveness &mdash; should be &le; 200 ms. CLS &mdash; layout stability &mdash; should be &le; 0.1. &ldquo;Good&rdquo; means hitting all three at the 75th percentile of real-user field data.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;LCP under 2.5 seconds, INP under 200 milliseconds, CLS under 0.1 &mdash; at the 75th percentile of field data. Load, responsiveness, stability.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">INP vs FID &mdash; what changed?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>INP replaced FID as a Core Web Vital in 2024. FID only measured the input delay of the <em>first</em> interaction, which was easy to pass and misleading. INP measures the latency of interactions throughout the whole visit and reports a representative worst case &mdash; a much truer picture of responsiveness.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;FID only timed the first input&rsquo;s delay; INP measures responsiveness across the whole session. INP&rsquo;s stricter and replaced FID in 2024 &mdash; so I never cite FID.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">A page has poor LCP, INP, or CLS &mdash; how do you fix each?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Poor LCP: speed up the largest paint &mdash; better TTFB, preload and prioritize the hero image, cut render-blocking resources. Poor INP: free the main thread &mdash; ship less client JS, split long tasks, reduce hydration. Poor CLS: reserve space &mdash; set image dimensions or <code>aspect-ratio</code> and leave room for late-loading content.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;LCP: faster server plus a prioritized hero image. INP: less JS and shorter tasks. CLS: reserve space with explicit sizes. Different gauge, different fix.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="hydration.html"><span class="pn-k">Previous</span><span class="pn-t">Hydration, explained</span></a>
+            <a class="next" href="../testing/index.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Testing &mdash; the trophy</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#field-lab">Field vs lab &amp; INP</a>
+          <a href="#fixes">Diagnosing a poor score</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

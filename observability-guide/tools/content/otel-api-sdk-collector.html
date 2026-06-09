@@ -1,0 +1,113 @@
+<section class="hero reveal">
+  <span class="eyebrow">OpenTelemetry · API, SDK &amp; Collector</span>
+  <h1>API, SDK &amp; Collector.</h1>
+  <p class="lead">OTel splits responsibilities across three layers so you can change your backend, sampling policy, or export destination without touching application code. All three speak one protocol: <strong>OTLP</strong>.</p>
+</section>
+
+<section class="section reveal" id="three-layers">
+  <h2><span class="section-num">01</span> The three layers</h2>
+  <p class="takeaway">The <b>API</b> defines what to call. The <b>SDK</b> defines what happens when you call it. The <b>Collector</b> decouples your app from any backend.</p>
+  <p>This separation is deliberate. A library can depend on the API (stable, no-op by default) without pulling in a concrete SDK. Ops teams swap the SDK config or Collector pipeline without asking developers to change a line of code.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>The <strong>API</strong> is the standard wall-socket shape — every appliance uses it. The <strong>SDK</strong> is the wiring behind your wall — it decides voltages, circuit breakers, and routing. The <strong>Collector</strong> is a smart power strip: plug any socket into it, and it routes current to whichever outlet (backend) you want, without rewiring the house.</p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>OTel API</dt><dd>Language interfaces for creating spans, recording metrics, emitting logs. No-op when no SDK is present — safe for library authors to call unconditionally.</dd>
+    <dt>OTel SDK</dt><dd>The concrete implementation: sampling decisions, batching, resource detection, export via OTLP.</dd>
+    <dt>OTel Collector</dt><dd>A standalone process (or sidecar) that <strong>receives → processes → exports</strong> telemetry. Decouples your app from every backend.</dd>
+    <dt>OTLP</dt><dd>OpenTelemetry Protocol — the single wire format for all signals (gRPC or HTTP/JSON). Every layer speaks it.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="pipeline">
+  <h2><span class="section-num">02</span> The full pipeline</h2>
+  <p>In production the data flows from your app through the Collector before reaching any backend. The Collector is the swap point — change an exporter config, not application code.</p>
+
+  <div class="diagram"><div class="dg-title">OTel data path — app to backends</div>
+    <div class="flow">
+      <div class="flow-node"><div class="fn-k">App</div><div class="fn-t">OTel SDK</div><div class="fn-d">Instruments code, batches spans/metrics/logs, sends via OTLP</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">OTLP</div><div class="fn-t">Collector</div><div class="fn-d">Receivers → Processors (filter/sample/enrich) → Exporters</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">Backends</div><div class="fn-t">Any combination</div><div class="fn-d">Prometheus · Tempo · Loki · Jaeger · Datadog · New Relic · vendor of choice</div></div>
+    </div>
+    <div class="cap">Changing backends = updating the Collector exporter config. Zero application changes.</div>
+  </div>
+
+  <div class="steps">
+    <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Receivers</h4><p>Accept telemetry in any format — OTLP, Prometheus scrape, Jaeger, Zipkin, cloud vendor formats.</p></div></div>
+    <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Processors</h4><p>Transform in-flight: batch, filter noisy spans, add k8s resource attributes, tail-sample, redact PII.</p></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Exporters</h4><p>Forward to one or many backends simultaneously — write once, fan out to Tempo + Datadog at the same time.</p></div></div>
+  </div>
+</section>
+
+<section class="section reveal" id="why-collector">
+  <h2><span class="section-num">03</span> Why the Collector matters</h2>
+  <p>Skipping the Collector and pointing your SDK directly at a vendor endpoint is the most common OTel mistake. It looks simpler — until you need to add a second backend, apply sampling, or switch vendors.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Anti-pattern — direct export</div>
+      <p>SDK → Vendor A endpoint. Changing backend = edit every service's config. No central sampling, no PII scrubbing, no fan-out.</p>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Better — Collector in the middle</div>
+      <p>SDK → Collector → any backend(s). Add a second exporter in one YAML block. Apply tail sampling once, centrally. Swap vendors with no app redeployment.</p>
+    </div>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+      <p>Exporting directly to one vendor's OTLP endpoint couples every service to that vendor. When you add a second backend (e.g., a Tempo sidecar for traces and Datadog for alerts), you have to touch every service. Put the Collector between them from day one.</p>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Your team wants to send traces to both Grafana Tempo and Datadog simultaneously. Where is the minimal-change place to do this?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Add two SDK exporters to every service.</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Add a second exporter block to the Collector pipeline.</button>
+      <button class="quiz-opt"><span class="mark"></span>Write a custom Prometheus remote-write rule.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> The Collector is the single fan-out point. One exporter config change sends the same telemetry to multiple backends — no service restarts required.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What's the difference between the OTel API and the OTel SDK?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>The API is the interface — the calls you make in your code. It's a no-op if nothing else is loaded, which makes it safe for library authors. The SDK is the concrete implementation that wires up sampling, batching, and export. You ship the API with your library; your app configures the SDK at startup.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"The API is the socket shape — safe for libraries to use, does nothing on its own. The SDK is the wiring that makes it actually work: sampling, batching, OTLP export."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why run an OTel Collector instead of exporting directly from the app?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>The Collector decouples your app from any specific backend. It lets you apply tail sampling, enrichment, and PII scrubbing centrally, fan out to multiple backends from one config change, and absorb backend outages with a retry buffer — none of which is practical if every service talks directly to a vendor endpoint.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"The Collector is the swap point. I can add a backend, change sampling, or scrub PII in one place — without redeploying any application."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>What are the Collector's three stages? (Receivers → Processors → Exporters.)</li><li>What protocol does it speak? (OTLP — gRPC or HTTP.)</li></ul></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is OTLP and why does it matter?</span><span class="pm-chip diff-warm">warm</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>OTLP (OpenTelemetry Protocol) is the single wire format for all three OTel signals — traces, metrics, and logs — over gRPC or HTTP/JSON. Before OTLP every vendor had its own agent format; OTLP means any OTel-instrumented app can talk to any OTLP-capable backend without format translation.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"OTLP is the one wire protocol for all OTel signals. It ended the era where each vendor needed its own proprietary agent format."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

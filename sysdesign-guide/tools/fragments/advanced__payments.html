@@ -1,0 +1,161 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Advanced · Stripe / payments</span>
+  <h1>Design a payment system.</h1>
+  <p class="lead">Payments flip the usual priorities: <strong>correctness beats availability and speed</strong> — charging twice or losing a transaction is unacceptable. Two invariants drive everything: <strong>exactly-once charging</strong> (idempotency, so retries don't double-charge) and <strong>never creating or destroying money</strong> (a double-entry ledger under ACID). Everything else — async state machines, reconciliation — serves those two.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Charge a customer, pay out merchants, refunds, talk to external networks/banks, expose a clear transaction history.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p><strong>Strong consistency &amp; correctness</strong> above all; full auditability; exactly-once effects despite retries and flaky external rails; durable — never lose a record.</p></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Reference</th><th>Figure</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>Visa avg / capacity</td><td>~10,200 TPS avg · up to 65–83k/s</td><td>the network aggregates all acquirers</td></tr>
+        <tr><td>Stripe BFCM 2025 peak</td><td>~2,533 TPS (152k/min), &gt;99.9999% uptime</td><td>one processor, far below the network</td></tr>
+        <tr><td>"1B payments/day"</td><td>~12k TPS avg, ~30k peak (2.5×), ~60k seasonal</td><td>size to <em>your</em> layer</td></tr>
+        <tr><td>Ledger growth</td><td>1B × 128 B/transfer ≈ 128 GB/day</td><td>(TigerBeetle's actual record size)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">02</span> &nbsp;API &amp; data model</h2>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/v1/payments</span><span class="ep-note">Idempotency-Key: 8f3c… · { amount (minor units int), currency, source, capture_method }</span></div>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/v1/payments/{id}/{capture,refund,cancel}</span><span class="ep-note">cancel only pre-capture; refund only post-capture</span></div>
+  <div class="kv">
+    <dt>Payment intent</dt><dd>id, idempotency_key, amounts as <strong>int64 minor units</strong> (never floats — IEEE-754 can't represent cents exactly), currency, status, psp_ref. State machine: created → authorized → captured → settled / failed / refunded / disputed.</dd>
+    <dt>Double-entry ledger</dt><dd><span class="mono">accounts</span>, immutable <span class="mono">journal_entries</span> (header), <span class="mono">journal_lines</span> (debit/credit) with the invariant <strong>Σ debits = Σ credits</strong> per entry.</dd>
+    <dt>Idempotency store</dt><dd>key + locked_at + stored response_code/body + recovery_point; <span class="mono">UNIQUE(user_id, key)</span>.</dd>
+  </div>
+  <p>Webhooks deliver async transitions (captured/settled/failed/disputed) — but they're <em>hints</em>; the PSP status API is authoritative for reconciliation, and webhook consumers must be idempotent (events get redelivered).</p>
+</section>
+
+<section class="section reveal" id="idempotency">
+  <h2><span class="section-num">03</span> &nbsp;Idempotency: the no-double-charge rule</h2>
+  <p>A charge is a non-idempotent, irreversible external side effect. If a client retries after a lost response, a naive system fires a <em>second</em> charge. The fix: a client-supplied <strong>idempotency key</strong>; the server stores the first request's result (success <em>or</em> failure) and replays it for any repeat.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">A retried charge is deduplicated by its key</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Idempotent charge",
+      "nodes": [
+        { "id": "client", "label": "Client", "type": "retry", "col": 0, "row": 1 },
+        { "id": "api", "label": "Payment API", "type": "idem key", "col": 1, "row": 1 },
+        { "id": "store", "label": "Idempotency store", "type": "key → result", "col": 2, "row": 0 },
+        { "id": "bank", "label": "Bank / network", "type": "external", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "client", "to": "api", "label": "charge + key" },
+        { "from": "api", "to": "store" },
+        { "from": "api", "to": "bank" }
+      ],
+      "steps": [
+        { "edge": ["client","api"], "caption": "Charge arrives with idempotency key 'k-9f2'." },
+        { "edge": ["api","store"], "caption": "Claim the key (INSERT … ON CONFLICT). Not seen → first attempt." },
+        { "edge": ["api","bank"], "caption": "Authorize with the bank (the PSP call has its OWN idempotency key), then record the result under 'k-9f2'." },
+        { "edge": ["client","api"], "caption": "The network retries the SAME request (the first response was lost)." },
+        { "edge": ["api","store"], "caption": "Key 'k-9f2' already has a result → return it. The bank is NOT called again. No double charge.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">charge.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">BEGIN;
+-- 1. Claim the idempotency key. ON CONFLICT short-circuits a retry.
+INSERT INTO idempotency_keys (idempotency_key, user_id, recovery_point, locked_at)
+VALUES ($1, $2, 'started', now())
+ON CONFLICT (user_id, idempotency_key) DO NOTHING
+RETURNING id;
+-- 0 rows  -> key exists: load + replay stored response (or 409 if still locked)
+
+-- 2. One BALANCED journal entry (header + lines): debits must equal credits.
+WITH e AS (
+  INSERT INTO journal_entries (idempotency_key, description)
+  VALUES ($1, 'capture') RETURNING id
+)
+INSERT INTO journal_lines (entry_id, account_id, direction, amount)
+SELECT e.id, v.account_id, v.direction, v.amount
+FROM e, (VALUES (:cust,'debit',2000), (:mrch,'credit',1971), (:fee,'credit',29))
+        AS v(account_id, direction, amount);
+-- DB enforces sum(debit) = sum(credit) per entry (trigger / deferred CHECK)
+COMMIT;
+-- The PSP charge call lives OUTSIDE this transaction (its own idempotency key).</code></pre></div>
+  </div>
+  <p class="small">You can't wrap a network call in a DB transaction — so split work into <strong>atomic phases</strong> (local txns) separated by the PSP call, persisting a <span class="mono">recovery_point</span> after each so a retry resumes from the last checkpoint instead of re-charging.</p>
+</section>
+
+<section class="section reveal" id="ledger">
+  <h2><span class="section-num">04</span> &nbsp;The double-entry ledger</h2>
+  <p>Every movement is a <strong>balanced pair</strong> — a debit and an equal credit — so the books always sum to zero and money is never created or lost. The journal is <strong>append-only and immutable</strong>: you never edit an entry, you add a reversing one. That's event sourcing for money: balance = a fold over the journal, with a perfect audit trail.</p>
+  <div class="kv">
+    <dt>Capture example</dt><dd><span class="mono">DEBIT customer_funds 2000 · CREDIT merchant_payable 1971 · CREDIT fees_revenue 29</span> → 2000 = 1971 + 29, balanced.</dd>
+    <dt>Enforce in the DB</dt><dd>Balance at the transaction layer (trigger/constraint), not app code — no partial failure can leave an unbalanced entry. Any single unbalanced entry is a <em>detectable bug</em>, not silent corruption.</dd>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why ACID / strong consistency</div><p>Balances are read-modify-write under concurrency; without isolation you get lost updates, double-spends, and negative balances. This is the textbook "choose CP over AP" case — a temporarily unavailable ledger is recoverable; a double-spend is not. Single-writer-per-account, ACID, strict serializability (what purpose-built ledgers like TigerBeetle provide).</p></div></div>
+</section>
+
+<section class="section reveal" id="consistency">
+  <h2><span class="section-num">05</span> &nbsp;Multi-step money movement</h2>
+  <p>Moving money across services (charge → ledger → payout) needs more than one local transaction. The options:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Distributed transactions for money",
+      "axisLabel": "How do we coordinate multi-step money movement?",
+      "stops": [
+        { "label": "2PC", "dims": { "Atomicity": 95, "Availability": 30, "Simplicity": 40, "Fit for money": 35 }, "note": "Prepare, then commit across participants. Strong atomicity — but a coordinator crash after prepare leaves participants holding locks indefinitely (blocking). Avoid across services; OK only same-DC, low volume." },
+        { "label": "Saga", "dims": { "Atomicity": 60, "Availability": 90, "Simplicity": 55, "Fit for money": 70 }, "note": "A sequence of local txns + compensating transactions to undo (a refund undoes a capture). Highly available, eventually consistent — the default for cross-service workflows. You must design the compensations." },
+        { "label": "TCC", "dims": { "Atomicity": 80, "Availability": 80, "Simplicity": 50, "Fit for money": 85 }, "note": "Try-Confirm-Cancel: reserve funds (try), then confirm or cancel. When you truly can't tolerate eventual consistency for internal money movement — a common payments choice." }
+      ]
+    }
+    </script>
+  </div>
+  <p>And the workhorse for reliable events: the <strong>outbox pattern</strong> — in one local transaction write the ledger change <em>and</em> an outbox row; a relay (poller or Debezium CDC) publishes it. Solves the dual-write problem without 2PC; consumers stay idempotent. Non-critical async state (receipts, analytics, fraud scoring) rides this and tolerates lag.</p>
+</section>
+
+<section class="section reveal" id="reconcile">
+  <h2><span class="section-num">06</span> &nbsp;Reconciliation &amp; the unknown-state problem</h2>
+  <p>Two independent systems (you and the bank) drift, so <strong>reconciliation</strong> compares your ledger against external truth. The 2026 best practice is <strong>three-way</strong>: internal ledger ↔ PSP settlement file ↔ bank statement — two-way recon gives false confidence (it never confirms funds actually landed).</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">"Did the charge succeed?"</div><p>The PSP processed the charge but the response was lost — the worst failure. <strong>Never blindly retry.</strong> Resolve with (a) the same idempotency key on retry (the PSP returns the original result, no duplicate), and (b) a background worker that scans payments stuck in transitional states and <strong>queries the PSP status API as the source of truth</strong> to drive the transition. Pull-based recovery → eventual consistency even after crashes, without the user re-attempting.</p></div></div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">07</span> &nbsp;Compliance, multi-region &amp; observability</h2>
+  <div class="kv">
+    <dt>PCI-DSS scope minimization</dt><dd>Keep raw PAN out of your systems via <strong>tokenization + a dedicated vault</strong>; network tokens (EMVCo / Apple-Google Pay DPANs) are the 2026 default and also lift auth rates (~2–5%) and cut fraud.</dd>
+    <dt>3DS2 / SCA (PSD2)</dt><dd>Strong Customer Authentication in the EU/UK; tokenized traffic scores better with issuer risk models → more frictionless 3DS2.</dd>
+    <dt>Data residency</dt><dd>Some jurisdictions (India RBI, China PBOC) mandate in-country storage → regional sharding of the cardholder-data environment + ledger. GDPR and PCI-DSS must be satisfied independently.</dd>
+    <dt>Metrics &amp; SLOs</dt><dd><strong>Authorization rate</strong> (the top KPI — segment by issuer/BIN/region; a drop signals an issuer/PSP outage), payment success rate, settlement lag, <strong>reconciliation breaks</strong> (count, aging, $). Common target: 99.9% success at &lt;1 s; API uptime up to 99.9999%.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">08</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A client's "charge $50" request times out and the client retries. How does the system avoid charging twice?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>It hopes the timeout meant the first charge failed</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The request carries an idempotency key; the server returns the stored result for a repeat key instead of charging again</button>
+      <button class="quiz-opt"><span class="mark"></span>It charges twice and refunds one later</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> the idempotency key makes the operation safe to retry — the first attempt records its result under the key, and any retry returns the same result without re-executing. The PSP call carries its own key too, so even that leg is safe to repeat.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"Two invariants: exactly-once via idempotency keys (claim-before-call, atomic phases with recovery points, the PSP call carrying its own key), and conservation of money via an immutable double-entry ledger under ACID — debits equal credits, enforced in the DB. Multi-step movement uses sagas/TCC, never blocking 2PC, with an outbox for reliable events. The unknown-state problem I resolve by querying the PSP status API, not by blind retries, and I run three-way reconciliation against settlement files. Amounts are integer minor units, and I tokenize to shrink PCI scope."</p></div></div>
+</section>

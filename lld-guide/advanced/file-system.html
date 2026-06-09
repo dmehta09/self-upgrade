@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced case — In-memory file system | The Design Field Guide</title>
+  <meta name="description" content="Designing an in-memory file system with the Composite pattern in Python: a File leaf, a Directory composite, one shared Entry interface, recursive size(), and absolute path()." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="adv" data-page="adv-file-system" data-lesson="adv-file-system">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../advanced/index.html" style="color:var(--accent)">Advanced</a><span class="sep">/</span><span class="current">File system</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Advanced case · structural pattern</span>
+            <h1>Case study: an in-memory file system.</h1>
+            <p class="lead">A file system is a tree: directories hold files, and directories hold <em>other directories</em>. The quiet insight is that a directory is itself a "file-like" thing — it has a name, a parent, a size, a path — so one interface can describe both. Build that single interface and the leaves and branches stop needing special cases: that's the <strong>Composite</strong> pattern.</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Step 1 — Requirements &amp; assumptions</h2>
+            <p>We're modelling a file system in memory — no disk, no syscalls. It must hold <strong>files</strong> and <strong>directories</strong>, let directories <strong>nest</strong> arbitrarily, list a directory's contents (<code>ls</code>), report a total <strong>size</strong> (a directory's size is the sum of everything inside it, recursively), and give any entry its absolute <strong>path</strong> from the root.</p>
+            <p><strong>Clarifying questions I'd ask:</strong> Files and directories, or also symlinks and hard links? Is a file's size just its content length, or do we count metadata? Are names unique within a directory? Should <code>size</code> on a directory recurse all the way down? Single-threaded, or shared across threads?</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">My stated assumptions</div><p>Two kinds of entry — <strong>files</strong> and <strong>directories</strong> — forming a single tree under one root named <code>"/"</code>. A file's size is <code>len(content)</code>; a directory's size is the recursive sum of its children. Names are <strong>unique within a directory</strong> (so children live in a <code>dict</code> keyed by name). No symlinks, no permissions. Single-threaded for the demo; a lock for sharing is noted as an extension.</p></div></div>
+            <div class="grid grid-2">
+              <div class="card feature"><span class="f-ic">✅</span><h4>In scope</h4><p>Create files and directories · nest directories arbitrarily · <code>ls</code> a directory's names · total <code>size</code> that recurses through subdirectories · absolute <code>path</code> for any entry from the root.</p></div>
+              <div class="card feature"><span class="f-ic">🚫</span><h4>Out of scope</h4><p>Real disk I/O, blocks and inodes, permissions and ownership, symlinks and hard links, timestamps, and concurrent access (a single lock is sketched as an extension, not built in).</p></div>
+            </div>
+          </section>
+
+          <!-- 2. ENTITIES -->
+          <section class="section reveal" id="entities">
+            <h2><span class="section-num">02</span> &nbsp;Step 2 — Entities</h2>
+            <p>The noun pass is short, because the whole trick is that there are really only two concrete things — a file and a directory — sharing one abstract idea of an "entry." Give each entry a name and a parent, and make <code>size()</code> and <code>path()</code> the operations every entry must answer.</p>
+            <div class="kv">
+              <dt>Entry</dt><dd><em>abstract component.</em> The shared idea: every entry has a <code>name</code> and a <code>parent</code>, and must define <code>size()</code> and <code>path()</code>. Client code only ever talks to an <code>Entry</code> — it never asks "are you a file or a directory?"</dd>
+              <dt>File</dt><dd><em>leaf.</em> Holds <code>content</code> and nothing else underneath it. Its <code>size()</code> is simply <code>len(content)</code>. A leaf has no children, so the recursion stops here.</dd>
+              <dt>Directory</dt><dd><em>composite.</em> Holds a collection of child entries (a <code>dict</code> name → <code>Entry</code>). Its <code>size()</code> <strong>recurses</strong>: it sums <code>size()</code> over its children — each of which may itself be a file or another directory.</dd>
+            </div>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A cardboard box <span class="tag">analogy</span></div><p>A box can hold books, or it can hold <em>more boxes</em> — which themselves hold books or yet more boxes. When you want the total weight, you don't care which: you put the whole thing on the scale and it just works, the nested boxes adding their contents into the total. A <code>File</code> is a book; a <code>Directory</code> is a box; <code>size()</code> is the scale. One way to weigh everything, whether it's a leaf or a branch — that's Composite.</p></div></div>
+          </section>
+
+          <!-- 3. DIAGRAM -->
+          <section class="section reveal" id="diagram">
+            <h2><span class="section-num">03</span> &nbsp;Step 3 — The Composite shape</h2>
+            <p>Both concrete classes <em>are</em> an <code>Entry</code> (interface realization — the hollow triangle), and a <code>Directory</code> is built out of more <code>Entry</code> objects (composition — the filled diamond). That second relationship is the recursive one: a directory contains entries, and a directory <em>is</em> an entry, so directories nest without limit. Read the connectors against the <a href="../oop/relationships.html">UML legend</a>.</p>
+            <div class="diagram">
+              <div class="dg-title">File ──&gt; «abstract» Entry &lt;── Directory · Directory ◆── Entry (recursive)</div>
+              <div class="uml-row">
+                <div class="umlclass" style="min-width:190px">
+                  <div class="umlc-name"><em>«abstract»</em><br>Entry</div>
+                  <div class="umlc-attrs"><span>- name: str</span><span>- parent: Entry</span></div>
+                  <div class="umlc-methods"><span>+ size(): int</span><span>+ path(): str</span></div>
+                </div>
+                <div class="uml-rel">
+                  <svg viewBox="0 0 96 30" fill="none"><line x1="2" y1="15" x2="83" y2="15" stroke="currentColor" stroke-width="1.6"/><path d="M83 6 L95 15 L83 24 Z" fill="var(--bg-elev)" stroke="currentColor" stroke-width="1.6"/></svg>
+                  <span class="ur-label">realizes</span>
+                </div>
+                <div class="umlclass" style="min-width:190px">
+                  <div class="umlc-name">File <span style="font-weight:400;opacity:.7">(leaf)</span></div>
+                  <div class="umlc-attrs"><span>- content: str</span></div>
+                  <div class="umlc-methods"><span>+ size(): int</span></div>
+                </div>
+              </div>
+              <div class="uml-row">
+                <div class="umlclass" style="min-width:190px">
+                  <div class="umlc-name">Directory <span style="font-weight:400;opacity:.7">(composite)</span></div>
+                  <div class="umlc-attrs"><span>- children: dict</span></div>
+                  <div class="umlc-methods"><span>+ add(entry)</span><span>+ size(): int</span><span>+ ls()</span></div>
+                </div>
+                <div class="uml-rel">
+                  <svg viewBox="0 0 96 30" fill="none"><line x1="2" y1="15" x2="83" y2="15" stroke="currentColor" stroke-width="1.6"/><path d="M83 6 L95 15 L83 24 Z" fill="var(--bg-elev)" stroke="currentColor" stroke-width="1.6"/></svg>
+                  <span class="ur-label">realizes</span>
+                </div>
+                <div class="umlclass" style="min-width:190px">
+                  <div class="umlc-name"><em>«abstract»</em><br>Entry</div>
+                  <div class="umlc-methods"><span>+ size(): int</span><span>+ path(): str</span></div>
+                </div>
+              </div>
+              <div class="uml-row">
+                <div class="umlclass" style="min-width:190px">
+                  <div class="umlc-name">Directory</div>
+                  <div class="umlc-methods"><span>+ add(entry)</span></div>
+                </div>
+                <div class="uml-rel">
+                  <svg viewBox="0 0 96 30" fill="none"><path d="M2 15 L13 9 L24 15 L13 21 Z" fill="currentColor" stroke="currentColor"/><line x1="24" y1="15" x2="94" y2="15" stroke="currentColor" stroke-width="1.6"/></svg>
+                  <span class="ur-label">contains *</span>
+                </div>
+                <div class="umlclass" style="min-width:190px">
+                  <div class="umlc-name"><em>«abstract»</em><br>Entry</div>
+                  <div class="umlc-attrs"><span>- name: str</span></div>
+                </div>
+              </div>
+              <div class="cap">Hollow triangle = <code>File</code> and <code>Directory</code> both <em>realize</em> the abstract <code>Entry</code> interface, so callers treat them identically. Filled diamond = a <code>Directory</code> is <em>composed of</em> more <code>Entry</code> objects — and because a directory <em>is</em> an <code>Entry</code>, the structure is a tree that nests to any depth. One uniform interface over a recursive whole: that is the Composite pattern.</div>
+            </div>
+          </section>
+
+          <!-- 4. IMPLEMENTATION -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">04</span> &nbsp;Step 4 — The implementation</h2>
+            <p><code>Entry</code> defines the shared shape and a single concrete helper — <code>path()</code> walks <code>parent</code> pointers up to the root and joins the names. <code>File</code> answers <code>size()</code> directly; <code>Directory</code> answers it by recursing over its children. Notice neither class ever type-checks the other.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">filesystem.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from __future__ import annotations
+
+class Entry:                              # the shared component
+    def __init__(self, name):
+        self.name = name
+        self.parent = None               # set when added to a directory
+
+    def size(self):
+        raise NotImplementedError
+
+    def path(self):
+        parts = []
+        node = self
+        while node is not None:
+            parts.append(node.name)
+            node = node.parent
+        parts.reverse()                  # root .. self
+        inner = "/".join(p for p in parts if p != "/")
+        return "/" + inner               # always absolute, from "/"
+
+class File(Entry):                       # leaf
+    def __init__(self, name, content=""):
+        super().__init__(name)
+        self.content = content
+    def size(self):
+        return len(self.content)
+
+class Directory(Entry):                  # composite
+    def __init__(self, name):
+        super().__init__(name)
+        self.children = {}               # name -> Entry
+    def add(self, entry):
+        entry.parent = self
+        self.children[entry.name] = entry
+        return entry                     # return it so calls can chain
+    def size(self):                      # recurse: sum of everything inside
+        return sum(child.size() for child in self.children.values())
+    def ls(self):
+        return sorted(self.children)</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why <code>add()</code> returns the entry</div><p>Returning the entry it just stored lets you write <code>home = root.add(Directory("home"))</code> and immediately keep building inside <code>home</code>. It's a small ergonomic touch that makes assembling a tree read top-down, the way the tree actually grows — and it's why the walkthrough below can chain so tidily.</p></div></div>
+          </section>
+
+          <!-- 5. WALKTHROUGH -->
+          <section class="section reveal" id="walkthrough">
+            <h2><span class="section-num">05</span> &nbsp;Walk a scenario</h2>
+            <p>Build a small tree: a <code>notes.txt</code> (11 bytes) under <code>home</code>, and an <code>app.py</code> (8 bytes) under <code>home/projects</code>. Then ask the <em>root</em> for its size — and watch the recursion pull the whole tree's bytes up into one number, <code>11 + 8 = 19</code>.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">demo.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">root = Directory("/")
+home = root.add(Directory("home"))
+home.add(File("notes.txt", "hello world"))      # 11 bytes
+projects = home.add(Directory("projects"))
+projects.add(File("app.py", "print(1)"))        # 8 bytes
+
+print(root.size())                               # 19  (whole tree)
+print(home.ls())                                 # ['notes.txt', 'projects']
+print(projects.children["app.py"].path())        # /home/projects/app.py</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>19
+['notes.txt', 'projects']
+/home/projects/app.py</div>
+            <p>One <code>root.size()</code> call fanned out through <code>home</code>, into <code>projects</code>, and reached both files — no caller ever wrote a loop or a type check. <code>ls</code> lists names alphabetically, and <code>path()</code> reconstructed the absolute path by walking parent pointers back to <code>"/"</code>.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">What makes this the Composite pattern?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>It stores files in a dictionary for O(1) lookup</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>File (leaf) and Directory (composite) share one <code>Entry</code> interface, so client code treats them uniformly</button>
+                <button class="quiz-opt"><span class="mark"></span>It uses recursion to compute the total size</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> Composite is about the <em>shared interface</em> over a part-whole tree. Because a leaf and a branch both present the same <code>Entry</code> face, the client can treat a single file and an entire directory subtree the same way. Recursion and the dictionary are implementation details that fall out of that uniform interface.</div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why does <code>Directory.size()</code> call <code>size()</code> on its children rather than checking their type?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because type checks are slower than method calls</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Uniform interface + recursion — a child may be a File or a Directory; calling <code>size()</code> works for both and recurses naturally</button>
+                <button class="quiz-opt"><span class="mark"></span>Because directories cannot contain other directories</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> every child is an <code>Entry</code>, so <code>child.size()</code> is valid whatever it is. A <code>File</code> returns its byte count; a <code>Directory</code> recurses into <em>its</em> children. No <code>isinstance</code> ladder, no special cases — the polymorphism does the branching, and the tree unwinds itself.</div>
+            </div>
+          </section>
+
+          <!-- 6. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">06</span> &nbsp;Extensions — your turn</h2>
+            <p>A clean Composite grows by adding one more operation that "just works" over the whole tree. Each of these is a small, additive method on <code>Directory</code> — the leaf and the interface stay untouched. Try them before peeking.</p>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 1 · recursive find</div>
+              <p class="ex-q">Add a <code>find(name)</code> to <code>Directory</code> that searches the <strong>whole subtree</strong> and returns the first entry with that name (or <code>None</code>). It should look inside nested directories, not just the immediate children.</p>
+              <p>Hint: loop over the children. If a child's name matches, return it. Otherwise, if the child is itself a <code>Directory</code>, recurse into it — exactly the same move <code>size()</code> makes.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">find.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python">def find(self, name):                    # add to Directory
+    for child in self.children.values():
+        if child.name == name:
+            return child
+        if isinstance(child, Directory):
+            hit = child.find(name)       # recurse into subdirectories
+            if hit is not None:
+                return hit
+    return None</code></pre></div>
+                  </div>
+                  <p>This is the one place the recursion legitimately asks "is this a <code>Directory</code>?" — because only a directory <em>has</em> a subtree to descend into. The leaf <code>File</code> needs no <code>find</code> at all; it simply can't match deeper, so the search skips past it. Same tree-walk skeleton as <code>size()</code>, returning the first hit instead of summing.</p>
+                </div>
+              </div>
+            </div>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 2 · a tree() pretty-printer (or du)</div>
+              <p class="ex-q">Add a <code>tree()</code> that prints the whole hierarchy indented by depth — like the Unix <code>tree</code> / <code>du</code> command — showing each directory and the files inside it. Bonus: print each entry's <code>size()</code> beside its name so you get a per-folder disk-usage view.</p>
+              <p>Hint: recurse with a depth argument. Print <code>"  " * depth + entry.name</code>, then if it's a <code>Directory</code>, recurse over its sorted children at <code>depth + 1</code>. A move/rename is the same idea in reverse — re-parent an entry by deleting it from its old directory's <code>children</code>, setting a new <code>parent</code>, and inserting it into the new one.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <p>One recursive walk, indented by depth, printing each entry's <code>size()</code> alongside it. Because <code>size()</code> is uniform, a folder line shows its whole recursive total for free:</p>
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">tree.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python">def tree(self, depth=0):                 # add to Directory
+    indent = "  " * depth
+    print(f"{indent}{self.name}/  ({self.size()} bytes)")
+    for name in sorted(self.children):
+        child = self.children[name]
+        if isinstance(child, Directory):
+            child.tree(depth + 1)        # recurse into subdirectories
+        else:
+            print(f"{indent}  {child.name}  ({child.size()} bytes)")</code></pre></div>
+                  </div>
+                  <p>Move/rename is just re-parenting: <code>del old.children[entry.name]</code>, then <code>entry.parent = new</code> and <code>new.children[entry.name] = entry</code> — after which <code>entry.path()</code> and both folders' <code>size()</code> report the new reality automatically, because nothing caches.</p>
+                </div>
+              </div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">What this design used — the toolkit recap</div><p><strong>Composite pattern</strong> — one <code>Entry</code> interface over a part-whole tree, so a leaf <code>File</code> and a branch <code>Directory</code> are interchangeable to callers. <strong>Recursion</strong> — <code>size()</code>, <code>find()</code>, and <code>tree()</code> all walk the structure by trusting children to handle themselves. <strong>Polymorphism</strong> — <code>child.size()</code> branches without an <code>isinstance</code> ladder. <strong>Encapsulation of children</strong> — a directory owns its <code>children</code> <code>dict</code> and the <code>add()</code> that maintains <code>parent</code> back-pointers. If this tree were shared across threads, wrap a <code>threading.Lock</code> around <code>add()</code> (and any other mutation) so two writers can't corrupt a directory's <code>children</code> — see the <a href="../advanced/index.html#concurrency">concurrency primer</a>.</p></div></div>
+            <p>Next: a tree of a different kind, where requests travel between cabins — <a href="../advanced/elevator-system.html">the elevator system</a>.</p>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../advanced/logging-framework.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: Logging framework</span></a>
+            <a class="next" href="../advanced/elevator-system.html"><span class="pn-k">Next ›</span><span class="pn-t">Case: Elevator system</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements</a>
+          <a href="#entities">Entities</a>
+          <a href="#diagram">The Composite shape</a>
+          <a href="#code">Implementation</a>
+          <a href="#walkthrough">Walkthrough</a>
+          <a href="#extensions">Extensions</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Advanced · File system</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

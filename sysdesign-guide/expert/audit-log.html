@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design an audit log / activity feed | The System Design Field Guide</title>
+  <meta name="description" content="Immutable, tamper-evident event trail: hash chaining + WORM, outbox ingestion, hot/cold retention, compliance query, and the activity-feed read model." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="expert" data-page="expert-audit-log" data-lesson="expert-audit-log">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Expert designs</span><span class="sep">/</span><span class="current">Design an audit log / activity feed</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Expert · audit log &amp; activity feed</span>
+  <h1>Design an audit log / activity feed.</h1>
+  <p class="lead">Two systems that share an ingestion path but diverge hard on guarantees. A <strong>compliance audit log</strong> optimizes for durability, immutability, tamper-evidence, and multi-year retention — every privileged action, provable to an auditor. A <strong>product activity feed</strong> ("Sarah commented on your doc") optimizes for read latency and freshness. Conflating them is the #1 smell: build <strong>one immutable write path</strong>, then derive the user-facing feed as a projection off it.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Append an event (who/what/when/where/outcome); query by actor/resource/time for compliance; export for auditors; serve a per-user/per-resource activity feed.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p><strong>Never lose an event</strong> (durability is paramount); <strong>tamper-evident</strong> (an admin can't quietly edit history); append-only; multi-year retention; tenant-scoped.</p></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption (10M MAU, audit-everything)</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Event rate</td><td>~50 auditable actions/user/day</td><td>~5,800/s avg, ~30k peak (large platforms: billions/day)</td></tr>
+        <tr><td>Volume</td><td>~1 KB/event</td><td>~500 GB/day raw → 6-yr HIPAA ≈ <strong>~1.1 PB</strong></td></tr>
+        <tr><td>Cold cost</td><td>Glacier Deep Archive ~$1/TB-mo vs S3 Std ~$23/TB-mo</td><td><strong>~23×</strong> cheaper → the reason for hot/cold tiering</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">02</span> &nbsp;API &amp; data model</h2>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/v1/events</span><span class="ep-note">Idempotency-Key: … → { id, seq, hash }</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/v1/events?actor=&amp;resource=&amp;from=&amp;to=&amp;tenant=</span><span class="ep-note">compliance query (cursor-paginated, tenant-scoped)</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/v1/verify?from_seq=&amp;to_seq= · /v1/feeds/{user}</span><span class="ep-note">chain consistency proof; activity-feed read</span></div>
+  <p>The event is structured and immutable — <strong>who</strong> (actor: type/id/name), <strong>what</strong> (namespaced action + before/after diff), <strong>when</strong> (UTC + a monotonic per-tenant <span class="mono">seq</span> for gap detection), <strong>where</strong> (ip, user-agent, request/trace id, <span class="mono">tenant_id</span>), <strong>outcome</strong> (success/denied/error), plus <span class="mono">prev_hash</span> + <span class="mono">hash</span> + <span class="mono">signature</span>. This maps ~1:1 to AWS CloudTrail and WorkOS Audit Logs.</p>
+</section>
+
+<section class="section reveal" id="ingestion">
+  <h2><span class="section-num">03</span> &nbsp;Architecture &amp; ingestion</h2>
+  <p>Don't lose events, don't block the business transaction, don't 2PC across DB + Kafka. The answer is the <strong>transactional outbox</strong>: write the audit row in the <em>same</em> DB transaction as the business change; a CDC relay ships it onward. The immutable store is the system of record; search + feed are disposable, rebuildable projections.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Outbox → Kafka → immutable store + projections</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Audit ingestion",
+      "nodes": [
+        { "id": "svc", "label": "App service", "type": "user", "col": 0, "row": 1 },
+        { "id": "outbox", "label": "Outbox (DB)", "type": "stateless", "col": 1, "row": 1 },
+        { "id": "kafka", "label": "Kafka", "type": "async", "col": 2, "row": 1 },
+        { "id": "store", "label": "Immutable ledger + WORM", "type": "store", "col": 3, "row": 0 },
+        { "id": "search", "label": "Search / feed", "type": "source", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "svc", "to": "outbox", "label": "same txn" },
+        { "from": "outbox", "to": "kafka", "label": "CDC" },
+        { "from": "kafka", "to": "store", "label": "append" },
+        { "from": "kafka", "to": "search", "label": "project" }
+      ],
+      "steps": [
+        { "edge": ["svc","outbox"], "caption": "App writes the business change + the audit event to the OUTBOX in one DB txn (no dual-write, no lost evidence)." },
+        { "edge": ["outbox","kafka"], "caption": "A CDC relay (Debezium) ships outbox rows to Kafka — crash-safe, at-least-once, keyed by entity for ordering.", "status": "hit" },
+        { "edge": ["kafka","store"], "caption": "Append to the immutable, hash-chained ledger + WORM object store — the system of record." },
+        { "edge": ["kafka","search"], "caption": "Project to read models: compliance search (hot) and the activity feed. Idempotent consumers dedup by event id." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="tamper">
+  <h2><span class="section-num">04</span> &nbsp;Tamper-evidence: hash chaining</h2>
+  <p>Each entry binds the previous one: <span class="mono">entry.hash = H(prev_hash ‖ payload)</span>. Edit any entry and its hash changes — which breaks <em>every</em> entry after it. You can't silently alter the middle (exactly how AWS CloudTrail's chained, signed digest files and QLDB's journal worked):</p>
+  <figure class="viz" data-viz aria-label="Hash chain tamper detection">
+    <figcaption class="viz-title">Tampering with one entry breaks the whole chain after it</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "array",
+      "meta": { "values": ["E0","E1","E2","E3","E4"] },
+      "frames": [
+        { "match": [0,1,2,3,4], "caption": "Append-only log. Each entry stores hash(prev_hash + payload)." },
+        { "active": [0,1,2,3,4], "caption": "The chain: E1 embeds E0's hash, E2 embeds E1's, … each binds its predecessor." },
+        { "reject": [2], "dim": [0,1], "caption": "An attacker edits E2's payload. Its recomputed hash no longer matches what's stored." },
+        { "reject": [2,3,4], "dim": [0,1], "caption": "E3 embedded E2's OLD hash, so the break cascades — every later entry fails verification. Tampering is provable." }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">chain.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">import hashlib, json
+GENESIS = "00" * 32
+
+def entry_hash(prev_hash, payload):
+    h = hashlib.sha256()
+    h.update(bytes.fromhex(prev_hash))                    # bind the predecessor
+    h.update(json.dumps(payload, sort_keys=True,          # DETERMINISTIC serialization
+                         separators=(",", ":")).encode()) #   or hashes won't reproduce
+    return h.hexdigest()
+
+def append(log, payload):
+    prev = log[-1]["hash"] if log else GENESIS
+    log.append({"seq": len(log), "payload": payload,
+                "prev_hash": prev, "hash": entry_hash(prev, payload)})  # never mutate prior
+
+def verify(log):
+    prev = GENESIS
+    for e in log:
+        if e["prev_hash"] != prev:                  return False   # chain broken
+        if e["hash"] != entry_hash(prev, e["payload"]): return False   # entry tampered
+        prev = e["hash"]
+    return True</code></pre></div>
+  </div>
+  <p class="small">At scale, a <strong>Merkle tree</strong> beats a flat chain — inclusion + append-only <em>consistency</em> proofs are O(log n) (the RFC 9162 Certificate-Transparency model; ~30 hashes for billions of entries).</p>
+</section>
+
+<section class="section reveal" id="worm">
+  <h2><span class="section-num">05</span> &nbsp;Anchoring, WORM &amp; retention</h2>
+  <div class="kv">
+    <dt>Anchoring / notarization</dt><dd>Hash chaining alone is defeatable by an operator who rewrites the <em>whole</em> chain — so publish the current Merkle root (a signed checkpoint) to an <strong>external witness</strong> on a cadence (a second account, a customer bucket, a transparency log). Once witnessed, history up to that checkpoint is frozen.</dd>
+    <dt>WORM at rest</dt><dd><strong>S3 Object Lock in compliance mode</strong> — can't be overwritten or deleted by <em>anyone</em>, including the root user; the retention period can't be shortened. Cohasset-assessed for SEC 17a-4 / FINRA. This is what makes the log evidentiary.</dd>
+    <dt>Hot / cold tiering</dt><dd>Hot (~90 days) in OpenSearch for investigations; cold (years) in S3 Object Lock → Glacier Deep Archive (cheap, slow restore — for "auditor asks once a year"). Time-partition so expiry is a partition drop; <strong>legal hold</strong> overrides retention. Design to the strictest bar: PCI ≥12 mo (3 mo hot), HIPAA 6 yr, SOX ~7 yr.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="query">
+  <h2><span class="section-num">06</span> &nbsp;Query, the feed &amp; consistency</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔎</span><h4>Compliance search</h4><p>Filter by actor/resource/action/time/outcome, <strong>tenant-scoped</strong> (mandatory <span class="mono">tenant_id</span> filter — cross-tenant leakage in a shared log is the catastrophic bug). The compliance log <em>never</em> fans out — it's query-on-read.</p></div>
+    <div class="card feature"><span class="f-ic fx">📰</span><h4>Activity feed</h4><p>This is the <a href="../core/news-feed.html">news-feed</a> problem — hybrid fan-out (push for normal actors, pull for high-fan-out), and the feed <em>may</em> aggregate ("3 people liked this") and expire. Only the product feed fans out.</p></div>
+    <div class="card feature"><span class="f-ic fx">🔒</span><h4>Append-only &amp; GDPR</h4><p>No updates, no deletes — corrections are new entries. GDPR erasure ≠ delete: <strong>crypto-shred</strong> (encrypt PII per subject, destroy the key) so hashes/integrity proofs over ciphertext stay intact. (Whether that legally counts as erasure is unsettled — get counsel sign-off.)</p></div>
+    <div class="card feature"><span class="f-ic fx">🧮</span><h4>Gap detection</h4><p>Monotonic <span class="mono">seq</span> + empty checkpoints (CloudTrail emits a digest even for zero-activity hours) make "nothing happened" <em>provable</em>, not assumed.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">07</span> &nbsp;Failure modes, observability &amp; 2026</h2>
+  <div class="kv">
+    <dt>Failure modes</dt><dd>Dropped events / chain gaps (seq-gap alert = Sev incident; outbox replay); ingestion lag (autoscale, backpressure — never drop); <strong>chain-verification failure</strong> (freeze writes, forensic review — a potential breach); legal-hold/retention violation (alarm on Object Lock config changes).</dd>
+    <dt>SLOs</dt><dd>Ingest durability ≥ 99.999%+ (the one that matters); end-to-end visibility lag p99 &lt; a few minutes; compliance-search p95 &lt; 1–2 s on hot; continuous chain verification; <strong>zero</strong> tolerance for silent event loss.</dd>
+    <dt>2026</dt><dd>CloudTrail (chained signed digests + Object Lock) is the reference; <strong>QLDB is end-of-life (Jul 2025)</strong> → teams roll hash-chaining/Merkle on commodity stores (or Azure SQL ledger / immudb); Datadog Audit Trail + Cloud SIEM; WorkOS Audit Logs as a tenant-facing model; RFC 9162 for third-party-verifiable logs.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">08</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">An admin with database access quietly edits an old audit entry to hide an action. How does the system make that detectable?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Restrict database permissions</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Hash-chain entries (each stores hash(prev_hash + payload)) so editing one breaks every later entry's hash, plus WORM storage and periodic anchoring of the Merkle root to an external witness</button>
+      <button class="quiz-opt"><span class="mark"></span>Keep a backup</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> permissions and backups don't make tampering <em>provable</em>. Hash chaining cryptographically links entries so any edit cascades into a detectable break; WORM (S3 Object Lock compliance mode) stops even root from deleting; and anchoring a signed Merkle root externally defeats a whole-chain rewrite. That's what gives a log evidentiary value for SOC 2 / HIPAA / SOX.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"I'd separate the tamper-evident <strong>compliance log</strong> from the <strong>activity feed</strong>, sharing one immutable write path. Events arrive via the transactional outbox (so a crash never loses evidence), get hash-chained into an append-only ledger on WORM storage, with the Merkle root periodically anchored to an external witness — that combination makes tampering provable, not just discouraged. I tier hot (OpenSearch, ~90 days) vs cold (Glacier, years) for the PB-scale retention, scope every query by tenant, and handle GDPR via crypto-shredding rather than deletion since the log is append-only."</p></div></div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../expert/billing.html"><span class="pn-k">‹ Back</span><span class="pn-t">Design billing, subscriptions & metering</span></a>
+            <a class="next" href="../reference/glossary.html"><span class="pn-k">Next ›</span><span class="pn-t">Glossary</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements & scale</a>
+          <a href="#api">API & data model</a>
+          <a href="#ingestion">Architecture & ingestion</a>
+          <a href="#tamper">Tamper-evidence: hash chaining</a>
+          <a href="#worm">Anchoring, WORM & retention</a>
+          <a href="#query">Query, the feed & consistency</a>
+          <a href="#ops">Failure modes, observability & 2026</a>
+          <a href="#recap">Trade-offs & interview recap</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Expert designs · Design an audit log / activity feed</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+  <script src="../assets/js/visualizer.js"></script>
+</body>
+</html>

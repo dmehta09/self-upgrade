@@ -1,0 +1,143 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">React &middot; React 19</span>
+            <h1>React 19: Actions, use(), compiler</h1>
+            <p class="lead">React 19 (19.2 as of June 2026) is mostly about <b>deleting boilerplate</b>. Forms, pending states, refs, and memoization that you used to hand-wire are now first-class &mdash; or written for you by the compiler.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">The framework now <b>writes the plumbing</b> &mdash; form submission, pending/optimistic UI, and memoization &mdash; that you previously coded by hand.</p>
+            <p>The throughline: less ceremony. <b>Actions</b> standardize async form work with built-in pending and error state. <code>use()</code> reads promises and context flexibly. <code>ref</code> is a normal prop. And <b>React Compiler 1.0</b> auto-memoizes so you stop sprinkling <code>useMemo</code>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>You upgraded from a manual car to an automatic. You still decide where to go, but the gear-shifting (form state, pending spinners, memoization) now happens for you. Less to operate, fewer ways to stall &mdash; you focus on the destination, not the clutch.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="map">
+            <h2><span class="section-num">01</span> Old way &rarr; React 19 way</h2>
+            <p>If you carried habits from React 18, retire these. The right-hand column is the current, correctly-named API.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>You used to write&hellip;</th><th>React 19 way</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td><code>forwardRef(...)</code></td><td><code>ref</code> as a normal prop</td><td>Function components accept <code>ref</code> directly; no wrapper for new components.</td></tr>
+                  <tr><td><code>useFormState</code></td><td><code>useActionState</code></td><td>Renamed and expanded &mdash; returns state, a wrapped action, and <code>isPending</code>.</td></tr>
+                  <tr><td>Manual <code>useMemo</code>/<code>useCallback</code>/<code>memo</code></td><td>React Compiler 1.0 (GA)</td><td>Auto-memoization at build time; hand-tune only measured hotspots.</td></tr>
+                  <tr><td><code>&lt;Context.Provider&gt;</code></td><td><code>&lt;Context&gt;</code></td><td>The context object itself is now the provider component.</td></tr>
+                  <tr><td>Helmet / head libs for <code>&lt;title&gt;</code></td><td>Render <code>&lt;title&gt;</code>/<code>&lt;meta&gt;</code> anywhere</td><td>Document metadata is hoisted into <code>&lt;head&gt;</code> automatically.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section reveal" id="actions">
+            <h2><span class="section-num">02</span> Actions &amp; form state</h2>
+            <p><b>Actions</b> are async functions wired to a form or transition; React tracks their pending and error state for you. <code>useActionState</code> wraps an action and hands back the latest result plus <code>isPending</code>; <code>useFormStatus</code> lets a nested button read the parent form&rsquo;s pending state without prop-drilling. <code>useOptimistic</code> shows an instant predicted result while the action runs.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">NameForm.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">const [error, submit, isPending] = useActionState(
+  async (_prev, formData) =&gt; {
+    const res = await save(formData.get("name"));
+    return res.ok ? null : "Save failed";
+  },
+  null, // initial state
+);
+return (
+  &lt;form action={submit}&gt;
+    &lt;input name="name" /&gt;
+    &lt;button disabled={isPending}&gt;Save&lt;/button&gt;
+    {error &amp;&amp; &lt;p&gt;{error}&lt;/p&gt;}
+  &lt;/form&gt;
+);</code></pre>
+            </div>
+            <p>No <code>onSubmit</code>, no manual <code>useState</code> for pending/error &mdash; the action owns that lifecycle.</p>
+          </section>
+
+          <section class="section reveal" id="use">
+            <h2><span class="section-num">03</span> use(): read promises &amp; context</h2>
+            <p><code>use()</code> reads a resource during render: pass it a <b>promise</b> and the component suspends until it resolves (pair with <code>&lt;Suspense&gt;</code>); pass it a <b>context</b> and it reads the value &mdash; but unlike <code>useContext</code>, <code>use()</code> may be called conditionally.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">Comments.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">// commentsPromise is created by a parent/loader.
+function Comments({ commentsPromise }) {
+  // Suspends here until the promise resolves.
+  const comments = use(commentsPromise);
+  return comments.map(c =&gt; &lt;p key={c.id}&gt;{c.text}&lt;/p&gt;);
+}
+// Wrap the caller in &lt;Suspense fallback={...}&gt; for the loading UI.</code></pre>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>Don&rsquo;t reach back for <code>useFormState</code> &mdash; it&rsquo;s renamed to <code>useActionState</code>; the old import is gone. And the <b>React Compiler is opt-in for existing apps</b>: it&rsquo;s GA and stable, but you still enable it (and respect the rules of React) &mdash; it doesn&rsquo;t silently rewrite a codebase you never configured.</p>
+              </div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Which is the correct React 19 hook for an async form&rsquo;s result and pending state?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>useActionState</code></button>
+                <button class="quiz-opt"><span class="mark"></span><code>useFormState</code></button>
+                <button class="quiz-opt"><span class="mark"></span><code>useState</code> plus a manual <code>isLoading</code> flag</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> <code>useActionState</code> is the stable name (it superseded the experimental <code>useFormState</code>). It returns <code>[state, action, isPending]</code>, so you don&rsquo;t hand-track loading state.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What&rsquo;s new in React 19?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Actions with <code>useActionState</code>/<code>useFormStatus</code>/<code>useOptimistic</code>, the <code>use()</code> API for promises and context, <code>ref</code> as a plain prop (no <code>forwardRef</code>), automatic document-metadata hoisting, <code>&lt;Context&gt;</code> as its own provider, and a stable React Compiler for auto-memoization.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Actions for forms, <code>use()</code> for promises and context, ref as a normal prop, metadata hoisting, and a stable compiler that auto-memoizes. Mostly: way less boilerplate.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is use() and how does it differ from hooks?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p><code>use()</code> reads a resource &mdash; a promise (the component suspends until it resolves) or a context value. Unlike normal hooks it can be called conditionally and inside loops, because it isn&rsquo;t tracked by call-order slots the same way.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;<code>use()</code> reads a promise or context during render &mdash; promises suspend. Unlike other hooks, you can call it conditionally.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Is the React Compiler automatic? Should I delete all my memo calls?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>It&rsquo;s GA and stable, but opt-in &mdash; you enable it in the build, and your code must follow the rules of React. Once on, it auto-memoizes, so most manual <code>useMemo</code>/<code>useCallback</code>/<code>memo</code> becomes redundant; keep hand-tuning only for profiled hotspots it can&rsquo;t cover.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Stable but opt-in &mdash; I turn it on and follow the rules of React. Then it memoizes for me, and I only keep manual memo for profiled hotspots.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="composition-and-context.html"><span class="pn-k">Previous</span><span class="pn-t">Composition &amp; context</span></a>
+            <a class="next" href="../nextjs/index.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Next.js App Router &mdash; overview</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#map">Old way &rarr; new way</a>
+          <a href="#actions">Actions &amp; form state</a>
+          <a href="#use">use(): promises &amp; context</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

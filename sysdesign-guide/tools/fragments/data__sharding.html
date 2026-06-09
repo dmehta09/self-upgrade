@@ -1,0 +1,81 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Data at scale · sharding</span>
+  <h1>Sharding &amp; partitioning.</h1>
+  <p class="lead">When one database can't hold all your data or handle all your writes, you split it across many machines — each holding a <strong>shard</strong> (a slice of the rows). Done well, you scale writes and storage almost linearly. Done badly, you create a "hot shard" that takes all the traffic, or paint yourself into a corner where re-splitting means moving everything. The whole game is choosing the <strong>shard key</strong>.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> &nbsp;Splitting the data</h2>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>One librarian can't manage a billion books. So you open several branches and split the collection by a rule — "A–F here, G–M there." The rule is the shard key. A good rule keeps every branch equally busy; a bad rule sends everyone to the branch holding the one popular author.</p>
+    </div>
+  </div>
+  <p>Each record's shard is decided by hashing its shard key. Watch users land on shards by <span class="mono">hash(user_id) % 4</span> — the load spreads evenly:</p>
+  <figure class="viz" data-viz aria-label="Sharding by hash">
+    <figcaption class="viz-title">hash(key) % 4 → shard</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "array",
+      "meta": { "values": ["Shard 0","Shard 1","Shard 2","Shard 3"] },
+      "frames": [
+        { "caption": "Four shards. Each key is routed by hash(key) % 4." },
+        { "active": [1], "caption": "user 101 → hash → Shard 1." },
+        { "active": [3], "caption": "user 102 → hash → Shard 3." },
+        { "active": [0], "caption": "user 103 → hash → Shard 0." },
+        { "active": [2], "caption": "user 104 → hash → Shard 2." },
+        { "match": [0,1,2,3], "caption": "Evenly spread — each shard owns ~25% of users, so writes and storage divide by four." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="how">
+  <h2><span class="section-num">02</span> &nbsp;How to split — and the trade-off</h2>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Partitioning strategies",
+      "axisLabel": "How do you map a key to a shard?",
+      "stops": [
+        { "label": "Range", "dims": { "Even distribution": 45, "Range scans": 95, "Easy to reshard": 60, "Simplicity": 85 }, "note": "Split by key ranges (A–F, G–M…). Range scans are cheap, but sequential or skewed keys (timestamps, 'celebrity') create hot shards. Used by Bigtable/HBase with dynamic splits." },
+        { "label": "Hash", "dims": { "Even distribution": 92, "Range scans": 20, "Easy to reshard": 35, "Simplicity": 78 }, "note": "Shard = hash(key) % N. Spreads load evenly and kills hotspots — but you lose cheap range scans, and changing N (adding a shard) reshuffles almost everything." },
+        { "label": "Consistent hashing", "dims": { "Even distribution": 85, "Range scans": 18, "Easy to reshard": 92, "Simplicity": 55 }, "note": "Place shards and keys on a ring so adding/removing a node moves only a small slice of keys. The standard for elastic, rebalancing clusters." }
+      ]
+    }
+    </script>
+  </div>
+  <p>The reason plain <span class="mono">hash % N</span> is dangerous is the resharding cost — which is exactly the problem <a href="consistent-hashing.html">consistent hashing</a> solves, next.</p>
+</section>
+
+<section class="section reveal" id="pitfalls">
+  <h2><span class="section-num">03</span> &nbsp;Hot shards &amp; cross-shard pain</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔥</span><h4>Hot shard / celebrity key</h4><p>If your shard key is skewed (e.g., shard by <span class="mono">country</span> and 60% are in one), that shard melts. Pick a high-cardinality, evenly-distributed key — or split the hot key further.</p></div>
+    <div class="card feature"><span class="f-ic fx">🔗</span><h4>Cross-shard queries &amp; joins</h4><p>A query spanning shards must hit them all and merge — slow. Transactions across shards are hard. Choose the shard key so your common queries stay within one shard.</p></div>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">The shard key is a one-way door</div><p>Changing your shard key later means migrating the entire dataset — painful and risky. Spend real time choosing it: it should spread load evenly <em>and</em> keep your hottest queries on a single shard. This single decision shapes the whole design.</p></div></div>
+  <div class="quiz" data-quiz>
+    <p class="q">A messaging app shards its messages table by <span class="mono">message_id</span> (random). Reading "all messages in a conversation" is now slow. Why, and what's the better shard key?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Nothing's wrong; random keys are ideal</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A conversation's messages are scattered across all shards; shard by <span class="mono">conversation_id</span> so each conversation lives on one shard</button>
+      <button class="quiz-opt"><span class="mark"></span>Add more shards</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> sharding by a random message_id scatters one conversation across every shard, so reading it is a cross-shard fan-out. Sharding by conversation_id co-locates a conversation, turning the common query into a single-shard read.</div>
+  </div>
+</section>

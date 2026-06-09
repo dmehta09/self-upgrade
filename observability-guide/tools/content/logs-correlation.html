@@ -1,0 +1,134 @@
+<section class="hero reveal">
+  <span class="eyebrow">Logs &middot; correlation IDs &amp; context</span>
+  <h1>Correlation IDs &amp; context.</h1>
+  <p class="lead">A log line in isolation tells you nothing about the request it belongs to. A correlation ID makes every log line part of a searchable, joinable story &mdash; and lets you jump straight from a log to the trace that explains the latency.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway">A <b>correlation ID</b> (or request ID) is a single identifier generated at the edge and forwarded in every log, every downstream call, and every response header.</p>
+  <p>Without it, logs from five services handling the same request look like five unrelated events. With it, one query &mdash; <code>request_id="abc-123"</code> &mdash; surfaces the complete story across all services.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Think of it as a parcel tracking number. Every depot (service) scans that same barcode as the package passes through. At any point you enter the number and see the full journey &mdash; dispatched, in transit, out for delivery &mdash; stitched together from independent scans at independent locations.</p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>correlation_id / request_id</dt><dd>Generated at the entry point (API gateway or client); forwarded in HTTP headers (<code>X-Request-ID</code>); included in every log line.</dd>
+    <dt>trace_id</dt><dd>The OpenTelemetry trace identifier; a 128-bit hex string. When OTel instrumentation is active, it <em>is</em> the correlation ID &mdash; no need for a separate one.</dd>
+    <dt>span_id</dt><dd>Identifies the current unit of work inside the trace. Log lines carrying both <code>trace_id</code> + <code>span_id</code> can be pinned to the exact span in Jaeger or Tempo.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="flow">
+  <h2><span class="section-num">02</span> One request, stitched across services</h2>
+  <p>Every service adds its own log lines; the shared <code>trace_id</code> is the thread that ties them all together in your log backend.</p>
+
+  <div class="diagram">
+    <div class="dg-title">POST /checkout &mdash; trace_id: <code>f3a7…c1e2</code></div>
+    <div class="flow">
+      <div class="flow-node">
+        <div class="fn-k">gateway</div>
+        <div class="fn-t">Request received</div>
+        <div class="fn-d">trace_id=f3a7…c1e2<br>span_id=aa01<br>status=200</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">orders-svc</div>
+        <div class="fn-t">Order created</div>
+        <div class="fn-d">trace_id=f3a7…c1e2<br>span_id=bb02<br>order_id=8821</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">payments-svc</div>
+        <div class="fn-t">Charge attempted</div>
+        <div class="fn-d">trace_id=f3a7…c1e2<br>span_id=cc03<br>result=ok</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">Loki / log backend</div>
+        <div class="fn-t">Jump to trace &rarr;</div>
+        <div class="fn-d">Query: trace_id=f3a7…c1e2<br>Filter in Grafana &rarr; open in Tempo</div>
+      </div>
+    </div>
+    <div class="cap">All three services emit distinct log lines. The shared <code>trace_id</code> stitches them &mdash; one query returns the full story; one click opens the trace waterfall in Tempo.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="otel-context">
+  <h2><span class="section-num">03</span> OTel auto-injects trace context into logs</h2>
+  <p class="takeaway">With OpenTelemetry, you don&rsquo;t manually thread IDs &mdash; the SDK injects <code>trace_id</code> and <code>span_id</code> into every log record automatically.</p>
+  <p>Configure a log bridge (e.g., <code>opentelemetry-instrumentation-logging</code>) and every <code>logging.info()</code> call gains trace context from the active span. The snippet below shows a manual fallback for context where OTel isn&rsquo;t running.</p>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">context_log.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="python">from opentelemetry import trace
+import structlog
+
+log = structlog.get_logger()
+
+def charge_card(order_id: str, amount: float) -&gt; None:
+    span = trace.get_current_span()
+    ctx = span.get_span_context()
+    log.info("payment.attempted",
+             order_id=order_id,
+             amount_usd=amount,
+             trace_id=format(ctx.trace_id, "032x"),
+             span_id=format(ctx.span_id, "016x"))
+    # With OTel log bridge active, the two lines above
+    # are injected automatically &mdash; no manual code needed.</code></pre>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+      <p>Logs without a correlation ID are <b>useless islands</b> during an incident. You see the error, but you can&rsquo;t find the upstream cause or the downstream blast radius. Retrofitting IDs across a live microservice fleet is painful &mdash; add them at service inception.</p>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">You have OTel tracing active. A customer reports a failed order. What&rsquo;s the fastest path from the error log to the root cause?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Copy the <code>trace_id</code> from the log line, open it in Tempo/Jaeger to see the full span waterfall.</button>
+      <button class="quiz-opt"><span class="mark"></span>Search all services for the user&rsquo;s email address across log files.</button>
+      <button class="quiz-opt"><span class="mark"></span>Check the dashboard for a spike in the error-rate metric.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> The <code>trace_id</code> is a direct pointer into the trace backend. One click in Grafana&rsquo;s &ldquo;Explore&rdquo; view links from the log line to the waterfall showing which span failed and why.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is a correlation ID and why does every log line need one?</span><span class="pm-chip diff-warm">warm</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>A correlation ID (or request ID) is a unique token generated when a request enters the system, forwarded in every outbound call, and stamped on every log line. Without it, logs from different services handling the same request are unrelated rows. With it, you reconstruct the entire request journey across ten services with a single query.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;It&rsquo;s a tracking number. Every service stamps the same ID on its logs so you can query the full journey in one go.&rdquo;</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How does OTel relate to correlation IDs? Do you still need a separate request ID?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>When OTel tracing is active, the <code>trace_id</code> <em>is</em> the correlation ID. The OTel log bridge auto-injects <code>trace_id</code> and <code>span_id</code> into every log record from the active span context. A separate request ID is redundant; you get a richer identifier that links directly to the trace waterfall in Jaeger or Tempo.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;With OTel, trace_id is your correlation ID, and the log bridge injects it automatically. You get logs and traces linked for free.&rdquo;</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What context fields beyond trace_id should you propagate in a multi-tenant system?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>At minimum: <code>tenant_id</code> and an opaque (hashed or internal) <code>user_id</code>. These let you scope incident impact (&ldquo;which tenants were affected?&rdquo;) and satisfy per-tenant SLAs. In regulated domains you might also carry a <code>session_id</code> for audit trails. All context fields should flow through OTel <code>Baggage</code> so every service picks them up without manual threading.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;tenant_id and an opaque user_id at minimum &mdash; they scope every query to the right customer without leaking PII into the log pipeline.&rdquo;</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>How do you prevent tenant_id from becoming a high-cardinality Loki label?</li><li>What&rsquo;s OTel Baggage and how does it differ from span attributes?</li></ul></div>
+      </div>
+    </details>
+  </div>
+</section>

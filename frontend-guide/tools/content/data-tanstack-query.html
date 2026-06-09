@@ -1,0 +1,157 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Data &amp; state &middot; server cache</span>
+            <h1>TanStack Query: server-state</h1>
+            <p class="lead">Server data isn&rsquo;t your state &mdash; it&rsquo;s a borrowed copy that can go stale. TanStack Query treats it that way: it caches, deduplicates, and quietly refreshes, deleting the whole <code>useEffect</code>-fetch-into-<code>useState</code> ritual.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">TanStack Query is an <b>async server-state cache</b>, not a client store. You describe <em>what</em> to fetch; it owns the <em>when</em>, the caching, and the freshness.</p>
+            <p>Each query has a <b>key</b> (the cache address) and a fetcher. Query gives you <code>data</code>, <code>isPending</code>, and <code>error</code>, dedupes concurrent requests for the same key, and shares one cache entry across every component that asks for it.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>A smart fridge with best-before dates. It keeps a copy of what you fetched so you eat instantly. <b>staleTime</b> is the &ldquo;best before&rdquo;: once it passes, the fridge quietly restocks in the background while you keep eating what&rsquo;s there. <b>gcTime</b> is the bin schedule &mdash; how long untouched leftovers sit before they&rsquo;re thrown out entirely.</p>
+              </div>
+            </div>
+
+            <div class="diagram"><div class="dg-title">Cache lifecycle of one query</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">just fetched</div><div class="fn-t">fresh</div><div class="fn-d">within staleTime &mdash; no refetch</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">staleTime passes</div><div class="fn-t">stale</div><div class="fn-d">still shown; eligible to refetch</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">on focus / remount</div><div class="fn-t">background refetch</div><div class="fn-d">isFetching=true, old data visible</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">no observers + gcTime</div><div class="fn-t">garbage-collected</div><div class="fn-d">entry removed from cache</div></div>
+              </div>
+            </div>
+
+            <dl class="kv">
+              <dt>Query key</dt><dd>A serializable array like <code>['todos', userId]</code> that <b>identifies</b> a cache entry. Same key = shared data &amp; one in-flight request.</dd>
+              <dt><code>isPending</code> vs <code>isFetching</code></dt><dd><code>isPending</code> (renamed from <code>isLoading</code>) = no cached data yet, first load. <code>isFetching</code> = a request is in flight, even a background refresh over existing data.</dd>
+              <dt><code>staleTime</code> vs <code>gcTime</code></dt><dd><code>staleTime</code> = how long data is considered fresh (no refetch). <code>gcTime</code> (renamed from <code>cacheTime</code>) = how long an <em>unused</em> entry survives before garbage collection. They&rsquo;re unrelated knobs.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="usequery">
+            <h2><span class="section-num">01</span> Reading data with useQuery</h2>
+            <p>One hook replaces a fetch effect, a loading flag, an error flag, and a cache. Set <code>staleTime</code> to control how eagerly it revalidates &mdash; the single most useful knob.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">useTodos.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">const { data, isPending, error, isFetching } = useQuery({
+  queryKey: ['todos', userId],   // cache address
+  queryFn: () =&gt; fetchTodos(userId),
+  staleTime: 60_000,             // fresh for 60s — no refetch in that window
+  // gcTime defaults to 5min: how long an UNUSED entry survives
+});
+
+if (isPending) return &lt;Spinner /&gt;;   // first load, no cached data
+if (error) return &lt;Error /&gt;;
+// isFetching can be true here during a quiet background refresh</code></pre>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>TanStack Query is <b>not a Redux replacement</b>. It only manages <em>server</em> data &mdash; the cached copy of what an API owns. True client state (theme, modals, the logged-in user, form drafts) still belongs in Zustand, Context, or <code>useState</code>. Don&rsquo;t shove UI flags into query keys.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="mutations">
+            <h2><span class="section-num">02</span> Writes: mutate, then invalidate</h2>
+            <p>A <code>useMutation</code> sends the change; afterwards you <code>invalidateQueries</code> the affected keys so the cache refetches and the UI reflects the new truth. This is how you keep lists in sync after a create/update/delete.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">useAddTodo.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">const qc = useQueryClient();
+const addTodo = useMutation({
+  mutationFn: (text: string) =&gt; api.addTodo(text),
+  onSuccess: () =&gt; {
+    // mark the list stale -&gt; Query refetches it from the server
+    qc.invalidateQueries({ queryKey: ['todos', userId] });
+  },
+});
+
+addTodo.mutate('Ship it');</code></pre>
+            </div>
+
+            <p>For instant feedback, optimistically write the cache in <code>onMutate</code> and roll back in <code>onError</code> if the server rejects it.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">optimistic.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">useMutation({
+  mutationFn: toggleTodo,
+  onMutate: async (id) =&gt; {
+    await qc.cancelQueries({ queryKey: ['todos'] });
+    const prev = qc.getQueryData(['todos']);        // snapshot
+    qc.setQueryData(['todos'], (t) =&gt; toggle(t, id)); // optimistic write
+    return { prev };                                 // pass to onError
+  },
+  onError: (_e, _id, ctx) =&gt; qc.setQueryData(['todos'], ctx.prev), // rollback
+  onSettled: () =&gt; qc.invalidateQueries({ queryKey: ['todos'] }),  // resync
+});</code></pre>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">After a successful <code>useMutation</code> that adds a todo, how do you make the cached list show it?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Call <code>invalidateQueries</code> on the list&rsquo;s key (or write it into the cache) in <code>onSuccess</code>.</button>
+                <button class="quiz-opt"><span class="mark"></span>Copy the list into <code>useState</code> and push the new item manually.</button>
+                <button class="quiz-opt"><span class="mark"></span>Nothing &mdash; Query auto-detects server changes.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Query can&rsquo;t know a write happened on the server. You tell it by invalidating the affected key (refetch) or by editing the cache with <code>setQueryData</code> &mdash; never by mirroring into <code>useState</code>.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Is TanStack Query a state manager like Redux?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>No. It manages <em>server</em> state &mdash; a cache of async data the backend owns, with deduping, background refetch, and revalidation. Redux/Zustand manage <em>client</em> state. They&rsquo;re complementary: Query for fetched data, a client store for UI/session.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;It&rsquo;s a server-state cache, not a Redux replacement. Fetched data goes in Query; theme and session go in a client store.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What&rsquo;s the difference between staleTime and gcTime?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p><code>staleTime</code> controls <em>freshness</em>: how long data is trusted before a refetch can fire. <code>gcTime</code> (formerly <code>cacheTime</code>) controls <em>retention</em>: how long an entry with no active observers lingers before garbage collection. One governs refetching; the other governs deletion.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;staleTime is best-before &mdash; when it refetches. gcTime is the bin schedule &mdash; when an unused entry gets dropped. Independent knobs.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you keep the UI in sync after a mutation?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Two ways. Simplest: <code>invalidateQueries</code> the affected keys in <code>onSuccess</code> so Query refetches the source of truth. For snappy UX: optimistically <code>setQueryData</code> in <code>onMutate</code>, snapshot the old value, roll back in <code>onError</code>, and <code>invalidateQueries</code> in <code>onSettled</code> to reconcile.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Invalidate the key to refetch, or optimistically patch the cache with a snapshot to roll back on error, then invalidate on settled.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="index.html"><span class="pn-k">Previous</span><span class="pn-t">Data &amp; state &mdash; three buckets</span></a>
+            <a class="next" href="zustand.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Zustand for client state</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#usequery">Reading data with useQuery</a>
+          <a href="#mutations">Writes: mutate, then invalidate</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

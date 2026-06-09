@@ -1,0 +1,203 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Warm-up · rate limiter</span>
+  <h1>Design a rate limiter.</h1>
+  <p class="lead">Cap how many requests a client may make in a window — to stop abuse, absorb spikes, and protect fragile downstreams. The interesting part isn't the counting; it's making one global limit hold <em>atomically</em> across a fleet of gateways, choosing an algorithm whose burst behaviour matches the requirement, and deciding what happens when the limiter's own datastore fails.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Given a key (user / API-key / IP), allow or reject each request against a configured limit (e.g. 1000 req/min). Return <span class="mono">429</span> with <span class="mono">Retry-After</span> on reject. Support per-route and per-tier limits; ideally tunable without redeploy.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>Correct <strong>globally</strong>, not per-instance. Sub-millisecond added latency on the hot path. Highly available — the limiter must not become the outage. Memory-cheap per key (millions of active keys).</p></div>
+  </div>
+  <p>Two questions decide the design: <strong>how strict must the limit be?</strong> (exact vs approximate changes the coordination cost) and <strong>what burst behaviour is acceptable?</strong> (a smooth hard cap vs allowing short bursts up to a ceiling).</p>
+</section>
+
+<section class="section reveal" id="estimate">
+  <h2><span class="section-num">02</span> &nbsp;Capacity estimation</h2>
+  <p>The limiter sees <em>every</em> request, so its load equals total API traffic. Size the counter store's ops/s, not its storage — state per key is a few bytes.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>API traffic (peak)</td><td>1M req/s</td><td>1M limiter checks/s</td></tr>
+        <tr><td>State per key</td><td>2 fields (tokens + ts) ≈ 64 B</td><td>10M active keys ≈ <strong>~640 MB</strong> RAM</td></tr>
+        <tr><td>Redis throughput</td><td>~50–100k rate-checks/s per shard*</td><td>1M ÷ 75k ≈ <strong>~14 shards</strong> (round up for hot keys)</td></tr>
+        <tr><td>Added latency</td><td>1 same-AZ Redis round trip</td><td><strong>~0.2–0.5 ms</strong> p99 with pooling + EVALSHA</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="small">*A check is one atomic Lua call (several internal ops), not a bare <span class="mono">GET</span> — budget well below raw <span class="mono">GET</span> throughput. These are order-of-magnitude planning figures, not guarantees.</p>
+  <p>Shape of the problem: <strong>tiny state, enormous request rate</strong>. The scaling lever is Redis ops/s (shard the keyspace) and shaving round trips — never storage.</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">03</span> &nbsp;API &amp; response contract</h2>
+  <p>Internally the limiter is one call; externally it shapes the HTTP response a client sees.</p>
+  <div class="endpoint"><span class="verb post">CALL</span><span class="path">allow(key, cost=1)</span><span class="ep-note">→ { allowed, remaining, retry_after }</span></div>
+  <div class="endpoint"><span class="verb get">HTTP</span><span class="path">429 Too Many Requests</span><span class="ep-note">Retry-After: 30 · RateLimit: "default";r=0;t=30</span></div>
+  <div class="kv">
+    <dt><span class="mono">429</span> + <span class="mono">Retry-After</span></dt><dd>The standard reject (RFC 6585); <span class="mono">Retry-After</span> tells the client how long to back off. Reserve <span class="mono">503</span> for server-side overload shedding, not per-client quota.</dd>
+    <dt>Legacy headers</dt><dd><span class="mono">X-RateLimit-Limit / -Remaining / -Reset</span> — ubiquitous but inconsistent across vendors (Reset has meant seconds, ms, or a timestamp).</dd>
+    <dt>Standards-track (2026)</dt><dd>The IETF <span class="mono">RateLimit</span> / <span class="mono">RateLimit-Policy</span> structured-field headers (<span class="mono">draft-ietf-httpapi-ratelimit-headers</span>) replace that ambiguous triplet — still an Internet-Draft, <em>not</em> yet an RFC. Ship both during the transition.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="algorithms">
+  <h2><span class="section-num">04</span> &nbsp;The algorithm choice</h2>
+  <p>Five algorithms span the accuracy / memory / burst trade-off. Drag through them:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Rate-limiting algorithms",
+      "axisLabel": "What state do we keep, and how accurate is it?",
+      "stops": [
+        { "label": "Fixed window", "dims": { "Accuracy": 45, "Memory efficiency": 95, "Burst control": 30, "Simplicity": 95 }, "note": "One counter per (key, window) with INCR + TTL. Dead simple and tiny — but up to 2× the limit can slip through across the window boundary." },
+        { "label": "Sliding counter", "dims": { "Accuracy": 80, "Memory efficiency": 90, "Burst control": 75, "Simplicity": 70 }, "note": "Weight the current + previous window by overlap. O(1) state, smooths the boundary spike — the common production default." },
+        { "label": "Sliding log", "dims": { "Accuracy": 100, "Memory efficiency": 25, "Burst control": 90, "Simplicity": 55 }, "note": "Store every request timestamp in a sorted set. Perfectly accurate, no boundary artifact — but O(N) memory per key, too costly at high volume." },
+        { "label": "Token bucket", "dims": { "Accuracy": 85, "Memory efficiency": 92, "Burst control": 95, "Simplicity": 75 }, "note": "Bucket of tokens refilling at a fixed rate; allow if ≥1. O(1) state, permits controlled bursts up to capacity — AWS API Gateway's model." },
+        { "label": "GCRA", "dims": { "Accuracy": 95, "Memory efficiency": 98, "Burst control": 90, "Simplicity": 50 }, "note": "Leaky-bucket-as-meter storing a single timestamp (TAT). Exact rolling window in one key / one command — redis-cell's CL.THROTTLE." }
+      ]
+    }
+    </script>
+  </div>
+  <p><strong>Default pick:</strong> <em>token bucket</em> when short bursts are fine (most public APIs); <em>sliding-window counter</em> for a smooth approximate cap with trivial memory; <em>GCRA</em> (<span class="mono">CL.THROTTLE</span>) for an exact rolling window in a single atomic command. Avoid the sliding log at scale (memory) and the fixed window where the 2× boundary leak matters.</p>
+  <figure class="viz" data-viz aria-label="Token bucket refill and consume">
+    <figcaption class="viz-title">Token bucket: refill at a steady rate, spend per request</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "array",
+      "meta": { "values": ["•","•","•","•","•","","",""] },
+      "frames": [
+        { "match": [0,1,2,3,4], "dim": [5,6,7], "caption": "Bucket holds 5 tokens (capacity 8). Idle clients accumulate up to the cap — that is the allowed burst." },
+        { "match": [0,1,2,3], "dim": [4,5,6,7], "caption": "A request spends 1 token (5 → 4). Allowed." },
+        { "match": [0,1], "dim": [2,3,4,5,6,7], "caption": "A burst spends 2 more (4 → 2). Still allowed while tokens remain." },
+        { "match": [0,1,2], "dim": [3,4,5,6,7], "caption": "Refill: elapsed × rate adds a token back (2 → 3), capped at 8. Long-run average is pinned to the refill rate." },
+        { "reject": [0], "dim": [1,2,3,4,5,6,7], "caption": "Empty bucket → reject with 429 + Retry-After until the next token drips in." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="distributed">
+  <h2><span class="section-num">05</span> &nbsp;Making it correct across many servers</h2>
+  <p>Traffic is spread over many gateways. <strong>Per-instance counters are wrong</strong>: a user doing 50 req on gateway A and 50 on B looks compliant on each but did 100 globally. So the counter must be <em>shared</em> — typically Redis — and the check must be <strong>atomic</strong>.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">The read-modify-write race</div><p>The naive <span class="mono">GET → check → SET</span> is not atomic: two concurrent requests both read <span class="mono">tokens=1</span>, both decide "allow", both write back — 2 requests pass on 1 token. Put the whole read-compute-write in one <strong>atomic Lua script</strong> (Redis runs Lua single-threaded), or use a single atomic command like <span class="mono">CL.THROTTLE</span>.</p></div></div>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">token_bucket.lua</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">-- KEYS[1]=bucket key   ARGV: rate, capacity, now(seconds), cost
+local rate, cap = tonumber(ARGV[1]), tonumber(ARGV[2])
+local now, cost = tonumber(ARGV[3]), tonumber(ARGV[4])
+
+local st     = redis.call("HMGET", KEYS[1], "tokens", "ts")
+local tokens = tonumber(st[1])
+local last   = tonumber(st[2])
+if tokens == nil then tokens, last = cap, now end   -- first sight: start full
+
+local elapsed = math.max(0, now - last)             -- guard backward clocks
+tokens = math.min(cap, tokens + elapsed * rate)     -- refill, capped
+
+local allowed = tokens &gt;= cost
+if allowed then tokens = tokens - cost end
+
+redis.call("HMSET", KEYS[1], "tokens", tokens, "ts", now)
+redis.call("EXPIRE", KEYS[1], math.ceil(cap / rate * 2))  -- idle keys self-expire
+return { allowed and 1 or 0, tokens }               -- flag + remaining (for headers)</code></pre></div>
+  </div>
+  <p>Pass <span class="mono">now</span> from a single trusted clock (or Redis <span class="mono">TIME</span>) so gateway clock skew can't corrupt the refill. For very hot keys, <strong>lease a batch of tokens</strong> to each instance (say 100 at once) and serve locally until drained — ~100× fewer Redis round trips, at the cost of slight over-admission near boundaries.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">A request through the limiter</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "allow(key) at the gateway",
+      "nodes": [
+        { "id": "client", "label": "Client", "type": "user", "col": 0, "row": 1 },
+        { "id": "gw", "label": "API gateway (limiter)", "type": "L7", "col": 1, "row": 1 },
+        { "id": "redis", "label": "Redis (shared bucket)", "type": "cache", "col": 2, "row": 0 },
+        { "id": "svc", "label": "Service", "type": "stateless", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "client", "to": "gw", "label": "request" },
+        { "from": "gw", "to": "redis", "label": "EVALSHA" },
+        { "from": "gw", "to": "svc", "label": "forward" },
+        { "from": "gw", "to": "client", "label": "429" }
+      ],
+      "steps": [
+        { "edge": ["client","gw"], "caption": "Request hits the gateway with an identity key (user / API-key / IP)." },
+        { "edge": ["gw","redis"], "caption": "One atomic Lua call: refill by elapsed time, then allow-and-decrement or reject.", "latency": "~0.3 ms" },
+        { "node": "redis", "caption": "Tokens remain → allowed. Return remaining for the RateLimit header.", "status": "hit" },
+        { "edge": ["gw","svc"], "caption": "Within limit → forward to the service." },
+        { "edge": ["gw","client"], "caption": "Empty bucket → 429 + Retry-After; the request never reaches the service.", "status": "miss" }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="placement">
+  <h2><span class="section-num">06</span> &nbsp;Where the limiter lives</h2>
+  <div class="kv">
+    <dt>Client SDK</dt><dd>Courtesy throttle to save bandwidth; <strong>untrusted</strong> — never the enforcement point.</dd>
+    <dt>API gateway / edge</dt><dd>The standard 2026 enforcement point (Kong, Cloudflare, AWS API Gateway, NGINX). Blocked traffic never touches app servers. Lacks deep business context.</dd>
+    <dt>Sidecar / mesh</dt><dd>Envoy extracts <em>descriptors</em> and calls an external <span class="mono">ratelimit</span> gRPC service (Redis-backed) — shared global counters across all proxies, language-agnostic, with <span class="mono">shadow_mode</span> to test a limit before enforcing it.</dd>
+    <dt>Dedicated service</dt><dd>Richest context (per-tenant plans, billing tiers), reusable across entrypoints; costs an extra hop.</dd>
+  </div>
+  <p>The pragmatic answer is <strong>layered</strong>: coarse volumetric / IP limits at the WAF/edge, fine per-API-key or per-tenant limits at the gateway or a dedicated service backed by Redis.</p>
+</section>
+
+<section class="section reveal" id="failure">
+  <h2><span class="section-num">07</span> &nbsp;Failure modes &amp; multi-region</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔌</span><h4>Redis down → fail-open or fail-closed?</h4><p><strong>Fail-open</strong> (allow when undecidable) keeps the API up but risks flooding an unprotected backend during the outage. <strong>Fail-closed</strong> protects the backend but takes you down. Usual call: fail-open for normal APIs, fail-closed where the limiter guards a fragile/expensive downstream — with a <em>local in-memory fallback</em> so you degrade to per-instance limiting, not all-or-nothing.</p></div>
+    <div class="card feature"><span class="f-ic fx">🔥</span><h4>Hot keys</h4><p>A shared NAT IP or celebrity user hammers one shard. Prefer authenticated per-user keys over per-IP; split a hot key into K sub-counters and sum; lease tokens locally to absorb load off Redis.</p></div>
+    <div class="card feature"><span class="f-ic fx">🌍</span><h4>Per-region vs global limits</h4><p>Per-region Redis is fast and HA, but the effective global limit becomes ≈ limit × regions unless you partition the quota by traffic share. Exact global limits need one authoritative counter — a cross-region round trip (50–150 ms) or consensus — so reserve them for billing/abuse and enforce asynchronously.</p></div>
+    <div class="card feature"><span class="f-ic fx">⏰</span><h4>Clock skew</h4><p>Token-bucket / GCRA refill is time-delta math. Compute time inside Redis (<span class="mono">TIME</span>) rather than trusting each caller, run NTP in slew mode, and guard against negative elapsed (<span class="mono">max(0, now-last)</span>).</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">08</span> &nbsp;Observability &amp; cost</h2>
+  <div class="kv">
+    <dt>Metrics</dt><dd>Allowed vs blocked (429) rate per route/tenant; <strong>near-limit ratio</strong> (passed but close — a capacity early-warning); limiter decision latency p99; Redis error/timeout rate; per-shard ops imbalance (hot-shard detection); fail-open activation count.</dd>
+    <dt>SLOs</dt><dd>Added latency p99 &lt; ~2–5 ms; limiter availability ≥ 99.99%; a stated correctness budget (acceptable over-admission % when local-token mode is on).</dd>
+    <dt>Alerts</dt><dd>429 spike (attack, misconfigured client, <em>or</em> a too-tight limit); Redis error rate over threshold; <strong>fail-open engaged</strong> → page (you are currently unprotected); rising near-limit ratio.</dd>
+    <dt>Cost</dt><dd>Dominated by the Redis fleet (RAM is small; ops/s drives shard count) and gateway compute. State storage is negligible. Cloud-native limits (API Gateway / WAF rules) trade per-request fees for zero ops burden.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">09</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why must the counter check run as one atomic operation rather than read-then-write?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Atomic operations are faster</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Concurrent requests can both read the same count and both "allow," over-admitting past the limit — only atomicity (Lua / CL.THROTTLE) closes the race</button>
+      <button class="quiz-opt"><span class="mark"></span>Redis can't store two fields otherwise</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> the read-modify-write race lets two requests both pass on one token. Redis runs a Lua script single-threaded and atomically, so no command interleaves between the read and the write — the limit holds.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"I'd enforce at the gateway with a token bucket for burst tolerance, backed by a shared Redis counter updated by one atomic Lua script so the limit holds globally across instances. I'd shard the keyspace for throughput, lease tokens locally to cut round trips on hot keys, and fail-open with a local fallback unless the limiter guards something fragile. Per-region limits with quota partitioning; exact global limits only where billing demands it, enforced asynchronously."</p></div></div>
+</section>

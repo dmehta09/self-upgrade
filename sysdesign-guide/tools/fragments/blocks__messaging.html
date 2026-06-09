@@ -1,0 +1,82 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Building blocks · messaging</span>
+  <h1>Queues, pub/sub &amp; streams.</h1>
+  <p class="lead">A message queue lets one part of your system hand work to another <strong>asynchronously</strong> — the sender drops a message and moves on; a worker picks it up later. This one idea buys you decoupling, spike absorption, and resilience. It's how you keep the user's request fast while the slow work (emails, video encoding, analytics) happens in the background.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> &nbsp;Producers, queues, consumers</h2>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>It's the order rail in a kitchen. The waiter (producer) clips a ticket to the rail (queue) and immediately goes back to serving — they don't stand and watch it cook. Whichever chef (consumer) is free grabs the next ticket. If a rush hits, tickets pile up on the rail rather than blocking the waiters; chefs work through the backlog.</p>
+    </div>
+  </div>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Place an order, do the slow work async</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Async work via a queue",
+      "nodes": [
+        { "id": "svc", "label": "Order service", "type": "producer", "col": 0, "row": 1 },
+        { "id": "q", "label": "Queue", "type": "buffer", "col": 1, "row": 1 },
+        { "id": "email", "label": "Email worker", "type": "consumer", "col": 2, "row": 0 },
+        { "id": "ware", "label": "Warehouse worker", "type": "consumer", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "svc", "to": "q", "label": "order.placed" },
+        { "from": "q", "to": "email" },
+        { "from": "q", "to": "ware" }
+      ],
+      "steps": [
+        { "node": "svc", "caption": "User clicks Buy. The service saves the order and replies 'success' immediately." },
+        { "edge": ["svc","q"], "caption": "It publishes an 'order.placed' event to the queue and returns — the user waits for none of the rest." },
+        { "edge": ["q","email"], "caption": "An email worker consumes the event and sends the receipt, in the background." },
+        { "edge": ["q","ware"], "caption": "A warehouse worker consumes the same event and starts fulfilment. Each subscriber works at its own pace." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="patterns">
+  <h2><span class="section-num">02</span> &nbsp;Queue vs pub/sub vs stream</h2>
+  <div class="kv">
+    <dt>Work queue</dt><dd>Each message is processed by <em>one</em> consumer from a pool — work is shared out. (RabbitMQ, SQS.) Use for tasks: send email, resize image, charge card.</dd>
+    <dt>Pub/sub</dt><dd>Each message is delivered to <em>every</em> subscriber. (SNS, Redis pub/sub.) Use for fan-out: one event, many independent reactions.</dd>
+    <dt>Log / stream</dt><dd>An ordered, replayable log of events, partitioned for scale; consumers track their own position (offset). (Kafka, Kinesis, Pulsar.) Use for analytics, event sourcing, and high-throughput pipelines where you may re-read history.</dd>
+  </div>
+  <p>The big win in all three: the producer doesn't wait, and a slow or down consumer just makes the backlog grow rather than failing the user's request. That's <strong>decoupling</strong> and <strong>load-levelling</strong> — a queue absorbs a traffic spike that would otherwise crush a synchronous system.</p>
+</section>
+
+<section class="section reveal" id="guarantees">
+  <h2><span class="section-num">03</span> &nbsp;Delivery guarantees &amp; idempotency</h2>
+  <p>Distributed messaging can't promise perfection. You choose:</p>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">1️⃣</span><h4>At-most-once</h4><p>May drop a message, never duplicates. Fine for telemetry where a lost sample doesn't matter.</p></div>
+    <div class="card feature"><span class="f-ic fx">🔁</span><h4>At-least-once (the common default)</h4><p>Never drops, but may deliver twice (e.g., a worker crashes after doing the work but before acking). You must handle duplicates.</p></div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">"Exactly-once" = at-least-once + idempotency</div><p>True exactly-once delivery is nearly impossible, so the real-world recipe is at-least-once delivery plus <strong>idempotent consumers</strong>: design the work so doing it twice is harmless (e.g., key each message by a unique ID and skip ones you've already processed). This exact trick is the heart of the <a href="../advanced/payments.html">payments</a> design.</p></div></div>
+  <p>Messages that keep failing go to a <strong>dead-letter queue</strong> for inspection rather than blocking the line forever.</p>
+  <div class="quiz" data-quiz>
+    <p class="q">Your queue is at-least-once. A "charge the customer" worker occasionally sees the same message twice. The fix?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Switch to at-most-once so messages are never duplicated</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Make the consumer idempotent — dedupe on a message/charge ID so a repeat is a no-op</button>
+      <button class="quiz-opt"><span class="mark"></span>Add more workers</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> at-most-once would risk dropping charges entirely. Keep at-least-once and make processing idempotent: record processed IDs (or use the payment's idempotency key) so a duplicate delivery charges no one twice.</div>
+  </div>
+</section>

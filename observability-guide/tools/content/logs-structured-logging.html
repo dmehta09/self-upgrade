@@ -1,0 +1,129 @@
+<section class="hero reveal">
+  <span class="eyebrow">Logs &middot; structured logging</span>
+  <h1>Structured logging.</h1>
+  <p class="lead">A log line you can&rsquo;t query is just noise. Structured logs are machine-readable records with named fields &mdash; you can filter, aggregate, and join them the same way you query a database.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> Structured vs unstructured</h2>
+  <p class="takeaway"><b>Unstructured</b> logs are prose; <b>structured</b> logs are records. The difference is queryability at scale.</p>
+  <p>A free-text log requires regex to extract facts. A JSON log has named keys &mdash; any log backend can filter on <code>order_id</code>, count by <code>user_id</code>, or group by <code>status</code> instantly.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Unstructured logs are a junk drawer &mdash; everything&rsquo;s in there but you rummage by hand. Structured logs are labeled, stackable boxes &mdash; you read the tag, pull the right one instantly. Same information; very different retrieval cost.</p>
+    </div>
+  </div>
+
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Unstructured (hard to query)</div>
+      <div class="codeblock">
+        <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">app.log</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+        <pre><code data-lang="text">2026-06-04 12:01:33 INFO Order 8821 placed by user 42 for $99.00 - payment OK</code></pre>
+      </div>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Structured JSON (queryable)</div>
+      <div class="codeblock">
+        <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">app.log</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+        <pre><code data-lang="json">{"ts":"2026-06-04T12:01:33Z","level":"INFO",
+ "event":"order.placed","order_id":"8821",
+ "user_id":"42","amount_usd":99.00,
+ "payment_status":"ok"}</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="levels">
+  <h2><span class="section-num">02</span> Log levels &amp; when to use them</h2>
+  <p class="takeaway">A log level is a <b>severity signal</b> &mdash; it tells operators which lines deserve attention and lets them mute the rest.</p>
+  <p>Choose the level by answering: &ldquo;Does an operator need to act on this right now?&rdquo; Flooding ERROR with noise trains people to ignore it.</p>
+
+  <dl class="kv">
+    <dt>DEBUG</dt><dd>Diagnostic detail for development; disable in production to avoid noise and cost.</dd>
+    <dt>INFO</dt><dd>Normal business events &mdash; request received, order placed, payment processed.</dd>
+    <dt>WARN</dt><dd>Unexpected but recoverable &mdash; retry succeeded, config fallback used, rate-limit approaching.</dd>
+    <dt>ERROR</dt><dd>A request or operation failed; operator attention warranted. One error log per failure, not per retry.</dd>
+  </dl>
+
+  <div class="quiz" data-quiz>
+    <p class="q">A database call fails but the service retries and succeeds on the second attempt. Which level is correct?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>WARN &mdash; it recovered; no operator action needed, but it&rsquo;s worth knowing.</button>
+      <button class="quiz-opt"><span class="mark"></span>ERROR &mdash; any failure is an error.</button>
+      <button class="quiz-opt"><span class="mark"></span>INFO &mdash; the overall operation succeeded.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> WARN is for unexpected-but-recovered situations. Save ERROR for actual failures. If every retry fires an ERROR, on-call engineers start ignoring the alert.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="what-to-log">
+  <h2><span class="section-num">03</span> What to log &mdash; and what never to log</h2>
+  <p class="takeaway">Log <b>decisions, IDs, and outcomes</b>. Never log <b>secrets, PII, or raw payloads</b>.</p>
+  <p>Good log fields help you answer &ldquo;what happened to this request?&rdquo; without needing to reproduce it.</p>
+
+  <dl class="kv">
+    <dt>Do log</dt><dd><code>request_id</code>, <code>user_id</code> (opaque), <code>order_id</code>, HTTP status, duration, decision made, error message (not stack trace in prod).</dd>
+    <dt>Never log</dt><dd>Passwords, API keys, tokens, full card numbers, email addresses, SSNs, request/response bodies without scrubbing.</dd>
+  </dl>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">orders.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="python">import logging, structlog
+
+log = structlog.get_logger()
+
+def place_order(user_id: str, order_id: str, amount: float) -&gt; None:
+    # Good: structured fields, no PII payload
+    log.info("order.placed",
+             user_id=user_id,
+             order_id=order_id,
+             amount_usd=amount)
+
+    # Bad (never do this):
+    # log.info(f"Order for user email {user.email} card {card.number}")</code></pre>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+      <p><b>Logging PII/secrets</b> is a compliance breach waiting to happen &mdash; logs are often shipped to multiple backends, retained for months, and accessed by tooling teams. Scrub before you emit, not after. And <b>logging in a hot inner loop</b> (e.g., per-item in a batch of thousands) buries signal in noise and spikes your ingestion bill.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why use structured logging instead of print statements?</span><span class="pm-chip diff-warm">warm</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Structured logs have named fields that log backends can index and query. You can filter <code>level=ERROR</code>, count by <code>service</code>, or join on <code>order_id</code> without regex. Free-text strings require parsing at query time, which doesn&rsquo;t scale and breaks when the message wording changes.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Structured logs are machine-readable records. You query them like data, not grep them like text &mdash; that&rsquo;s what makes them useful at scale.&rdquo;</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What should you never put in a log line and why?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Secrets (API keys, tokens), PII (emails, card numbers, SSNs), and unscrubbed request/response bodies. Logs are forwarded to multiple systems, stored for long retention windows, and often accessed by more people than the app itself. A leaked secret in logs is just as exploitable as one in code.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Secrets and PII &mdash; logs get shipped everywhere and retained for months. One accidental token in a log line is a full credential leak.&rdquo;</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">An engineer wants to log at DEBUG inside a loop processing 50 000 items. What&rsquo;s the problem?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Volume and cost. 50 000 log lines per invocation multiplies into millions per hour. Ingestion is priced by GB &mdash; the bill spikes and the signal-to-noise ratio collapses, making real errors invisible. Log a summary at INFO (e.g., items processed, errors count) rather than one line per item.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Hot-loop logging destroys your bill and buries errors in noise. Log summaries, not per-item lines.&rdquo;</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>How would you keep visibility without per-item logs? (counters + one summary line, or a metric)</li><li>How does sampling help here?</li></ul></div>
+      </div>
+    </details>
+  </div>
+</section>

@@ -1,0 +1,187 @@
+<section class="hero reveal">
+  <span class="eyebrow">AWS · compute &amp; networking</span>
+  <h1>Compute &amp; networking.</h1>
+  <p class="lead">EC2 instances are the raw compute; an Auto Scaling Group keeps the right number of healthy ones; a load balancer fans traffic to them; and a VPC is the private network they all live in. This is the backbone every AWS architecture question circles back to.</p>
+</section>
+
+<section class="section reveal" id="ec2">
+  <h2><span class="section-num">01</span> EC2: instances, AMIs &amp; families</h2>
+  <p class="takeaway">An <b>EC2 instance</b> is a virtual server you rent by the second. You boot it from an <b>AMI</b> (a machine image — OS + your baked-in software) and pick an <b>instance type</b> from a <b>family</b> sized for your workload.</p>
+  <p>Families map to a shape: <b>t/m</b> general-purpose, <b>c</b> compute-heavy, <b>r/x</b> memory-heavy. Each comes in <b>Graviton</b> (ARM) variants — AWS's own silicon that's typically ~20% cheaper for the same throughput.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A <b>VPC</b> is your own gated neighbourhood: public-facing shops sit on the street (public subnets), private back-offices sit behind the gate (private subnets), and the front gate (the Internet Gateway) is the only way in or out. An <b>Auto Scaling Group</b> is the shift manager who hires more workers when the queue grows, sends them home when it's quiet, and instantly replaces anyone who quits mid-shift.</p></div></div>
+
+  <dl class="kv">
+    <dt>Instance</dt><dd>A running virtual machine. Billed per second; stop it and you stop most of the bill.</dd>
+    <dt>AMI</dt><dd>The image it boots from — OS plus pre-installed software. Bake one in CI so every instance starts identical.</dd>
+    <dt>Family / size</dt><dd>Shape (<code>t</code>, <code>m</code>, <code>c</code>, <code>r</code>) × size (<code>large</code>, <code>xlarge</code>…). Match it to CPU-vs-memory needs.</dd>
+    <dt>Graviton (ARM)</dt><dd>AWS ARM CPUs — best price/perf for most modern, recompiled workloads. Default to it unless something needs x86.</dd>
+  </dl>
+
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">tip</span></div><p>Don't hand-build "pet" servers. Bake an <b>AMI</b> (or use a container image) so an instance is disposable — the ASG can replace it from the same image with zero ceremony. Cattle, not pets, applies to VMs too.</p></div></div>
+</section>
+
+<section class="section reveal" id="asg-lb">
+  <h2><span class="section-num">02</span> Auto Scaling Groups &amp; load balancers</h2>
+  <p class="takeaway">An <b>ASG</b> keeps your fleet between <b>min</b> and <b>max</b>, tracking a <b>desired</b> count. <b>Scaling policies</b> grow or shrink it to match load, and it <b>self-heals</b> — a failed health check means the instance is killed and replaced automatically.</p>
+
+  <dl class="kv">
+    <dt>min / desired / max</dt><dd>Floor, current target, ceiling. The ASG never drops below min or above max.</dd>
+    <dt>Scaling policy</dt><dd>Add/remove instances on a signal — typically <b>target tracking</b> (e.g. hold CPU at 50%).</dd>
+    <dt>Self-healing</dt><dd>Unhealthy instance → terminated and replaced from the same launch template. No human paged.</dd>
+    <dt>Multi-AZ</dt><dd>Spread the ASG across Availability Zones so one AZ failing just means fewer healthy targets, not an outage.</dd>
+  </dl>
+
+  <p>In front of the fleet sits a <b>load balancer</b>. Pick by OSI layer:</p>
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">ALB — Application LB (L7)</div>
+      <ul><li>Understands HTTP/HTTPS.</li><li><b>Host- and path-based routing</b> (<code>/api</code> → one target group, <code>shop.example.com</code> → another).</li><li>TLS termination, WebSockets, gRPC.</li><li>Default for web apps &amp; microservices.</li></ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">NLB — Network LB (L4)</div>
+      <ul><li>Operates on TCP/UDP — no HTTP awareness.</li><li><b>Ultra-high throughput</b>, very low latency, static IPs.</li><li>Preserves the client source IP.</li><li>For non-HTTP, extreme scale, or when you need a fixed IP.</li></ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Single-AZ is not high availability.</b> An ASG with min=2 in one Availability Zone still drops to zero when that AZ has an outage. HA means spreading instances across <b>two or more AZs</b> behind a load balancer that only routes to healthy targets.</p></div></div>
+</section>
+
+<section class="section reveal" id="vpc">
+  <h2><span class="section-num">03</span> VPC: subnets, routing &amp; egress</h2>
+  <p class="takeaway">A <b>VPC</b> is a private network defined by a <b>CIDR block</b> (e.g. <code>10.0.0.0/16</code>), carved into <b>subnets</b> across multiple AZs. <b>Public</b> subnets have a route to the <b>Internet Gateway</b>; <b>private</b> subnets do not — they reach the internet outbound only through a <b>NAT gateway</b>.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">A request into a multi-AZ VPC</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "VPC request path",
+      "nodes": [
+        { "id": "net", "label": "Internet", "type": "client", "col": 0, "row": 1 },
+        { "id": "igw", "label": "Internet Gateway", "type": "edge", "col": 1, "row": 1 },
+        { "id": "alb", "label": "ALB · public subnets (AZ-a/b)", "type": "balancer", "col": 2, "row": 1 },
+        { "id": "app", "label": "ASG instances · private subnets (AZ-a/b)", "type": "compute", "col": 3, "row": 1 },
+        { "id": "rds", "label": "RDS Multi-AZ · private subnets", "type": "database", "col": 4, "row": 1 }
+      ],
+      "edges": [
+        { "from": "net", "to": "igw", "label": "inbound" },
+        { "from": "igw", "to": "alb", "label": "to public subnet" },
+        { "from": "alb", "to": "app", "label": "route to healthy target" },
+        { "from": "app", "to": "rds", "label": "private query" }
+      ],
+      "steps": [
+        { "node": "net", "caption": "A user's HTTPS request arrives at the VPC's public edge." },
+        { "edge": ["net","igw"], "caption": "The Internet Gateway is the only door in; it sits at the VPC boundary." },
+        { "edge": ["igw","alb"], "caption": "Traffic lands on the ALB, which lives in public subnets spread across two AZs." },
+        { "edge": ["alb","app"], "caption": "The ALB forwards to a healthy ASG instance in a private subnet — no public IP on the app tier.", "status": "hit" },
+        { "edge": ["app","rds"], "caption": "The instance queries RDS over the private network. The DB is Multi-AZ and never internet-reachable." }
+      ] }
+    </script>
+    <p class="viz-fallback">An inbound request enters through the Internet Gateway, hits an ALB in public subnets across two AZs, is routed to a healthy ASG instance in a private subnet, which then queries a Multi-AZ RDS database over the private network. Only the ALB is internet-facing.</p>
+  </figure>
+
+  <dl class="kv">
+    <dt>CIDR &amp; subnets</dt><dd>The VPC owns an IP range; each subnet is a slice of it, pinned to <b>one AZ</b>. Spread subnets across AZs for HA.</dd>
+    <dt>Route table</dt><dd>Per-subnet rules for where traffic goes. <b>Public</b> = a <code>0.0.0.0/0</code> route to the IGW; <b>private</b> = no such route.</dd>
+    <dt>Internet Gateway</dt><dd>The VPC's bidirectional door to the internet. Public subnets route through it.</dd>
+    <dt>NAT gateway</dt><dd>Lets <b>private</b> subnets make <b>outbound</b> connections (pull packages, call APIs) without being reachable inbound.</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Two classics: <b>(1)</b> putting databases in <b>public</b> subnets — your RDS should sit in private subnets, reachable only from the app tier. <b>(2)</b> Forgetting <b>NAT gateways cost real money</b> — an hourly charge <em>plus</em> a per-GB data-processing fee on all egress. Heavy private-subnet egress (image pulls, S3 traffic) can quietly become a top line item; use <b>VPC endpoints</b> to keep AWS-bound traffic off the NAT.</p></div></div>
+</section>
+
+<section class="section reveal" id="security">
+  <h2><span class="section-num">04</span> Security groups vs NACLs</h2>
+  <p class="takeaway">Two firewall layers. A <b>security group</b> wraps an instance/ENI and is <b>stateful</b> — allow traffic out and the reply is automatically allowed back. A <b>NACL</b> guards a whole subnet and is <b>stateless</b> — you must allow both directions explicitly.</p>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>Dimension</th><th>Security group</th><th>NACL</th></tr></thead>
+    <tbody>
+      <tr><td>Attaches to</td><td>An instance / ENI</td><td>A subnet</td></tr>
+      <tr><td>State</td><td><b>Stateful</b> — return traffic auto-allowed</td><td><b>Stateless</b> — allow each direction yourself</td></tr>
+      <tr><td>Rules</td><td><b>Allow</b> only</td><td><b>Allow and deny</b></td></tr>
+      <tr><td>Everyday use</td><td>Your primary control — 99% of the time</td><td>Coarse subnet-wide guardrail / explicit blocks</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>Mental model: the <b>security group</b> is the bouncer at each door who remembers who he let out; the <b>NACL</b> is the perimeter fence with a blunt allow/deny list and no memory.</p>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Instances in a private subnet need to <code>pip install</code> from the public internet, but must never accept inbound connections from it. What do you add?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A NAT gateway in a public subnet, with the private subnet's route table sending <code>0.0.0.0/0</code> to it.</button>
+      <button class="quiz-opt"><span class="mark"></span>An Internet Gateway route on the private subnet so instances get public IPs.</button>
+      <button class="quiz-opt"><span class="mark"></span>A stateless NACL rule that allows all inbound traffic.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> A NAT gateway gives <b>outbound-only</b> internet access: private instances can initiate connections out, but nothing on the internet can initiate one in. Routing the private subnet to an IGW (or giving it public IPs) would expose it; opening a NACL does the opposite of what's asked.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="sizing">
+  <h2><span class="section-num">05</span> Sizing the web tier</h2>
+  <p class="takeaway">Interviewers love "how many instances?" The answer is back-of-envelope: turn users into <b>peak QPS</b>, divide by what one server handles, and round up. Drag the sliders to feel how traffic drives fleet size.</p>
+
+  <div class="calc" data-calc>
+    <script type="application/json" class="calc-config">
+    { "title": "Sizing a web tier",
+      "preset": "Web app",
+      "presets": [
+        { "label": "Web app", "values": { "dau": 2000000, "writesPerUser": 5, "readWrite": 20, "bytesPerItem": 2000, "retentionYears": 2, "replication": 3, "perServerQps": 800 } }
+      ],
+      "outputs": ["writeQps","readQps","peakQps","storageTotal","servers"] }
+    </script>
+    <p class="viz-fallback">For ~2M daily users at 5 writes each with a 20:1 read:write ratio, average write QPS is small but reads dominate; multiplied by a peak factor this yields peak QPS, which divided by ~800 QPS per server gives the number of stateless app servers the ASG should target, plus a rough total-storage estimate.</p>
+  </div>
+
+  <dl class="kv">
+    <dt>Why it matters</dt><dd>That "servers" number is your ASG's <b>desired</b> count at peak; set <b>max</b> above it with headroom and <b>min</b> for a quiet floor.</dd>
+    <dt>Round up, add headroom</dt><dd>Never size to exactly 100% — instances die, AZs drain, deploys briefly double capacity. Target ~50–70% utilisation.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">06</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">ALB vs NLB — when do you reach for each?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>The <b>ALB</b> is a Layer-7 (HTTP) load balancer: it routes by <b>host and path</b>, terminates TLS, and speaks WebSockets/gRPC — my default for web apps and microservices. The <b>NLB</b> is Layer-4 (TCP/UDP): no HTTP awareness, but <b>extreme throughput</b>, very low latency, static IPs, and it preserves the client source IP. I pick NLB for non-HTTP protocols, massive scale, or when I need a fixed IP.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"ALB is Layer 7 — it routes on host and path and handles TLS, so it's my default for HTTP. NLB is Layer 4 — raw TCP at huge throughput with static IPs, for non-HTTP or extreme scale."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Public vs private subnet — what goes where, and why?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>A <b>public</b> subnet has a route to the Internet Gateway; a <b>private</b> one doesn't. Internet-facing things go public — the <b>load balancer</b>, NAT gateways, bastions. Everything else goes private: <b>app servers</b> and especially <b>databases</b>. The app tier is reached only through the load balancer, and it gets outbound internet via a NAT gateway. Minimising public surface area is the whole point.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Only the internet-facing layer — the load balancer and NAT — lives in public subnets. App servers and databases stay private, reachable through the LB, with outbound via NAT. Smallest possible public surface."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>Why is a public RDS a red flag? (No reason to expose your data store to the internet; it's a breach vector.)</li><li>What pins a subnet to one AZ? (A subnet lives in exactly one AZ — that's why HA needs subnets in several.)</li></ul></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How does an ASG give you both HA and self-healing?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Two mechanisms. <b>Self-healing</b>: the ASG watches health checks; a failing instance is terminated and a fresh one is launched from the same template — no human in the loop. <b>HA</b>: you spread the ASG across <b>multiple AZs</b>, so if one AZ fails, the others keep serving and the ASG launches replacements in the healthy AZs to restore desired capacity. Together: a node dying or an AZ dropping both self-correct.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"It replaces unhealthy instances automatically from the launch template — that's self-healing. Span it across AZs and it survives an AZ outage too, relaunching capacity in the zones that are still up."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do instances in a private subnet reach the internet?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Through a <b>NAT gateway</b>. The NAT lives in a public subnet (which routes to the IGW); the private subnet's route table sends <code>0.0.0.0/0</code> to the NAT. That gives <b>outbound-only</b> access — instances can call out, but nothing inbound can reach them. It costs an hourly fee plus per-GB processing, so for AWS-bound traffic (S3, ECR) I'd add <b>VPC endpoints</b> to bypass the NAT and save money.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"A NAT gateway gives private instances outbound-only internet — they can initiate connections out, nothing can reach in. It's not free, so I route AWS traffic through VPC endpoints to cut the NAT bill."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

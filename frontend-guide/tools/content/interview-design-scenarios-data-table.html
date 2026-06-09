@@ -1,0 +1,176 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Design round &middot; data table</span>
+            <h1>Design a data table</h1>
+            <p class="lead">Sortable, filterable, paginated &mdash; and it has to stay smooth at 100k rows. The whole game is one question asked over and over: does this operation belong on the client or the server, and how do we render a huge dataset without melting the DOM.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">A data table is a <b>view over a dataset</b> with sort, filter, and pagination. The two pivotal calls: <b>client vs server</b> for each operation, and <b>virtualization</b> once rows get large.</p>
+            <p>A column config drives what renders; table state (sort, filters, page) drives what data you show. Small data &rarr; do everything in the browser. Big data &rarr; push the work to the server and only paint what&rsquo;s visible.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>A spreadsheet that stays smooth at 100k rows. You never <em>see</em> all 100k cells at once &mdash; the app only draws the few dozen rows in your viewport and reuses them as you scroll (virtualization). Sorting a million rows is a server&rsquo;s job; redrawing the screen is the browser&rsquo;s job. Keep those separate.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="walk">
+            <h2><span class="section-num">01</span> The six steps, on a table</h2>
+            <p>Quick pass first &mdash; then we go deep on the two decisions that actually carry the answer.</p>
+            <dl class="kv">
+              <dt>1 &middot; Requirements</dt><dd>How many rows (100 or 100k)? Which columns are sortable/filterable? Server-paginated API or full dataset in memory? Row selection?</dd>
+              <dt>2 &middot; API &amp; state</dt><dd>A <code>columns</code> config (key, header, sortable, render). Table state: <code>sort</code>, <code>filters</code>, <code>page</code>, <code>selection</code> &mdash; ideally driven by the URL.</dd>
+              <dt>3 &middot; Data flow</dt><dd>Small data: fetch once, derive sorted/filtered rows. Large data: send sort/filter/page to the server and render the returned slice.</dd>
+              <dt>4 &middot; Rendering &amp; perf</dt><dd>Virtualize rows past a few hundred; sticky header; memoize row components; don&rsquo;t refetch on every keystroke.</dd>
+              <dt>5 &middot; A11y &amp; edges</dt><dd>Real <code>&lt;table&gt;</code> semantics, <code>aria-sort</code> on headers, keyboard selection, and empty/loading/error states.</dd>
+              <dt>6 &middot; Trade-offs</dt><dd>Client = instant but bounded by memory; server = scales but adds latency. URL state = shareable but more plumbing.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="clientserver">
+            <h2><span class="section-num">02</span> Client vs server &mdash; per operation</h2>
+            <p>This table <em>is</em> the answer to most of the round. Decide each operation by dataset size and whether the full set even lives in the browser.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Operation</th><th>Do it client-side when&hellip;</th><th>Do it server-side when&hellip;</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Sorting</strong></td><td>The full dataset is already loaded and small (&lt; ~10k rows).</td><td>Data is paginated/huge; you can only see one page, so the server must sort the whole set.</td></tr>
+                  <tr><td><strong>Filtering</strong></td><td>Rows are in memory and filters are simple field matches.</td><td>Filtering must run across all rows you don&rsquo;t have, or needs DB indexes/full-text search.</td></tr>
+                  <tr><td><strong>Pagination</strong></td><td>You hold every row and just slice locally for display.</td><td>The dataset is too big to ship &mdash; fetch page N on demand (offset or cursor).</td></tr>
+                  <tr><td><strong>Search</strong></td><td>Instant client filter over a small loaded list.</td><td>Backed by a search index; debounce the query and fetch matches.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>Rule of thumb: <b>if the whole dataset fits comfortably in memory, do it on the client for instant feedback. The moment it doesn&rsquo;t, every operation moves to the server</b> &mdash; because you can only act on the rows you actually have.</p>
+          </section>
+
+          <section class="section reveal" id="virtualize">
+            <h2><span class="section-num">03</span> Render all rows vs virtualize</h2>
+            <p>Even with server pagination, a single page of a few thousand rows can stutter. Virtualization renders only what&rsquo;s on screen.</p>
+            <div class="versus">
+              <div class="vs-col vs-bad">
+                <div class="vs-h">Mount every row</div>
+                <div class="codeblock"><pre><code data-lang="tsx">// 100k rows -&gt; 100k DOM nodes
+&lt;tbody&gt;
+  {rows.map((r) =&gt; (
+    &lt;Row key={r.id} data={r} /&gt;
+  ))}
+&lt;/tbody&gt;
+// scroll jank, huge memory, slow paint</code></pre></div>
+              </div>
+              <div class="vs-col vs-good">
+                <div class="vs-h">Virtualize the viewport</div>
+                <div class="codeblock"><pre><code data-lang="tsx">// only ~30 visible rows in the DOM
+const v = useVirtualizer({
+  count: rows.length,
+  estimateSize: () =&gt; 40,
+  getScrollElement: () =&gt; ref.current,
+});
+// render v.getVirtualItems(), absolutely
+// positioned inside a tall spacer</code></pre></div>
+              </div>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>Two killers. <b>Don&rsquo;t mount 100k DOM rows</b> &mdash; the browser chokes on layout and memory; virtualize instead. And <b>don&rsquo;t refetch the whole table on every keystroke</b> in a filter box &mdash; debounce the input and send one request, or filter in memory if the data&rsquo;s already there.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="config">
+            <h2><span class="section-num">04</span> A column config &amp; URL-driven state</h2>
+            <p>Drive the table from a declarative <code>columns</code> array, and keep sort/filter/page <b>in the URL</b> so a view is shareable and survives refresh.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">columns.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">type Column&lt;T&gt; = {
+  key: keyof T;
+  header: string;
+  sortable?: boolean;
+  render?: (row: T) =&gt; React.ReactNode;
+};
+
+const columns: Column&lt;User&gt;[] = [
+  { key: "name", header: "Name", sortable: true },
+  { key: "email", header: "Email" },
+  { key: "role", header: "Role", sortable: true,
+    render: (u) =&gt; &lt;Badge&gt;{u.role}&lt;/Badge&gt; },
+];
+// table state lives in the URL: ?sort=name:asc&amp;page=2&amp;role=admin</code></pre>
+            </div>
+            <div class="callout tip">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Pro tip <span class="tag">tip</span></div>
+                <p>URL-as-state makes the table <b>shareable, bookmarkable, and back-button friendly</b>. Pair it with TanStack Query keyed on those params &mdash; changing the URL changes the key, which triggers the right refetch automatically. Row selection usually stays in local state (it&rsquo;s ephemeral, not worth sharing).</p>
+              </div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">A table must show and sort 100k rows from a paginated API. Where should sorting happen?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Server-side &mdash; you only hold one page, so the server must sort the full set and return the right page.</button>
+                <button class="quiz-opt"><span class="mark"></span>Client-side &mdash; just call <code>rows.sort()</code> in the component.</button>
+                <button class="quiz-opt"><span class="mark"></span>It doesn&rsquo;t matter; results are identical either way.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> With pagination you only have one slice in memory, so a client sort would just reorder that slice. The server sorts across <em>all</em> rows, then returns the correct page.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When do you sort/filter on the client vs the server?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>If the full dataset is already loaded and small, do it on the client for instant feedback. Once it&rsquo;s paginated or too big to ship, the server must do it &mdash; you can only sort or filter the rows you actually hold.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Small, in-memory data sorts on the client for speed. Big or paginated data has to sort on the server &mdash; you can&rsquo;t sort rows you don&rsquo;t have.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you keep a 100k-row table smooth?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Virtualize the rows so only the ~30 visible ones are in the DOM, with a tall spacer to keep the scrollbar honest. Combine that with server pagination/filtering and memoized row components so re-renders stay cheap.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Virtualization &mdash; render only the rows in the viewport, not all 100k. Add server paging and memoized rows and it stays buttery.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Where should the table&rsquo;s sort/filter/page state live?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>In the URL query string. That makes the view shareable, bookmarkable, and back-button friendly, and it becomes a natural cache key for the data fetch. Ephemeral things like row selection can stay in local state.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;I put sort, filter, and page in the URL so views are shareable and it doubles as the query key. Selection stays local since it&rsquo;s throwaway.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="autocomplete.html"><span class="pn-k">Previous</span><span class="pn-t">Design an autocomplete</span></a>
+            <a class="next" href="make-it-fast.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Make this page fast</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#walk">The six steps</a>
+          <a href="#clientserver">Client vs server</a>
+          <a href="#virtualize">Render all vs virtualize</a>
+          <a href="#config">Column config &amp; URL state</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

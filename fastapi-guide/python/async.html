@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Python — Async in depth | FastAPI Field Guide</title>
+  <meta name="description" content="Async Python beyond the basics: the event loop and coroutines, awaiting concurrently with asyncio.gather and tasks, concurrency vs parallelism, async with / async for, and why you must never block the loop — mapped to FastAPI async routes." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13 2 4 14h6l-1 8 9-12h-6z' fill='%231ec9b0'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="python" data-page="py-async" data-lesson="python-async">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="FastAPI Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="#06140f" stroke="#06140f" stroke-width="1.2" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>
+        <span class="brand-text"><b>FastAPI Field Guide</b><span>Runnable visual guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here"><h4>Start here</h4><a class="nav-link" href="../index.html">Home</a></nav>
+      <nav class="nav-group is-py" aria-label="Python">
+        <h4><span class="dot"></span>Python</h4>
+        <a class="nav-link" href="../python/index.html">Setup &amp; tooling</a>
+        <a class="nav-link" href="../python/concepts.html">The refresher</a>
+        <a class="nav-link" href="../python/oop.html">Classes &amp; OOP</a>
+        <a class="nav-link" href="../python/decorators.html">Decorators &amp; closures</a>
+        <a class="nav-link" href="../python/errors.html">Errors &amp; exceptions</a>
+        <a class="nav-link" href="../python/generators.html">Generators &amp; context</a>
+        <a class="nav-link" href="../python/typing.html">Typing in depth</a>
+        <a class="nav-link" href="../python/async.html">Async in depth</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#loop">Event loop &amp; coroutines</a>
+          <a class="nav-link" href="#gather">await &amp; gather</a>
+          <a class="nav-link" href="#concurrency">Concurrency vs parallelism</a>
+          <a class="nav-link" href="#asyncwith">async with / async for</a>
+          <a class="nav-link" href="#blocking">Don't block the loop</a>
+        </div>
+      </nav>
+      <nav class="nav-group is-core" aria-label="FastAPI core">
+        <h4><span class="dot"></span>FastAPI core</h4>
+        <a class="nav-link" href="../fastapi/index.html">Overview</a>
+        <a class="nav-link" href="../fastapi/routing.html">Routing &amp; params</a>
+        <a class="nav-link" href="../fastapi/request-body.html">Request body &amp; models</a>
+        <a class="nav-link" href="../fastapi/validation.html">Validation &amp; errors</a>
+        <a class="nav-link" href="../fastapi/dependencies.html">Dependency injection</a>
+      </nav>
+      <nav class="nav-group is-db" aria-label="Databases"><h4><span class="dot"></span>Databases</h4><a class="nav-link" href="../fastapi/databases.html">SQLModel &amp; CRUD</a></nav>
+      <nav class="nav-group is-auth" aria-label="Auth"><h4><span class="dot"></span>Auth &amp; security</h4><a class="nav-link" href="../fastapi/auth.html">OAuth2 &amp; JWT</a></nav>
+      <nav class="nav-group is-adv" aria-label="Advanced"><h4><span class="dot"></span>Advanced</h4><a class="nav-link" href="../fastapi/advanced.html">Async &amp; structure</a></nav>
+      <nav class="nav-group" aria-label="Ship it"><h4>Ship it</h4><a class="nav-link" href="../deploy/index.html">Testing &amp; deployment</a></nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../python/index.html" style="color:var(--accent)">Python</a><span class="sep">/</span><span class="current">Async in depth</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Python · async in depth</span>
+            <h1>Doing other work while you wait.</h1>
+            <p class="lead">A web server spends most of its life <em>waiting</em> — on a database, another API, the network. <strong>async</strong> lets one process serve many requests during that idle time instead of sitting blocked. The refresher introduced <code>async</code>/<code>await</code>; here we go deeper: the event loop, running things concurrently, and the one mistake that quietly ruins it.</p>
+          </section>
+
+          <!-- 1 · event loop & coroutines -->
+          <section class="section reveal" id="loop">
+            <h2><span class="section-num">01</span> &nbsp;The event loop &amp; coroutines</h2>
+            <p>An <code>async def</code> function is a <strong>coroutine</strong>: it can <em>pause</em> at every <code>await</code> and hand control back, then resume later. The <strong>event loop</strong> is the scheduler that runs many coroutines on a <em>single thread</em>, switching to another whenever the current one is waiting. <code>await</code> means “pause me here until this finishes; run something else meanwhile.”</p>
+            <div class="runpad" data-needs="">
+              <div class="rp-head"><span class="rp-title">coroutine.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+              <textarea class="rp-editor" spellcheck="false" rows="10">
+import asyncio
+
+async def greet(name):
+    await asyncio.sleep(0)        # a pause point (pretend I/O)
+    return f"hello {name}"
+
+# this runner provides the loop, so we can await at the top level:
+print(await greet("Ada"))
+</textarea>
+              <div class="rp-output"><pre class="rp-expected">hello Ada</pre></div>
+            </div>
+            <p>In a real script there's no loop yet, so you start one with <code>asyncio.run(main())</code> — that's the single entry point that creates the loop, runs your top coroutine, and closes it:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">script.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import asyncio
+
+async def main():
+    print(await greet("Ada"))
+
+asyncio.run(main())     # creates the loop, runs main(), cleans up</code></pre></div>
+            </div>
+          </section>
+
+          <!-- 2 · await & gather -->
+          <section class="section reveal" id="gather">
+            <h2><span class="section-num">02</span> &nbsp;<code>await</code> &amp; <code>asyncio.gather</code></h2>
+            <p>Awaiting calls one after another is still <em>sequential</em> — each finishes before the next starts. To overlap the waiting, hand several coroutines to <code>asyncio.gather</code>: it runs them concurrently and returns all results once they're done, <strong>in the order you passed them</strong> (not the order they finished).</p>
+            <div class="runpad" data-needs="">
+              <div class="rp-head"><span class="rp-title">gather.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+              <textarea class="rp-editor" spellcheck="false" rows="14">
+import asyncio
+
+async def fetch(name, delay):
+    await asyncio.sleep(delay)       # 'orders' finishes first...
+    return f"{name} done"
+
+# run all three concurrently
+results = await asyncio.gather(
+    fetch("users", 0.03),
+    fetch("orders", 0.01),
+    fetch("stats", 0.02),
+)
+print(results)                        # ...but order matches the arguments
+</textarea>
+              <div class="rp-output"><pre class="rp-expected">['users done', 'orders done', 'stats done']</pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title"><code>gather</code> vs <code>create_task</code></div><p><code>gather(...)</code> is the quick way to fan out and wait for everything. <code>asyncio.create_task(coro)</code> schedules a coroutine to run in the background <em>now</em> and hands you a handle to await later — useful when you want work started but not yet joined.</p></div></div>
+          </section>
+
+          <!-- 3 · concurrency vs parallelism -->
+          <section class="section reveal" id="concurrency">
+            <h2><span class="section-num">03</span> &nbsp;Concurrency vs parallelism</h2>
+            <p>Crucial distinction. <strong>Concurrency</strong> is one worker juggling many tasks by switching whenever one waits — that's asyncio, on a single thread. <strong>Parallelism</strong> is many workers running at the literal same instant on multiple CPU cores. Async gives you the first, not the second.</p>
+            <div class="diagram" style="background-image:none;">
+              <div class="dg-title">One thread, taking turns</div>
+              <div class="kv">
+                <dt>I/O-bound work</dt><dd>waiting on network/disk/DB → <strong>async wins</strong> (overlap the waiting)</dd>
+                <dt>CPU-bound work</dt><dd>crunching numbers, no waiting → async does <em>not</em> help; use processes</dd>
+                <dt>asyncio</dt><dd>concurrency on one thread (cooperative switching at <code>await</code>)</dd>
+                <dt>multiprocessing</dt><dd>true parallelism across cores</dd>
+              </div>
+            </div>
+            <p>You can <em>see</em> the cooperative switching: both tasks start before either resumes, because each yields control at its <code>await</code>.</p>
+            <div class="runpad" data-needs="">
+              <div class="rp-head"><span class="rp-title">interleave.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+              <textarea class="rp-editor" spellcheck="false" rows="12">
+import asyncio
+
+async def task(name):
+    print(f"{name}: start")
+    await asyncio.sleep(0)      # yield control to the loop here
+    print(f"{name}: resume")
+
+await asyncio.gather(task("A"), task("B"))
+</textarea>
+              <div class="rp-output"><pre class="rp-expected">A: start
+B: start
+A: resume
+B: resume</pre></div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">Will marking a CPU-heavy function <code>async def</code> make it run faster?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Yes — <code>async</code> always speeds code up</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>No — async helps <em>I/O waiting</em>, not CPU work; use processes for that</button>
+                <button class="quiz-opt"><span class="mark"></span>Only if you add more <code>await</code>s</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Async overlaps <em>waiting</em>. CPU-bound work never waits, so it just hogs the single thread — and worse, blocks every other task. Reach for <code>multiprocessing</code> or a worker queue instead.</div>
+            </div>
+          </section>
+
+          <!-- 4 · async with / async for -->
+          <section class="section reveal" id="asyncwith">
+            <h2><span class="section-num">04</span> &nbsp;<code>async with</code> &amp; <code>async for</code></h2>
+            <p>The async cousins of two things you already know. <code>async with</code> is a context manager whose <em>setup and teardown are themselves async</em> — an async HTTP client or database session. <code>async for</code> iterates an <strong>async generator</strong> that <code>await</code>s between items — perfect for streaming data as it arrives.</p>
+            <div class="runpad" data-needs="">
+              <div class="rp-head"><span class="rp-title">async_for.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+              <textarea class="rp-editor" spellcheck="false" rows="12">
+import asyncio
+
+async def ticker(n):              # an async generator
+    for i in range(1, n + 1):
+        await asyncio.sleep(0)    # could be waiting on a stream
+        yield i
+
+async for value in ticker(3):
+    print(value)
+</textarea>
+              <div class="rp-output"><pre class="rp-expected">1
+2
+3</pre></div>
+            </div>
+            <p>In real code, <code>async with</code> is everywhere an HTTP client or DB session appears:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">client.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import httpx
+
+async def fetch_json(url: str):
+    async with httpx.AsyncClient() as client:   # async setup + teardown
+        response = await client.get(url)
+        return response.json()</code></pre></div>
+            </div>
+          </section>
+
+          <!-- 5 · don't block the loop -->
+          <section class="section reveal" id="blocking">
+            <h2><span class="section-num">05</span> &nbsp;Don't block the loop</h2>
+            <p>The golden rule: async only helps if you <code>await</code> <em>async</em> libraries. A <strong>blocking</strong> call inside a coroutine — <code>time.sleep</code>, a synchronous DB driver, a heavy computation — freezes the entire event loop, so <em>every</em> request stalls until it returns. When you must run blocking work, offload it to a thread with <code>asyncio.to_thread</code>, keeping the loop free.</p>
+            <div class="runpad" data-needs="">
+              <div class="rp-head"><span class="rp-title">offload.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+              <textarea class="rp-editor" spellcheck="false" rows="12">
+import asyncio
+import time
+
+def slow_blocking():             # an ordinary blocking function
+    time.sleep(0)                # imagine a sync DB call or heavy work
+    return "computed"
+
+# run it in a worker thread so the event loop keeps serving others
+result = await asyncio.to_thread(slow_blocking)
+print(result)
+</textarea>
+              <div class="rp-output"><pre class="rp-expected">computed</pre></div>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">One blocking line stalls the whole server</div><p>Because everything shares one thread, a single <code>time.sleep(5)</code> in an <code>async</code> handler pauses every other in-flight request for 5 seconds. If a library isn't async-aware, either don't <code>await</code> it on the loop, or push it to a thread/process.</p></div></div>
+          </section>
+
+          <!-- FastAPI tie-in -->
+          <section class="section reveal" id="fastapi">
+            <h2><span class="section-num">06</span> &nbsp;How this maps to FastAPI</h2>
+            <p>FastAPI is built on the event loop, and it's smart about it. Write <code>async def</code> for a route and it runs on the loop — perfect when you <code>await</code> async DB/HTTP calls. Write a plain <code>def</code> route and FastAPI automatically runs it in a <strong>threadpool</strong>, so a blocking call there won't freeze the loop.</p>
+            <div class="diagram" style="background-image:none;">
+              <div class="dg-title">Which one do I write?</div>
+              <div class="kv">
+                <dt>async def route</dt><dd>when you <code>await</code> async libraries (httpx, async DB) — runs on the loop</dd>
+                <dt>def route</dt><dd>when your code is sync/blocking — FastAPI offloads it to a threadpool for you</dd>
+                <dt>BackgroundTasks</dt><dd>fire-and-forget work after the response is sent</dd>
+                <dt>lifespan</dt><dd>an <code>@asynccontextmanager</code> for startup/shutdown (async <code>with</code>!)</dd>
+              </div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">The decision in one line</div><p>Awaiting something async? Use <code>async def</code>. Calling blocking/sync code? A plain <code>def</code> route is safer — let FastAPI's threadpool handle it. The <a href="../fastapi/advanced.html">Advanced</a> page applies exactly this to real routes, background tasks, and lifespan.</p></div></div>
+          </section>
+
+          <!-- exercise -->
+          <div class="exercise reveal">
+            <div class="ex-tag">Exercise</div>
+            <p class="ex-q">Write code that runs three <code>say(word)</code> coroutines <strong>concurrently</strong> with <code>asyncio.gather</code> and prints the uppercased results.</p>
+            <p>Given <code>say("a")</code>, <code>say("b")</code>, <code>say("c")</code>, the result should be <code>['A', 'B', 'C']</code>.</p>
+            <div class="runpad" data-needs="" style="margin-top:14px;">
+              <div class="rp-head"><span class="rp-title">exercise.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+              <textarea class="rp-editor" spellcheck="false" rows="12">
+import asyncio
+
+async def say(word):
+    await asyncio.sleep(0)
+    return word.upper()
+
+# gather say("a"), say("b"), say("c") concurrently and print the list
+results = ...
+print(results)
+</textarea>
+              <div class="rp-output"><pre class="rp-expected">(write your solution and press Run)</pre></div>
+            </div>
+            <details class="deeper">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show solution <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="codeblock">
+                  <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">solution.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                  <div class="code-pane active"><pre><code data-lang="python">import asyncio
+
+async def say(word):
+    await asyncio.sleep(0)
+    return word.upper()
+
+results = await asyncio.gather(say("a"), say("b"), say("c"))
+print(results)        # ['A', 'B', 'C']  — order matches the arguments</code></pre></div>
+                </div>
+                <p>All three coroutines run concurrently; <code>gather</code> waits for the slowest and returns the results in argument order. Swap <code>asyncio.sleep</code> for a real <code>await</code> on an async client and this is a genuine concurrent fan-out.</p>
+              </div>
+            </details>
+          </div>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../python/typing.html"><span class="pn-k">‹ Back</span><span class="pn-t">Typing in depth</span></a>
+            <a class="next" href="../fastapi/index.html"><span class="pn-k">Next ›</span><span class="pn-t">FastAPI · Overview</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#loop">Event loop &amp; coroutines</a>
+          <a href="#gather">await &amp; gather</a>
+          <a href="#concurrency">Concurrency vs parallelism</a>
+          <a href="#asyncwith">async with / async for</a>
+          <a href="#blocking">Don't block the loop</a>
+          <a href="#fastapi">How it maps to FastAPI</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Python · Async in depth</span>
+        <span class="fmono">FastAPI Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/runpad.js"></script>
+  <script src="../assets/js/playground.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

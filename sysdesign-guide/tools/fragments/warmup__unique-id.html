@@ -1,0 +1,173 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Warm-up · unique IDs</span>
+  <h1>Design a unique-ID generator.</h1>
+  <p class="lead">Many systems need globally unique IDs at high volume — tweets, orders, messages — ideally <strong>time-sortable</strong> (cheap "newest first", index-friendly inserts) and generated <strong>without coordination</strong> (no central bottleneck). The real decision in 2026 is which scheme: Snowflake's compact 64-bit packing, or the now-standard <strong>UUIDv7</strong>. We'll build both and name the trade-off.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Produce IDs that are globally unique and roughly ordered by creation time, generated locally by any node, with no duplicates ever.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>High throughput (10⁴–10⁶ IDs/s fleet-wide), no per-ID coordination on the hot path, compact enough to index well, and resilient to clock skew and node restarts.</p></div>
+  </div>
+  <p>Capacity sanity check: a large app peaks near <strong>~100k IDs/s</strong>. A single Snowflake node mints 4,096/ms = <strong>~4.1M IDs/s</strong>, so even one node covers it — the design goal isn't throughput, it's <em>uniqueness + ordering without a central counter</em>.</p>
+</section>
+
+<section class="section reveal" id="options">
+  <h2><span class="section-num">02</span> &nbsp;The options</h2>
+  <p>Five schemes span the trade-off between sortability, coordination, size, and index-friendliness:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Unique-ID schemes",
+      "axisLabel": "Sortable? Coordination-free? Compact? Index-friendly?",
+      "stops": [
+        { "label": "DB auto-inc", "dims": { "Time-sortable": 90, "Coordination-free": 10, "Compact": 100, "Index-friendly": 100, "Unguessable": 5 }, "note": "Tiny and perfectly sequential, but funnels every insert through one writer — a hard bottleneck and SPOF that doesn't survive sharding." },
+        { "label": "UUIDv4", "dims": { "Time-sortable": 5, "Coordination-free": 100, "Compact": 30, "Index-friendly": 20, "Unguessable": 100 }, "note": "122 random bits: zero coordination, unguessable — but unsortable, and random inserts fragment a B-tree (page splits, cache misses). The old default, now an anti-pattern for primary keys." },
+        { "label": "UUIDv7", "dims": { "Time-sortable": 90, "Coordination-free": 100, "Compact": 35, "Index-friendly": 85, "Unguessable": 40 }, "note": "RFC 9562 (2024): 48-bit ms timestamp in the high bits + random tail. k-sortable, coordination-free, index-friendly. The 2026 default for new systems — native in Postgres 18 and Python 3.14." },
+        { "label": "ULID", "dims": { "Time-sortable": 90, "Coordination-free": 100, "Compact": 45, "Index-friendly": 85, "Unguessable": 40 }, "note": "Same 48-bit-ts + 80-bit-random shape as v7, encoded as a 26-char Crockford base32 string. Predates v7; choose it when you want the compact text form." },
+        { "label": "Snowflake", "dims": { "Time-sortable": 95, "Coordination-free": 70, "Compact": 95, "Index-friendly": 95, "Unguessable": 45 }, "note": "64-bit: timestamp + machine-id + sequence. Compact, strictly sortable, ~4.1M IDs/s/node — but needs worker-id assignment and trusts the wall clock." }
+      ]
+    }
+    </script>
+  </div>
+  <p><strong>Pick:</strong> <em>UUIDv7</em> as the modern default when 128 bits is acceptable (native DB support makes it a one-line swap); <em>Snowflake</em> when you need compact 8-byte numeric IDs or a sortable shard key. Both leak creation time and are loosely enumerable — never use them as security tokens.</p>
+</section>
+
+<section class="section reveal" id="layout">
+  <h2><span class="section-num">03</span> &nbsp;Snowflake — the 64-bit layout</h2>
+  <p>Snowflake packs four fields into a 64-bit integer; each node reads its clock, stamps its machine id, and counts within the millisecond:</p>
+  <div class="diagram" style="background-image:none;">
+    <div class="dg-title">Snowflake — 64 bits</div>
+    <div style="display:flex; gap:4px; align-items:stretch; font-family:var(--font-mono); font-size:12px; text-align:center;">
+      <div style="flex:1; padding:12px 6px; border-radius:8px; background:rgba(107,116,136,.16); border:1px solid var(--border);"><b style="color:var(--text)">1</b><br><span style="color:var(--text-faint)">unused (sign)</span></div>
+      <div style="flex:20; padding:12px 6px; border-radius:8px; background:rgba(56,189,248,.16); border:1px solid rgba(56,189,248,.4);"><b style="color:#38bdf8">41 bits</b><br><span style="color:var(--text-muted)">timestamp (ms since epoch)</span></div>
+      <div style="flex:6; padding:12px 6px; border-radius:8px; background:rgba(52,211,153,.16); border:1px solid rgba(52,211,153,.4);"><b style="color:#34d399">10 bits</b><br><span style="color:var(--text-muted)">machine id</span></div>
+      <div style="flex:7; padding:12px 6px; border-radius:8px; background:rgba(251,191,36,.16); border:1px solid rgba(251,191,36,.4);"><b style="color:#fbbf24">12 bits</b><br><span style="color:var(--text-muted)">sequence</span></div>
+    </div>
+    <div class="cap">Timestamp first → IDs sort by time. Machine id → no two nodes collide. Sequence → up to 4,096 IDs per node per millisecond.</div>
+  </div>
+  <ul>
+    <li><strong>41-bit timestamp</strong> → 2⁴¹ ms ≈ <strong>69.7 years</strong> from a <em>custom</em> epoch (not 1970, to maximise lifespan). In the high bits so IDs increase over time.</li>
+    <li><strong>10-bit machine id</strong> → 1,024 nodes, often split <strong>5-bit datacenter + 5-bit worker</strong>. This is what removes coordination.</li>
+    <li><strong>12-bit sequence</strong> → 4,096 IDs/node/ms = <strong>~4.1M IDs/s/node</strong>. Exhaust it within a ms → spin to the next tick.</li>
+  </ul>
+</section>
+
+<section class="section reveal" id="code">
+  <h2><span class="section-num">04</span> &nbsp;The generator &amp; the clock-skew gotcha</h2>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">snowflake.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">class Snowflake:
+    def __init__(self, machine_id: int, epoch: int = 1704067200000):
+        self.machine_id = machine_id          # 0..1023, leased per node
+        self.epoch = epoch                    # custom epoch (ms)
+        self.last_ms = -1
+        self.seq = 0
+
+    def next_id(self, now_ms: int) -> int:
+        if now_ms &lt; self.last_ms:             # CLOCK WENT BACKWARDS
+            raise RuntimeError("clock moved back; refuse until it catches up")
+        if now_ms == self.last_ms:
+            self.seq = (self.seq + 1) &amp; 0xFFF  # 12-bit sequence
+            if self.seq == 0:                  # exhausted this ms
+                while now_ms &lt;= self.last_ms:
+                    now_ms = self.clock_ms()   # spin to next ms
+        else:
+            self.seq = 0
+        self.last_ms = now_ms
+        return (((now_ms - self.epoch) &lt;&lt; 22)   # timestamp in high bits
+                | (self.machine_id &lt;&lt; 12)       # then machine id
+                | self.seq)                     # then sequence</code></pre></div>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Time can go backwards</div><p>Snowflake trusts the wall clock. NTP <em>slew</em> mode adjusts gradually (safe), but <em>step</em> mode can jump the clock backward — then a node could mint an ID with a smaller timestamp than one already issued, risking a duplicate. Mitigations: <strong>refuse</strong> until the clock catches up (shown), <strong>wait</strong> if the regression is tiny, or advance a logical clock <span class="mono">max(now, last_ms)</span> and borrow sequence bits. Operationally: run NTP slew-only and alert on backward jumps. Raising this unprompted is a strong senior signal.</p></div></div>
+</section>
+
+<section class="section reveal" id="uuidv7">
+  <h2><span class="section-num">05</span> &nbsp;UUIDv7 — the 2026 default</h2>
+  <p>UUIDv7 (RFC 9562, 2024) puts a <strong>48-bit Unix-ms timestamp</strong> in the most-significant bits, then version/variant bits and 74 random bits. Same k-sortable, index-friendly property as Snowflake, but 128-bit, coordination-free, and standardised — and as of 2026 it's built in:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">uuidv7.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python"># Python 3.14 ships uuid.uuid7() (monotonic within a ms)
+import uuid
+id = uuid.uuid7()        # 0190c3e2-... time-ordered, coordination-free
+
+# PostgreSQL 18 ships it natively:
+#   CREATE TABLE orders (id uuid PRIMARY KEY DEFAULT uuidv7(), ...);
+# The leading 48-bit ms timestamp makes inserts land at the right
+# edge of the B-tree -> index locality like auto-increment, but global.</code></pre></div>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why v7 beats v4 as a primary key</div><p>A B-tree appends most efficiently when keys increase monotonically — inserts hit the hot rightmost leaf, no page splits. UUIDv4's random bits scatter inserts across the whole keyspace (random I/O, write amplification, poor buffer-pool hits — brutal under InnoDB clustered indexes). v7's timestamp prefix restores that locality while staying globally unique. RFC 9562 defines counter methods to keep multiple IDs <em>within</em> the same ms monotonic too.</p></div></div>
+</section>
+
+<section class="section reveal" id="coordination">
+  <h2><span class="section-num">06</span> &nbsp;Scaling without per-ID coordination</h2>
+  <p>Snowflake's only coordination is <strong>worker-id assignment</strong> at startup — leased from a strongly-consistent coordinator (ZooKeeper ephemeral node / etcd lease). After that, every ID is minted locally. If you instead want a monotonic <em>counter</em> (Flickr ticket / Meituan Leaf style), avoid a single DB sequence by <strong>segment allocation</strong>: each node leases a block (e.g. 1,000 IDs) in one transaction and hands them out from memory, re-leasing only when drained — ~1,000× fewer DB hits, and writes keep flowing while the coordinator is briefly down.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Coordination only at startup</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Worker-id lease, then mint locally",
+      "nodes": [
+        { "id": "node", "label": "ID node", "type": "stateless", "col": 0, "row": 1 },
+        { "id": "coord", "label": "etcd / ZooKeeper", "type": "source", "col": 1, "row": 1 },
+        { "id": "db", "label": "Sharded DB", "type": "store", "col": 2, "row": 1 }
+      ],
+      "edges": [
+        { "from": "node", "to": "coord", "label": "lease worker-id" },
+        { "from": "node", "to": "db", "label": "insert(id)" }
+      ],
+      "steps": [
+        { "edge": ["node","coord"], "caption": "On startup: lease a unique worker-id (and datacenter id). The only coordination.", "latency": "once" },
+        { "node": "coord", "caption": "Lease granted: worker-id 37. Renew periodically; stop generating if the lease lapses.", "status": "hit" },
+        { "node": "node", "caption": "Mint IDs locally: (ms << 22) | (worker << 12) | seq. Zero network calls per ID." },
+        { "edge": ["node","db"], "caption": "Insert with the time-ordered ID → sequential, index-friendly writes on every shard." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="failure">
+  <h2><span class="section-num">07</span> &nbsp;Failure modes &amp; multi-region</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">⏰</span><h4>Clock skew</h4><p>Backward jumps break monotonicity and risk duplicate (ts, seq) tuples. Run NTP slew-only; refuse / wait / borrow-sequence on regression. Forward jumps are harmless (skip ms).</p></div>
+    <div class="card feature"><span class="f-ic fx">⚠️</span><h4>Worker-id collision</h4><p>Two nodes sharing a worker id in the same ms → <strong>duplicate IDs</strong>, the worst failure. Assign via etcd/ZK lease, renew it, and halt generation if it lapses. Avoid deriving worker-id from anything that can clash.</p></div>
+    <div class="card feature"><span class="f-ic fx">🔢</span><h4>Sequence overflow</h4><p>&gt;4,096 IDs in one ms on a node → spin-wait to the next ms (rare; one node already does ~4.1M/s).</p></div>
+    <div class="card feature"><span class="f-ic fx">🌍</span><h4>Multi-region</h4><p>Subdivide the machine bits as <strong>5-bit datacenter + 5-bit worker</strong> (32 DCs × 32 workers) so each region owns a disjoint ID-space slice — globally unique <em>by construction</em>, with no cross-region coordination.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">08</span> &nbsp;Observability &amp; cost</h2>
+  <div class="kv">
+    <dt>Metrics</dt><dd>IDs/s per node; sequence-exhaustion (spin) rate; <strong>clock-regression events</strong> (alert immediately); worker-id lease renewals/failures; coordinator availability.</dd>
+    <dt>SLOs</dt><dd>Zero duplicate IDs (the only hard invariant); generation latency p99 sub-microsecond (it's local arithmetic); coordinator availability ≥ 99.99% (only needed at startup/renew).</dd>
+    <dt>Cost</dt><dd>Effectively free on the hot path — no datastore, no network per ID. The only cost is running the small HA coordinator (etcd/ZK quorum) for worker-id leases. UUIDv7 costs nothing beyond the 16 bytes per row (vs 8 for Snowflake) — the storage/index trade for skipping coordination entirely.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">09</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why put the timestamp in the <em>high</em> bits of the ID rather than the low bits?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>It makes the number smaller</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>So IDs sort chronologically — later IDs are numerically larger, giving cheap "newest first" ordering and right-edge (index-friendly) inserts</button>
+      <button class="quiz-opt"><span class="mark"></span>The CPU requires it</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> with the timestamp in the most-significant bits, a larger ID means a later time. IDs become roughly sortable by creation time and index inserts stay near the right edge of the B-tree — the whole reason v7/Snowflake beat random UUIDv4 as primary keys.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"For a new system in 2026 I'd default to UUIDv7 — it's time-ordered, coordination-free, and native in Postgres 18 / Python 3.14, so it indexes far better than random UUIDv4. If I need compact 8-byte numeric IDs or a sortable shard key, I'd use Snowflake: 41-bit timestamp + 10-bit worker + 12-bit sequence, with worker-ids leased from etcd at startup and clock-skew handled by refusing on a backward jump. Both leak creation time, so I'd use a separate random token where unguessability matters."</p></div></div>
+</section>

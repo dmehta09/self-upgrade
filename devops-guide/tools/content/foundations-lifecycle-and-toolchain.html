@@ -1,0 +1,154 @@
+<section class="hero reveal">
+  <span class="eyebrow">Foundations · the pipeline</span>
+  <h1>The delivery lifecycle &amp; toolchain.</h1>
+  <p class="lead">A change flows down one conveyor — plan → code → build → test → release → deploy → operate — and the build produces <b>one artifact</b> that is promoted, unchanged, all the way to production.</p>
+</section>
+
+<section class="section reveal" id="lifecycle">
+  <h2><span class="section-num">01</span> One conveyor, seven stages</h2>
+  <p class="takeaway">The lifecycle is a <b>pipeline</b>: each stage adds something and hands a standard part to the next. The golden rule — <b>build once, promote the same artifact</b> everywhere.</p>
+  <p>You don't recompile per environment. CI builds a versioned image; staging and prod run those exact bytes. That's what makes "tested in staging" actually mean "this will behave in prod."</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Think of a car assembly line. Each station bolts on one part and passes a <em>standard chassis</em> down the belt. You'd never re-stamp the body at the paint station — same idea here: the artifact built at the start is the exact thing inspected and shipped at the end.</p></div></div>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">A change rides the conveyor: source → operate</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "Delivery lifecycle",
+      "nodes": [
+        { "id": "src", "label": "Source (Git)", "type": "plan + code", "col": 0, "row": 1 },
+        { "id": "ci", "label": "CI build + test", "type": "build + test", "col": 1, "row": 1 },
+        { "id": "reg", "label": "Registry (ECR)", "type": "artifact", "col": 2, "row": 0 },
+        { "id": "cd", "label": "Deploy", "type": "release + deploy", "col": 3, "row": 1 },
+        { "id": "ops", "label": "Operate", "type": "run + feedback", "col": 4, "row": 1 }
+      ],
+      "edges": [
+        { "from": "src", "to": "ci", "label": "webhook" },
+        { "from": "ci", "to": "reg", "label": "push image" },
+        { "from": "reg", "to": "cd", "label": "pull image" },
+        { "from": "cd", "to": "ops", "label": "live" }
+      ],
+      "steps": [
+        { "node": "src", "caption": "You plan and code a change; it lands in Git, the single source of truth." },
+        { "edge": ["src","ci"], "caption": "A push fires a webhook: CI checks out the exact commit and runs build + tests." },
+        { "edge": ["ci","reg"], "caption": "Green checks → build ONE versioned image and push it to the registry.", "status": "hit" },
+        { "edge": ["reg","cd"], "caption": "Release + deploy pull that same image — no rebuild — into the target environment." },
+        { "edge": ["cd","ops"], "caption": "It's live. Operating it produces feedback that flows back into the next plan." }
+      ] }
+    </script>
+    <p class="viz-fallback">A commit in Git triggers CI to build and test, which pushes one versioned image to the registry; deploy pulls that exact image into the environment, then it runs and feeds back into planning.</p>
+  </figure>
+</section>
+
+<section class="section reveal" id="stages">
+  <h2><span class="section-num">02</span> What each stage does</h2>
+  <p>Two halves: the left side (plan→test) is mostly developer flow and CI; the right side (release→operate) is delivery and running the service. The handoff between them is the <b>artifact</b>.</p>
+
+  <dl class="kv">
+    <dt>Plan</dt><dd>Decide what to build — issues, tickets, design. The backlog feeds the conveyor.</dd>
+    <dt>Code</dt><dd>Write it; commit to a branch; open a pull request against <code>main</code>.</dd>
+    <dt>Build</dt><dd>Compile and package into a deployable unit — typically a container image.</dd>
+    <dt>Test</dt><dd>Lint, unit, integration. This is the gate: red blocks the merge.</dd>
+    <dt>Release</dt><dd>Cut a version and decide it's eligible to ship (tag, changelog, approval).</dd>
+    <dt>Deploy</dt><dd>Put that version on infrastructure — to staging, then production.</dd>
+    <dt>Operate</dt><dd>Run it, respond to incidents, and feed what you learn back into Plan.</dd>
+  </dl>
+
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">Heads up <span class="tag">scope</span></div><p>The telemetry behind "Operate" — metrics, traces, dashboards, SLO burn-rate alerts — lives in the companion <strong>Observability guide</strong>. Here we cover the DevOps side: pipelines, infra, deploys, and the human process.</p></div></div>
+</section>
+
+<section class="section reveal" id="toolchain">
+  <h2><span class="section-num">03</span> The 2026 toolchain map</h2>
+  <p>Don't memorize every product — memorize the <b>categories</b> and one or two AWS-first defaults per slot. Tools change; the shape of the pipeline doesn't.</p>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>Category</th><th>What it does</th><th>2026 defaults (AWS-first)</th></tr></thead>
+    <tbody>
+      <tr><td><b>SCM</b></td><td>Source of truth for code + history.</td><td>Git on GitHub (also GitLab)</td></tr>
+      <tr><td><b>CI</b></td><td>Build + test every change.</td><td>GitHub Actions (or CodeBuild)</td></tr>
+      <tr><td><b>Artifact</b></td><td>Store the immutable build output.</td><td>Container registry — <b>ECR</b> (GHCR)</td></tr>
+      <tr><td><b>IaC</b></td><td>Define infra as versioned code.</td><td>Terraform / CloudFormation + CDK</td></tr>
+      <tr><td><b>Orchestration</b></td><td>Run containers, schedule + heal.</td><td>Kubernetes (EKS) / ECS-Fargate</td></tr>
+      <tr><td><b>CD &amp; GitOps</b></td><td>Sync desired state from Git → cluster.</td><td>Argo CD / Flux</td></tr>
+      <tr><td><b>Secrets</b></td><td>Store + inject credentials safely.</td><td>AWS Secrets Manager / Vault</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Two failure modes: <b>tool sprawl</b> (five overlapping CI systems nobody fully owns) and <b>building the artifact differently per stage</b>. If staging compiles its own image and prod compiles another, "tested == shipped" is a lie — you tested bytes that never reach production.</p></div></div>
+</section>
+
+<section class="section reveal" id="artifact">
+  <h2><span class="section-num">04</span> Why "build once" matters</h2>
+  <p>An <b>artifact</b> is the single immutable output of the build — usually a versioned container image, tagged by commit SHA. It's the contract between CI and CD: CI produces it, CD only ever <em>promotes</em> it.</p>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">promote.sh</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="bash"># Built ONCE in CI, tagged by commit:
+IMG=123.dkr.ecr.us-east-1.amazonaws.com/api:git-9af2c1
+
+# Staging and prod deploy the SAME digest — no rebuild:
+kubectl set image deploy/api api=$IMG -n staging
+kubectl set image deploy/api api=$IMG -n prod   # identical bytes</code></pre>
+  </div>
+
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Rebuild per stage</div>
+      <ul><li>Each env runs <code>docker build</code> again.</li><li>Base image or a dep drifted between builds.</li><li>Prod ships bytes nobody tested.</li><li>"Worked in staging" guarantees nothing.</li></ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Build once, promote</div>
+      <ul><li>One image, tagged by SHA, in the registry.</li><li>Every env deploys the exact same digest.</li><li>Traceable: tag maps back to a commit.</li><li>Rollback = redeploy a previous tag.</li></ul>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Why build the deployable artifact exactly once and promote it, instead of rebuilding for each environment?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>So the bytes tested in CI are the identical bytes that run in prod — rebuilding can drift (new base image, new dep) and invalidate your tests.</button>
+      <button class="quiz-opt"><span class="mark"></span>Because rebuilding per environment is impossible with containers.</button>
+      <button class="quiz-opt"><span class="mark"></span>Only to save a few seconds of build time in the pipeline.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Immutable promotion means "tested == shipped." Rebuilding lets a transitive dependency or base-image change sneak in, so prod runs something you never actually tested.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Walk me through your delivery pipeline.</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>A push to Git fires a webhook to CI (GitHub Actions). CI checks out the commit, runs lint + tests, and on green builds one versioned image and pushes it to ECR. CD (Argo CD) then promotes that exact image through staging to prod. The same artifact rides the whole conveyor, and operating it feeds the next plan.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Git triggers CI, CI builds and tests and pushes one image to ECR, and CD promotes that exact image to staging then prod. Build once, promote the same bytes — so what we tested is what ships."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Where does Infrastructure as Code fit relative to CI/CD?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>CI/CD ships the <em>application</em> artifact; IaC provisions and changes the <em>infrastructure</em> it runs on — VPCs, clusters, databases — as versioned code (Terraform, CloudFormation/CDK). They're parallel tracks that meet at deploy: the platform must exist (IaC) for the app (CI/CD) to land on. Both flow from Git and are reviewed like code.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"CI/CD delivers the app; IaC delivers the infrastructure underneath it. Two pipelines, both from Git — IaC builds the runway, CI/CD lands the plane."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>Same repo or separate? (Often separate — infra changes at a different cadence and blast radius.)</li><li>Terraform vs CloudFormation? (Cloud-agnostic + huge ecosystem vs AWS-native, no extra state to manage.)</li></ul></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What's an artifact, and why build it once?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>An artifact is the single immutable output of the build — typically a versioned container image tagged by commit SHA, stored in a registry like ECR. You build it once so the exact bytes you tested are the bytes that deploy to every environment. Rebuilding per stage lets a base image or transitive dependency drift, which silently invalidates your tests and your rollback story.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"The artifact is the immutable image we built and tested. We promote that same digest everywhere so prod runs exactly what we tested — and rollback is just redeploying a previous tag."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

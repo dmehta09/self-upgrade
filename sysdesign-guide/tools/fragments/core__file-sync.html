@@ -1,0 +1,181 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Core · Dropbox / Google Drive</span>
+  <h1>Design file sync.</h1>
+  <p class="lead">Edit a file on your laptop and seconds later it's on your phone. Behind that simplicity is the defining split: <strong>content</strong> (big, immutable, content-addressed blobs in object storage) is handled completely differently from <strong>metadata</strong> (small, structured, strongly-consistent rows in a DB). The efficiency tricks — content-defined chunking, dedup, and delta sync — are the heart of it.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Upload/download (chunked, resumable); sync across a user's devices; share; version history; work offline and reconcile on reconnect.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>Exabyte-scale storage; <strong>minimise bandwidth</strong> (never re-upload a whole file for a one-line change); 12-nines durability; fast propagation between devices.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="estimate">
+  <h2><span class="section-num">02</span> &nbsp;Capacity estimation</h2>
+  <p>Real anchors (Dropbox): 700M+ users, multiple EB stored, &gt;600k drives, &gt;12-nines durability. Model 500M registered / 100M MAU:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Logical storage</td><td>500M × 50 GB/user</td><td>≈ <strong>25 EB</strong> logical</td></tr>
+        <tr><td>After dedup + EC</td><td>~2× dedup, erasure-coded ~1.4×</td><td>≈ <strong>~13 EB</strong> physical (every 10% dedup ≈ 1 EB of disk)</td></tr>
+        <tr><td>File count → metadata</td><td>500M × 20k files × ~300 B/row</td><td>10¹³ files → ~3 PB metadata (≈0.02% of blobs)</td></tr>
+        <tr><td>Edit rate</td><td>100M MAU × 50 edits/day, peak 5–10×</td><td>~58k edits/s avg → <strong>~500k metadata ops/s</strong> peak</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Two takeaways: <strong>blob storage dominates metadata by ~3–4 orders of magnitude</strong> (the whole reason to split the tiers), and with delta sync the binding constraint is usually <strong>metadata DB QPS</strong>, not bandwidth (each edit = a tiny chunk upload + a metadata commit).</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">03</span> &nbsp;API (chunked, resumable, dedup-first)</h2>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/need_blocks { manifest:[hash…] }</span><span class="ep-note">→ { missing:[hash…] } · dedup BEFORE bytes move</span></div>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/upload_session/{start,append,finish}</span><span class="ep-note">resumable: re-send from last acked offset after a crash</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/list_folder/continue?cursor=… · /longpoll?cursor=…</span><span class="ep-note">paginated delta + change notification</span></div>
+  <p>The client computes chunk hashes + a manifest, asks which the server is <em>missing</em>, uploads only those, then commits the manifest. Content-addressing makes a mid-upload crash safe to fully retry — re-uploading an existing chunk is a no-op dedup hit. Downloads are ranged GETs per chunk hash, infinitely CDN-cacheable (immutable).</p>
+</section>
+
+<section class="section reveal" id="model">
+  <h2><span class="section-num">04</span> &nbsp;Data model</h2>
+  <div class="kv">
+    <dt><span class="mono">file</span> / <span class="mono">version</span></dt><dd>file = (namespace, parent, name); each <span class="mono">version</span> is immutable and points at a <span class="mono">manifest</span>. Versioning is free.</dd>
+    <dt><span class="mono">manifest</span></dt><dd>the ordered list of chunk hashes — a Merkle "recipe" for a file version. Diffing two manifests instantly identifies changed chunks.</dd>
+    <dt><span class="mono">chunk</span></dt><dd><span class="mono">hash</span> PK (content-addressed), size, storage locator, <strong>refcount</strong> for GC. Shared across users/files.</dd>
+    <dt><span class="mono">namespace</span> + <span class="mono">device_cursor</span></dt><dd>sharing = a namespace mounted into multiple users' trees (not file copies). Each device stores <span class="mono">last_seen_version</span>; sync replays a per-namespace journal past that cursor.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="chunking">
+  <h2><span class="section-num">05</span> &nbsp;Chunking: why content-defined beats fixed-size</h2>
+  <p>Fixed-size chunking (cut every 4 MB by offset) breaks on <em>insertion</em>: add one byte at the front and every later boundary shifts, so every chunk's hash changes — delta sync sees the whole file as new. <strong>Content-defined chunking (CDC)</strong> places boundaries by <em>content</em> (cut where a rolling hash matches a pattern), so an insert re-anchors only the one chunk around it.</p>
+  <figure class="viz" data-viz aria-label="Fixed vs content-defined chunking">
+    <figcaption class="viz-title">Insert one byte: fixed-size re-hashes everything; CDC re-hashes one chunk</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "array",
+      "meta": { "values": ["c1","c2","c3","c4","c5","c6"] },
+      "frames": [
+        { "match": [0,1,2,3,4,5], "caption": "A file split into 6 chunks, each stored by content hash." },
+        { "active": [0], "caption": "Insert one byte at the start of chunk c1." },
+        { "reject": [0,1,2,3,4,5], "caption": "FIXED-SIZE: every boundary shifts by one byte → every chunk's hash changes → re-upload the whole file." },
+        { "match": [1,2,3,4,5], "reject": [0], "caption": "CONTENT-DEFINED: boundaries re-anchor on content → only c1 changes. Delta sync ships one chunk." }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">fastcdc.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">MIN, AVG, MAX = 2*1024, 8*1024, 64*1024      # reference 2k / 8k / 64k
+bits   = 13                                   # log2(8192)
+MASK_S = (1 &lt;&lt; (bits + 2)) - 1                 # strict below target -> smaller chunks
+MASK_L = (1 &lt;&lt; (bits - 2)) - 1                 # loose above target  -> larger chunks
+GEAR   = [rand64() for _ in range(256)]       # fixed table, shared by all peers
+
+def next_cut(data, start):
+    end = min(start + MAX, len(data))
+    if end - start &lt;= MIN:
+        return end                            # tail / tiny file -> one chunk
+    fp, i = 0, start + MIN                     # cut-point skipping: skip below MIN
+    normal = start + AVG
+    while i &lt; end:
+        fp = (fp &lt;&lt; 1) + GEAR[data[i]]         # Gear rolling hash (shift + add)
+        mask = MASK_S if i &lt; normal else MASK_L
+        if (fp &amp; mask) == 0:                   # content-defined boundary
+            return i + 1
+        i += 1
+    return end                                # forced cut at MAX</code></pre></div>
+  </div>
+  <p>FastCDC (USENIX ATC '16) is ~10× faster than Rabin-based CDC at the same dedup ratio — Gear hash + cut-point skipping + normalized chunking (two masks tighten the size distribution).</p>
+</section>
+
+<section class="section reveal" id="architecture">
+  <h2><span class="section-num">06</span> &nbsp;Metadata/content split &amp; the sync flow</h2>
+  <p>Two services: the <strong>metadata service</strong> (DB — needs transactions, strong consistency, low-latency point reads) tracks files/versions/manifests; the <strong>block service</strong> stores chunks in cheap, immutable, throughput-oriented <strong>object storage</strong>. Different durability/latency/cost profiles → never couple them.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Upload changed chunks, then notify other devices</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Upload changed chunks + notify devices",
+      "nodes": [
+        { "id": "laptop", "label": "Laptop", "type": "client", "col": 0, "row": 1 },
+        { "id": "meta", "label": "Metadata svc", "type": "db", "col": 1, "row": 0 },
+        { "id": "block", "label": "Block svc", "type": "chunks", "col": 1, "row": 2 },
+        { "id": "store", "label": "Object storage", "type": "S3", "col": 2, "row": 2 },
+        { "id": "notif", "label": "Notify svc", "type": "push", "col": 2, "row": 0 },
+        { "id": "phone", "label": "Phone", "type": "client", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "laptop", "to": "meta", "label": "need_blocks?" },
+        { "from": "laptop", "to": "block", "label": "missing chunks" },
+        { "from": "block", "to": "store" },
+        { "from": "meta", "to": "notif" },
+        { "from": "notif", "to": "phone" }
+      ],
+      "steps": [
+        { "edge": ["laptop","meta"], "caption": "Laptop sends the manifest; metadata replies which chunk hashes are missing." },
+        { "edge": ["laptop","block"], "caption": "It uploads ONLY the missing chunks (delta sync). Unchanged chunks are skipped." },
+        { "edge": ["block","store"], "caption": "Chunks land in durable object storage, deduped by hash." },
+        { "edge": ["meta","notif"], "caption": "ONLY after blocks are durable does metadata commit the new version → triggers a notification." },
+        { "edge": ["notif","phone"], "caption": "The phone long-polls, pulls the delta + missing chunks, and reassembles the file.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="failure">
+  <h2><span class="section-num">07</span> &nbsp;Conflicts, failure &amp; the ordering invariant</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔀</span><h4>Conflicts</h4><p>Two offline edits → two versions. File sync keeps <strong>both</strong> ("conflicted copy"), never silently merging opaque bytes. OT/CRDT merge is only for collaborative <em>documents</em> (Docs/Paper), not binary blobs.</p></div>
+    <div class="card feature"><span class="f-ic fx">⛓️</span><h4>Block-before-metadata</h4><p>Always durably write blocks, <em>then</em> commit metadata. Reverse it and a crash leaves a manifest pointing at a missing chunk — a dangling, unreadable file. The chosen order risks only orphaned chunks (reclaimed by refcount GC) — bias toward orphans over data loss.</p></div>
+    <div class="card feature"><span class="f-ic fx">📴</span><h4>Resumable uploads</h4><p>Sessions keyed by id + offset; content-addressing makes retries idempotent. A block-store outage still leaves metadata reads/listing working (split tiers).</p></div>
+    <div class="card feature"><span class="f-ic fx">🧹</span><h4>Background scrubber</h4><p>Verifies every committed manifest's chunks exist + checksum; refcount GC deletes chunks at refcount 0 (with a grace period to avoid racing in-flight commits).</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">08</span> &nbsp;Multi-region, observability &amp; cost</h2>
+  <div class="kv">
+    <dt>Multi-region</dt><dd>Erasure-code blobs across zones (Dropbox replicates a fresh block to a second zone within ~1 s, then EC); accept uploads at the nearest PoP; pin a namespace's metadata to a home region for low-latency commits + residency.</dd>
+    <dt>Observability &amp; SLOs</dt><dd>Sync latency (edit → visible on peer), <strong>dedup ratio</strong> + delta-sync efficiency (a bad client rollout that breaks CDC tanks dedup → cost spike), upload success/resume rate, conflict rate, scrubber checksum mismatches, GC backlog. Durability target &gt;12 nines, availability 99.99%.</dd>
+    <dt>Cost</dt><dd>Object storage dominates (×10³⁻⁴ over metadata) — Dropbox built Magic Pocket and adopted SMR drives + erasure coding (~1.4× vs 3× replication ≈ 2× capacity saving) purely for $/TB. <strong>Dedup + delta sync are the primary levers</strong>: dedup cuts stored bytes, delta sync cuts bandwidth.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">09</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You change one line in a 2 GB video project file. With content-defined chunking + delta sync, what gets uploaded?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>The entire 2 GB file again</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Only the chunk(s) whose contents (and therefore hash) changed — a few MB</button>
+      <button class="quiz-opt"><span class="mark"></span>Nothing — edits aren't synced</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> only the chunks whose hashes changed are uploaded; the rest are already stored and referenced by hash. Content-defined boundaries mean an insert re-anchors just one chunk instead of shifting all of them.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"Split metadata (strongly-consistent DB: files, versions, manifests of chunk hashes) from content (immutable, content-addressed chunks in object storage). Chunk with content-defined chunking — FastCDC — so an insert re-anchors one chunk and delta sync ships only changed chunks; identical chunks dedup globally by hash. Always write blocks before committing metadata so I never get a dangling reference. Conflicts keep both copies. The dominant cost is object storage, so dedup + erasure coding are the levers."</p></div></div>
+</section>

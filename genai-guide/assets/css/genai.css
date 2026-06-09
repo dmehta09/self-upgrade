@@ -1,0 +1,215 @@
+/* ============================================================
+   GenAI Field Guide — interactive widgets + interview components
+   Loaded AFTER styles.css and theme.css; reuses their design tokens
+   (--accent, --surface, --border, --font-*, semantic viz colors).
+   1 · genai-lab (tokenizer / chunking / prompt)
+   2 · sampling           (Phase 1 remainder)
+   3 · vectors            (Phase 2)
+   4 · viz renderers: heatmap + denoise   (Phase 1 / Phase 4)
+   5 · Q&A blocks (.qa)   (Phase 2)
+   6 · flashcards         (Phase 3)
+   ============================================================ */
+
+/* themed range slider used across widgets */
+.gl-slider, .gs-slider { -webkit-appearance: none; appearance: none; height: 5px; border-radius: 999px;
+  background: var(--surface-2); outline: none; accent-color: var(--accent); }
+.gl-slider::-webkit-slider-thumb, .gs-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .15); }
+.gl-slider::-moz-range-thumb, .gs-slider::-moz-range-thumb { width: 16px; height: 16px; border: none; border-radius: 50%; background: var(--accent); cursor: pointer; }
+
+/* ============================================================
+   1 · GENAI-LAB  (tokenizer / chunking / prompt)
+   ============================================================ */
+.genai-lab {
+  margin: 1.8em 0; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); padding: 16px 16px 14px;
+}
+.gl-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.gl-title {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.gl-title::before { content: "⌨ "; color: var(--accent); }
+.gl-presets { display: flex; flex-wrap: wrap; gap: 7px; margin-left: auto; }
+.gl-preset {
+  font-family: var(--font-mono); font-size: 11px; cursor: pointer;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--bg-elev); color: var(--text-muted); transition: all .15s var(--ease);
+}
+.gl-preset:hover { border-color: var(--accent); color: var(--accent); }
+.gl-editor {
+  width: 100%; display: block; resize: vertical; min-height: 70px; box-sizing: border-box;
+  font-family: var(--font-mono); font-size: 14px; line-height: 1.6; tab-size: 4;
+  color: var(--text); background: var(--code-bg); border: 1px solid var(--code-border);
+  border-radius: var(--radius); padding: 13px 15px; outline: none; white-space: pre-wrap;
+}
+.gl-editor:focus { box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .45); }
+.gl-tokens {
+  display: flex; flex-wrap: wrap; gap: 4px; margin: 14px 0 4px; padding: 12px;
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); min-height: 44px;
+}
+.gl-tok {
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.5; padding: 3px 6px; border-radius: 6px;
+  background: rgba(var(--accent-rgb), .12); color: var(--text); border: 1px solid rgba(var(--accent-rgb), .22);
+  white-space: pre; cursor: help;
+}
+.gl-tok.alt { background: rgba(125, 211, 252, .12); border-color: rgba(125, 211, 252, .26); } /* sky alt */
+.gl-tok.unk { background: rgba(251, 113, 133, .12); border-color: rgba(251, 113, 133, .3); color: #fda4af; }
+.gl-stats { display: flex; flex-wrap: wrap; gap: 22px; margin: 12px 2px 2px; }
+.gl-stat { display: flex; flex-direction: column; gap: 1px; }
+.gl-stat b { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; color: var(--accent); line-height: 1; }
+.gl-stat span { font-size: 11.5px; color: var(--text-faint); font-family: var(--font-mono); }
+.gl-cost { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px;
+  padding-top: 12px; border-top: 1px dashed var(--border); font-size: 13px; color: var(--text-muted); }
+.gl-cost-label { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-faint); }
+.gl-cost-out { font-family: var(--font-mono); color: var(--accent); font-weight: 600; }
+.gl-model { margin-left: auto; font-family: var(--font-mono); font-size: 12px; padding: 5px 8px;
+  border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text-muted); cursor: pointer; }
+
+/* chunking + prompt mode classes (.gl-doc, .gl-chunk, .gl-msg, …) — added in Phase 1 remainder */
+
+/* ============================================================
+   5 · Q&A BLOCK (.qa) — interview question with model answer +
+   "how to say it out loud". A styled <details> (native open/close);
+   reuses .pm-chip difficulty + .callout.tip for the spoken line.
+   ============================================================ */
+.qa-set { margin: 1.4em 0; display: flex; flex-direction: column; gap: 10px; }
+.qa { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.qa > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 11px; padding: 14px 16px; font-weight: 600; color: var(--text); }
+.qa > summary::-webkit-details-marker { display: none; }
+.qa > summary .chev { width: 16px; height: 16px; color: var(--accent); flex: none; transition: transform .25s var(--ease); }
+.qa[open] > summary .chev { transform: rotate(90deg); }
+.qa .qa-q { flex: 1; min-width: 0; }
+.qa > summary .pm-chip { margin-left: auto; flex: none; }
+.qa-body { padding: 2px 16px 16px; border-top: 1px solid var(--border); }
+.qa-body h5 { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); margin: 14px 0 6px; }
+.qa-body > p { color: var(--text-muted); }
+.qa-say { margin: 14px 0 4px; }
+.qa-followups ul { margin: 4px 0 0; padding-left: 18px; color: var(--text-muted); font-size: 14px; }
+.qa-followups li { margin: 3px 0; }
+
+/* shared slider/query rows (genai-lab chunking/prompt + sampling) */
+.gl-srow { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
+.gl-slabel { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); min-width: 132px; flex: none; }
+.gl-sval { font-family: var(--font-mono); font-size: 12px; color: var(--accent); min-width: 64px; }
+.gl-srow .gl-slider { flex: 1; }
+.gl-qinput { flex: 1; font-family: var(--font-body); font-size: 14px; color: var(--text); background: var(--code-bg);
+  border: 1px solid var(--code-border); border-radius: var(--radius-sm); padding: 8px 11px; outline: none; }
+.gl-qinput:focus { box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .45); }
+
+/* ============================================================
+   2 · SAMPLING (.gs-*)
+   ============================================================ */
+.gs-ctrls { margin: 4px 0 12px; }
+.gs-bars { display: flex; flex-direction: column; gap: 7px; padding: 12px; background: var(--bg-elev);
+  border: 1px solid var(--border); border-radius: var(--radius); }
+.gs-bar { display: flex; align-items: center; gap: 10px; }
+.gs-tok { font-family: var(--font-mono); font-size: 12.5px; color: var(--text); width: 64px; flex: none; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gs-track { flex: 1; height: 16px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.gs-fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .25s var(--ease-out); }
+.gs-pct { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); width: 52px; flex: none; }
+.gs-bar.gs-cut { opacity: .4; }
+.gs-bar.gs-cut .gs-fill { background: var(--text-faint); }
+.gs-cap { margin-top: 12px; font-size: 13.5px; color: var(--text-muted); min-height: 1.4em; }
+
+/* ============================================================
+   1b · GENAI-LAB chunking + prompt modes
+   ============================================================ */
+.gl-doc { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 4px; }
+.gl-chunk { position: relative; padding: 11px 13px 11px; border-radius: var(--radius-sm); font-size: 14px; line-height: 1.55;
+  color: var(--text); background: rgba(var(--accent-rgb), .08); border: 1px solid rgba(var(--accent-rgb), .2); }
+.gl-chunk[style*="--ci: 1"] { background: rgba(125, 211, 252, .09); border-color: rgba(125, 211, 252, .24); }
+.gl-chunk[style*="--ci: 2"] { background: rgba(167, 139, 250, .09); border-color: rgba(167, 139, 250, .24); }
+.gl-chunk[style*="--ci: 3"] { background: rgba(251, 191, 36, .09); border-color: rgba(251, 191, 36, .24); }
+.gl-chunk-tag { display: block; font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 5px; }
+.gl-chunk.retrieved { border-color: #6ee7b7; box-shadow: 0 0 0 1px rgba(110, 231, 183, .5), 0 0 16px -6px rgba(110, 231, 183, .5); }
+.gl-chunk.retrieved .gl-chunk-tag { color: #6ee7b7; }
+.gl-vars { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.gl-msgs { display: flex; flex-direction: column; gap: 9px; }
+.gl-msg { border: 1px solid var(--border); border-left: 3px solid var(--text-faint); border-radius: var(--radius-sm); padding: 10px 13px; background: var(--bg-elev); }
+.gl-msg-role { display: block; font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 4px; }
+.gl-msg-body { font-size: 14.5px; color: var(--text); line-height: 1.5; }
+.gl-msg.system { border-left-color: var(--accent); } .gl-msg.system .gl-msg-role { color: var(--accent); }
+.gl-msg.user { border-left-color: #7dd3fc; } .gl-msg.user .gl-msg-role { color: #7dd3fc; }
+.gl-msg.assistant { border-left-color: #6ee7b7; } .gl-msg.assistant .gl-msg-role { color: #6ee7b7; }
+
+/* ============================================================
+   4 · VIZ heatmap renderer (attention)
+   ============================================================ */
+.viz-heat { display: grid; gap: 3px; font-family: var(--font-mono); width: 100%; max-width: 560px; }
+.viz-heat-corner { }
+.viz-heat-col { font-size: 10px; color: var(--text-faint); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 2px; }
+.viz-heat-row { font-size: 11px; color: var(--text-muted); text-align: right; padding-right: 8px; white-space: nowrap; display: flex; align-items: center; justify-content: flex-end; }
+.viz-heat-cell { aspect-ratio: 1 / 1; min-height: 18px; border-radius: 4px; border: 1px solid var(--border); transition: background .25s var(--ease-out); }
+.viz-heat-cell.hot { border-color: var(--accent); }
+
+/* ============================================================
+   7 · GLOSSARY (filterable term list)
+   ============================================================ */
+.gl-filter { width: 100%; box-sizing: border-box; font-family: var(--font-body); font-size: 15px; color: var(--text);
+  background: var(--code-bg); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 12px 15px; outline: none; margin: 6px 0 18px; }
+.gl-filter:focus { box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .45); }
+.glossary { display: flex; flex-direction: column; }
+.gterm { padding: 13px 4px; border-bottom: 1px solid var(--border); }
+.gterm.hide { display: none; }
+.gterm dfn { font-style: normal; font-weight: 600; color: var(--text); font-family: var(--font-display); font-size: 1.06rem; }
+.gterm dfn .gt-tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); margin-left: 8px; }
+.gterm p { margin: 5px 0 0; color: var(--text-muted); font-size: 14.5px; line-height: 1.55; }
+.gl-empty { color: var(--text-faint); padding: 20px 4px; font-style: italic; display: none; }
+
+/* ============================================================
+   3 · VECTORS (.gv-*) — embedding similarity + ANN explorer
+   ============================================================ */
+.genai-vectors { margin: 1.8em 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); padding: 16px; }
+.gv-ctrls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 22px; margin-bottom: 8px; }
+.gv-field { display: flex; flex-direction: column; gap: 5px; }
+.gv-field .gl-slabel { min-width: 0; }
+.gv-sel { font-family: var(--font-mono); font-size: 13px; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text); cursor: pointer; }
+.gv-ctrls .gl-srow { flex: 1; min-width: 180px; }
+.gv-stage { display: flex; justify-content: center; padding: 8px 0; }
+.gv-svg { width: 100%; max-width: 380px; height: auto; }
+.gv-line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; opacity: .8; }
+.gv-pt circle { fill: var(--surface-2); stroke: var(--border-strong); stroke-width: 1.5; transition: all .2s var(--ease-out); }
+.gv-pt .gv-lbl { fill: var(--text-faint); font-family: var(--font-mono); font-size: 10px; text-anchor: middle; }
+.gv-pt.query circle { fill: var(--accent); stroke: var(--accent); }
+.gv-pt.query .gv-lbl { fill: var(--accent); font-weight: 700; }
+.gv-pt.near circle { fill: rgba(110, 231, 183, .25); stroke: #6ee7b7; stroke-width: 2.5; }
+.gv-pt.near .gv-lbl { fill: #6ee7b7; }
+.gv-out { margin-top: 8px; }
+.gv-score { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.gv-score-label { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+.gv-score-track { flex: 1; height: 12px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.gv-score-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; transition: width .25s var(--ease-out); }
+.gv-score-val { font-family: var(--font-mono); color: var(--accent); }
+.gv-note { font-size: 13.5px; color: var(--text-muted); line-height: 1.5; margin: 4px 0 0; }
+
+/* ============================================================
+   6 · FLASHCARDS (.flashdeck / .flashcard)
+   ============================================================ */
+.flashdeck { margin: 1.6em 0; }
+.fd-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; font-family: var(--font-mono); font-size: 12px; color: var(--text-faint); flex-wrap: wrap; }
+.fd-shuffle, .fd-reset { font-family: var(--font-mono); font-size: 11.5px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; }
+.fd-shuffle:hover, .fd-reset:hover { border-color: var(--accent); color: var(--accent); }
+.fd-progress b { color: var(--accent); }
+.fd-cards { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+.flashcard { perspective: 1000px; cursor: pointer; outline: none; }
+.flashcard:focus-visible .fc-inner { box-shadow: 0 0 0 2px var(--accent); border-radius: var(--radius); }
+.fc-inner { position: relative; transform-style: preserve-3d; transition: transform .5s var(--ease); min-height: 152px; }
+.flashcard.flipped .fc-inner { transform: rotateY(180deg); }
+.fc-face { position: absolute; inset: 0; -webkit-backface-visibility: hidden; backface-visibility: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 18px; display: flex; flex-direction: column; justify-content: center; }
+.fc-front { border-top: 3px solid var(--accent); }
+.fc-back { transform: rotateY(180deg); background: var(--bg-elev); color: var(--text-muted); font-size: 14px; line-height: 1.55; overflow: auto; }
+.fc-hint { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 8px; }
+.fc-front p { font-family: var(--font-display); font-size: 1.2rem; font-weight: 600; color: var(--text); margin: 0; }
+.fc-back p { margin: 0; }
+.fc-mark { display: flex; gap: 8px; margin-top: 10px; }
+.fc-known, .fc-unknown { flex: 1; font-family: var(--font-mono); font-size: 11px; padding: 7px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; }
+.fc-known:hover { border-color: #6ee7b7; color: #6ee7b7; }
+.fc-unknown:hover { border-color: #fcd34d; color: #fcd34d; }
+.flashcard.known .fc-front { border-top-color: #6ee7b7; opacity: .65; }
+@media (prefers-reduced-motion: reduce) { .fc-inner { transition: none; } }
+
+/* ============================================================
+   4b · VIZ denoise renderer (diffusion canvas)
+   ============================================================ */
+.viz-canvas { image-rendering: pixelated; border-radius: var(--radius); border: 1px solid var(--border-strong); background: #0b1020; display: block; }

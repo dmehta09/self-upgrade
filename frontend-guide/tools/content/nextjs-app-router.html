@@ -1,0 +1,161 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Next.js &middot; App Router model</span>
+            <h1>The App Router model</h1>
+            <p class="lead">The App Router turns your <code>app/</code> directory into the router: folders are URL segments and a handful of special files declare the UI for each one. Master the conventions and routing, layouts, loading and errors all fall out of where you put files.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">The <b>filesystem is the router</b>. A folder is a URL segment; special files give it behavior.</p>
+            <p>Each segment can declare a <code>layout</code> (persistent shell), a <code>page</code> (the route&rsquo;s UI), and states like <code>loading</code> and <code>error</code>. Layouts nest as folders nest, so a route&rsquo;s UI is the chain of layouts wrapping its page.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>A building&rsquo;s address. <code>app/dashboard/settings/</code> is just &ldquo;floor dashboard, room settings.&rdquo; You don&rsquo;t register the address anywhere &mdash; walking the folders <em>is</em> walking the URL. Add a folder, you&rsquo;ve added a route.</p>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>File</th><th>What it declares</th></tr></thead>
+                <tbody>
+                  <tr><td><strong><code>layout.tsx</code></strong></td><td>Shared shell wrapping a segment + its children; persists across navigations (no remount).</td></tr>
+                  <tr><td><strong><code>page.tsx</code></strong></td><td>The UI unique to this route. A segment is only routable if it has a <code>page</code>.</td></tr>
+                  <tr><td><strong><code>loading.tsx</code></strong></td><td>Instant fallback shown via Suspense while the segment&rsquo;s server work streams in.</td></tr>
+                  <tr><td><strong><code>error.tsx</code></strong></td><td>Client error boundary for the segment; gets <code>error</code> + <code>reset()</code>.</td></tr>
+                  <tr><td><strong><code>not-found.tsx</code></strong></td><td>Rendered when a segment calls <code>notFound()</code> (or hits an unmatched route).</td></tr>
+                  <tr><td><strong><code>route.ts</code></strong></td><td>An HTTP endpoint (GET/POST&hellip;) instead of UI &mdash; a segment is a page <em>or</em> a route, not both.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <dl class="kv">
+              <dt><code>(folder)</code></dt><dd><b>Route group</b>: organizes files / shares a layout without adding a URL segment.</dd>
+              <dt><code>@slot</code></dt><dd><b>Parallel routes</b>: render multiple independent pages into one layout at once.</dd>
+              <dt><code>(.)folder</code></dt><dd><b>Intercepting routes</b>: show a route (e.g. a modal) in the current context instead of a full nav.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="render">
+            <h2><span class="section-num">01</span> How a request composes</h2>
+            <p>A navigation doesn&rsquo;t throw away the shell. Layouts stay mounted while the changed leaf swaps &mdash; nested layouts wrap from the root inward to the page.</p>
+            <div class="diagram"><div class="dg-title">Request &rarr; /dashboard/settings</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">root</div><div class="fn-t">app/layout</div><div class="fn-d">&lt;html&gt;, fonts, providers</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">segment</div><div class="fn-t">dashboard/layout</div><div class="fn-d">sidebar, nav (persists)</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">leaf</div><div class="fn-t">settings/page</div><div class="fn-d">the changing UI</div></div>
+              </div>
+            </div>
+            <p>Wrap a segment in <code>loading.tsx</code> and Next auto-creates a Suspense boundary there: the layout paints instantly, the page streams in.</p>
+          </section>
+
+          <section class="section reveal" id="dynamic">
+            <h2><span class="section-num">02</span> Async params &amp; metadata</h2>
+            <p>Per-route request inputs are <b>async</b> in Next 16 &mdash; you <code>await</code> them. That keeps a route static until it actually reads request data. Define page <code>&lt;title&gt;</code>/SEO with the Metadata API, not manual tags.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">app/blog/[slug]/page.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">// params &amp; searchParams are Promises now — await them.
+export async function generateMetadata(
+  { params }: { params: Promise&lt;{ slug: string }&gt; }
+) {
+  const { slug } = await params;
+  return { title: `Post: ${slug}` };       // Metadata API, not &lt;head&gt;
+}
+
+export default async function Page(
+  { params }: { params: Promise&lt;{ slug: string }&gt; }
+) {
+  const { slug } = await params;
+  return &lt;article&gt;{slug}&lt;/article&gt;;
+}</code></pre>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>In Next 16, <code>params</code>, <code>searchParams</code>, <code>cookies()</code> and <code>headers()</code> are all <b>async</b>. Reaching for <code>params.slug</code> or <code>cookies().get(&hellip;)</code> synchronously is the #1 migration error &mdash; <code>await</code> them first.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="tooling">
+            <h2><span class="section-num">03</span> Turbopack is the default</h2>
+            <p>As of Next.js 16, <b>Turbopack</b> is the default bundler for <em>both</em> <code>next dev</code> and <code>next build</code> &mdash; no flag needed. Config lives in <code>next.config.ts</code>; the old <code>middleware.ts</code> is now <code>proxy.ts</code>.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">package.json &middot; scripts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="json">{
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "build:webpack": "next build --webpack"
+  }
+}</code></pre>
+            </div>
+            <p>Both commands run on Turbopack automatically; pass <code>--webpack</code> only if a legacy plugin still needs it.</p>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why doesn&rsquo;t a shared sidebar in <code>dashboard/layout.tsx</code> flash or reset when you navigate between two pages under it?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Layouts persist across navigations &mdash; only the changed leaf segment re-renders.</button>
+                <button class="quiz-opt"><span class="mark"></span>Because the whole tree re-renders, but React is fast enough to hide it.</button>
+                <button class="quiz-opt"><span class="mark"></span>Because <code>layout.tsx</code> is a client component by default.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> A <code>layout</code> wraps its children and stays mounted while you move between sibling pages. Only the segment that actually changed re-renders, so layout state (scroll, open menus) survives.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Name the special files in an App Router segment and what each does.</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p><code>layout</code> is the persistent shell, <code>page</code> the route&rsquo;s UI, <code>loading</code> the Suspense fallback, <code>error</code> the segment error boundary, <code>not-found</code> the 404 UI, and <code>route</code> an HTTP endpoint instead of UI. A segment needs a <code>page</code> or <code>route</code> to be reachable.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;layout, page, loading, error, not-found, route. Layout is the shell that persists; page is the leaf; loading and error are auto-wired Suspense and error boundaries.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do nested layouts work, and why do they matter for UX?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Layouts nest as folders nest: a route&rsquo;s UI is every layout from the root down, wrapping its page. Because they persist across navigation, shared chrome (nav, sidebars) doesn&rsquo;t remount &mdash; state and scroll survive and only the changed segment streams.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Layouts compose root-to-leaf and persist between navigations, so shared UI stays mounted and only the leaf re-renders.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why are <code>params</code> and <code>cookies()</code> async in Next 16?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Making request inputs Promises lets Next keep a route static and start rendering before request data resolves &mdash; the route only becomes dynamic at the <code>await</code>. It&rsquo;s the API shape that makes dynamic-by-default plus partial prerendering possible.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;They&rsquo;re async so rendering can start before request data is read &mdash; the route stays static until you await it, which is what enables partial prerendering.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="index.html"><span class="pn-k">Previous</span><span class="pn-t">Next.js App Router &mdash; overview</span></a>
+            <a class="next" href="server-vs-client-components.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Server vs Client Components</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#render">How a request composes</a>
+          <a href="#dynamic">Async params &amp; metadata</a>
+          <a href="#tooling">Turbopack is the default</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

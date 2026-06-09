@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design a web crawler | The System Design Field Guide</title>
+  <meta name="description" content="Crawl the web politely and without loops: the URL frontier, Bloom-filter dedup, and BFS at scale." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="core" data-page="core-crawler" data-lesson="core-crawler">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Core designs</span><span class="sep">/</span><span class="current">Design a web crawler</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Core · web crawler</span>
+  <h1>Design a web crawler.</h1>
+  <p class="lead">Systematically download the web — following links page to page — to feed a search index. The web is enormous, looping, and trap-laden, so the design is about <em>scale and discipline</em>: never re-fetching a URL, being polite to each host, deduping near-identical content, and spreading the work across thousands of machines. The non-obvious staff insight: at modern scale a crawler is <strong>CPU-bound on TLS handshakes, not bandwidth.</strong></p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Start from seed URLs, download each page, extract + normalize links, store content for indexing, and re-crawl on a freshness schedule.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>Billions of pages → massively parallel. <strong>Polite</strong> (one in-flight request/host, respect <span class="mono">robots.txt</span>). Robust to traps (infinite calendars, session-id loops). No duplicate work; durable progress.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="estimate">
+  <h2><span class="section-num">02</span> &nbsp;Capacity estimation</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Crawl rate</td><td>1B pages / 30 days</td><td>1e9 ÷ (30 × 86,400) ≈ <strong>~400 pages/s avg</strong> (plan ~800 peak)</td></tr>
+        <tr><td>Page size (2025)</td><td>P50 ≈ 138 KB, mean ≈ 242 KB</td><td>the classic "100 KB" is dated — pages grew ~3–5×</td></tr>
+        <tr><td>Storage</td><td>1B × ~250 KB, 5-yr retention</td><td>≈ 250 TB/crawl → <strong>tens of PB</strong> retained</td></tr>
+        <tr><td>Bandwidth</td><td>800 pages/s × 250 KB</td><td>≈ <strong>1.6 Gbps</strong> — bandwidth is rarely the wall</td></tr>
+        <tr><td>Real bottleneck</td><td>2025 case: 1B pages / 25.5 h, $462, 12 nodes</td><td><strong>TLS handshake ≈ 25% of all CPU</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Shape: not a bandwidth problem but a <strong>CPU + coordination</strong> problem. Reuse connections and cache DNS to cut TLS/lookup cost; the frontier and dedup state are the hard parts.</p>
+</section>
+
+<section class="section reveal" id="loop">
+  <h2><span class="section-num">03</span> &nbsp;The crawl loop (BFS over the link graph)</h2>
+  <p>The pipeline (Mercator-style): the <strong>frontier</strong> hands out a URL (politely), a <strong>fetcher</strong> downloads it, a <strong>parser</strong> extracts links, dedup decides what's new, and unseen URLs flow back to the frontier — a breadth-first traversal of the web's link graph.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Frontier → fetch → parse → dedup → frontier</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "The crawl loop",
+      "nodes": [
+        { "id": "frontier", "label": "URL frontier", "type": "buffer", "col": 0, "row": 1 },
+        { "id": "fetch", "label": "Fetcher", "type": "worker", "col": 1, "row": 1 },
+        { "id": "parse", "label": "Parser", "type": "worker", "col": 2, "row": 1 },
+        { "id": "seen", "label": "Seen-set (Bloom)", "type": "dedup", "col": 3, "row": 0 },
+        { "id": "store", "label": "Content store", "type": "blob", "col": 3, "row": 2 }
+      ],
+      "edges": [
+        { "from": "frontier", "to": "fetch", "label": "next URL" },
+        { "from": "fetch", "to": "parse", "label": "HTML" },
+        { "from": "parse", "to": "store", "label": "save" },
+        { "from": "parse", "to": "seen", "label": "links?" },
+        { "from": "seen", "to": "frontier", "label": "new URLs" }
+      ],
+      "steps": [
+        { "edge": ["frontier","fetch"], "caption": "Frontier hands out a URL only from a host whose politeness window has elapsed." },
+        { "edge": ["fetch","parse"], "caption": "Fetch (after a robots.txt check), reusing connections; pass HTML to the parser.", "latency": "TLS ≈ 25% CPU" },
+        { "edge": ["parse","store"], "caption": "Save the raw page to blob storage, deduped by content hash." },
+        { "edge": ["parse","seen"], "caption": "Extract + normalize links; check each against the URL-seen Bloom filter." },
+        { "edge": ["seen","frontier"], "caption": "Unseen URLs go back to the frontier — the BFS loop. Already-seen URLs are skipped.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+  <figure class="viz" data-viz aria-label="Crawl BFS">
+    <figcaption class="viz-title">BFS over the link graph (the seen-set breaks loops)</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "graph",
+      "meta": {
+        "directed": true, "width": 520, "height": 240,
+        "nodes": [
+          { "id": "A", "label": "seed", "x": 70, "y": 120 },
+          { "id": "B", "label": "p2", "x": 220, "y": 60 },
+          { "id": "C", "label": "p3", "x": 220, "y": 180 },
+          { "id": "D", "label": "p4", "x": 380, "y": 60 },
+          { "id": "E", "label": "p5", "x": 380, "y": 180 }
+        ],
+        "edges": [ ["A","B"], ["A","C"], ["B","D"], ["C","E"], ["E","B"] ]
+      },
+      "frames": [
+        { "active": ["A"], "caption": "Start at the seed URL." },
+        { "visited": ["A"], "frontier": ["B","C"], "edgesOn": [["A","B"],["A","C"]], "caption": "Download it, extract links → add p2, p3 to the frontier." },
+        { "visited": ["A","B"], "frontier": ["C","D"], "edgesOn": [["B","D"]], "caption": "Crawl p2 → discover p4." },
+        { "visited": ["A","B","C"], "frontier": ["D","E"], "edgesOn": [["C","E"]], "caption": "Crawl p3 → discover p5." },
+        { "visited": ["A","B","C","E"], "frontier": ["D"], "edgesOn": [["E","B"]], "caption": "p5 links back to p2 — but p2 is in the seen-set, so we skip it. No loop." },
+        { "visited": ["A","B","C","D","E"], "caption": "Frontier empties as every reachable page is crawled exactly once." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="frontier">
+  <h2><span class="section-num">04</span> &nbsp;The URL frontier (Mercator)</h2>
+  <p>Two FIFO stages do priority <em>and</em> politeness at once:</p>
+  <div class="kv">
+    <dt>Front queues — priority</dt><dd>One queue per priority band; a URL's priority comes from its importance / change rate. Selection is biased toward higher-priority queues. This is "BFS with priorities."</dd>
+    <dt>Back queues — politeness</dt><dd>One queue <strong>per host</strong>, plus a host→queue map (guarantees one open connection/host) and a <strong>min-heap of next-allowed-fetch-times</strong>. A worker pops the heap root, sleeps until that host is allowed, then fetches its head URL. Rule of thumb: ~3× as many back queues as worker threads so threads rarely starve while staying polite.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="dedup">
+  <h2><span class="section-num">05</span> &nbsp;Dedup: URL-seen &amp; near-duplicate content</h2>
+  <p><strong>URL-seen</strong> across tens of billions of URLs would need hundreds of GB in a hash set — a <strong>Bloom filter</strong> answers it in a fraction of the space, accepting a tiny false-positive rate (≈10 bits/URL → ~1%; ~14–15 bits → ~0.1–0.2%) where a rare FP just skips a page (never loops, never re-crawls).</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">bloom.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">import math, mmh3
+from bitarray import bitarray
+
+class BloomFilter:
+    def __init__(self, n, fp=0.01):
+        self.m = max(1, int(-(n * math.log(fp)) / (math.log(2) ** 2)))  # bits
+        self.k = max(1, int((self.m / n) * math.log(2)))                # hashes
+        self.bits = bitarray(self.m); self.bits.setall(0)
+
+    def _idx(self, item):
+        for i in range(self.k):
+            yield mmh3.hash(item, i) % self.m      # i = per-hash seed
+
+    def add(self, item):
+        for j in self._idx(item):
+            self.bits[j] = 1
+
+    def contains(self, item):                       # False = definitely absent
+        return all(self.bits[j] for j in self._idx(item))   # True = maybe present</code></pre></div>
+  </div>
+  <p><strong>Content near-duplicates</strong> need more: exact hashing (MD5/SHA) flips on one changed byte (an ad, a timestamp), missing the ~29% of pages that are near-dupes. Use <strong>simhash</strong> (Google: 64-bit fingerprint, near-dup if Hamming distance ≤ 3) or <strong>minhash/LSH</strong> (Jaccard similarity over shingles) — locality-sensitive, so similar docs get similar fingerprints.</p>
+</section>
+
+<section class="section reveal" id="politeness">
+  <h2><span class="section-num">06</span> &nbsp;Politeness, traps &amp; freshness</h2>
+  <div class="kv">
+    <dt>robots.txt (RFC 9309)</dt><dd>Standardizes only <span class="mono">User-agent / Allow / Disallow</span> (parse ≥500 KiB, cache ≤24h, treat 5xx as full-disallow). <strong>Crawl-delay and Sitemap are NOT in the standard</strong> — a common interview gotcha. Per-host rate-limit anyway (Mercator's adaptive "next = now + 10× last download time").</dd>
+    <dt>Traps</dt><dd>Infinite calendars and session-id/sort/filter params create unbounded near-dup spaces. Cap crawl depth + URL length, blocklist tracking params, budget pages/host, and <strong>normalize URLs</strong> (lowercase host, strip default ports, sort/strip params).</dd>
+    <dt>Freshness</dt><dd>Model changes as Poisson; surprisingly, a <strong>uniform</strong> re-visit policy beats a proportional one for average freshness — ignore pages that change too fast, and increase re-visit frequency sub-linearly with change rate, evenly spaced.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="failure">
+  <h2><span class="section-num">07</span> &nbsp;Failure modes &amp; distributed coordination</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🧵</span><h4>Fetcher crash</h4><p>Fetchers are stateless — restart and re-pull from the frontier. In-flight URLs need at-least-once redelivery (visibility timeout / un-acked offset).</p></div>
+    <div class="card feature"><span class="f-ic fx">💾</span><h4>Frontier durability (the critical one)</h4><p>Lose the frontier and you lose the crawl's progress. Back it with a durable log — Kafka with <span class="mono">acks=all</span>, consumers commit offsets <em>after</em> processing — and checkpoint the seen-set + per-host state.</p></div>
+    <div class="card feature"><span class="f-ic fx">🧩</span><h4>Partition by host</h4><p>Partition the frontier by <span class="mono">hash(hostname)</span> so all of a host's URLs land on one scheduler → per-host rate-limiting is correct and a domain is fetched by at most one worker.</p></div>
+    <div class="card feature"><span class="f-ic fx">☠️</span><h4>Poison hosts</h4><p>Tarpits and giant single-host frontiers (real case: yahoo.com/wikipedia.org ballooning to tens of GB). Per-host caps, timeouts, and circuit breakers.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">08</span> &nbsp;2026 wrinkles, observability &amp; cost</h2>
+  <div class="kv">
+    <dt>JS rendering</dt><dd>Many pages need a headless-Chromium render (Google's two-phase fetch-then-render) costing ~1–2 orders of magnitude more CPU than a raw fetch — render <em>selectively</em>, gated by crawl budget. (Note: most AI crawlers — GPTBot, ClaudeBot — don't render JS.)</dd>
+    <dt>Metrics &amp; SLOs</dt><dd>Pages/s vs target, fetch p50/p99, URL-seen + near-dup hit rates (≈29% dupes; a drop means dedup broke), <strong>per-host politeness violations (must be zero — page immediately)</strong>, frontier depth + hot-host runaway, 4xx/5xx/429 rates, TLS-handshake CPU%.</dd>
+    <dt>Cost</dt><dd>Drivers, biggest first: rendering compute, fetch CPU (TLS), then storage (compress WARC + dedup before store — the 2025 case used instance storage because S3 for one day was $2k–5k). Bandwidth is rarely the wall.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">09</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why is a Bloom filter a good fit for the crawler's "have I seen this URL?" check?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>It never makes mistakes</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>It uses tiny memory for billions of URLs; a rare false positive just skips a page, which is acceptable</button>
+      <button class="quiz-opt"><span class="mark"></span>It stores the full page content</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> Bloom filters trade a small false-positive rate for huge space savings and no false negatives. For dedup, "occasionally skip a page" is harmless, while "never loop / never re-crawl" is exactly the guarantee we need — and it fits in memory.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"It's a BFS over the link graph with a Mercator frontier — front queues for priority, per-host back queues + a time heap for politeness. URL-seen is a Bloom filter (≈10 bits/URL), content near-dups via simhash with Hamming ≤ 3. I'd partition the frontier by host hash so politeness is correct and back it with a durable log so a crash doesn't lose progress. The real bottleneck at scale is TLS-handshake CPU, not bandwidth, so I'd reuse connections and cache DNS, and render JS selectively because it's far more expensive."</p></div></div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../core/distributed-cache.html"><span class="pn-k">‹ Back</span><span class="pn-t">Design a distributed cache</span></a>
+            <a class="next" href="../core/notification-system.html"><span class="pn-k">Next ›</span><span class="pn-t">Design a notification system</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements & scale</a>
+          <a href="#estimate">Capacity estimation</a>
+          <a href="#loop">The crawl loop (BFS over the link graph)</a>
+          <a href="#frontier">The URL frontier (Mercator)</a>
+          <a href="#dedup">Dedup: URL-seen & near-duplicate content</a>
+          <a href="#politeness">Politeness, traps & freshness</a>
+          <a href="#failure">Failure modes & distributed coordination</a>
+          <a href="#ops">2026 wrinkles, observability & cost</a>
+          <a href="#recap">Trade-offs & interview recap</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Core designs · Design a web crawler</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+  <script src="../assets/js/visualizer.js"></script>
+</body>
+</html>

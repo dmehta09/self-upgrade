@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LangChain — Core concepts | The Lang Stack</title>
+  <meta name="description" content="Deep dive into LangChain: chat models, messages, prompts, output parsers, LCEL & Runnables, tools, retrieval, RAG, memory, and agents. With diagrams and Python." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.4' fill='%2334d399'/><circle cx='19' cy='6' r='2.4' fill='%23818cf8'/><circle cx='12' cy='18' r='2.4' fill='%23fbbf24'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+</head>
+<body data-tool="langchain" data-page="lc-concepts">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Lang Stack home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06140f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M6.8 7.4 10.4 16M17.2 7.4 13.6 16M7 6h10"/></svg></span>
+        <span class="brand-text"><b>The Lang Stack</b><span>Visual field guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../ecosystem/index.html">The big picture</a>
+        <a class="nav-link" href="../ecosystem/glossary.html">Glossary</a>
+      </nav>
+      <nav class="nav-group is-lc" aria-label="LangChain">
+        <h4><span class="dot"></span>LangChain</h4>
+        <a class="nav-link" href="../langchain/index.html">Overview</a>
+        <a class="nav-link" href="../langchain/concepts.html">Core concepts</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#models">Chat models</a>
+          <a class="nav-link" href="#messages">Messages</a>
+          <a class="nav-link" href="#prompts">Prompt templates</a>
+          <a class="nav-link" href="#parsers">Output parsers</a>
+          <a class="nav-link" href="#lcel">LCEL &amp; Runnables</a>
+          <a class="nav-link" href="#tools">Tools &amp; tool calling</a>
+          <a class="nav-link" href="#retrieval">Retrieval</a>
+          <a class="nav-link" href="#rag">RAG</a>
+          <a class="nav-link" href="#memory">Memory</a>
+          <a class="nav-link" href="#agents">Agents</a>
+          <a class="nav-link" href="#gotchas">1.0 &amp; gotchas</a>
+        </div>
+      </nav>
+      <nav class="nav-group is-lg" aria-label="LangGraph">
+        <h4><span class="dot"></span>LangGraph</h4>
+        <a class="nav-link" href="../langgraph/index.html">Overview</a>
+        <a class="nav-link" href="../langgraph/concepts.html">Core concepts</a>
+      </nav>
+      <nav class="nav-group is-ls" aria-label="LangSmith">
+        <h4><span class="dot"></span>LangSmith</h4>
+        <a class="nav-link" href="../langsmith/index.html">Overview</a>
+        <a class="nav-link" href="../langsmith/concepts.html">Core concepts</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../langchain/index.html" style="color:var(--accent)">LangChain</a><span class="sep">/</span><span class="current">Core concepts</span></nav>
+        <div class="topbar-spacer"></div>
+        <span class="pill"><span class="dot"></span>Python · v1.3</span>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">LangChain · core concepts</span>
+            <h1>The building blocks, one at a time.</h1>
+            <p class="lead">Eleven ideas take you from "what's a chat model?" to building a retrieval-powered agent. Each comes with a picture, runnable Python, and the gotcha that trips up beginners.</p>
+          </section>
+
+          <!-- 1. MODELS -->
+          <section class="section reveal" id="models">
+            <h2><span class="section-num">01</span> &nbsp;Chat models &amp; the standard interface</h2>
+            <p>A <strong>chat model</strong> is your connection to an LLM (GPT, Claude, Gemini, a local model…). LangChain wraps every provider in one identical interface, so your code doesn't care which company's model is behind it.</p>
+            <p>You send it a list of <strong>messages</strong> and it returns one <strong>AI message</strong> back. The key methods (shared by everything in LangChain):</p>
+            <div class="kv">
+              <dt>.invoke(input)</dt><dd>Run once, wait for the full answer.</dd>
+              <dt>.stream(input)</dt><dd>Get the answer token-by-token as it's generated (for typewriter UIs).</dd>
+              <dt>.batch([a, b])</dt><dd>Run many inputs efficiently in parallel.</dd>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">models.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain.chat_models import init_chat_model
+
+model = init_chat_model("gpt-4o", model_provider="openai", temperature=0)
+
+# Swap providers by changing ONE string — your app code stays identical:
+# model = init_chat_model("claude-haiku-4-5", model_provider="anthropic")
+
+answer = model.invoke("What's the tallest mountain on Earth?")
+print(answer.content)        # -> "Mount Everest..."
+print(answer.usage_metadata) # -> token counts, handy for cost tracking</code></pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">temperature = creativity dial</div><p><code>temperature=0</code> makes the model deterministic and focused (great for facts &amp; tools). Higher values (0.7–1) make it more varied and creative. Start at 0 while learning.</p></div></div>
+          </section>
+
+          <!-- 2. MESSAGES -->
+          <section class="section reveal" id="messages">
+            <h2><span class="section-num">02</span> &nbsp;Messages: the units of a conversation</h2>
+            <p>Chat models don't think in plain strings — they think in <strong>messages</strong>, each with a <em>role</em>. LangChain gives you a type for each role:</p>
+            <div class="grid grid-2">
+              <div class="card feature"><span class="f-ic">⚙️</span><h4>SystemMessage</h4><p>The standing instructions — who the assistant is, rules to follow. Set once at the top.</p></div>
+              <div class="card feature"><span class="f-ic">🧑</span><h4>HumanMessage</h4><p>What the user said.</p></div>
+              <div class="card feature"><span class="f-ic">🤖</span><h4>AIMessage</h4><p>What the model replied (may include requests to call tools).</p></div>
+              <div class="card feature"><span class="f-ic">🔧</span><h4>ToolMessage</h4><p>The result of running a tool, fed back so the model can continue.</p></div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">messages.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain_core.messages import SystemMessage, HumanMessage
+
+conversation = [
+    SystemMessage("You are a witty geography tutor. Keep answers short."),
+    HumanMessage("Why is the sky blue?"),
+]
+reply = model.invoke(conversation)
+print(reply.content)
+
+# A conversation is just this list growing over time — append the AI's
+# reply and the next human turn, then invoke again. That IS chat history.</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Shortcut</div><p>You can also pass plain dicts like <code>{"role": "user", "content": "hi"}</code> or even a bare string. The message classes just make intent explicit.</p></div></div>
+          </section>
+
+          <!-- 3. PROMPTS -->
+          <section class="section reveal" id="prompts">
+            <h2><span class="section-num">03</span> &nbsp;Prompt templates</h2>
+            <p>Hard-coding prompts with f-strings gets messy fast. A <strong>prompt template</strong> is a reusable blueprint with <code>{placeholders}</code> you fill in at runtime — testable, shareable, and tidy.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">prompts.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain_core.prompts import ChatPromptTemplate
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a translator. Translate into {language}."),
+    ("human", "{text}"),
+])
+
+# Fill the blanks -> ready-to-send messages
+messages = prompt.invoke({"language": "French", "text": "Good morning!"})
+print(model.invoke(messages).content)   # -> "Bonjour !"</code></pre></div>
+            </div>
+          </section>
+
+          <!-- 4. PARSERS -->
+          <section class="section reveal" id="parsers">
+            <h2><span class="section-num">04</span> &nbsp;Output parsers &amp; structured output</h2>
+            <p>Models return text, but your program usually wants <em>data</em> — a number, a list, a typed object. Two approaches:</p>
+            <h3>A) Simple parsers</h3>
+            <p><code>StrOutputParser</code> just pulls the <code>.content</code> string out of the AI message — the most common final step in a chain.</p>
+            <h3>B) Structured output (the modern way)</h3>
+            <p>Define the shape you want with a Pydantic model and call <code>.with_structured_output()</code>. LangChain uses the model's native tool-calling to <em>guarantee</em> the reply matches your schema — no fragile text parsing.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">structured.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from pydantic import BaseModel, Field
+
+class Movie(BaseModel):
+    title: str
+    year: int = Field(description="release year")
+    rating: float
+
+structured_model = model.with_structured_output(Movie)
+
+movie = structured_model.invoke("Tell me about the film Inception.")
+print(movie.title, movie.year)   # -> Inception 2010
+print(type(movie))               # -> <class 'Movie'>  (a real object, not text!)</code></pre></div>
+            </div>
+          </section>
+
+          <!-- 5. LCEL -->
+          <section class="section reveal" id="lcel">
+            <h2><span class="section-num">05</span> &nbsp;LCEL &amp; the Runnable interface <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p>Here's the concept that makes LangChain click. Every block is a <strong>Runnable</strong> — it has <code>.invoke()</code>, <code>.stream()</code>, <code>.batch()</code>. Because they all match, you connect them with the pipe <code>|</code>. The output of each becomes the input of the next.</p>
+
+            <div class="diagram">
+              <div class="dg-title">A chain reads left → right, like a pipeline</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">input</div><div class="fn-t">{"topic": "otters"}</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">prompt</div><div class="fn-t">fills the template</div><div class="fn-d">→ messages</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">model</div><div class="fn-t">calls the LLM</div><div class="fn-d">→ AI message</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">parser</div><div class="fn-t">extracts text</div><div class="fn-d">→ "string"</div></div>
+              </div>
+              <div class="cap">The <code>|</code> just feeds each block's output into the next.</div>
+            </div>
+
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">lcel.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+
+prompt = ChatPromptTemplate.from_template("Write a haiku about {topic}.")
+parser = StrOutputParser()
+
+chain = prompt | model | parser          # <- the whole pipeline, one line
+
+print(chain.invoke({"topic": "otters"})) # run it
+for chunk in chain.stream({"topic": "rain"}):  # or stream it word by word
+    print(chunk, end="", flush=True)</code></pre></div>
+            </div>
+            <p>The payoff: streaming, batching, and async come <em>for free</em> on any chain, because every piece already supports them.</p>
+
+            <div class="quiz" data-quiz>
+              <p class="q">In <code>chain = prompt | model | parser</code>, what does the <code>model</code> receive as its input?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>The raw dict <code>{"topic": "otters"}</code></button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>The formatted messages produced by <code>prompt</code></button>
+                <button class="quiz-opt"><span class="mark"></span>A plain string the user typed</button>
+              </div>
+              <div class="quiz-explain"><b>Right idea:</b> data flows left-to-right. <code>prompt</code> turns the dict into messages, and <em>those messages</em> are what <code>model</code> receives. The model's output then flows on to <code>parser</code>.</div>
+            </div>
+          </section>
+
+          <!-- 6. TOOLS -->
+          <section class="section reveal" id="tools">
+            <h2><span class="section-num">06</span> &nbsp;Tools &amp; tool calling</h2>
+            <p>A <strong>tool</strong> is just a Python function the model is allowed to call — to search the web, do math, hit your database. You write the function, decorate it with <code>@tool</code>, and "bind" it to the model. The model then decides <em>when</em> to call it and with <em>what arguments</em>.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1 0 5.6l-1.4 1.4-5.6-5.6 1.4-1.4a4 4 0 0 1 5.6 0ZM3 21l4-1 11-11"/></svg></span><div class="co-body"><div class="co-title">The model doesn't run the tool — <em>you</em> do <span class="tag">key point</span></div><p>The model only <em>requests</em> a call: "please run <code>get_weather(city='Paris')</code>". Your code runs it and hands the result back as a <code>ToolMessage</code>. The model then continues with that information.</p></div></div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">tools.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain_core.tools import tool
+
+@tool
+def get_weather(city: str) -> str:
+    """Get the current weather for a city."""   # docstring tells the model what it does
+    return f"It's 22°C and sunny in {city}."
+
+model_with_tools = model.bind_tools([get_weather])
+
+response = model_with_tools.invoke("What's the weather in Paris?")
+
+# The model didn't answer in words — it asked to call the tool:
+for call in response.tool_calls:
+    print(call["name"], call["args"])   # -> get_weather {'city': 'Paris'}</code></pre></div>
+            </div>
+            <p>Doing this handoff loop by hand is tedious — which is exactly why <strong>agents</strong> (below) and LangGraph exist: they run the call-the-tool-then-think-again loop for you.</p>
+          </section>
+
+          <!-- 7. RETRIEVAL -->
+          <section class="section reveal" id="retrieval">
+            <h2><span class="section-num">07</span> &nbsp;The retrieval stack</h2>
+            <p>To let a model answer questions about <em>your</em> documents, you first turn those documents into something searchable-by-meaning. Five pieces do this, in order:</p>
+            <div class="diagram">
+              <div class="dg-title">Turning documents into a searchable knowledge base</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">1 · loader</div><div class="fn-t">Document loader</div><div class="fn-d">reads PDFs, web, files</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">2 · splitter</div><div class="fn-t">Text splitter</div><div class="fn-d">chops into chunks</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">3 · embeddings</div><div class="fn-t">Embedding model</div><div class="fn-d">text → vectors</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">4 · vector store</div><div class="fn-t">Vector database</div><div class="fn-d">stores &amp; searches</div></div>
+              </div>
+              <div class="cap">A <strong>retriever</strong> (5) is the thin wrapper that takes a question and returns the most relevant chunks.</div>
+            </div>
+            <div class="deeper">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> What's an embedding, really? <span class="tag">go deeper</span></summary>
+              <div class="deeper-body"><p>An <strong>embedding</strong> turns a piece of text into a long list of numbers (a "vector") that captures its <em>meaning</em>. Texts about similar things end up with similar vectors — so "How do I reset my password?" lands near a support doc about password resets, even if they share no exact words. The vector store finds nearest neighbours by this numeric similarity. That's "semantic search."</p></div>
+            </div>
+          </section>
+
+          <!-- 8. RAG -->
+          <section class="section reveal" id="rag">
+            <h2><span class="section-num">08</span> &nbsp;RAG: Retrieval-Augmented Generation <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p>RAG is the most common real-world LangChain pattern. The idea in one line: <strong>before</strong> asking the model, fetch relevant facts and paste them into the prompt. The model then answers <em>grounded</em> in your data instead of guessing.</p>
+            <div class="diagram">
+              <div class="dg-title">The RAG request flow</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">question</div><div class="fn-t">"What's our refund policy?"</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">retrieve</div><div class="fn-t">search your docs</div><div class="fn-d">→ top matching chunks</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">augment</div><div class="fn-t">stuff into prompt</div><div class="fn-d">context + question</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">generate</div><div class="fn-t">model answers</div><div class="fn-d">grounded reply</div></div>
+              </div>
+              <div class="cap">Retrieve → Augment → Generate. That's literally where the name comes from.</div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">rag.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain_openai import OpenAIEmbeddings
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+
+# 1. Build a tiny knowledge base (normally you'd load + split real files)
+docs = ["Refunds are accepted within 30 days with a receipt.",
+        "Shipping is free over $50."]
+store = InMemoryVectorStore.from_texts(docs, embedding=OpenAIEmbeddings())
+retriever = store.as_retriever()
+
+# 2. A prompt that has a slot for retrieved context
+prompt = ChatPromptTemplate.from_template(
+    "Answer using ONLY this context:\n{context}\n\nQuestion: {question}"
+)
+
+def format_docs(docs):
+    return "\n".join(d.page_content for d in docs)
+
+# 3. Wire it as an LCEL chain
+rag_chain = (
+    {"context": retriever | format_docs, "question": RunnablePassthrough()}
+    | prompt | model | StrOutputParser()
+)
+
+print(rag_chain.invoke("Can I get a refund after 2 weeks?"))
+# -> "Yes — refunds are accepted within 30 days with a receipt."</code></pre></div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">What's the main reason to use RAG instead of just asking the model directly?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>It makes the model run faster</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>It grounds answers in your specific, up-to-date documents — reducing made-up answers</button>
+                <button class="quiz-opt"><span class="mark"></span>It removes the need for an API key</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> The model only knows its training data and can hallucinate. RAG feeds it the relevant facts <em>at question time</em>, so answers stay accurate, current, and traceable to a source.</div>
+            </div>
+          </section>
+
+          <!-- 9. MEMORY -->
+          <section class="section reveal" id="memory">
+            <h2><span class="section-num">09</span> &nbsp;Memory &amp; chat history</h2>
+            <p>Models are stateless — each call is a blank slate. To make a chatbot "remember," you simply keep the growing list of messages and resend it every turn. For short chats that's all you need.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">memory.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">history = [SystemMessage("You are a helpful assistant.")]
+
+def chat(user_text):
+    history.append(HumanMessage(user_text))
+    reply = model.invoke(history)
+    history.append(reply)           # remember the AI's turn too
+    return reply.content
+
+chat("My name is Sam.")
+print(chat("What's my name?"))      # -> "Your name is Sam." (it remembered)</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">For real apps, memory lives in LangGraph</div><p>Resending a list works until conversations get long, span sessions, or need to survive a restart. That's where LangGraph's <strong>checkpointers</strong> come in — automatic, persistent memory keyed by a conversation ID. We cover it in the LangGraph section.</p></div></div>
+          </section>
+
+          <!-- 10. AGENTS -->
+          <section class="section reveal" id="agents">
+            <h2><span class="section-num">10</span> &nbsp;Agents</h2>
+            <p>An <strong>agent</strong> is a model in a loop with tools: it thinks, optionally calls a tool, reads the result, thinks again, and repeats until it can answer. You no longer wire this loop by hand — <code>create_agent</code> builds it for you.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">agent.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain.agents import create_agent
+from langchain_core.tools import tool
+
+@tool
+def add(a: int, b: int) -> int:
+    """Add two numbers."""
+    return a + b
+
+@tool
+def multiply(a: int, b: int) -> int:
+    """Multiply two numbers."""
+    return a * b
+
+agent = create_agent(model="gpt-4o", tools=[add, multiply])
+
+result = agent.invoke({"messages": [{"role": "user", "content": "What is 12 * 7 + 5?"}]})
+print(result["messages"][-1].content)   # -> "89" (it called multiply, then add)</code></pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">This is the bridge to LangGraph</div><p><code>create_agent</code> returns a graph that runs on <strong>LangGraph</strong>. So the moment you build an agent, you're already using LangGraph — even if you never imported it. Learn the graph model next to unlock loops, memory, and human approval.</p></div></div>
+          </section>
+
+          <!-- 11. GOTCHAS -->
+          <section class="section reveal" id="gotchas">
+            <h2><span class="section-num">11</span> &nbsp;What changed in 1.0 &amp; common gotchas</h2>
+            <p>LangChain 1.0 (late 2025) was a big cleanup. If you find an old tutorial, watch for these:</p>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Old agent classes are gone</div><p><code>AgentExecutor</code>, <code>initialize_agent</code>, and "ReAct agent" prompt-parsing are legacy. Use <code>create_agent</code>. Truly old code now lives in a separate <code>langchain-classic</code> package.</p></div></div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Pre-built chains were removed</div><p><code>RetrievalQA</code>, <code>ConversationalRetrievalChain</code>, etc. are gone. Build the same thing with LCEL (<code>|</code>) — it's a few more lines but far clearer, as in the RAG example above.</p></div></div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Keep package versions aligned</div><p>If <code>langchain-openai</code> and <code>langchain-core</code> drift far apart you'll see odd errors. Pin minor ranges, e.g. <code>langchain&gt;=1.3,&lt;1.4</code>.</p></div></div>
+          </section>
+
+          <nav class="page-nav reveal">
+            <a href="../langchain/index.html"><span class="pn-k">‹ Back</span><span class="pn-t">LangChain · Overview</span></a>
+            <a class="next" href="../langgraph/index.html"><span class="pn-k">Next ›</span><span class="pn-t">LangGraph · Overview</span></a>
+          </nav>
+        </div>
+
+        <!-- On this page -->
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#models">Chat models</a>
+          <a href="#messages">Messages</a>
+          <a href="#prompts">Prompt templates</a>
+          <a href="#parsers">Output parsers</a>
+          <a href="#lcel">LCEL &amp; Runnables</a>
+          <a href="#tools">Tools &amp; tool calling</a>
+          <a href="#retrieval">Retrieval stack</a>
+          <a href="#rag">RAG</a>
+          <a href="#memory">Memory</a>
+          <a href="#agents">Agents</a>
+          <a href="#gotchas">1.0 &amp; gotchas</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">LangChain · Core concepts</span>
+        <span class="fmono">The Lang Stack · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

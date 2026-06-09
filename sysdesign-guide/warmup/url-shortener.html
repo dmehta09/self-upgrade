@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design a URL shortener | The System Design Field Guide</title>
+  <meta name="description" content="The classic warm-up: base62 keys, a key-generation service, read-heavy caching, and the redirect path." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="warmup" data-page="warmup-url" data-lesson="warmup-url">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../warmup/index.html" style="color:var(--accent)">Warm-up designs</a><span class="sep">/</span><span class="current">Design a URL shortener</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Warm-up · TinyURL / Bitly</span>
+  <h1>Design a URL shortener.</h1>
+  <p class="lead">Turn <span class="mono">long.example.com/a/very/long/path</span> into <span class="mono">sho.rt/abc123</span> and redirect visitors back. The core is simple — which is exactly why it's the canonical warm-up for the full method: scope it, estimate it, design an API and store, choose a code-generation strategy, then make a massively read-heavy redirect path fast, global, and resilient.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Create a short URL from a long one (optional custom alias + expiry). Redirect a short URL to its long URL. Click analytics is a common nice-to-have.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p><strong>Massively read-heavy</strong> (~100:1 to 1000:1 reads:writes). Redirects fast (&lt; 100&nbsp;ms) and highly available. Codes unique and not bulk-guessable. Storage is never the bottleneck — read QPS and cache memory are.</p></div>
+  </div>
+  <p>The shape: <strong>cheap writes, hot reads, modest storage.</strong> The product question that drives the design — do we need per-click analytics and mutable destinations? — decides 301 vs 302 (see §6).</p>
+</section>
+
+<section class="section reveal" id="estimate">
+  <h2><span class="section-num">02</span> &nbsp;Capacity estimation</h2>
+  <p>Anchor on a realistic read-heavy model: ~100M DAU each following a few links/day → hundreds of millions of redirects/day; new-URL creation is tiny by comparison.</p>
+  <div class="calc" data-calc>
+    <script type="application/json" class="calc-config">
+    {
+      "title": "URL shortener — capacity",
+      "preset": "URL shortener",
+      "presets": [
+        { "label": "URL shortener", "values": { "dau": 100000000, "writesPerUser": 0.1, "readWrite": 100, "bytesPerItem": 500, "retentionYears": 5, "replication": 3 } }
+      ],
+      "outputs": ["writeQps","readQps","peakQps","storageTotal","servers"]
+    }
+    </script>
+  </div>
+  <p>Takeaways: only a few hundred writes/s but tens of thousands of reads/s — so optimise hard for reads (cache!) — and a few TB over five years, which one well-chosen store (or a modest shard count) holds easily.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Write volume is an assumption, not a fact</div><p>Reference designs disagree by ~1000× on writes (ByteByteGo's 100M new URLs/day vs Hello Interview's 100k/day; real Bitly ≈ 8.5M created/day, ~10B clicks/month). State your assumption, present capacity as a range, and note that the read-heavy framing (~100:1+) is what everyone agrees on.</p></div></div>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">03</span> &nbsp;API &amp; data model</h2>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/urls</span><span class="ep-note">{ long_url, alias?, expiry? } → { short_url }</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/{short_code}</span><span class="ep-note">→ 301/302 redirect to long_url</span></div>
+  <p>The data model is almost nothing — a single mapping with the short code as primary key:</p>
+  <div class="kv">
+    <dt>short_code</dt><dd>Primary key, e.g. <span class="mono">abc123</span> (7 chars). Looked up on every redirect. Keep a <strong>UNIQUE constraint</strong> as the last-line safety net against any generation bug.</dd>
+    <dt>long_url</dt><dd>The original URL (~200–500 B).</dd>
+    <dt>created_at / expiry / owner</dt><dd>Metadata; expiry powers TTL cleanup.</dd>
+  </div>
+  <p>Access is a <strong>pure point lookup by primary key</strong> — no ranges, joins, or multi-row transactions on the hot path. A key-value store (DynamoDB, Cassandra) or a plain relational table both work; since writes are ~1/s, the deciding factor is read scale + global replication, not query power. <strong>Shard by <span class="mono">hash(short_code)</span></strong> so every read hits exactly one partition with even distribution — never by <span class="mono">created_at</span> (hot shard on recent writes).</p>
+</section>
+
+<section class="section reveal" id="codes">
+  <h2><span class="section-num">04</span> &nbsp;Generating short codes</h2>
+  <p>Mint a unique 7-char code in <strong>base62</strong> (0-9 a-z A-Z; not base64 — <span class="mono">+</span>/<span class="mono">/</span> are URL-unsafe). 62⁷ ≈ <strong>3.52 trillion</strong> codes; 6 chars (≈56.8B) is borderline, 7 has headroom.</p>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔢</span><h4>Counter → base62</h4><p>Encode a monotonic id in base62. <strong>Zero collisions</strong>, no existence check. But a single counter is a SPOF and codes are sequential (guessable).</p></div>
+    <div class="card feature"><span class="f-ic fx">🗝️</span><h4>KGS / range allocation</h4><p>Pre-generate random codes offline, or lease <em>ranges</em> of ids to each app node (etcd/Redis <span class="mono">INCRBY</span>) so it mints locally and re-leases only when drained. No hot-path coordination; non-sequential codes.</p></div>
+  </div>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">base62.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+BASE = 62
+
+def encode(num: int) -> str:
+    if num == 0:               # loop below never runs for 0
+        return ALPHABET[0]
+    if num &lt; 0:
+        raise ValueError("id must be non-negative")
+    out = []
+    while num:
+        num, rem = divmod(num, BASE)
+        out.append(ALPHABET[rem])
+    return "".join(reversed(out))   # remainders come out least-significant first
+</code></pre></div>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why not just hash the long URL?</div><p>Truncated hashes (MD5 → 7 chars) <strong>collide</strong> — two URLs map to one code — forcing a check-and-retry on every write. Counters and KGS sidestep collisions entirely. Pitfalls to name: the alphabet ordering is a permanent contract (reorder it and every existing code breaks); sequential counters are enumerable, so XOR/Feistel-permute the id before encoding if guessability matters; keep a profanity denylist.</p></div></div>
+</section>
+
+<section class="section reveal" id="architecture">
+  <h2><span class="section-num">05</span> &nbsp;High-level architecture</h2>
+  <p>Two paths: a rare write (create) and a hot read (redirect). The redirect path carries ~99.9% of traffic and is served almost entirely from cache; click events fire async so logging never blocks the redirect.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">The redirect (read) path</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "GET /abc123 → redirect",
+      "nodes": [
+        { "id": "client", "label": "Browser", "type": "user", "col": 0, "row": 1 },
+        { "id": "lb", "label": "Load balancer", "type": "L7", "col": 1, "row": 1 },
+        { "id": "svc", "label": "Redirect service", "type": "stateless", "col": 2, "row": 1 },
+        { "id": "cache", "label": "Redis", "type": "cache", "col": 3, "row": 0 },
+        { "id": "db", "label": "KV store", "type": "source", "col": 3, "row": 2 }
+      ],
+      "edges": [
+        { "from": "client", "to": "lb", "label": "GET /abc123" },
+        { "from": "lb", "to": "svc" },
+        { "from": "svc", "to": "cache" },
+        { "from": "svc", "to": "db" }
+      ],
+      "steps": [
+        { "edge": ["client","lb"], "caption": "Someone clicks sho.rt/abc123." },
+        { "edge": ["lb","svc"], "caption": "Routed to any stateless redirect server." },
+        { "edge": ["svc","cache"], "caption": "Look up abc123 in Redis first — the hot path." },
+        { "node": "cache", "caption": "Hit (~99% of the time). Return a 301/302 to the long URL in ~1 ms.", "status": "hit", "latency": "~1 ms" },
+        { "edge": ["svc","db"], "caption": "Rare miss → read the KV store, refill the cache, then redirect.", "status": "miss", "latency": "~10 ms" }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="caching">
+  <h2><span class="section-num">06</span> &nbsp;Caching &amp; 301 vs 302</h2>
+  <p>Caching is the single biggest lever. The access pattern is Zipfian — a small hot set of links gets most clicks — so a modest Redis footprint covers the working set and yields <strong>90–95%+ hit ratios</strong>, making p99 redirects single-digit ms.</p>
+  <div class="kv">
+    <dt>301 (permanent)</dt><dd>Browsers/CDNs cache it, so repeat clicks <strong>never reach you</strong> — lowest load and latency — <em>but</em> you lose per-click analytics on cached hits and can't change or expire the destination.</dd>
+    <dt>302 (temporary)</dt><dd>Not cached by default, so every click hits your service → <strong>accurate analytics</strong> and a mutable/expirable/geo-targetable destination. Cost: full origin load on every click (size your cache/QPS for total clicks, not unique users).</dd>
+  </div>
+  <p>Bitly-class products default to <strong>302</strong> precisely because analytics and dynamic destinations are the product. The choice is "free clicks but lost control (301)" vs "full traffic but full control (302)."</p>
+</section>
+
+<section class="section reveal" id="failure">
+  <h2><span class="section-num">07</span> &nbsp;Failure modes &amp; resilience</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🧊</span><h4>Cache death / cold start</h4><p>The dangerous one: a flushed cache sends 100% of reads to a DB provisioned for ~5% → <strong>thundering herd</strong>. Mitigate with a replicated cache (Sentinel/Cluster failover), request coalescing / single-flight on misses, jittered TTLs to avoid synchronized expiry, and gradual warming.</p></div>
+    <div class="card feature"><span class="f-ic fx">💾</span><h4>DB death</h4><p>Reads still served from cache for the hot set (graceful degradation); cold codes 503. Writes (create) fail — acceptable, since create is low-volume and non-critical. Multi-AZ replicas + managed KV restore it.</p></div>
+    <div class="card feature"><span class="f-ic fx">🗝️</span><h4>ID coordinator death</h4><p>With <strong>pre-allocated id ranges in memory</strong>, writes keep working until a node's block drains — the coordinator need only be up to lease the next block. A single Redis <span class="mono">INCR</span> with no range buffering is the anti-pattern (its death stops all writes).</p></div>
+    <div class="card feature"><span class="f-ic fx">📊</span><h4>Analytics pipeline death</h4><p>Click logging is fire-and-forget into a queue (Kafka) — a logging outage must never affect redirects.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="multiregion">
+  <h2><span class="section-num">08</span> &nbsp;Multi-region &amp; the edge</h2>
+  <p>Serve redirects close to users. The modern (2026) pattern collapses the classic "cache + DB" tiers into a single globally-replicated <strong>edge KV</strong> layer:</p>
+  <div class="kv">
+    <dt>Edge KV</dt><dd>Run redirect logic at the edge against Cloudflare Workers KV or DynamoDB Global Tables — global single-digit-ms redirects from the durable store itself.</dd>
+    <dt>Consistency</dt><dd>Replication is async/eventually consistent: a brand-new link may not resolve in a distant region for a short window (DynamoDB Global Tables ~1–2 s; Workers KV up to ~60 s). That's fine — only the user who <em>just</em> created a link is affected, and the mapping is immutable once written.</dd>
+    <dt>Strong cross-region</dt><dd>DynamoDB Multi-Region Strong Consistency (GA 2025) exists for the rare case that can't tolerate the lag — usually overkill here.</dd>
+  </div>
+  <p>Shorteners are an <strong>eventual-consistency-friendly</strong> workload: immutable mapping, read-heavy, read-your-own-write window measured in seconds.</p>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">09</span> &nbsp;Observability &amp; cost</h2>
+  <div class="kv">
+    <dt>Metrics &amp; SLOs</dt><dd>Redirect latency p99 (SLO &lt; 50–100 ms at the edge); <strong>cache hit ratio</strong> (SLO ≥ 90–95% — your leading indicator, alert below ~85%); redirect availability ≥ 99.99%; create success rate ≥ 99.9%; replication lag; 404 rate (expired/invalid).</dd>
+    <dt>Alerts</dt><dd>Hit ratio drop (herd/cold cache), 5xx rate &gt; 0.1%, cross-region lag beyond budget, id-range exhaustion rate.</dd>
+    <dt>Cost (order of magnitude)</dt><dd>Driven by <strong>cache memory</strong> (dominant at high read QPS) and <strong>egress / CDN request fees</strong> (billions of tiny redirects); compute scales with read QPS; <strong>storage is a rounding error</strong> (even 365B records ≈ tens of TB on managed KV).</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">10</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why is generating codes from a counter (or a key-generation service) usually better than hashing the long URL?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Hashing is too slow to compute</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Hashing causes collisions (two URLs → same code), forcing check-and-retry; counters/KGS guarantee uniqueness</button>
+      <button class="quiz-opt"><span class="mark"></span>You can't base62-encode a hash</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> the problem with hashing is collisions — you'd check the store and retry on every create. A counter or a pre-generated key pool gives guaranteed-unique codes with no hot-path collision check.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"It's read-heavy and tiny per record, so: base62 codes from range-allocated counters to avoid collisions and a single-counter SPOF, a key-value store as source of truth, and an aggressive cache (or edge KV) so ~99% of redirects never touch the DB. Default to 302 because analytics and mutable destinations are the product. Serve globally from edge KV, accepting a seconds-long read-your-own-write window. The real constraints are read QPS and cache memory — storage never is."</p></div></div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../warmup/index.html"><span class="pn-k">‹ Back</span><span class="pn-t">The design playbook</span></a>
+            <a class="next" href="../warmup/rate-limiter.html"><span class="pn-k">Next ›</span><span class="pn-t">Design a rate limiter</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements & scale</a>
+          <a href="#estimate">Capacity estimation</a>
+          <a href="#api">API & data model</a>
+          <a href="#codes">Generating short codes</a>
+          <a href="#architecture">High-level architecture</a>
+          <a href="#caching">Caching & 301 vs 302</a>
+          <a href="#failure">Failure modes & resilience</a>
+          <a href="#multiregion">Multi-region & the edge</a>
+          <a href="#ops">Observability & cost</a>
+          <a href="#recap">Trade-offs & interview recap</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Warm-up designs · Design a URL shortener</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+  <script src="../assets/js/capacity.js"></script>
+</body>
+</html>

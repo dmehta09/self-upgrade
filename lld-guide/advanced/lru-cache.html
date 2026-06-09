@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced case — LRU / LFU cache | The Design Field Guide</title>
+  <meta name="description" content="Design an LRU cache with O(1) get and put in Python: a HashMap plus a doubly linked list, sentinel nodes, eviction, the LFU variant (frequency buckets + min-freq), and a thread-safe wrapper with threading.Lock." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="adv" data-page="adv-lru-cache" data-lesson="adv-lru-cache">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../advanced/index.html" style="color:var(--accent)">Advanced</a><span class="sep">/</span><span class="current">LRU / LFU cache</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Advanced case · data structures</span>
+            <h1>Case study: an LRU cache in O(1).</h1>
+            <p class="lead">One of the most-asked design questions there is. The twist: it's not a pattern, it's a <em>structure</em> — a <code>HashMap</code> and a doubly linked list, designed together so every <code>get</code> and <code>put</code> is constant time. Build that, then meet its trickier sibling (LFU) and make it thread-safe.</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Step 1 — Requirements &amp; assumptions</h2>
+            <p>A cache holds a bounded number of key→value entries. When it's full and a new key arrives, something must be thrown out. <strong>LRU</strong> — Least Recently Used — evicts whatever hasn't been touched for the longest.</p>
+            <p><strong>Clarifying questions I'd ask:</strong> What capacity? What counts as a "use" — both reads and writes? What should <code>get</code> return on a miss? Do we need it thread-safe? Is LRU the right policy, or LFU (least <em>frequently</em> used)?</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">The hard requirement: O(1)</div><p>Both <code>get(key)</code> and <code>put(key, value)</code> must run in <strong>constant time</strong>, capacity included. That single line rules out the obvious designs and forces the HashMap-plus-linked-list combo. A miss returns <code>None</code>; every <code>get</code> and <code>put</code> counts as a use.</p></div></div>
+          </section>
+
+          <!-- 2. THE DESIGN -->
+          <section class="section reveal" id="design">
+            <h2><span class="section-num">02</span> &nbsp;Step 2 — Why two structures, not one</h2>
+            <p>Try the naive designs and watch them fail the O(1) bar:</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Idea</th><th>get</th><th>find &amp; evict LRU</th></tr></thead>
+                <tbody>
+                  <tr><td>A plain <code>dict</code></td><td>O(1) ✓</td><td>O(n) — must scan for the oldest ✗</td></tr>
+                  <tr><td>A list ordered by recency</td><td>O(n) — must search ✗</td><td>O(1) at the end ✓</td></tr>
+                  <tr><td><strong>HashMap + doubly linked list</strong></td><td>O(1) ✓</td><td>O(1) ✓</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>Neither structure alone wins. So we use <strong>both, pointing at the same nodes</strong>:</p>
+            <div class="kv">
+              <dt>HashMap (<code>dict</code>)</dt><dd>Maps <code>key → Node</code>. Gives O(1) "is this key here, and where's its node?"</dd>
+              <dt>Doubly linked list</dt><dd>Holds the nodes in <em>recency</em> order: most-recent at the front, least-recent at the back. Doubly linked so we can <strong>unlink any node in O(1)</strong> (we have its <code>prev</code> and <code>next</code>).</dd>
+              <dt>Node</dt><dd>Stores <code>key</code>, <code>value</code>, and the two list pointers. (It holds the <code>key</code> too, so that on eviction we can delete it from the map.)</dd>
+            </div>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A stack of plates with an index <span class="tag">analogy</span></div><p>The linked list is a stack of plates — touch a plate and it goes back on top; the bottom plate is the one to toss. The HashMap is a sticky-note index telling you exactly which plate is "B" so you don't dig through the stack. Index to find, stack to order.</p></div></div>
+          </section>
+
+          <!-- 3. DIAGRAM -->
+          <section class="section reveal" id="diagram">
+            <h2><span class="section-num">03</span> &nbsp;Step 3 — The shape in your head</h2>
+            <div class="diagram">
+              <div class="dg-title">HashMap → nodes · list orders them by recency</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">head</div><div class="fn-t">sentinel</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">MRU</div><div class="fn-t">"c": 3</div><div class="fn-d">most recent</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">·</div><div class="fn-t">"a": 1</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">LRU</div><div class="fn-t">"b": 2</div><div class="fn-d">evict next</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">tail</div><div class="fn-t">sentinel</div></div>
+              </div>
+              <div class="cap">The <code>HashMap</code> jumps to any node in O(1); the list lets us <em>unlink</em> and <em>re-link</em> that node in O(1) too. Two empty <strong>sentinel</strong> nodes (head/tail) mean every real node always has a <code>prev</code> and <code>next</code> — no null-checks at the ends.</div>
+            </div>
+          </section>
+
+          <!-- 4. IMPLEMENTATION -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">04</span> &nbsp;Step 4 — The implementation</h2>
+            <p>Two tiny list helpers — <code>_remove</code> and <code>_push_front</code> — do all the pointer work; <code>get</code> and <code>put</code> are then just "unlink, move to front, maybe evict."</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">lru.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">class Node:
+    __slots__ = ("key", "value", "prev", "next")
+    def __init__(self, key=None, value=None):
+        self.key = key
+        self.value = value
+        self.prev = None
+        self.next = None
+
+class LRUCache:
+    def __init__(self, capacity: int):
+        self.capacity = capacity
+        self._map: dict = {}                  # key -> Node  (O(1) lookup)
+        self._head = Node()                   # sentinels: head.next = MRU,
+        self._tail = Node()                   #            tail.prev = LRU
+        self._head.next = self._tail
+        self._tail.prev = self._head
+
+    def _remove(self, node: Node) -> None:    # unlink in O(1)
+        node.prev.next = node.next
+        node.next.prev = node.prev
+
+    def _push_front(self, node: Node) -> None:  # link just after head (MRU)
+        node.prev = self._head
+        node.next = self._head.next
+        self._head.next.prev = node
+        self._head.next = node
+
+    def get(self, key):
+        node = self._map.get(key)
+        if node is None:
+            return None
+        self._remove(node)                    # touched -> becomes most-recent
+        self._push_front(node)
+        return node.value
+
+    def put(self, key, value) -> None:
+        node = self._map.get(key)
+        if node is not None:                  # update + promote
+            node.value = value
+            self._remove(node)
+            self._push_front(node)
+            return
+        if len(self._map) >= self.capacity:   # full -> evict the LRU (tail.prev)
+            lru = self._tail.prev
+            self._remove(lru)
+            del self._map[lru.key]            # this is why a node stores its key
+        node = Node(key, value)
+        self._map[key] = node
+        self._push_front(node)</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why a node stores its own <code>key</code></div><p>On eviction we have the <em>node</em> (it's <code>tail.prev</code>), but we must also delete it from the map — and the map is keyed by <code>key</code>. Without <code>node.key</code> we'd have no way to find the map entry in O(1). Small detail, classic interview "gotcha."</p></div></div>
+          </section>
+
+          <!-- 5. WALKTHROUGH -->
+          <section class="section reveal" id="walkthrough">
+            <h2><span class="section-num">05</span> &nbsp;Walk a scenario</h2>
+            <p>Capacity 2. Watch <code>"a"</code> survive because we <em>used</em> it, while <code>"b"</code> — untouched — gets evicted when <code>"c"</code> arrives.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">demo.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">cache = LRUCache(capacity=2)
+cache.put("a", 1)              # [a]
+cache.put("b", 2)              # [b, a]   (b most-recent)
+print(cache.get("a"))          # 1   -> [a, b]   (a promoted, b now LRU)
+cache.put("c", 3)              # full: evict b -> [c, a]
+print(cache.get("b"))          # None  (b was evicted)
+print(cache.get("c"))          # 3</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>1
+None
+3</div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why must the list be <em>doubly</em> linked rather than singly linked?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>To store more data per node</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>So we can unlink an arbitrary node in O(1) — we need its <code>prev</code> to rewire neighbours</button>
+                <button class="quiz-opt"><span class="mark"></span>Doubly linked lists use less memory</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> on a <code>get</code> we yank a node out of the middle and move it to the front. To splice it out we must fix the node <em>before</em> it — which a singly linked list can't reach in O(1). The back-pointer is what keeps everything constant time.</div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">In this design, is <code>get</code> a read-only operation?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Yes — it only returns a value</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>No — it reorders the list (promotes the node), so it mutates shared state</button>
+                <button class="quiz-opt"><span class="mark"></span>Only when the key is missing</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> a successful <code>get</code> moves the node to the front. That's a write to the structure — which is exactly why making this thread-safe (below) means locking <code>get</code> too, not just <code>put</code>.</div>
+            </div>
+            <div class="deeper">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> The 12-line Pythonic version with <code>OrderedDict</code> <span class="tag">go deeper</span></summary>
+              <div class="deeper-body">
+                <p>In real code you'd rarely hand-roll the list. <code>collections.OrderedDict</code> already <em>is</em> a hash map with order, plus O(1) <code>move_to_end</code> and <code>popitem</code>. (And for pure function memoisation, <code>functools.lru_cache</code> does the whole thing.) Build it by hand once — for the interview — then reach for these:</p>
+                <div class="codeblock">
+                  <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">lru_ordered.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                  <div class="code-pane active"><pre><code data-lang="python">from collections import OrderedDict
+
+class LRUCache:
+    def __init__(self, capacity: int):
+        self.capacity = capacity
+        self._d: OrderedDict = OrderedDict()
+
+    def get(self, key):
+        if key not in self._d:
+            return None
+        self._d.move_to_end(key)          # mark most-recent
+        return self._d[key]
+
+    def put(self, key, value) -> None:
+        if key in self._d:
+            self._d.move_to_end(key)
+        self._d[key] = value
+        if len(self._d) > self.capacity:
+            self._d.popitem(last=False)   # pop the least-recent (front)</code></pre></div>
+                </div>
+                <p>Same O(1) behaviour, a fraction of the code. The hand-rolled version is still worth knowing — it's what <code>OrderedDict</code> is doing under the hood.</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- 6. LFU VARIANT -->
+          <section class="section reveal" id="lfu">
+            <h2><span class="section-num">06</span> &nbsp;The LFU variant — evict by <em>frequency</em></h2>
+            <p>LFU evicts the <strong>least frequently used</strong> key; ties are broken by recency (oldest of the least-used goes). The trick for O(1): bucket keys by their use-count, and track the current <code>min</code> count so eviction is "pop the oldest key from the <code>min</code> bucket."</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">lfu.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from collections import defaultdict, OrderedDict
+
+class LFUCache:
+    def __init__(self, capacity: int):
+        self.capacity = capacity
+        self._vals: dict = {}                          # key -> value
+        self._freq: dict = {}                          # key -> use count
+        self._buckets = defaultdict(OrderedDict)       # count -> keys (in LRU order)
+        self._min = 0                                  # smallest live count
+
+    def _bump(self, key) -> None:
+        f = self._freq[key]
+        del self._buckets[f][key]                      # leave the old bucket
+        if not self._buckets[f]:                       # bucket emptied?
+            del self._buckets[f]
+            if self._min == f:
+                self._min += 1                         # min moves up
+        self._freq[key] = f + 1
+        self._buckets[f + 1][key] = None               # join the next bucket
+
+    def get(self, key):
+        if key not in self._vals:
+            return None
+        self._bump(key)
+        return self._vals[key]
+
+    def put(self, key, value) -> None:
+        if self.capacity == 0:
+            return
+        if key in self._vals:                          # update + bump
+            self._vals[key] = value
+            self._bump(key)
+            return
+        if len(self._vals) >= self.capacity:           # evict least-freq, oldest
+            evict_key, _ = self._buckets[self._min].popitem(last=False)
+            del self._vals[evict_key]
+            del self._freq[evict_key]
+        self._vals[key] = value                        # new keys start at freq 1
+        self._freq[key] = 1
+        self._buckets[1][key] = None
+        self._min = 1</code></pre></div>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">The two things people get wrong</div><p>① A brand-new key has frequency 1, so after an eviction you must reset <code>self._min = 1</code>. ② Use an <strong>ordered</strong> bucket (here <code>OrderedDict</code>) so that within the same frequency you can still evict the <em>least-recently-used</em> — LFU's tie-breaker is LRU.</p></div></div>
+          </section>
+
+          <!-- 7. THREAD-SAFE -->
+          <section class="section reveal" id="threadsafe">
+            <h2><span class="section-num">07</span> &nbsp;Making it thread-safe</h2>
+            <p>Share one cache across threads and both <code>get</code> and <code>put</code> become dangerous — remember, <code>get</code> rewires the list, so it's a writer too. Two threads interleaving those pointer updates can corrupt the list outright. Guard every public operation with a single lock (see the <a href="../advanced/index.html#concurrency">concurrency primer</a>).</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">safe_lru.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import threading
+
+class ThreadSafeLRU(LRUCache):
+    def __init__(self, capacity: int):
+        super().__init__(capacity)
+        self._lock = threading.Lock()
+
+    def get(self, key):
+        with self._lock:                  # get() mutates the list -> must lock
+            return super().get(key)
+
+    def put(self, key, value) -> None:
+        with self._lock:
+            super().put(key, value)</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">One coarse lock is the right first answer</div><p>Each operation is a handful of pointer swaps — microseconds — so a single lock around the whole cache is simple and plenty fast. Only if profiling shows lock contention would you reach for sharding (many small caches keyed by <code>hash(key) % N</code>, each with its own lock) to spread the traffic. Don't pre-optimise; say that out loud in an interview.</p></div></div>
+          </section>
+
+          <!-- 8. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">08</span> &nbsp;Extensions — your turn</h2>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 1 · TTL expiry</div>
+              <p class="ex-q">Add a per-entry <strong>time-to-live</strong>: a key older than <code>ttl</code> seconds is treated as a miss (and dropped). What does each node need, and where do you check it?</p>
+              <p>Hint: store an <code>expires_at</code> on the node (pass the "now" in to stay deterministic). Check it at the top of <code>get</code> — an expired hit becomes a miss, and you unlink + delete it.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">ttl.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python"># node gains: self.expires_at = now + ttl   (set in put)
+def get(self, key, now: float):
+    node = self._map.get(key)
+    if node is None:
+        return None
+    if now >= node.expires_at:            # expired -> treat as a miss
+        self._remove(node)
+        del self._map[key]
+        return None
+    self._remove(node); self._push_front(node)
+    return node.value</code></pre></div>
+                  </div>
+                  <p>Recency eviction and TTL expiry are independent policies that compose cleanly: one keeps the cache <em>small</em>, the other keeps it <em>fresh</em>.</p>
+                </div>
+              </div>
+            </div>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 2 · the trade-off question</div>
+              <p class="ex-q">An interviewer asks: "When would LFU beat LRU, and when would it lose?" Give a one-sentence answer for each.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <p><strong>LFU wins</strong> when popularity is stable — a few hot keys hit constantly should never be evicted just because of a recent quiet spell. <strong>LFU loses</strong> when access patterns shift: an old key with a huge historical count clings on long after it stopped being used (the "cache pollution" problem), while LRU adapts immediately. Many real caches use a hybrid (e.g. LFU with aging, or LRU-K).</p>
+                </div>
+              </div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">What this design used — the toolkit recap</div><p><strong>Custom data structure</strong> — a HashMap and a doubly linked list co-designed for O(1). <strong>Sentinels</strong> to erase edge-cases. <strong>Encapsulation</strong> — <code>_remove</code>/<code>_push_front</code> hide the pointer surgery. <strong>Inheritance</strong> for the thread-safe wrapper, and a single <strong><code>Lock</code></strong> for the critical sections. And the senior move: knowing the stdlib (<code>OrderedDict</code>, <code>functools.lru_cache</code>) does this for you in production.</p></div></div>
+            <p>Next: a gentler pattern — <a href="../advanced/logging-framework.html">a logging framework with Chain of Responsibility</a>.</p>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../advanced/index.html"><span class="pn-k">‹ Back</span><span class="pn-t">Advanced cases · overview</span></a>
+            <a class="next" href="../advanced/logging-framework.html"><span class="pn-k">Next ›</span><span class="pn-t">Case: Logging framework</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements</a>
+          <a href="#design">Why two structures</a>
+          <a href="#diagram">The shape</a>
+          <a href="#code">Implementation</a>
+          <a href="#walkthrough">Walkthrough</a>
+          <a href="#lfu">LFU variant</a>
+          <a href="#threadsafe">Thread-safe</a>
+          <a href="#extensions">Extensions</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Advanced · LRU / LFU cache</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

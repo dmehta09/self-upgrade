@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced case — Movie ticket booking | The Design Field Guide</title>
+  <meta name="description" content="Designing a concurrent movie-ticket booking system in Python — seat states (free/held/booked), atomic check-and-hold to prevent double-booking, and releasing held seats when payment fails." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="adv" data-page="adv-movie-booking" data-lesson="adv-movie-booking">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../advanced/index.html" style="color:var(--accent)">Advanced</a><span class="sep">/</span><span class="current">Movie booking</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Advanced case · concurrency</span>
+            <h1>Case study: movie ticket booking.</h1>
+            <p class="lead">The whole design hinges on one hazard: two people click "buy seat A1" at the same instant, and a naive system happily sells it twice. The fix isn't more code — it's a <strong>hold-then-pay</strong> flow guarded by a lock, so checking that seats are free and marking them held is <em>one atomic step</em>. Hold the seats, take the (slow) payment, then confirm — or release the hold if it fails.</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Step 1 — Requirements &amp; assumptions</h2>
+            <p>A customer picks one or more seats for a particular show and pays for them. The system must <strong>never double-book a seat</strong>, even when two requests for the same seat arrive at the same moment. Because payment is slow, we <strong>hold</strong> the chosen seats while it runs, and <strong>release</strong> them if the payment fails or times out — so a half-finished booking never strands a seat forever.</p>
+            <p><strong>Clarifying questions I'd ask:</strong> Can a customer book several seats in one go, all-or-nothing? What happens if one of the requested seats is already taken — fail the whole request, or book the rest? How long do we hold seats before the payment must complete? Is payment synchronous, or a callback we wait on? Do we need this thread-safe across many concurrent requests (yes — that's the point)?</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Assumptions, so the code stays focused</div><p>Everything is <strong>in-memory</strong> and in <strong>one process</strong> (a real system would use a database row-lock or a distributed lock — same idea, bigger blast radius). <strong>Payment is a boolean</strong> we pass in (<code>pay_succeeds</code>) standing in for a real gateway. The <strong>timeout</strong> is shown as an explicit <code>release</code> call rather than a background timer, so the seat state machine stays the star.</p></div></div>
+            <div class="grid grid-2">
+              <div class="card"><h4>In scope</h4><p>Seat state machine (free / held / booked) · atomic all-or-nothing hold of several seats · confirm on payment success · release on payment failure or timeout · a single <code>Lock</code> per show.</p></div>
+              <div class="card"><h4>Out of scope</h4><p>Pricing, discounts and tax · seat maps and UI · users and auth · persistence and a real payment gateway · cross-process / distributed locking · a live background expiry timer (sketched as an extension).</p></div>
+            </div>
+          </section>
+
+          <!-- 2. THE RACE CONDITION -->
+          <section class="section reveal" id="race">
+            <h2><span class="section-num">02</span> &nbsp;Step 2 — The race condition</h2>
+            <p>This is the whole case in one paragraph, so read it slowly. Two requests arrive for seat <code>A1</code> at the same instant. Each one does the obvious thing: <em>check</em> that <code>A1</code> is <code>FREE</code>, see that it is, then <em>book</em> it. But if both threads run the <em>check</em> before either runs the <em>book</em>, they <strong>both</strong> see <code>FREE</code> and they <strong>both</strong> book — two customers, one seat. The seat was double-sold, and worse, both got a "success." This is a classic <strong>read–modify–write</strong> race (see the <a href="../advanced/index.html#concurrency">concurrency primer</a>).</p>
+            <p>The fix is to make <strong>"check that all requested seats are free, THEN mark them held"</strong> a single, indivisible <strong>critical section</strong> under a lock. While one thread holds the lock, no other thread can even peek at the seats — so the second request sees <code>A1</code> as <code>HELD</code> and fails cleanly, exactly as it should.</p>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">"Check-then-act" is not atomic</div><p>Any code shaped like <em>"if the seat is free, then take it"</em> is two operations with a gap in between — and a thread can be switched out right in that gap. CPython's GIL does <strong>not</strong> save you: it serialises single bytecodes, not your multi-step logic. The only fix is to put the <em>check</em> and the <em>act</em> inside the same <code>with self._lock:</code> block so nothing can run between them.</p></div></div>
+          </section>
+
+          <!-- 3. SEAT STATES -->
+          <section class="section reveal" id="states">
+            <h2><span class="section-num">03</span> &nbsp;Step 3 — Seat states</h2>
+            <p>Every seat is always in exactly one of three states, and only certain transitions are legal. A free seat can be <em>held</em>; a held seat can be <em>confirmed</em> (booked) or <em>released</em> back to free; a booked seat is terminal. That little state machine is what makes the rules easy to reason about.</p>
+            <div class="diagram">
+              <div class="dg-title">FREE → HELD → BOOKED · with HELD → FREE on payment failure / timeout</div>
+              <div class="flow">
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">state</div><div class="fn-t">FREE</div><div class="fn-d">nobody has it</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">state</div><div class="fn-t">HELD</div><div class="fn-d">reserved, paying</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">state</div><div class="fn-t">BOOKED</div><div class="fn-d">paid · terminal</div></div>
+              </div>
+              <div class="cap"><code>hold</code> moves FREE → HELD · <code>confirm</code> moves HELD → BOOKED on payment success · <code>release</code> moves HELD → FREE when payment <strong>fails or times out</strong>. A booked seat never goes back.</div>
+            </div>
+            <p>Two small classes carry the design — one owns the state, the other owns the flow (single responsibility):</p>
+            <div class="kv">
+              <dt><code>Show</code></dt><dd>Owns the seats and their states, plus the one <code>threading.Lock</code>. Exposes the three atomic transitions — <code>hold</code>, <code>confirm</code>, <code>release</code> — each guarded by that lock. It is the <em>only</em> thing that ever touches seat state.</dd>
+              <dt><code>BookingService</code></dt><dd>Orchestrates the flow: hold the seats → take payment → confirm on success or release on failure. It holds no locks and no seat state of its own; it just calls the <code>Show</code> in the right order.</dd>
+            </div>
+          </section>
+
+          <!-- 4. IMPLEMENTATION -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">04</span> &nbsp;Step 4 — The implementation</h2>
+            <p>Notice how every state change in <code>show.py</code> lives inside a <code>with self._lock:</code> block — the <em>check</em> and the <em>set</em> are never separated. And note <code>hold</code> is <strong>all-or-nothing</strong>: if any one seat is taken, the whole request fails and nothing is changed.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">show.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import threading
+from enum import Enum
+
+class SeatState(Enum):
+    FREE = "free"
+    HELD = "held"
+    BOOKED = "booked"
+
+class Show:
+    def __init__(self, show_id, seat_ids):
+        self.show_id = show_id
+        self.seats = {s: SeatState.FREE for s in seat_ids}
+        self._lock = threading.Lock()
+
+    def hold(self, seat_ids):
+        with self._lock:                    # check-and-set is ONE atomic step
+            if any(self.seats[s] is not SeatState.FREE for s in seat_ids):
+                return False                # at least one is taken -> fail as a whole
+            for s in seat_ids:
+                self.seats[s] = SeatState.HELD
+            return True
+
+    def confirm(self, seat_ids):
+        with self._lock:
+            if any(self.seats[s] is not SeatState.HELD for s in seat_ids):
+                return False
+            for s in seat_ids:
+                self.seats[s] = SeatState.BOOKED
+            return True
+
+    def release(self, seat_ids):            # called on payment failure / timeout
+        with self._lock:
+            for s in seat_ids:
+                if self.seats[s] is SeatState.HELD:
+                    self.seats[s] = SeatState.FREE</code></pre></div>
+            </div>
+            <p>The service is deliberately dumb — it knows the <em>order</em> of steps, nothing about locks:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">booking.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">class BookingService:
+    def __init__(self, show):
+        self.show = show
+
+    def book(self, seat_ids, pay_succeeds):
+        if not self.show.hold(seat_ids):        # atomically reserve, or bail
+            return "seats unavailable"
+        # seats are HELD; take payment (this part can be slow)
+        if pay_succeeds:
+            self.show.confirm(seat_ids)
+            return "booked"
+        self.show.release(seat_ids)             # payment failed -> free the holds
+        return "payment failed, seats released"</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why payment happens <em>outside</em> the lock</div><p>The lock is held only for the microseconds it takes to flip a few seats to <code>HELD</code> — then it's released. Payment, which can take seconds, runs while the lock is <strong>free</strong>, so other customers can keep booking other seats. The held seats are reserved for this buyer, but the whole show isn't frozen waiting on one slow card. Keep the critical section tiny; do the slow work outside it.</p></div></div>
+          </section>
+
+          <!-- 5. WALKTHROUGH -->
+          <section class="section reveal" id="walkthrough">
+            <h2><span class="section-num">05</span> &nbsp;Walk a scenario</h2>
+            <p>Three seats. The first booking takes <code>A1</code> and <code>A2</code>; the second asks for <code>A2</code> and <code>A3</code> and is rejected as a whole because <code>A2</code> is gone; the third holds <code>A3</code>, fails payment, and the seat returns to <code>free</code>.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">demo.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">show = Show("INTERSTELLAR-9pm", ["A1", "A2", "A3"])
+svc = BookingService(show)
+
+print(svc.book(["A1", "A2"], pay_succeeds=True))   # books A1, A2
+print(svc.book(["A2", "A3"], pay_succeeds=True))   # A2 already taken
+print(svc.book(["A3"], pay_succeeds=False))        # held, then payment fails
+print(show.seats["A3"].value)                       # back to free</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>booked
+seats unavailable
+payment failed, seats released
+free</div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why must "check the seats are free" and "mark them held" happen inside ONE lock?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>So the code reads more cleanly in one block</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Otherwise two threads both see FREE and both book the same seat — a lost-update / double-booking race.</button>
+                <button class="quiz-opt"><span class="mark"></span>Because <code>any()</code> can only be called once per lock</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> separate the check from the set and a second thread can slip into the gap, see the seat still <code>FREE</code>, and book it too. Wrapping both in one critical section makes the check-and-set indivisible, so the second request reliably sees <code>HELD</code> and fails.</div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why hold seats and take payment after, instead of booking immediately?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Booking immediately is impossible in Python</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Payment is slow and may fail; holding reserves the seats during it and releases them if it fails or times out, so seats aren't lost or double-sold.</button>
+                <button class="quiz-opt"><span class="mark"></span>Holding is faster than booking, so it improves throughput</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> if you "booked" before payment you'd sell unpaid seats; if you took payment before reserving, two buyers could pay for the same seat. The <code>HELD</code> state is the middle ground — it reserves the seats during the slow payment and hands them back to <code>FREE</code> if it doesn't go through.</div>
+            </div>
+          </section>
+
+          <!-- 6. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">06</span> &nbsp;Extensions — your turn</h2>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 1 · optimistic concurrency</div>
+              <p class="ex-q">Our lock is <strong>pessimistic</strong> — it assumes a clash and blocks everyone. The alternative is <strong>optimistic</strong>: don't lock, give each seat a <em>version number</em>, and on confirm only succeed if the version is unchanged, else retry. Sketch that compare-and-set, and say when each approach wins.</p>
+              <p>Hint: read the seat's version when you start, do your work, then on commit check the version is still what you read; bump it on success, retry on a mismatch.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">optimistic.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python"># each seat carries (state, version). No lock held during the slow work.
+def try_book(self, seat_id):
+    state, version = self.seats[seat_id]      # snapshot what we saw
+    if state is not SeatState.FREE:
+        return False
+    # ...slow work (e.g. payment) happens here, holding NO lock...
+    return self._compare_and_set(seat_id, expected_version=version)
+
+def _compare_and_set(self, seat_id, expected_version):
+    with self._lock:                          # tiny atomic commit window
+        state, version = self.seats[seat_id]
+        if version != expected_version:       # someone changed it first
+            return False                      # caller re-reads and retries
+        self.seats[seat_id] = (SeatState.BOOKED, version + 1)
+        return True</code></pre></div>
+                  </div>
+                  <p><strong>Pessimistic (a lock)</strong> wins when contention is high — many people fight over the same hot seats — because retries would thrash. <strong>Optimistic (versioning)</strong> wins when contention is low — clashes are rare, so you avoid the cost of locking on the common path and only pay on the occasional retry. Databases expose this as a version column; the compare-and-set becomes <code>UPDATE ... WHERE version = :v</code>, succeeding only if <code>rows_affected == 1</code>.</p>
+                </div>
+              </div>
+            </div>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 2 · a real hold timeout</div>
+              <p class="ex-q">Right now a hold only ends when the service calls <code>release</code>. What if the customer walks away mid-payment? Add a <strong>real timeout</strong> that auto-releases a held seat after <code>T</code> seconds, so abandoned holds don't strand seats forever.</p>
+              <p>Hint: two common designs — a background <em>sweeper</em> thread that periodically frees expired holds, or a <em>hold-expiry timestamp</em> on each seat that's checked lazily on access.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">expiry.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python"># on hold(): also stamp self.hold_expiry[s] = now + T
+
+def _expire_stale_holds(self, now):
+    with self._lock:                          # same lock guards the sweep
+        for s, state in self.seats.items():
+            if state is SeatState.HELD and now &gt;= self.hold_expiry[s]:
+                self.seats[s] = SeatState.FREE   # abandoned -> back to free
+
+# Option A: a daemon thread calls this every second.
+# Option B: call it lazily at the top of hold()/confirm() so an
+#           expired hold is reclaimed the moment someone else asks for it.</code></pre></div>
+                  </div>
+                  <p>Either way the sweep runs <em>under the same lock</em> as the booking logic, so an expiring hold can't race a confirm. The lazy option needs no extra thread but only reclaims seats when traffic touches them; the sweeper reclaims promptly but costs a background thread. A real ticketing site usually does both: a sweeper for promptness, lazy checks as a safety net.</p>
+                </div>
+              </div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">What this design used — the toolkit recap</div><p><strong>Atomic critical sections</strong> — a <code>threading.Lock</code> wraps each check-and-set so "free? then hold" is indivisible and double-booking can't happen. A <strong>held / booked state machine</strong> (FREE → HELD → BOOKED, with HELD → FREE) models the slow payment cleanly and makes release trivial. <strong>Optimistic vs pessimistic locking</strong> — versioning-with-retry as the low-contention alternative to a blocking lock. And <strong>SRP</strong>: the <code>Show</code> owns seat state and locking, the <code>BookingService</code> owns the flow — neither reaches into the other's job.</p></div></div>
+            <p>Next: a different flavour of concurrency — handing work between threads safely with <a href="../advanced/pubsub-queue.html">a Pub/Sub message queue</a>.</p>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../advanced/rate-limiter.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: Rate limiter</span></a>
+            <a class="next" href="../advanced/pubsub-queue.html"><span class="pn-k">Next ›</span><span class="pn-t">Case: Pub/Sub queue</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements</a>
+          <a href="#race">The race condition</a>
+          <a href="#states">Seat states</a>
+          <a href="#code">Implementation</a>
+          <a href="#walkthrough">Walkthrough</a>
+          <a href="#extensions">Extensions</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Advanced · Movie booking</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design YouTube / video streaming | The System Design Field Guide</title>
+  <meta name="description" content="Upload, transcode, and stream video globally: the CDN, adaptive bitrate, blob storage, and the view path." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="advanced" data-page="adv-youtube" data-lesson="adv-youtube">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Advanced designs</span><span class="sep">/</span><span class="current">Design YouTube / video streaming</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Advanced · YouTube / Netflix</span>
+  <h1>Design video streaming.</h1>
+  <p class="lead">Let anyone upload a video and let everyone, on any device and any connection, watch it smoothly. The bytes are gigantic, so two things dominate: a <strong>transcoding pipeline</strong> (one upload → many qualities/codecs, in parallel) and a <strong>CDN</strong> (serve from the edge). <strong>Egress bandwidth — not storage or compute — is the bill</strong>, which is why every choice optimises bytes-on-the-wire.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; capacity</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Upload (resumable); process into streamable formats; watch with adaptive quality; search + recommend.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>EB-scale storage, enormous read bandwidth, global low-latency playback, and cost control (egress dominates by 1–2 orders of magnitude).</p></div>
+  </div>
+  <div class="calc" data-calc>
+    <script type="application/json" class="calc-config">
+    {
+      "title": "Video — storage &amp; egress",
+      "preset": "YouTube-scale",
+      "presets": [ { "label": "YouTube-scale", "values": { "dau": 100000000, "writesPerUser": 0.02, "readWrite": 500, "bytesPerItem": 50000000, "retentionYears": 5, "replication": 2 } } ],
+      "outputs": ["writeQps","readQps","storageTotal","bandwidthOut","servers"]
+    }
+    </script>
+  </div>
+  <p>Anchor: ~500 h uploaded/min → ~720k video-hours/day; &gt;1B watch-hours/day. At ~3 Mbps blended, 1B watch-hours ≈ <strong>~1.35 EB/day egress</strong> — ~100–250× the ingest bytes. Even at $0.003/GB that's ~$4M/day, so a 1-point CDN-offload gain or a codec that cuts bytes ⅓ is worth enormous money.</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">02</span> &nbsp;API &amp; data model</h2>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/upload?uploadType=resumable</span><span class="ep-note">→ Location: session URI · PUT chunks with Content-Range · 308 Resume Incomplete</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/manifest/{id}.m3u8 | .mpd</span><span class="ep-note">the bitrate ladder (HLS/DASH)</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/seg/{id}/{rendition}/{n}.m4s</span><span class="ep-note">immutable CMAF segment — long CDN TTL</span></div>
+  <p><strong>Polyglot persistence:</strong> video metadata (title, codecs, rendition catalog, DRM key refs) in a sharded RDBMS; raw mezzanine + transcoded segments in object storage (immutable, content-addressed); and <strong>view counts in a separate high-write counter store</strong> — never in the metadata row (a hot trending video would melt that row). Resumable uploads must terminate at the nearest <strong>edge PoP</strong> to cut first-byte latency.</p>
+</section>
+
+<section class="section reveal" id="transcode">
+  <h2><span class="section-num">03</span> &nbsp;The upload &amp; transcoding pipeline</h2>
+  <p>The raw upload lands in object storage; the creator sees "processing…" instantly. A DAG of jobs then chunks the video (GOP-aligned), transcodes each chunk across a farm in parallel, stitches, packages (CMAF), and warms the CDN — with thumbnails, captions, and QC on parallel branches.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Upload → transcode → store</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Upload pipeline",
+      "nodes": [
+        { "id": "creator", "label": "Creator", "type": "upload", "col": 0, "row": 1 },
+        { "id": "raw", "label": "Raw storage", "type": "S3", "col": 1, "row": 1 },
+        { "id": "q", "label": "Transcode DAG", "type": "jobs", "col": 2, "row": 1 },
+        { "id": "workers", "label": "Transcode farm", "type": "per-title", "col": 3, "row": 0 },
+        { "id": "store", "label": "Segment storage", "type": "CMAF", "col": 3, "row": 2 }
+      ],
+      "edges": [
+        { "from": "creator", "to": "raw", "label": "upload" },
+        { "from": "raw", "to": "q" },
+        { "from": "q", "to": "workers" },
+        { "from": "workers", "to": "store" }
+      ],
+      "steps": [
+        { "edge": ["creator","raw"], "caption": "The raw mezzanine lands in object storage; the creator gets 'processing…' immediately." },
+        { "edge": ["raw","q"], "caption": "A transcode DAG is enqueued (slow → async); the video is chunked GOP-aligned." },
+        { "edge": ["q","workers"], "caption": "A farm encodes each chunk into the per-title bitrate ladder × codecs, in parallel across thousands of workers." },
+        { "edge": ["workers","store"], "caption": "Stitched, packaged into CMAF segments + manifests, written to storage, CDN warmed.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Per-title (and per-shot) encoding</div><p>Instead of a fixed ladder, run trial encodes, plot bitrate-vs-quality (VMAF) curves, and pick rungs on the <strong>convex hull</strong>. Simple content reaches 1080p at ~1.5 Mbps; complex "water/action" content caps at 720p even at 8 Mbps. Netflix goes per-<em>shot</em> (Dynamic Optimizer). The encode happens <em>once</em> and is amortised over billions of views, so spending compute to save bytes always wins — which is also why Google built the <strong>Argos VCU</strong> ASIC (~20–33× transcode efficiency).</p></div></div>
+</section>
+
+<section class="section reveal" id="abr">
+  <h2><span class="section-num">04</span> &nbsp;Adaptive bitrate, codecs &amp; the player</h2>
+  <p>The watch path is almost entirely <a href="../blocks/cdn.html">CDN</a>: the player fetches a small <strong>manifest</strong> (the bitrate ladder), then streams immutable segments from the nearest edge, switching quality per segment. Protocols: <strong>HLS</strong> (.m3u8) and <strong>MPEG-DASH</strong> (.mpd), converging on <strong>CMAF</strong> (one set of fMP4 segments, both manifests, encrypt once for 3 DRMs). Low-latency (LL-HLS / CMAF-LL) uses ~200–400 ms partial chunks for ~2–5 s glass-to-glass.</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">abr.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python"># ladder: ascending [(bitrate_bps, height)]; measured_bps: EWMA of recent segment throughput
+def pick_rendition(ladder, measured_bps, buffer_s,
+                   safety=0.85, low_buf=10, panic_buf=4):
+    usable = measured_bps * safety                 # headroom for variance
+    affordable = [r for r in ladder if r[0] &lt;= usable]
+    pick = affordable[-1] if affordable else ladder[0]   # else lowest rung
+
+    if buffer_s &lt; panic_buf:
+        return ladder[0]                           # near-stall: drop to floor
+    if buffer_s &lt; low_buf:
+        return pick                                # cautious: throughput-bounded
+    idx = ladder.index(pick)                        # healthy buffer (BOLA-style):
+    if idx + 1 &lt; len(ladder) and buffer_s &gt; 2 * low_buf:
+        return ladder[idx + 1]                     # spend buffer to raise quality
+    return pick</code></pre></div>
+  </div>
+  <p>Production players are <strong>hybrid</strong>: throughput-based when the buffer is low (startup/seek), buffer-based (BOLA) when healthy — and never switch up so hard you risk a rebuffer. On codecs (2026): <strong>AV1</strong> is the dominant VOD codec (~⅓ less bandwidth than H.264; Netflix ~30% of streaming, YouTube &gt;75% of videos), with <strong>H.264 as the live/fallback</strong> baseline. AV1 encode is far costlier — fine for VOD (encode once), not for live.</p>
+</section>
+
+<section class="section reveal" id="cdn">
+  <h2><span class="section-num">05</span> &nbsp;CDN, the edge &amp; cost</h2>
+  <div class="kv">
+    <dt>Multi-tier</dt><dd>edge PoP → regional mid-tier (origin shield, collapses duplicate misses) → origin/object storage. Immutable segments → long TTLs → very high hit rates.</dd>
+    <dt>Head vs long tail</dt><dd>Cache the popular head hot at the edge; the cold long tail lives in cheaper storage and is fetched on demand. Optimise <strong>byte-offload (≥95%)</strong>, not request hit-ratio — bytes map to dollars.</dd>
+    <dt>Owned CDNs</dt><dd>Netflix Open Connect embeds appliances <em>inside</em> ISP networks (~190+ Gbps each) so popular bytes never touch transit. Multi-CDN steering adds resilience + price leverage.</dd>
+    <dt>Cost levers</dt><dd>per-title + AV1 (fewer bytes), owned/embedded CDNs (near-zero marginal transit), CMAF (encode once for HLS+DASH+3 DRMs), custom transcode silicon to make the expensive recipes cheap at 500 h/min ingest.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">06</span> &nbsp;Failure, multi-region &amp; observability</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔁</span><h4>Transcode failure</h4><p>Jobs are idempotent (content-addressed outputs) + retried with backoff; chunk-level granularity re-runs only the failed chunk. Poison jobs → DLQ so one bad upload can't block the farm.</p></div>
+    <div class="card feature"><span class="f-ic fx">📤</span><h4>Resumable upload</h4><p>Chunked + 308/Range resume survives flaky networks; partial bytes persisted so the client never restarts from zero.</p></div>
+    <div class="card feature"><span class="f-ic fx">🌍</span><h4>Multi-region</h4><p>Regional storage (residency + locality), global CDN for delivery, upload at the nearest ingest PoP; immutable segments are safe to serve stale on origin/PoP failover.</p></div>
+    <div class="card feature"><span class="f-ic fx">📊</span><h4>QoE observability</h4><p><strong>Rebuffer ratio</strong> (SLO &lt; 1%), <strong>startup/join time</strong> (2 s delay → &gt;50% abandon), start-failure rate (&lt; 0.5%), bitrate served, <strong>CDN byte-offload</strong> (≥95%). Alert on rebuffer spike by region/CDN/ISP and byte-offload drops (cost blowout).</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">07</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why transcode each upload into many bitrates and chop it into short segments up front?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>To save the creator's upload bandwidth</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>So the player can adapt quality to the viewer's connection mid-stream, and each segment is a cacheable CDN object</button>
+      <button class="quiz-opt"><span class="mark"></span>Because video can't be stored as one file</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> pre-made bitrate ladders + short segments enable adaptive bitrate streaming (smooth playback on any connection) and make playback a series of cacheable edge fetches — the two things that make global streaming work and stay affordable.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"Upload to object storage, then an async transcode DAG chunks the video and encodes a per-title bitrate ladder in AV1 (encode once, amortise over billions of views). Package as CMAF so one set of segments serves HLS+DASH and encrypts once for three DRMs. The watch path is ~95%+ CDN: the player runs hybrid ABR over immutable, cacheable segments. The entire design optimises egress because that's the dominant cost — per-title encoding, AV1, byte-offload, and owned/embedded CDNs are all bytes-on-the-wire levers."</p></div></div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../advanced/uber.html"><span class="pn-k">‹ Back</span><span class="pn-t">Design Uber / ride-hailing</span></a>
+            <a class="next" href="../advanced/payments.html"><span class="pn-k">Next ›</span><span class="pn-t">Design a payment system</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements & capacity</a>
+          <a href="#api">API & data model</a>
+          <a href="#transcode">The upload & transcoding pipeline</a>
+          <a href="#abr">Adaptive bitrate, codecs & the player</a>
+          <a href="#cdn">CDN, the edge & cost</a>
+          <a href="#ops">Failure, multi-region & observability</a>
+          <a href="#recap">Trade-offs & interview recap</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Advanced designs · Design YouTube / video streaming</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+  <script src="../assets/js/capacity.js"></script>
+</body>
+</html>

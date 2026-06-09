@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FastAPI — Databases with SQLModel | FastAPI Field Guide</title>
+  <meta name="description" content="Persist data with SQLModel: table models vs schemas, the engine and sessions, CRUD with select/exec, relationships, and where Alembic migrations fit." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13 2 4 14h6l-1 8 9-12h-6z' fill='%231ec9b0'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="db" data-page="fa-db" data-lesson="fastapi-databases">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="FastAPI Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="#06140f" stroke="#06140f" stroke-width="1.2" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>
+        <span class="brand-text"><b>FastAPI Field Guide</b><span>Runnable visual guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here"><h4>Start here</h4><a class="nav-link" href="../index.html">Home</a></nav>
+      <nav class="nav-group is-py" aria-label="Python">
+        <h4><span class="dot"></span>Python</h4>
+        <a class="nav-link" href="../python/index.html">Setup &amp; tooling</a>
+        <a class="nav-link" href="../python/concepts.html">The refresher</a>
+        <a class="nav-link" href="../python/oop.html">Classes &amp; OOP</a>
+        <a class="nav-link" href="../python/decorators.html">Decorators &amp; closures</a>
+        <a class="nav-link" href="../python/errors.html">Errors &amp; exceptions</a>
+        <a class="nav-link" href="../python/generators.html">Generators &amp; context</a>
+        <a class="nav-link" href="../python/typing.html">Typing in depth</a>
+        <a class="nav-link" href="../python/async.html">Async in depth</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="FastAPI core">
+        <h4><span class="dot"></span>FastAPI core</h4>
+        <a class="nav-link" href="../fastapi/index.html">Overview</a>
+        <a class="nav-link" href="../fastapi/routing.html">Routing &amp; params</a>
+        <a class="nav-link" href="../fastapi/request-body.html">Request body &amp; models</a>
+        <a class="nav-link" href="../fastapi/validation.html">Validation &amp; errors</a>
+        <a class="nav-link" href="../fastapi/dependencies.html">Dependency injection</a>
+      </nav>
+      <nav class="nav-group is-db" aria-label="Databases">
+        <h4><span class="dot"></span>Databases</h4>
+        <a class="nav-link" href="../fastapi/databases.html">SQLModel &amp; CRUD</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#what">Why SQLModel</a>
+          <a class="nav-link" href="#models">Tables &amp; schemas</a>
+          <a class="nav-link" href="#engine">Engine &amp; session</a>
+          <a class="nav-link" href="#crud">CRUD</a>
+          <a class="nav-link" href="#relationships">Relationships</a>
+          <a class="nav-link" href="#migrations">Migrations</a>
+        </div>
+      </nav>
+      <nav class="nav-group is-auth" aria-label="Auth"><h4><span class="dot"></span>Auth &amp; security</h4><a class="nav-link" href="../fastapi/auth.html">OAuth2 &amp; JWT</a></nav>
+      <nav class="nav-group is-adv" aria-label="Advanced"><h4><span class="dot"></span>Advanced</h4><a class="nav-link" href="../fastapi/advanced.html">Async &amp; structure</a></nav>
+      <nav class="nav-group" aria-label="Ship it"><h4>Ship it</h4><a class="nav-link" href="../deploy/index.html">Testing &amp; deployment</a></nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span class="current">Databases (SQLModel)</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">FastAPI · databases</span>
+            <h1>Make your data survive a restart.</h1>
+            <p class="lead">So far everything vanished when the server stopped. A <strong>database</strong> stores data permanently. We'll use <strong>SQLModel</strong> — built by FastAPI's author on top of SQLAlchemy and Pydantic — so your database tables <em>are</em> Pydantic models. One class, used for both.</p>
+          </section>
+
+          <section class="section reveal" id="what">
+            <h2><span class="section-num">01</span> &nbsp;Why SQLModel</h2>
+            <p>SQLModel sits on two giants: <strong>SQLAlchemy</strong> (the battle-tested Python ORM that talks to the database) and <strong>Pydantic</strong> (validation). It glues them so a single class is both a validated data model and a database table.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="bash">pip install sqlmodel
+# we'll use SQLite — a zero-setup file database, perfect for learning</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">SQLModel is pre-1.0</div><p>It's still on <code>0.0.x</code> versions and evolving. The patterns here are current and stable, but check the docs for the latest details. SQLite is great to learn on; switching to PostgreSQL later is mostly a connection-string change.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="models">
+            <h2><span class="section-num">02</span> &nbsp;Table models &amp; schemas</h2>
+            <p>A class with <code>table=True</code> becomes a real database table. It's good practice to also define plain (non-table) models for input and output — so your API contract is separate from your storage.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">models.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from sqlmodel import SQLModel, Field
+
+class HeroBase(SQLModel):           # shared fields
+    name: str = Field(index=True)
+    age: int | None = None
+
+class Hero(HeroBase, table=True):   # the actual table
+    id: int | None = Field(default=None, primary_key=True)
+
+class HeroCreate(HeroBase):         # what POST accepts (no id)
+    pass
+
+class HeroPublic(HeroBase):         # what we return (id included)
+    id: int
+
+class HeroUpdate(SQLModel):         # PATCH — every field optional
+    name: str | None = None
+    age: int | None = None</code></pre></div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="engine">
+            <h2><span class="section-num">03</span> &nbsp;The engine &amp; a session</h2>
+            <p>The <strong>engine</strong> is your connection to the database (create it once). A <strong>session</strong> is a short-lived workspace for a unit of work — you get a fresh one per request via a <code>yield</code> dependency (remember those?).</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">db.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from typing import Annotated
+from fastapi import Depends
+from sqlmodel import SQLModel, Session, create_engine
+
+engine = create_engine("sqlite:///database.db")
+
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)     # create tables if missing
+
+def get_session():
+    with Session(engine) as session:         # opens, then auto-closes
+        yield session
+
+SessionDep = Annotated[Session, Depends(get_session)]</code></pre></div>
+            </div>
+            <p>Call <code>create_db_and_tables()</code> once at startup (we wire that into <code>lifespan</code> on the <a href="../fastapi/advanced.html">Advanced</a> page).</p>
+          </section>
+
+          <section class="section reveal" id="crud">
+            <h2><span class="section-num">04</span> &nbsp;CRUD: create, read, update, delete</h2>
+            <p>With the session injected, the four operations are short. Note SQLModel's own <code>select()</code> + <code>session.exec(...)</code> (not SQLAlchemy's <code>.execute()</code>).</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">routes.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from fastapi import FastAPI, HTTPException
+from sqlmodel import select
+
+app = FastAPI()
+
+@app.post("/heroes", response_model=HeroPublic, status_code=201)
+def create_hero(hero: HeroCreate, session: SessionDep):
+    db_hero = Hero.model_validate(hero)      # HeroCreate -> Hero
+    session.add(db_hero)
+    session.commit()
+    session.refresh(db_hero)                 # reload to get the new id
+    return db_hero
+
+@app.get("/heroes", response_model=list[HeroPublic])
+def list_heroes(session: SessionDep, offset: int = 0, limit: int = 20):
+    return session.exec(select(Hero).offset(offset).limit(limit)).all()
+
+@app.get("/heroes/{hero_id}", response_model=HeroPublic)
+def get_hero(hero_id: int, session: SessionDep):
+    hero = session.get(Hero, hero_id)        # fetch by primary key
+    if not hero:
+        raise HTTPException(404, "Hero not found")
+    return hero
+
+@app.patch("/heroes/{hero_id}", response_model=HeroPublic)
+def update_hero(hero_id: int, data: HeroUpdate, session: SessionDep):
+    hero = session.get(Hero, hero_id)
+    if not hero:
+        raise HTTPException(404, "Hero not found")
+    hero.sqlmodel_update(data.model_dump(exclude_unset=True))  # only sent fields
+    session.add(hero); session.commit(); session.refresh(hero)
+    return hero
+
+@app.delete("/heroes/{hero_id}", status_code=204)
+def delete_hero(hero_id: int, session: SessionDep):
+    hero = session.get(Hero, hero_id)
+    if not hero:
+        raise HTTPException(404, "Hero not found")
+    session.delete(hero); session.commit()</code></pre></div>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Two common trip-ups</div><p>1) Use <code>exclude_unset=True</code> on updates so you only overwrite fields the client actually sent. 2) After <code>commit()</code>, call <code>refresh()</code> if you need server-generated values (like the new <code>id</code>) back on the object.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="relationships">
+            <h2><span class="section-num">05</span> &nbsp;Relationships</h2>
+            <p>Link tables with a foreign key and a <code>Relationship</code> so you can navigate from one object to its related rows in Python.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">relationships.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from sqlmodel import SQLModel, Field, Relationship
+
+class Team(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    heroes: list["Hero"] = Relationship(back_populates="team")
+
+class Hero(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    team_id: int | None = Field(default=None, foreign_key="team.id")
+    team: Team | None = Relationship(back_populates="heroes")
+
+# now: my_hero.team.name   and   my_team.heroes</code></pre></div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="migrations">
+            <h2><span class="section-num">06</span> &nbsp;Migrations (a heads-up)</h2>
+            <p><code>create_all()</code> only <em>creates</em> tables that don't exist — it won't alter an existing table when you change a model later. For evolving a real database safely, you use <strong>migrations</strong>. The standard tool is <strong>Alembic</strong> (it ships with SQLAlchemy): it records each schema change as a versioned script you apply in order.</p>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">For now, learning is fine without it</div><p>While experimenting, deleting the SQLite file and letting <code>create_all()</code> rebuild is perfectly OK. Reach for Alembic once you have data you can't lose.</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">You added a new column to a model. Why didn't it appear in your existing SQLite table?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>SQLModel doesn't support new columns</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>create_all()</code> only creates missing tables — it never alters existing ones; that needs a migration</button>
+                <button class="quiz-opt"><span class="mark"></span>You forgot to call <code>session.commit()</code></button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> <code>create_all()</code> is create-if-missing only. To change an existing table's shape, use a migration tool like Alembic (or, while learning, recreate the database).</div>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../fastapi/dependencies.html"><span class="pn-k">‹ Back</span><span class="pn-t">Dependency injection</span></a>
+            <a class="next" href="../fastapi/auth.html"><span class="pn-k">Next ›</span><span class="pn-t">Auth &amp; security</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#what">Why SQLModel</a>
+          <a href="#models">Tables &amp; schemas</a>
+          <a href="#engine">Engine &amp; session</a>
+          <a href="#crud">CRUD</a>
+          <a href="#relationships">Relationships</a>
+          <a href="#migrations">Migrations</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">FastAPI · Databases with SQLModel</span>
+        <span class="fmono">FastAPI Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/runpad.js"></script>
+  <script src="../assets/js/playground.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

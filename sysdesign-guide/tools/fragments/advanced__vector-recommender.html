@@ -1,0 +1,186 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Advanced · 2026 · embeddings &amp; recsys</span>
+  <h1>Design vector search &amp; a recommender.</h1>
+  <p class="lead">Modern search and recommendations rest on <strong>embeddings</strong>: turn every item and query into a point in high-dimensional space so "similar in meaning" becomes "close together." Finding good results is then "find the nearest points" — a job for <strong>approximate nearest-neighbour (ANN)</strong> indexes. Real recommenders wrap this in a <strong>two-stage funnel</strong>: cheaply retrieve candidates, then expensively rank them. This is the same shape behind 2026's RAG pipelines.</p>
+</section>
+
+<section class="section reveal" id="embeddings">
+  <h2><span class="section-num">01</span> &nbsp;Embeddings &amp; nearest neighbours</h2>
+  <p>Embeddings are dense semantic vectors; nearby vectors are semantically similar (cosine / dot product). "Search" and "recommend" become the <em>same</em> operation: find the nearest points to the query/user.</p>
+  <figure class="viz" data-viz aria-label="Nearest neighbour search">
+    <figcaption class="viz-title">Find the k nearest items to a query</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "graph",
+      "meta": {
+        "width": 520, "height": 250,
+        "nodes": [
+          { "id": "Q", "label": "query", "x": 260, "y": 125 },
+          { "id": "a", "label": "i1", "x": 320, "y": 95 },
+          { "id": "b", "label": "i2", "x": 210, "y": 160 },
+          { "id": "c", "label": "i3", "x": 120, "y": 70 },
+          { "id": "d", "label": "i4", "x": 430, "y": 200 },
+          { "id": "e", "label": "i5", "x": 350, "y": 190 }
+        ],
+        "edges": [ ["Q","a"], ["Q","b"], ["Q","c"], ["Q","d"], ["Q","e"] ]
+      },
+      "frames": [
+        { "active": ["Q"], "dim": ["a","b","c","d","e"], "caption": "The query becomes a point in embedding space." },
+        { "active": ["Q"], "caption": "Every item is also a point. We want the closest ones." },
+        { "active": ["Q"], "visited": ["a","b"], "edgesOn": [["Q","a"],["Q","b"]], "caption": "ANN returns the nearest neighbours: i1 and i2 — the most semantically similar." },
+        { "active": ["Q"], "visited": ["a","b"], "dim": ["c","d","e"], "caption": "Far-away items are skipped. ANN finds these approximately in ~log time, not by scanning all items." }
+      ]
+    }
+    </script>
+  </figure>
+  <p>Exact nearest-neighbour is O(N·dim) per query — for 1B × 768-dim that's ~10¹² FLOPs <em>per query</em>, impossible at QPS. So <strong>ANN</strong> trades a few % recall for 100–1000× speedup. Common dims: 768 (BERT-class), 1536/3072 (OpenAI <span class="mono">text-embedding-3</span>).</p>
+</section>
+
+<section class="section reveal" id="estimate">
+  <h2><span class="section-num">02</span> &nbsp;Capacity estimation</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Raw vectors</td><td>1B × 768 × 4 B (float32)</td><td>≈ <strong>3.07 TB</strong> raw</td></tr>
+        <tr><td>HNSW resident</td><td>+ graph links (~1.5–2×)</td><td>≈ <strong>3–5 TB</strong> RAM (the cost driver)</td></tr>
+        <tr><td>Product quantization</td><td>768-dim → 96 B/vector (~32×)</td><td>≈ <strong>96 GB</strong> (lossy → re-rank with full vectors)</td></tr>
+        <tr><td>DiskANN (SSD)</td><td>compressed in RAM, full on SSD</td><td><strong>~64 GB RAM</strong> serves 1B @ &lt;3 ms, 95%+ recall</td></tr>
+        <tr><td>Feature-store QPS</td><td>1 req × hundreds of candidates × features</td><td><strong>100–1000×</strong> the recommendation QPS</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The headline trade: <strong>memory dominates HNSW cost; disk dominates DiskANN</strong>. A real case compressed a 1B-vector index from a 3 TB-RAM HNSW cluster to a single 96 GB-RAM DiskANN machine (~31× less RAM) searching in ~15 ms — the cost crossover arrives well before 1B vectors.</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">03</span> &nbsp;API &amp; data model</h2>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">search(query, k, filter)</span><span class="ep-note">query → embed → filtered ANN top-K</span></div>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">recommend(user_id, context, k)</span><span class="ep-note">user tower → embed → ANN → rank → filter</span></div>
+  <div class="endpoint"><span class="verb put">PUT</span><span class="path">upsert(item_id, embedding, metadata)</span><span class="ep-note">add/replace vector + payload (deletes are tombstones)</span></div>
+  <div class="kv">
+    <dt>ANN index + vector/metadata store</dt><dd>vectors + payload (category, price, in_stock) for <strong>filtered ANN</strong> ("similar AND in_stock"), separate from the index structure.</dd>
+    <dt>Feature store</dt><dd>precomputed + real-time features for ranking, with online (low-latency KV) / offline (training) parity — serves 100–1000× the rec QPS due to user→item fan-out.</dd>
+    <dt>User profile</dt><dd>often <strong>multiple</strong> interest embeddings per user (not one), e.g. partitioned by category.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="ann">
+  <h2><span class="section-num">04</span> &nbsp;ANN indexes: recall vs latency vs memory</h2>
+  <p>The three families span the cost/quality triangle (recall ↑ costs latency ↑ and/or memory ↑; the curve steepens sharply from 0.95→0.99):</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "ANN index families",
+      "axisLabel": "Where does the index live, and what does it cost?",
+      "stops": [
+        { "label": "HNSW", "dims": { "Recall": 95, "Low latency": 92, "Memory efficiency": 30, "Dynamic updates": 80 }, "note": "Multi-layer navigable small-world graph. Best out-of-box recall (~95%+) and ~1-2 ms in-RAM latency, good incremental inserts — but the whole graph sits in RAM (~1.5-2× raw). ~100-200M vectors/node practical." },
+        { "label": "IVF-PQ", "dims": { "Recall": 70, "Low latency": 72, "Memory efficiency": 92, "Dynamic updates": 35 }, "note": "Inverted-file clusters + product quantization → compressed codes (~32× smaller), low memory. Lower recall, tune nprobe; needs periodic re-clustering as the distribution drifts." },
+        { "label": "DiskANN", "dims": { "Recall": 95, "Low latency": 75, "Memory efficiency": 95, "Dynamic updates": 55 }, "note": "Vamana graph with full vectors on SSD, compressed in RAM. ~1B on a single node, 95%+ recall, <3 ms mean, ~90% less RAM than HNSW. The cost winner well before 1B vectors." }
+      ]
+    }
+    </script>
+  </div>
+  <p>Knobs: HNSW's <span class="mono">M</span> / <span class="mono">ef_search</span>, IVF's <span class="mono">nlist</span> / <span class="mono">nprobe</span>. Pushing the last few points of recall (0.95→0.99) can cost 3–5× latency.</p>
+</section>
+
+<section class="section reveal" id="pipeline">
+  <h2><span class="section-num">05</span> &nbsp;The two-stage recommender</h2>
+  <p>You can't run an expensive cross-feature ranker over a billion items per request. So the funnel: <strong>candidate generation</strong> (cheap, recall-oriented ANN — billions → hundreds) then <strong>ranking</strong> (expensive deep model scores those hundreds with rich features → dozens). In practice multiple retrieval sources run in parallel and merge — a DAG, not a line.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Retrieve candidates, then rank them</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Candidate generation → ranking",
+      "nodes": [
+        { "id": "user", "label": "User", "type": "request", "col": 0, "row": 1 },
+        { "id": "embed", "label": "User tower", "type": "vector", "col": 1, "row": 1 },
+        { "id": "ann", "label": "Vector DB", "type": "ANN index", "col": 2, "row": 0 },
+        { "id": "rank", "label": "Ranking model", "type": "scores ~100s", "col": 2, "row": 2 },
+        { "id": "out", "label": "Results", "type": "top N", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "user", "to": "embed" },
+        { "from": "embed", "to": "ann", "label": "dot-product k-NN" },
+        { "from": "ann", "to": "rank", "label": "~hundreds" },
+        { "from": "rank", "to": "out", "label": "top dozens" }
+      ],
+      "steps": [
+        { "edge": ["user","embed"], "caption": "The user tower turns the user/context into a query embedding (~1 ms)." },
+        { "edge": ["embed","ann"], "caption": "Stage 1 — retrieval: ANN over precomputed item embeddings narrows billions → hundreds, fast.", "status": "hit" },
+        { "edge": ["ann","rank"], "caption": "Stage 2 — ranking: a heavier model scores those candidates with rich cross-features (user × item × context)." },
+        { "edge": ["rank","out"], "caption": "Filter (dedup, diversity, already-seen, policy) → return the top dozens. Cheap-broad then expensive-narrow." }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">two_tower.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python"># Item embeddings are precomputed OFFLINE for the whole catalog and loaded into ANN.
+# Only the user tower runs online -> new items need just an item-tower pass + upsert
+# (no model retrain), so item freshness is cheap.
+
+def recommend(user, k=20):
+    u = user_tower(user.features)                 # online, ~1 ms
+    cands = ann_index.search(u, k=500)            # Stage 1: dot-product top-K (retrieval)
+    scored = rank_model.score(u, cands, features.fetch(user, cands))  # Stage 2: rich
+    return business_rules(scored)[:k]             # dedup / diversity / already-seen</code></pre></div>
+  </div>
+  <p>The two towers (user + item) share an embedding space; the item tower is run offline over the whole catalog, only the user tower runs at request time. Towers deliberately can't see cross-features — that's stage 2's job.</p>
+</section>
+
+<section class="section reveal" id="freshness">
+  <h2><span class="section-num">06</span> &nbsp;Freshness, the stack &amp; RAG</h2>
+  <div class="kv">
+    <dt>Online vs offline</dt><dd>Offline batch embed + index rebuild is simplest but stale (hours); HNSW supports <strong>incremental inserts</strong>, while IVF needs periodic re-clustering. <strong>Deletes are hard</strong> — removing an HNSW node breaks graph links, so use tombstones + periodic compaction (frequent deletes fragment the graph and degrade recall).</dd>
+    <dt>2026 stack</dt><dd>Vector DBs: pgvector (Postgres), Milvus, Qdrant, Weaviate, Pinecone; libraries FAISS / ScaNN / DiskANN (now in SQL Server 2025).</dd>
+    <dt>RAG — the dominant new driver</dt><dd>The same two-stage funnel: hybrid retrieval (dense + BM25) → top-20/50 → <strong>cross-encoder re-rank</strong> (query+doc scored jointly — the highest-ROI single improvement, +15–30% on RAG metrics) → top-3/5 → LLM. Retrieval, not generation, is the 2026 bottleneck.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">07</span> &nbsp;Failure, multi-region, observability &amp; cost</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🧊</span><h4>Stale embeddings</h4><p>Retrain the model but not re-embed the catalog → query and item vectors live in different spaces → silent recall collapse. <strong>Version embeddings; re-embed on model change.</strong></p></div>
+    <div class="card feature"><span class="f-ic fx">❄️</span><h4>Cold-start</h4><p>New user (no vector) / new item (not indexed). Mitigate with content-based item embeddings (item tower needs no history), popularity fallbacks, and exploration (bandits).</p></div>
+    <div class="card feature"><span class="f-ic fx">🧩</span><h4>Sharding</h4><p>Graph indexes resist partitioning (dense global connectivity) → <strong>scatter-gather</strong>: query all shards in parallel, merge top-K. Replicate shards for read QPS; leader-follower (slightly stale reads OK).</p></div>
+    <div class="card feature"><span class="f-ic fx">📊</span><h4>Observability</h4><p><strong>Recall@K</strong> vs brute-force ground truth (alert on regression), p99 latency split by stage (ranking is usually the tail), feature-store fetch latency (its 100–1000× fan-out dominates), index staleness, fallback rate. End-to-end SLO ~200 ms p99.</p></div>
+  </div>
+  <p class="small">Cost: quantize aggressively (PQ/int8) and re-rank survivors with full-precision vectors; DiskANN cuts RAM ~90% vs in-RAM HNSW at 1B scale. How the platforms do it: YouTube/Google two-tower + deep ranker (ScaNN); Spotify two-stage + multiple interest vectors; Meta generative recommenders (HSTU); RAG + cross-encoder rerank everywhere.</p>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">08</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why split a recommender into candidate generation then ranking, instead of ranking everything?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Ranking models can't handle embeddings</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Scoring a precise model over billions of items per request is far too slow; cheap ANN narrows to a few hundred, which the expensive model can then rank in time</button>
+      <button class="quiz-opt"><span class="mark"></span>To use two databases instead of one</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> it's a cost/latency split — broad-and-cheap retrieval (ANN over two-tower embeddings) followed by narrow-and-expensive ranking with rich cross-features. This two-stage shape is how virtually all large-scale search, recsys, and RAG systems hit their latency budget.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"Embed items and queries into one space; retrieval is ANN nearest-neighbour. I'd use a two-tower model — item tower offline over the catalog, user tower online — then ANN for candidate generation and a heavy ranker on the few hundred survivors. Index choice is the cost lever: HNSW for best recall in RAM, DiskANN to serve a billion vectors from SSD at ~90% less RAM. I'd version embeddings to avoid the stale-space trap, use tombstones for deletes, and scatter-gather across shards. The same funnel powers RAG, with a cross-encoder re-ranker as the highest-ROI add."</p></div></div>
+</section>

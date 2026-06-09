@@ -1,0 +1,76 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Fundamentals · estimation</span>
+  <h1>Back-of-the-envelope math.</h1>
+  <p class="lead">Estimation is the step most people skip and interviewers most want to see. It's not about precision — it's about turning "design YouTube" into "≈ 1&nbsp;million writes a day, 100&nbsp;:&nbsp;1 reads, petabytes a year" so your architecture is grounded in reality. The good news: it's three formulas and some rounding.</p>
+</section>
+
+<section class="section reveal" id="why">
+  <h2><span class="section-num">01</span> &nbsp;Why bother</h2>
+  <p>Numbers settle arguments. "Should we shard the database?" is unanswerable until you know it must hold 50&nbsp;TB and one machine holds 2&nbsp;TB — then the answer is obviously yes, and you can say <em>why</em>. Estimation converts hand-waving into decisions.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>It's the same as a builder estimating "this wall needs about 500 bricks." Nobody counts each brick — they multiply length × height × bricks-per-square-metre and round. You're doing exactly that for requests and bytes.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="recipe">
+  <h2><span class="section-num">02</span> &nbsp;The recipe — three formulas</h2>
+  <p>Start from one number you can guess or are told — <strong>daily active users (DAU)</strong> — and a couple of assumptions. Everything else follows.</p>
+  <div class="kv">
+    <dt>Writes per second</dt><dd>DAU × (writes per user per day) ÷ 86,400. There are <strong>~86,400 seconds in a day</strong> — round to <strong>10⁵</strong> to do it in your head.</dd>
+    <dt>Reads per second</dt><dd>writes/s × (read : write ratio). Most consumer apps are heavily read-heavy — 10&nbsp;:&nbsp;1 to 1000&nbsp;:&nbsp;1.</dd>
+    <dt>Peak QPS</dt><dd>average QPS × a peak factor (2–10×). Traffic isn't flat; design for the spike, not the mean.</dd>
+    <dt>Storage</dt><dd>writes/day × bytes per item × retention (days) × replication factor. This is what decides sharding.</dd>
+    <dt>Bandwidth</dt><dd>QPS × bytes per item. Matters most for media (images, video) — often the real bottleneck.</dd>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">The one constant to memorise</div><p><strong>1 day ≈ 86,400 s ≈ 10⁵ s.</strong> So "1 million events/day" ≈ <strong>~12/s</strong> average. Everything else is multiplication.</p></div></div>
+</section>
+
+<section class="section reveal" id="calculator">
+  <h2><span class="section-num">03</span> &nbsp;Try it — a live capacity calculator</h2>
+  <p>Drag the sliders or pick a preset. Watch QPS, storage, and the implied server count update, with the formula shown next to each number. This same calculator appears on the case studies, pre-loaded for each system.</p>
+  <div class="calc" data-calc>
+    <script type="application/json" class="calc-config">
+    {
+      "title": "Estimate any read-heavy service",
+      "preset": "Twitter-scale",
+      "presets": [
+        { "label": "URL shortener", "values": { "dau": 100000000, "writesPerUser": 0.1, "readWrite": 100, "bytesPerItem": 500, "retentionYears": 5, "replication": 3 } },
+        { "label": "Twitter-scale", "values": { "dau": 300000000, "writesPerUser": 2, "readWrite": 100, "bytesPerItem": 300, "retentionYears": 5, "replication": 3 } },
+        { "label": "Chat app", "values": { "dau": 500000000, "writesPerUser": 40, "readWrite": 2, "bytesPerItem": 200, "retentionYears": 2, "replication": 3 } },
+        { "label": "Photo sharing", "values": { "dau": 200000000, "writesPerUser": 2, "readWrite": 50, "bytesPerItem": 2000000, "retentionYears": 5, "replication": 3 } }
+      ],
+      "outputs": ["writeQps","readQps","peakQps","storageTotal","bandwidthOut","servers"]
+    }
+    </script>
+  </div>
+  <p class="muted" style="font-size:13.5px;">These are order-of-magnitude figures — the point is the <em>shape</em> (thousands vs millions of QPS, GB vs PB of storage), which is what your architecture must respect.</p>
+</section>
+
+<section class="section reveal" id="rounding">
+  <h2><span class="section-num">04</span> &nbsp;Round ruthlessly — powers of two &amp; ten</h2>
+  <p>Interviewers want speed, not decimals. Round every number to one significant figure and lean on these:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Round to</th><th>Why it helps</th></tr></thead>
+      <tbody>
+        <tr><td>Seconds in a day</td><td><strong>10⁵</strong> (really 86,400)</td><td>Convert per-day to per-second instantly.</td></tr>
+        <tr><td>2¹⁰</td><td><strong>1 thousand</strong> (1,024)</td><td>KB ≈ 10³ B, MB ≈ 10⁶, GB ≈ 10⁹, TB ≈ 10¹², PB ≈ 10¹⁵.</td></tr>
+        <tr><td>A char / a number</td><td><strong>1–8 bytes</strong></td><td>A tweet ≈ 300 B; a UUID = 16 B; an int = 4–8 B.</td></tr>
+        <tr><td>Month</td><td><strong>~2.5 million s</strong></td><td>30 × 86,400 ≈ 2.6M.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">A service gets 1 billion writes per day. Roughly what's the average write QPS?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>~1,000/s</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>~10,000/s</button>
+      <button class="quiz-opt"><span class="mark"></span>~1,000,000/s</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> 10⁹ ÷ 10⁵ = 10⁴ = ~10,000/s. (Then multiply by a peak factor of 2–10× for the spike you actually design for.)</div>
+  </div>
+</section>

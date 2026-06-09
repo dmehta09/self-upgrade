@@ -1,0 +1,136 @@
+<section class="hero reveal">
+  <span class="eyebrow">Scenario &middot; errors</span>
+  <h1>Scenario: error-rate surge.</h1>
+  <p class="lead">A fast burn-rate alert fires at 14× on the 1-hour window. The checkout service is returning 5xx errors at a rate that would exhaust the monthly error budget in minutes.</p>
+</section>
+
+<section class="section reveal" id="situation">
+  <h2><span class="section-num">01</span> The situation</h2>
+  <p class="takeaway"><b>SLO:</b> 99.9% of requests succeed. Alert fired: 14.4× burn rate, fast window. Error budget burning fast.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>The burn-rate alert is like a fuel gauge dropping to empty in real-time instead of gradually. At 1× burn you'd empty the tank in 30 days. At 14.4× you'd empty it in 50 hours — and at this rate in the 1-hour window, you're losing budget much faster. The fast window catches this before the budget is actually gone.</p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>SLO</dt><dd>99.9% availability (success rate)</dd>
+    <dt>Burn rate</dt><dd>14.4× on the 1-hour window — exhausts 30-day budget in ~50 hours at sustained pace</dd>
+    <dt>Observed error rate</dt><dd>~4.5% (vs. 0.1% budget allowance)</dd>
+    <dt>First question</dt><dd>Which endpoint? Which version? Is this correlated to a recent deploy?</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="burn-widget">
+  <h2><span class="section-num">02</span> The burn-rate indicator</h2>
+  <p>Interact with the slider to see how a 4.5% error rate maps to a burn rate multiple — and which alert tier it triggers.</p>
+
+  <figure class="viz budgetburn" data-budgetburn>
+    <figcaption class="viz-title">Error-rate → burn rate → alert tier</figcaption>
+    <script type="application/json" class="bb-config">
+    { "mode":"burnrate", "slo":99.9 }
+    </script>
+    <p class="viz-fallback">At a 4.5% error rate against a 99.9% SLO: burn rate = 4.5 / 0.1 = 45×. Well above the 14.4× page threshold. The monthly error budget would be exhausted in roughly 16 hours if this continued. At 0.1% error rate the burn rate is 1× — exactly on budget.</p>
+  </figure>
+</section>
+
+<section class="section reveal" id="investigation">
+  <h2><span class="section-num">03</span> Step-by-step investigation</h2>
+
+  <div class="steps">
+    <div class="step">
+      <span class="step-num">1</span>
+      <div class="step-body">
+        <h4>Fast burn alert fires → RED dashboard</h4>
+        <p>Open the Grafana RED panel. Error rate for <code>POST /checkout</code> is 4.5% — started ~12 minutes ago. Latency is normal. Traffic is normal. This is a clean error spike, not a latency problem.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="step-num">2</span>
+      <div class="step-body">
+        <h4>Filter by endpoint and version</h4>
+        <p>Break down the error panel by <code>http.route</code> and deployment version. The errors are 100% on version <code>v2.14.3</code>, deployed 18 minutes ago. All other versions are clean. Deploy correlation found.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="step-num">3</span>
+      <div class="step-body">
+        <h4>Exemplar trace → find the failing span</h4>
+        <p>Click an error exemplar from the error rate panel. The trace shows a <code>createOrder</code> span with status <code>ERROR</code>. Inside it: a call to the <code>payments-service</code> fails with a gRPC <code>UNAVAILABLE</code> status.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="step-num">4</span>
+      <div class="step-body">
+        <h4>Correlated logs → confirm the dependency failure</h4>
+        <p>From the failing span, jump to Loki (filtered by <code>trace_id</code>). Log line: <code>{"event": "payments_call_failed", "reason": "connection refused", "endpoint": "payments-svc:9090", "trace_id": "abc123"}</code>. The v2.14.3 deploy changed the payments service endpoint — wrong host in the config.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="step-num">5</span>
+      <div class="step-body">
+        <h4>Rollback → watch budget recover</h4>
+        <p>Roll back to <code>v2.14.2</code>. Error rate drops to 0.05% within 3 minutes. The burn-rate chart returns to below 1×. Error budget begins recovering. Incident closed.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+      <p>Don't alert on the cause (payments-service health check failing) — alert on the symptom (checkout SLO burn). The payment service might have been flapping for hours without a single checkout failing; the checkout SLO burn is what confirms user impact. Symptom-based alerting prevents false pages and missed true positives.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="narration">
+  <h2><span class="section-num">04</span> Narrate it in an interview (STAR)</h2>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>STAR</th><th>What to say</th></tr></thead>
+      <tbody>
+        <tr><td><strong>S</strong>ituation</td><td>"99.9% availability SLO for checkout. A 14× burn-rate alert fired on the fast window, 12 minutes after a deploy."</td></tr>
+        <tr><td><strong>T</strong>ask</td><td>"Identify which endpoint and version. Find the root cause fast — the budget was burning at 45×."</td></tr>
+        <tr><td><strong>A</strong>ction</td><td>"RED error panel filtered by version — 100% on v2.14.3. Exemplar trace showed a UNAVAILABLE gRPC call to payments-service. Loki log confirmed wrong endpoint in the config. Rolled back."</td></tr>
+        <tr><td><strong>R</strong>esult</td><td>"Error rate dropped to 0.05% within 3 minutes of rollback. Burn rate fell below 1×. Budget recovered over the following hours."</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">You get an alert that the payments service health check is failing. Should you page the on-call engineer?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Yes — a dependency is down, that's always critical.</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Not necessarily — check the checkout SLO burn rate first. Health check failures don't always mean user impact.</button>
+      <button class="quiz-opt"><span class="mark"></span>Only if it's been failing for more than 5 minutes.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Cause-based alerts (health check down) don't confirm user impact. Maybe checkout has retries or circuit breakers. The SLO burn rate tells you if users are actually being affected — that's the signal to page on.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why use a multi-window burn-rate alert instead of a simple error-rate threshold?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>A single error-rate threshold alerts on spikes that might be transient — a 5-second burst triggers the page even if it self-resolves. Multi-window burn rates (e.g. 14.4× on 1-hour AND 6-hour) require sustained budget consumption to fire. The fast window catches big spikes quickly; the slow window filters noise. Together they give high precision — you only page when the budget is genuinely under threat.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"A raw threshold alert pages on transient spikes. Multi-window burn rates require the problem to be sustained — fast window catches big issues, slow window proves it's not a blip."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What's your rollback decision criteria — how do you decide when to rollback vs. hotfix?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>If the error rate is high and the root cause is clearly the deploy (version-correlated, started post-deploy), rollback immediately — don't try to hotfix under pressure. Hotfix only if the rollback would take longer than a targeted code fix, or if the previous version had a known breaking issue. The decision criterion: can you get the SLO back within the budget window faster by reverting or by fixing? Always prefer the fastest path back to SLO.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"If the deploy caused it, roll back first and debug second. Don't hotfix under pressure with users still impacted. Restore service, then do a post-mortem."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

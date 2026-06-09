@@ -1,0 +1,167 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">React &middot; hooks</span>
+            <h1>Hooks, identity &amp; memoization</h1>
+            <p class="lead">Hooks let a plain function hold state across renders. The pro-level insight isn&rsquo;t the API surface &mdash; it&rsquo;s <em>identity</em>: which values stay the same object between renders, and why that decides what re-renders.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">A hook is React <b>remembering something for this component</b> across renders &mdash; matched up by <b>call order</b>, not by name.</p>
+            <p>Your function runs top to bottom every render. React doesn&rsquo;t see your variable names; it lines up each hook call with the slot it used last time, in the same order. That single rule explains the rules of hooks, stale closures, and why refs differ from state.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>Hooks are a row of <b>labeled drawers</b> React opens in the exact same order every render. The 1st <code>useState</code> always opens drawer #1, the 2nd opens drawer #2. Put them behind an <code>if</code> and you open the drawers in the wrong order &mdash; now drawer #2&rsquo;s contents land in the wrong hand.</p>
+              </div>
+            </div>
+
+            <dl class="kv">
+              <dt><code>useState</code></dt><dd>A value React remembers; updating it schedules a render. Updates <b>batch</b> within an event.</dd>
+              <dt><code>useRef</code></dt><dd>A mutable box (<code>.current</code>) React keeps around &mdash; changing it does <b>not</b> render.</dd>
+              <dt><code>useMemo</code> / <code>useCallback</code></dt><dd>Cache a value / a function by identity so it&rsquo;s stable across renders when deps don&rsquo;t change.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="state">
+            <h2><span class="section-num">01</span> useState: functional updates, lazy init, batching</h2>
+            <p>Reach for the <b>functional updater</b> whenever the next value depends on the previous one &mdash; it reads the latest state, not the value captured when the closure was created. Pass a <b>function</b> to <code>useState</code> to compute the initial value only once.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">Counter.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">// Lazy init: readHeavy() runs once, not every render.
+const [items, setItems] = useState(() =&gt; readHeavy());
+
+function addThree() {
+  // Both run; React batches into ONE render.
+  setCount(c =&gt; c + 1); // functional updater sees latest
+  setCount(c =&gt; c + 1); // ...so this adds to the first
+}</code></pre>
+            </div>
+            <p>In React 18+ updates are batched even inside promises, timeouts, and native handlers &mdash; so multiple <code>setState</code> calls in one tick produce a single re-render.</p>
+          </section>
+
+          <section class="section reveal" id="ref">
+            <h2><span class="section-num">02</span> useRef: the mutable box that doesn&rsquo;t render</h2>
+            <p>A ref is for values that should <b>survive renders but not drive the UI</b>: a DOM node, a timer id, the previous value of a prop. Writing <code>ref.current</code> is a side effect &mdash; React neither tracks it nor re-renders.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">useInterval.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">const timer = useRef&lt;number | null&gt;(null);
+// Mutating .current never re-renders the component.
+timer.current = window.setInterval(tick, 1000);
+// Need the UI to update? That has to be state, not a ref.</code></pre>
+            </div>
+            <p class="takeaway">Rule of thumb: if changing it should repaint the screen, it&rsquo;s <b>state</b>. If not, it&rsquo;s a <b>ref</b>.</p>
+          </section>
+
+          <section class="section reveal" id="identity">
+            <h2><span class="section-num">03</span> Identity: useMemo vs useCallback vs useRef</h2>
+            <p>All three exist to keep <em>something</em> stable across renders. They differ in <b>what</b> they stabilize and <b>when</b> it changes. With <b>React Compiler 1.0</b> (GA, stable in 19.2) most memoization is now automatic &mdash; reserve manual ones for measured hotspots.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Hook</th><th>Returns</th><th>Changes when&hellip;</th><th>Use it for</th></tr></thead>
+                <tbody>
+                  <tr><td><strong><code>useMemo</code></strong></td><td>The <em>result</em> of a function</td><td>A dependency changes</td><td>Caching an expensive computation; a stable object/array prop</td></tr>
+                  <tr><td><strong><code>useCallback</code></strong></td><td>The <em>function itself</em></td><td>A dependency changes</td><td>A stable function identity for a <code>memo</code> child or an effect dep</td></tr>
+                  <tr><td><strong><code>useRef</code></strong></td><td>A mutable <code>{ current }</code> box</td><td><em>Never</em> (same object for the component&rsquo;s life)</td><td>Holding a value across renders without re-rendering</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p><code>useCallback(fn, deps)</code> is just <code>useMemo(() =&gt; fn, deps)</code> &mdash; same machinery, sugar for functions.</p>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p><b>Stale closures.</b> A <code>useCallback</code> (or effect) captures the variables in scope when it was created. Omit a value from the deps and the function keeps reading the <em>old</em> one forever &mdash; the classic &ldquo;my counter is stuck at 1&rdquo; bug. Fix: list every value you read, or use a functional updater to dodge the capture entirely.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="rules">
+            <h2><span class="section-num">04</span> Rules of hooks &amp; custom hooks</h2>
+            <p>Two rules, both downstream of the call-order model: call hooks only at the <b>top level</b> (never inside conditions, loops, or nested functions), and only from React functions or other hooks. That guarantees a <b>stable call order</b> every render.</p>
+            <p>A <b>custom hook</b> is just a function whose name starts with <code>use</code> that calls other hooks. It composes stateful logic for reuse &mdash; it does not share state between components; each call gets its own.</p>
+            <div class="versus">
+              <div class="vs-col vs-bad">
+                <div class="vs-h">Breaks call order</div>
+                <div class="codeblock"><pre><code data-lang="tsx">function Profile({ id }) {
+  if (!id) return null;
+  // hook is now conditional
+  const [user, setUser] = useState(null);
+  return &lt;div&gt;{user?.name}&lt;/div&gt;;
+}</code></pre></div>
+              </div>
+              <div class="vs-col vs-good">
+                <div class="vs-h">Stable call order</div>
+                <div class="codeblock"><pre><code data-lang="tsx">function Profile({ id }) {
+  const [user, setUser] = useState(null);
+  // condition AFTER the hooks
+  if (!id) return null;
+  return &lt;div&gt;{user?.name}&lt;/div&gt;;
+}</code></pre></div>
+              </div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why must hooks be called in the same order every render?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>React matches each hook to its stored state by call index, not by name &mdash; order <em>is</em> the identity.</button>
+                <button class="quiz-opt"><span class="mark"></span>Because hooks are async and the order controls timing.</button>
+                <button class="quiz-opt"><span class="mark"></span>It&rsquo;s only a lint style preference, not a real constraint.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Hooks are stored in a list keyed by the order they&rsquo;re called. A conditional hook shifts every later index, so React hands back the wrong slot&rsquo;s state.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What are the rules of hooks, and why do they exist?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Call hooks only at the top level and only from React functions or custom hooks. React tracks hook state by call order, so a conditional or looped hook shifts the indices and returns the wrong state.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Top level only, and only from React functions. Hooks are matched by call order, so conditionals would scramble which state you get back.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">useMemo vs useCallback &mdash; what&rsquo;s the difference?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p><code>useMemo</code> caches the <em>result</em> of calling a function; <code>useCallback</code> caches the <em>function itself</em>. <code>useCallback(fn, d)</code> is literally <code>useMemo(() =&gt; fn, d)</code>. Both stabilize identity so a <code>memo</code> child or effect doesn&rsquo;t see a &ldquo;new&rdquo; value every render.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;useMemo memoizes a value, useCallback memoizes a function &mdash; same machinery. And in React 19 the compiler does most of it for me anyway.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why doesn&rsquo;t mutating a ref trigger a re-render?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>A ref is a plain mutable object React hands you and never inspects again. There&rsquo;s no setter and no subscription, so writing <code>.current</code> can&rsquo;t schedule work. State has a dedicated setter that tells React to re-render; a ref deliberately doesn&rsquo;t.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;A ref is just a box React doesn&rsquo;t watch &mdash; no setter, no subscription. If a change needs to show on screen, it has to be state.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="render-and-rerender.html"><span class="pn-k">Previous</span><span class="pn-t">Render vs re-render</span></a>
+            <a class="next" href="useeffect-mental-model.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">useEffect &mdash; the right mental model</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#state">useState</a>
+          <a href="#ref">useRef</a>
+          <a href="#identity">Identity &amp; memoization</a>
+          <a href="#rules">Rules &amp; custom hooks</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

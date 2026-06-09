@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLD case study — Notification service | The Design Field Guide</title>
+  <meta name="description" content="A low-level design case study of a multi-channel notification service that combines three patterns: Observer (topic subscribers), Strategy (interchangeable Email/SMS/Push channels), and Factory (channel creation) — idiomatic Python 3.13 that honours the Open/Closed Principle." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="lld" data-page="lld-notification" data-lesson="lld-notification">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../lld/index.html" style="color:var(--accent)">LLD</a><span class="sep">/</span><span class="current">Notification service</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">LLD case study · Observer + Strategy + Factory</span>
+            <h1>Designing a notification service.</h1>
+            <p class="lead">This one is a favourite interview question precisely because no single pattern solves it. A good design weaves <strong>three</strong> together — Observer to track who cares, Strategy to swap delivery channels, and Factory to build them — and the payoff is that adding a brand-new channel never touches a line of existing code.</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Clarify the requirements</h2>
+            <p>The brief: a service that delivers messages to users across several channels. Concretely it should:</p>
+            <ul>
+              <li>Send notifications over <strong>multiple channels</strong> — Email, SMS, Push to begin with.</li>
+              <li>Let users <strong>subscribe</strong> to topics / events (e.g. <code>"orders"</code>, <code>"billing"</code>).</li>
+              <li>When an event is <strong>published</strong> to a topic, notify every subscriber.</li>
+              <li>Crucially: <strong>adding a new channel must not require editing existing code.</strong> That's the <a href="../solid/principles.html">Open/Closed Principle</a> — open for extension, closed for modification.</li>
+            </ul>
+            <p>Three distinct concerns are hiding in there. "Who gets told" is a <em>subscription</em> problem. "How they get told" is a <em>delivery</em> problem with interchangeable options. "How a channel comes into existence" is a <em>construction</em> problem. Each maps cleanly onto a classic pattern.</p>
+          </section>
+
+          <!-- 2. DESIGN -->
+          <section class="section reveal" id="design">
+            <h2><span class="section-num">02</span> &nbsp;The approach</h2>
+            <p>Let's name the pieces before writing them:</p>
+            <div class="grid grid-3 stagger">
+              <div class="card feature"><span class="f-ic">📡</span><h4>Channel = Strategy</h4><p>A <code>Channel</code> Protocol with one method, <code>send(user, message)</code>. <code>EmailChannel</code>, <code>SMSChannel</code>, <code>PushChannel</code> are interchangeable implementations.</p></div>
+              <div class="card feature"><span class="f-ic">🏭</span><h4>ChannelFactory = Factory</h4><p><code>ChannelFactory.create("email")</code> turns a string into the right channel object, so callers never hard-code constructors.</p></div>
+              <div class="card feature"><span class="f-ic">🔔</span><h4>NotificationService = Observer</h4><p>Users <code>subscribe(topic, user)</code>; a <code>publish(topic, msg)</code> fans the message out to every subscriber. Subscribers are the "observers."</p></div>
+            </div>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A magazine subscription <span class="tag">analogy</span></div><p>You subscribe to a magazine (Observer): when an issue is published, the publisher mails it to everyone on the list without knowing or caring who they are. <em>How</em> it reaches you — post, email, an app — is the delivery channel (Strategy). And the mailroom that picks the right envelope for your chosen format is the Factory.</p></div></div>
+          </section>
+
+          <!-- 3. DIAGRAM -->
+          <section class="section reveal" id="diagram">
+            <h2><span class="section-num">03</span> &nbsp;The class diagram</h2>
+            <p>The <code>Channel</code> interface with its three implementations (hollow triangle = "implements"), and the <code>NotificationService</code> that holds a channel and a list of subscribers:</p>
+            <div class="diagram">
+              <div class="dg-title">Channel «interface» and its strategies</div>
+              <div class="uml-stack">
+                <div class="umlclass is-interface" style="min-width:230px">
+                  <div class="umlc-name"><span class="umlc-stereo">«interface»</span>Channel</div>
+                  <div class="umlc-methods">
+                    <span>+ send(user, message)</span>
+                  </div>
+                </div>
+                <div class="uml-rel">
+                  <svg viewBox="0 0 96 30" fill="none"><line x1="48" y1="28" x2="48" y2="9" stroke="currentColor" stroke-width="1.6"/><path d="M41 9 L48 2 L55 9 Z" fill="var(--bg-elev)" stroke="currentColor" stroke-width="1.6"/></svg>
+                  <span class="ur-label">implements</span>
+                </div>
+                <div class="uml-row">
+                  <div class="umlclass"><div class="umlc-name">EmailChannel</div><div class="umlc-methods"><span>+ send()</span></div></div>
+                  <div class="umlclass"><div class="umlc-name">SMSChannel</div><div class="umlc-methods"><span>+ send()</span></div></div>
+                  <div class="umlclass"><div class="umlc-name">PushChannel</div><div class="umlc-methods"><span>+ send()</span></div></div>
+                </div>
+              </div>
+              <div class="cap">Each channel is one Strategy; the <code>ChannelFactory</code> (not drawn) builds the right one from a string.</div>
+            </div>
+            <div class="diagram">
+              <div class="dg-title">NotificationService → Channel, and its subscribers</div>
+              <div class="uml-row">
+                <div class="umlclass" style="min-width:215px">
+                  <div class="umlc-name">NotificationService</div>
+                  <div class="umlc-attrs">
+                    <span>- _topics: dict[str, list[User]]</span>
+                    <span>- _channel: Channel</span>
+                  </div>
+                  <div class="umlc-methods">
+                    <span>+ subscribe(topic, user)</span>
+                    <span>+ unsubscribe(topic, user)</span>
+                    <span>+ publish(topic, message)</span>
+                  </div>
+                </div>
+                <div class="uml-rel">
+                  <svg viewBox="0 0 96 30" fill="none"><line x1="2" y1="15" x2="88" y2="15" stroke="currentColor" stroke-width="1.6"/><path d="M88 10 L95 15 L88 20" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+                  <span class="ur-label">sends via</span>
+                </div>
+                <div class="umlclass"><div class="umlc-name"><span class="umlc-stereo">«interface»</span>Channel</div></div>
+              </div>
+              <div class="cap">An <em>association</em> (solid arrow): the service holds and uses a <code>Channel</code> without owning the interface.</div>
+            </div>
+          </section>
+
+          <!-- 4. CODE -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">04</span> &nbsp;The implementation</h2>
+            <p>We model a user as a tiny dataclass, define <code>Channel</code> as a <code>Protocol</code> (structural typing — no inheritance needed), then write the three channels, the factory, and the service.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-tabs"><button class="code-tab active">channels.py</button><button class="code-tab">factory.py</button><button class="code-tab">service.py</button></span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from __future__ import annotations
+from dataclasses import dataclass
+from typing import Protocol
+
+
+@dataclass(frozen=True)
+class User:
+    name: str
+    address: str          # email, phone number, or device id — channel decides
+
+
+class Channel(Protocol):
+    """The Strategy contract. Anything with a matching send() is a Channel —
+    no inheritance required (structural typing)."""
+    def send(self, user: User, message: str) -&gt; None: ...
+
+
+class EmailChannel:
+    def send(self, user: User, message: str) -&gt; None:
+        print(f"  [EMAIL] to {user.address}: {message}")
+
+
+class SMSChannel:
+    def send(self, user: User, message: str) -&gt; None:
+        print(f"  [SMS]   to {user.address}: {message}")
+
+
+class PushChannel:
+    def send(self, user: User, message: str) -&gt; None:
+        print(f"  [PUSH]  to device {user.address}: {message}")</code></pre></div>
+              <div class="code-pane"><pre><code data-lang="python">class ChannelFactory:
+    """The Factory. Maps a string key to a channel constructor, so callers
+    say create('email') instead of importing and newing EmailChannel."""
+
+    _registry: dict[str, type[Channel]] = {
+        "email": EmailChannel,
+        "sms": SMSChannel,
+        "push": PushChannel,
+    }
+
+    @classmethod
+    def create(cls, kind: str) -&gt; Channel:
+        try:
+            return cls._registry[kind]()
+        except KeyError:
+            raise ValueError(f"unknown channel: {kind!r}") from None
+
+    @classmethod
+    def register(cls, kind: str, channel: type[Channel]) -&gt; None:
+        cls._registry[kind] = channel        # lets new channels plug in</code></pre></div>
+              <div class="code-pane"><pre><code data-lang="python">class NotificationService:
+    """The Observer subject. Holds subscribers per topic and one delivery
+    Channel, and fans a published message out to every subscriber."""
+
+    def __init__(self, channel: Channel):
+        self._channel = channel
+        self._topics: dict[str, list[User]] = {}
+
+    def subscribe(self, topic: str, user: User) -&gt; None:
+        subs = self._topics.setdefault(topic, [])
+        if user not in subs:
+            subs.append(user)
+
+    def unsubscribe(self, topic: str, user: User) -&gt; None:
+        if user in self._topics.get(topic, []):
+            self._topics[topic].remove(user)
+
+    def publish(self, topic: str, message: str) -&gt; None:
+        subscribers = self._topics.get(topic, [])
+        print(f"publish '{topic}' -&gt; {len(subscribers)} subscriber(s)")
+        for user in subscribers:              # notify every observer
+            self._channel.send(user, message)</code></pre></div>
+            </div>
+            <p>Three things to notice. The channels <em>don't inherit</em> from <code>Channel</code> — they just match its shape, which is what a <code>Protocol</code> checks. The factory's <code>create</code> hides which class is built. And <code>NotificationService</code> depends only on the <code>Channel</code> abstraction, never on a concrete channel — so it never needs editing when channels change.</p>
+          </section>
+
+          <!-- 5. PATTERNS -->
+          <section class="section reveal" id="patterns">
+            <h2><span class="section-num">05</span> &nbsp;Three patterns, one service</h2>
+            <p>Here's the map from requirement to pattern, and how each contributes to the design:</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Pattern</th><th>What plays the role</th><th>Job in this design</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Observer</strong></td><td><code>NotificationService</code> + per-topic subscriber lists</td><td>Decouples publishers from subscribers — <code>publish</code> doesn't know who's listening.</td></tr>
+                  <tr><td><strong>Strategy</strong></td><td><code>Channel</code> Protocol + Email/SMS/Push</td><td>Delivery is an interchangeable algorithm; swap the channel without touching the service.</td></tr>
+                  <tr><td><strong>Factory</strong></td><td><code>ChannelFactory.create()</code></td><td>Centralises construction; callers pick a channel by name, not by importing classes.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">How the Open/Closed Principle is satisfied</div><p>Adding a Slack channel means: write a <code>SlackChannel</code> with a <code>send()</code>, then <code>ChannelFactory.register("slack", SlackChannel)</code>. You <em>extend</em> the system (new class) without <em>modifying</em> <code>NotificationService</code>, the existing channels, or the factory's source. Because the service depends on the <code>Channel</code> abstraction (Strategy) and never on a concrete type, it simply doesn't care that a new one appeared — that's OCP, made possible by abstraction.</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">Which pattern is responsible for the service notifying many subscribers when one event is published?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Factory</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Observer</button>
+                <button class="quiz-opt"><span class="mark"></span>Strategy</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> Observer is the one-to-many notification pattern. The <code>NotificationService</code> is the subject; subscribers are observers updated on <code>publish</code>.</div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why does adding a <code>SlackChannel</code> <em>not</em> force you to edit <code>NotificationService</code>?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because Python re-imports modules automatically</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Because the service depends on the <code>Channel</code> abstraction, not on any concrete channel — new channels just satisfy the same shape</button>
+                <button class="quiz-opt"><span class="mark"></span>Because Slack happens to be compatible with SMS</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> the service talks to the <code>Channel</code> Protocol only. Any object with a matching <code>send()</code> works, so extension lives entirely in new code — the Open/Closed Principle.</div>
+            </div>
+          </section>
+
+          <!-- 6. WALKTHROUGH -->
+          <section class="section reveal" id="walkthrough">
+            <h2><span class="section-num">06</span> &nbsp;A runnable walkthrough</h2>
+            <p>Build the service with an email channel from the factory, subscribe two users to <code>"orders"</code>, then publish:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">run.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">channel = ChannelFactory.create("email")     # Factory builds the strategy
+service = NotificationService(channel)
+
+alice = User("Alice", "alice@example.com")
+bob   = User("Bob",   "bob@example.com")
+
+service.subscribe("orders", alice)            # Observer: register subscribers
+service.subscribe("orders", bob)
+service.subscribe("billing", bob)             # Bob also cares about billing
+
+service.publish("orders", "Your order #42 has shipped!")
+service.publish("billing", "Invoice #7 is ready.")
+service.publish("promos", "50% off!")         # nobody subscribed</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>publish 'orders' -&gt; 2 subscriber(s)
+  [EMAIL] to alice@example.com: Your order #42 has shipped!
+  [EMAIL] to bob@example.com: Your order #42 has shipped!
+publish 'billing' -&gt; 1 subscriber(s)
+  [EMAIL] to bob@example.com: Invoice #7 is ready.
+publish 'promos' -&gt; 0 subscriber(s)</div>
+            <p>Both subscribers to <code>"orders"</code> were notified; only Bob got the billing message; and the <code>"promos"</code> topic with no subscribers simply notified nobody. Want SMS instead? Build the service with <code>ChannelFactory.create("sms")</code> — not one other line changes.</p>
+          </section>
+
+          <!-- 7. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">07</span> &nbsp;Extend it yourself</h2>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 1 · add Slack without touching existing code (OCP)</div>
+              <p class="ex-q">Add a <code>SlackChannel</code> and make <code>ChannelFactory.create("slack")</code> work — without editing <code>NotificationService</code>, the existing channels, or the factory's class body.</p>
+              <p>Hint: that's exactly what <code>ChannelFactory.register</code> is for.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <p>All-new code; nothing existing is modified. The new class just satisfies the <code>Channel</code> shape and registers itself.</p>
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">slack.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python">class SlackChannel:                      # matches the Channel Protocol
+    def send(self, user: User, message: str) -&gt; None:
+        print(f"  [SLACK] @{user.address}: {message}")
+
+ChannelFactory.register("slack", SlackChannel)   # plug it in
+
+service = NotificationService(ChannelFactory.create("slack"))
+service.subscribe("orders", User("Cara", "cara"))
+service.publish("orders", "Build passed.")</code></pre></div>
+                  </div>
+                  <div class="io-out"><b>Output</b>publish 'orders' -&gt; 1 subscriber(s)
+  [SLACK] @cara: Build passed.</div>
+                  <p>Not a single existing line changed — pure extension. That is the Open/Closed Principle delivered by the Strategy + Factory combo.</p>
+                </div>
+              </div>
+            </div>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 2 · wrap a channel with a retry Decorator</div>
+              <p class="ex-q">Sometimes <code>send</code> fails transiently. Write a <code>RetryChannel</code> that <em>wraps</em> any other channel and retries its <code>send</code> a few times before giving up — without modifying the wrapped channel. This is the Decorator pattern.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <p>A decorator <em>is</em> a <code>Channel</code> (same <code>send</code> shape) and <em>has</em> a <code>Channel</code> it delegates to — composition, not inheritance.</p>
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">retry.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python">class FlakyChannel:
+    """Pretend channel that fails the first attempt, then succeeds."""
+    def __init__(self) -&gt; None:
+        self._attempts = 0
+    def send(self, user: User, message: str) -&gt; None:
+        self._attempts += 1
+        if self._attempts &lt; 2:
+            raise ConnectionError("network blip")
+        print(f"  [FLAKY] to {user.address}: {message}")
+
+
+class RetryChannel:                       # wraps any Channel, is one too
+    def __init__(self, inner: Channel, tries: int = 3) -&gt; None:
+        self._inner = inner
+        self._tries = tries
+    def send(self, user: User, message: str) -&gt; None:
+        for attempt in range(1, self._tries + 1):
+            try:
+                self._inner.send(user, message)
+                return
+            except ConnectionError as e:
+                print(f"  retry {attempt}/{self._tries} after: {e}")
+        print("  giving up after retries")
+
+
+service = NotificationService(RetryChannel(FlakyChannel()))
+service.subscribe("orders", User("Dee", "dee@x.io"))
+service.publish("orders", "Shipped!")</code></pre></div>
+                  </div>
+                  <div class="io-out"><b>Output</b>publish 'orders' -&gt; 1 subscriber(s)
+  retry 1/3 after: network blip
+  [FLAKY] to dee@x.io: Shipped!</div>
+                  <p>The service still thinks it's talking to a plain <code>Channel</code>; the retry logic was layered on transparently. Decorators stack — you could wrap that again with a logging channel.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../lld/vending-machine.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: Vending machine</span></a>
+            <a class="next" href="../advanced/index.html"><span class="pn-k">Next ›</span><span class="pn-t">Advanced cases · overview</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements</a>
+          <a href="#design">The approach</a>
+          <a href="#diagram">Class diagram</a>
+          <a href="#code">Implementation</a>
+          <a href="#patterns">Three patterns</a>
+          <a href="#walkthrough">Walkthrough</a>
+          <a href="#extensions">Extend it yourself</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">LLD · Notification service</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

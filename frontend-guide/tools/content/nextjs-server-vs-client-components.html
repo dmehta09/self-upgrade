@@ -1,0 +1,173 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Next.js &middot; Server vs Client</span>
+            <h1>Server vs Client Components</h1>
+            <p class="lead">React Server Components render on the server and ship <em>zero</em> JS; <code>"use client"</code> marks the boundary where code starts shipping to the browser. Knowing where to draw that line is the single biggest lever on your bundle size.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">Server Components run <b>only on the server</b> and send finished HTML. <code>"use client"</code> opts a subtree into the <b>browser bundle</b>.</p>
+            <p>By default every component in <code>app/</code> is a Server Component: it can be <code>async</code>, read the DB or secrets, and never ships its JS. You add <code>"use client"</code> only where you need interactivity &mdash; state, effects, event handlers, browser APIs.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>A restaurant. The kitchen (server) has the full pantry &mdash; the database, the secrets &mdash; and sends out finished plates (HTML). Only the things diners actually touch &mdash; the call bell, the salt shaker (interactivity) &mdash; live in the dining room (<code>"use client"</code>). You don&rsquo;t ship the whole pantry to every table.</p>
+              </div>
+            </div>
+
+            <figure class="viz rscviz" data-rscviz>
+              <figcaption class="viz-title">Push the boundary down &mdash; ship less JS</figcaption>
+              <script type="application/json" class="rsc-config">
+              {
+                "title": "Product page — flip a node to client",
+                "tree": {
+                  "id": "Page", "kind": "server", "children": [
+                    { "id": "ProductInfo", "kind": "server" },
+                    { "id": "AddToCart", "kind": "client", "toggle": true, "children": [
+                      { "id": "QtyStepper", "kind": "client" },
+                      { "id": "Reviews", "kind": "server", "toggle": true }
+                    ]}
+                  ]
+                },
+                "kb": 13,
+                "note": "AddToCart needs state, so it's a client component. Click it to toggle. Notice Reviews — even authored 'server' — is forced client because its parent is client. Lift Reviews out of AddToCart to keep it on the server."
+              }
+              </script>
+              <p class="viz-fallback">A tree: Page (server) holds ProductInfo (server) and AddToCart (client). AddToCart contains QtyStepper (client) and Reviews. Because AddToCart is a client component, everything under it &mdash; including Reviews &mdash; ships to the browser. Two meters compare components that run on the server vs. KB of JS shipped.</p>
+            </figure>
+
+            <dl class="kv">
+              <dt>Server Component</dt><dd>Default. Renders on the server, can be <code>async</code>, touches DB/secrets, ships no JS.</dd>
+              <dt>Client Component</dt><dd>Marked <code>"use client"</code>. Ships to the browser; can use state, effects, handlers, browser APIs.</dd>
+              <dt>The boundary</dt><dd>Everything <em>imported below</em> a <code>"use client"</code> file becomes client too.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="server">
+            <h2><span class="section-num">01</span> Server Components fetch directly</h2>
+            <p>A Server Component can be <code>async</code> and <code>await</code> data inline &mdash; no <code>useEffect</code>, no client fetch, no loading flash. Secrets stay on the server because the code never reaches the browser.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">app/products/[id]/page.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">// Server Component (default) — runs only on the server.
+import { db } from "@/lib/db";
+import { AddToCart } from "./add-to-cart";
+
+export default async function Page(
+  { params }: { params: Promise&lt;{ id: string }&gt; }
+) {
+  const { id } = await params;
+  const product = await db.product.find(id);   // DB access, no API route
+  return (
+    &lt;section&gt;
+      &lt;h1&gt;{product.name}&lt;/h1&gt;
+      &lt;AddToCart id={product.id} /&gt;   {/* island of interactivity */}
+    &lt;/section&gt;
+  );
+}</code></pre>
+            </div>
+          </section>
+
+          <section class="section reveal" id="client">
+            <h2><span class="section-num">02</span> Mark the interactive island</h2>
+            <p><code>"use client"</code> at the top of a file makes it (and its imports) part of the browser bundle. Put it on the <em>leaf</em> that needs state &mdash; not the page.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">app/products/[id]/add-to-cart.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">"use client";
+import { useState } from "react";
+
+export function AddToCart({ id }: { id: string }) {
+  const [qty, setQty] = useState(1);          // state ⇒ must be client
+  return (
+    &lt;button onClick={() =&gt; addItem(id, qty)}&gt;
+      Add {qty} to cart
+    &lt;/button&gt;
+  );
+}</code></pre>
+            </div>
+
+            <p>A client component can still <em>render</em> server components &mdash; if you pass them as <code>children</code>. The server renders them and hands the client wrapper finished output to slot in.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">app/dashboard/page.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">// Server page passes a Server Component INTO a client wrapper.
+import { Collapsible } from "./collapsible";   // "use client"
+import { Report } from "./report";             // server, async
+
+export default function Page() {
+  return (
+    &lt;Collapsible&gt;
+      &lt;Report /&gt;   {/* stays server — it's children, not imported by the client file */}
+    &lt;/Collapsible&gt;
+  );
+}</code></pre>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>Two traps. (1) Props crossing the boundary must be <b>serializable</b> &mdash; you can&rsquo;t pass a function or a class instance from a server parent to a client child. (2) Slapping <code>"use client"</code> on a big parent drags its <em>whole imported subtree</em> into the browser. Push the directive down to the leaf.</p>
+              </div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">You add <code>"use client"</code> to your top-level <code>Layout</code> so one button can have an <code>onClick</code>. What happens?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>The entire imported subtree becomes client &mdash; you ship far more JS and lose server-only data access in it.</button>
+                <button class="quiz-opt"><span class="mark"></span>Only the button becomes client; React isolates it automatically.</button>
+                <button class="quiz-opt"><span class="mark"></span>Nothing changes &mdash; <code>"use client"</code> only affects the file it&rsquo;s in.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> <code>"use client"</code> marks a boundary: every component imported under it ships to the browser. Extract the button into its own <code>"use client"</code> leaf and keep the layout on the server.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why do Server Components improve performance?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>They render on the server and ship no JavaScript, so the client bundle shrinks to just the interactive islands. Data fetching happens next to the data (no client round-trips), and the user gets HTML immediately. Less JS means faster hydration and better INP.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;They ship zero JS and fetch next to the data. The browser only downloads the interactive islands, so the bundle and hydration cost drop.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What can&rsquo;t cross the server&ndash;client boundary?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Props passed from a server component to a client component must be serializable &mdash; plain objects, arrays, primitives, dates. Functions, class instances and JSX-producing render props can&rsquo;t cross. The exception is <code>children</code>: a server component rendered as children is sent as already-rendered output.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Only serializable props &mdash; no functions or class instances. You can still pass a server component as children, because that&rsquo;s sent as rendered output.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Where should you put <code>"use client"</code>?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>As far <em>down</em> the tree as possible &mdash; on the smallest leaf that actually needs state, effects or handlers. The directive turns its whole imported subtree into client code, so a high boundary balloons the bundle. Keep data-heavy parents on the server and isolate interactivity into small islands.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;On the smallest interactive leaf. Pushing the boundary down keeps parents on the server and ships the least JS.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="app-router.html"><span class="pn-k">Previous</span><span class="pn-t">The App Router model</span></a>
+            <a class="next" href="rendering-strategies.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Rendering strategies: SSR/SSG/ISR/PPR</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#server">Server Components fetch directly</a>
+          <a href="#client">Mark the interactive island</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

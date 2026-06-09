@@ -1,0 +1,129 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Testing &middot; end-to-end</span>
+            <h1>End-to-end with Playwright</h1>
+            <p class="lead">E2E is the top of the trophy &mdash; the thinnest layer. <b>Playwright</b> drives a real browser through your actual app: real navigation, real network, real rendering. It&rsquo;s the highest-confidence test you can write, and the slowest &mdash; so you reserve it for the flows that truly matter.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">Playwright is a <b>robot user</b> in a <b>real browser</b>. Same locators as RTL (<code>getByRole</code>), plus <b>auto-waiting</b> &mdash; so no manual sleeps.</p>
+            <p>You script a user&rsquo;s journey &mdash; visit a URL, click, type, expect &mdash; and Playwright executes it in Chromium, Firefox, or WebKit. Locators are lazy and resilient, and every action and assertion automatically waits for the element to be ready, which kills the timing flakiness that plagues older e2e tools.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>It&rsquo;s a tireless robot QA tester. You hand it a checklist &mdash; &ldquo;log in, add to cart, check out&rdquo; &mdash; and it sits at a real browser and does exactly that, every time, in seconds. It even waits patiently for slow pages on its own, so it never clicks a button that hasn&rsquo;t appeared yet.</p>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>&nbsp;</th><th>Unit / Integration (Vitest + RTL)</th><th>End-to-end (Playwright)</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Speed</strong></td><td>Milliseconds &mdash; runs on every save.</td><td>Seconds per test &mdash; real browser + server.</td></tr>
+                  <tr><td><strong>Confidence</strong></td><td>High for a unit/feature in isolation.</td><td>Highest &mdash; the whole stack wired together.</td></tr>
+                  <tr><td><strong>Environment</strong></td><td>jsdom or Browser Mode; mocked network.</td><td>Real browser, real routing, real (or seeded) backend.</td></tr>
+                  <tr><td><strong>When to use</strong></td><td>Most of your tests &mdash; the trophy&rsquo;s wide middle.</td><td>A few critical flows: auth, checkout, signup.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section reveal" id="example">
+            <h2><span class="section-num">01</span> A Playwright test</h2>
+            <p>Same readable shape as an RTL test &mdash; <code>page.goto</code> then role-based locators &mdash; but it&rsquo;s driving a real browser. The web-first <code>expect</code> auto-retries until the assertion passes or times out, so you never write <code>waitForTimeout</code>.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">checkout.spec.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">import { test, expect } from "@playwright/test";
+
+test("user can check out", async ({ page }) =&gt; {
+  await page.goto("/cart");
+  // locator: same role-first idea as RTL
+  await page.getByRole("button", { name: /checkout/i }).click();
+  await page.getByLabel("Card number").fill("4242 4242 4242 4242");
+  await page.getByRole("button", { name: /pay/i }).click();
+
+  // web-first assertion: auto-waits, no manual sleep
+  await expect(page.getByRole("heading", { name: /order confirmed/i })).toBeVisible();
+});</code></pre>
+            </div>
+            <p>When a test does fail, Playwright&rsquo;s <b>trace viewer</b> replays each step with DOM snapshots and network, and <b>fixtures</b> let you share setup (a logged-in <code>page</code>) cleanly across tests.</p>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>Don&rsquo;t e2e everything. End-to-end tests are slow and the most flake-prone &mdash; a giant e2e suite becomes a CI bottleneck people start ignoring. Cover the handful of critical paths (login, payment, signup) with Playwright and push everything else down to fast integration tests.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="balance">
+            <h2><span class="section-num">02</span> Balancing the trophy</h2>
+            <p>Every flow could be tested at multiple layers; the skill is choosing the cheapest layer that gives real confidence. Validation logic? Integration. The end-to-end happy path of your money-maker? That&rsquo;s what e2e is for.</p>
+            <dl class="kv">
+              <dt>Reach for e2e when</dt><dd>The flow spans pages, services, and real navigation &mdash; and breaking it would be a business incident (checkout, auth).</dd>
+              <dt>Stay in integration when</dt><dd>You&rsquo;re verifying a component or feature&rsquo;s behavior &mdash; faster feedback, far less flake.</dd>
+            </dl>
+
+            <div class="quiz" data-quiz>
+              <p class="q">You need to verify a form&rsquo;s field-validation rules (required, email format, min length). Best layer?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Integration (Vitest + RTL) &mdash; fast, focused, and no full browser needed.</button>
+                <button class="quiz-opt"><span class="mark"></span>End-to-end in Playwright across all three browsers.</button>
+                <button class="quiz-opt"><span class="mark"></span>It doesn&rsquo;t matter &mdash; pick whichever.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Validation is component-level logic &mdash; integration tests cover it in milliseconds. Save Playwright for the critical end-to-end journey (e.g. submitting the form actually creates the account), not every validation branch.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When do you reach for e2e over unit/integration?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>When a flow crosses page, network, and service boundaries and breaking it would be a real incident &mdash; auth, checkout, signup. E2e gives the highest confidence because it exercises the whole stack, but it&rsquo;s slow and flakier, so I keep the suite small and let fast integration tests cover everything else.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;For the few business-critical journeys that span the whole stack. Highest confidence, but slow &mdash; so I cover critical paths only and push the rest to integration.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What are locators and auto-waiting?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>A locator is a lazy, reusable handle to an element &mdash; usually <code>getByRole</code> &mdash; resolved fresh each time it&rsquo;s used. Auto-waiting means Playwright automatically waits for an element to be present, visible, and actionable before clicking, and its web-first <code>expect</code> retries until the assertion holds. Together they eliminate manual sleeps and most flakiness.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Locators are lazy role-based handles; auto-waiting means every action and assertion waits for the element to be ready. So no <code>sleep</code> calls and far less flake.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you balance the testing trophy?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Lean on the layer with the best confidence-per-second: TypeScript and lint as a free base, a wide band of Vitest + RTL integration tests, some unit tests for tricky pure logic, and a thin top of Playwright e2e for critical flows only. The goal is maximum confidence with a suite that stays fast and isn&rsquo;t flaky.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Static types at the base, lots of integration in the middle, a few units, and a thin e2e top for critical flows. Confidence per second is the metric.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="vitest-and-rtl.html"><span class="pn-k">Previous</span><span class="pn-t">Vitest + React Testing Library</span></a>
+            <a class="next" href="../ship/index.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Ship it &mdash; tooling, a11y &amp; deploy</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#example">A Playwright test</a>
+          <a href="#balance">Balancing the trophy</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

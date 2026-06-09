@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced cases — overview &amp; concurrency primer | The Design Field Guide</title>
+  <meta name="description" content="The advanced LLD case studies: what makes them harder, a reusable concurrency primer (race conditions, threading.Lock, the GIL, atomic critical sections in Python), and a map of nine cases to the patterns each teaches." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="adv" data-page="adv-overview" data-lesson="adv-overview">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span class="current">Advanced cases</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Advanced cases · overview</span>
+            <h1>The cases that separate seniors.</h1>
+            <p class="lead">The <a href="../lld/index.html">six-step method</a> doesn't change here — but the design decisions get harder. These nine studies layer in <strong>custom data structures</strong>, two patterns you haven't met yet (<strong>Chain of Responsibility</strong>, <strong>Composite</strong>), and the dimension the classic cases skipped: <strong>concurrency</strong>. Start with the primer below, then take them in order.</p>
+          </section>
+
+          <!-- 1. WHAT MAKES THESE ADVANCED -->
+          <section class="section reveal" id="what">
+            <h2><span class="section-num">01</span> &nbsp;What makes a case "advanced"</h2>
+            <p>The classic cases (parking lot, vending machine, notification service) are about <em>modelling</em> — finding the right classes and wiring them cleanly. These advanced ones keep all of that and add one or more of:</p>
+            <div class="grid grid-2 stagger">
+              <div class="card feature"><span class="f-ic">🧮</span><h4>Custom data structures</h4><p>An LRU cache isn't a pattern — it's a <code>HashMap</code> + a doubly linked list designed together for O(1) operations. You build the structure, not just arrange classes.</p></div>
+              <div class="card feature"><span class="f-ic">🧵</span><h4>Concurrency</h4><p>Booking the same seat from two threads, refilling a token bucket, fanning a message out to subscribers — many of these break unless you reason about <em>shared mutable state</em>.</p></div>
+              <div class="card feature"><span class="f-ic">🧩</span><h4>More patterns, combined</h4><p>Chain of Responsibility, Composite, Strategy, Observer and State show up — often two or three in one design, each doing one job.</p></div>
+              <div class="card feature"><span class="f-ic">⚖️</span><h4>Real trade-offs</h4><p>Optimistic vs pessimistic locking, batch vs real-time matching, token bucket vs sliding window. The interviewer wants the <em>why</em>, not just code.</p></div>
+            </div>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">Same recipe, tougher ingredients <span class="tag">analogy</span></div><p>You still cook with the same method — scope it, find the entities, draw it, build it. But now some ingredients are slippery: shared state that two cooks grab at once. Most of the new skill is learning to put a lock on the one drawer they both reach into.</p></div></div>
+          </section>
+
+          <!-- 2. CONCURRENCY PRIMER -->
+          <section class="section reveal" id="concurrency">
+            <h2><span class="section-num">02</span> &nbsp;The concurrency primer</h2>
+            <p>Several cases below share one new hazard, so we cover it once, here. A <strong>race condition</strong> happens when two threads touch the same data at the same time and the result depends on who got there first. The classic culprit is <strong>read–modify–write</strong>: <code>x += 1</code> looks like one step but is really three — read <code>x</code>, add one, write it back — and a thread can be paused mid-way.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">Two people, one shared notebook <span class="tag">analogy</span></div><p>You both read "balance: 100", each add 50 in your head, and each write "150". Two deposits happened; the notebook says 150, not 200. One update was <em>lost</em>. A <strong>lock</strong> is the rule "hold the pen before you read, put it down after you write" — now the second person sees 150 and writes 200.</p></div></div>
+            <p>Watch it happen. Five threads each increment a counter 100,000 times; the total <em>should</em> be 500,000:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-tabs"><button class="code-tab active">Racy (lost updates)</button><button class="code-tab">Fixed with a Lock</button></span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import threading
+
+class Counter:
+    def __init__(self):
+        self.value = 0
+    def increment(self):
+        self.value += 1            # read, +1, write — three steps, not one
+
+c = Counter()
+def work():
+    for _ in range(100_000):
+        c.increment()
+
+threads = [threading.Thread(target=work) for _ in range(5)]
+for t in threads: t.start()
+for t in threads: t.join()
+
+print(c.value)                     # NOT 500000 — updates were lost</code></pre></div>
+              <div class="code-pane"><pre><code data-lang="python">import threading
+
+class Counter:
+    def __init__(self):
+        self.value = 0
+        self._lock = threading.Lock()
+    def increment(self):
+        with self._lock:           # only ONE thread inside at a time
+            self.value += 1        # now the 3 steps can't be interleaved
+
+c = Counter()
+def work():
+    for _ in range(100_000):
+        c.increment()
+
+threads = [threading.Thread(target=work) for _ in range(5)]
+for t in threads: t.start()
+for t in threads: t.join()
+
+print(c.value)                     # 500000 — always</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>Racy:  482137   (a different wrong number each run)
+Fixed:  500000</div>
+            <p>The fix is a <code>threading.Lock</code> guarding the <strong>critical section</strong> — the few lines that read-then-write shared state. <code>with self._lock:</code> acquires the lock on entry and releases it on exit (even if an exception fires). Keep critical sections <em>small</em>: lock, touch the shared data, unlock.</p>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">"Doesn't the GIL make Python thread-safe?" — no</div><p>CPython's Global Interpreter Lock means one thread runs bytecode at a time, but a thread can still be <em>switched out between bytecodes</em> — right in the middle of <code>read → add → write</code>. So compound operations like <code>x += 1</code>, "check then act", and "find a free seat then book it" are <strong>not</strong> atomic. You still need your own lock. (A single <code>list.append</code> happens to be atomic in CPython, but never rely on that for your own multi-step logic.)</p></div></div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">The toolbox you'll reuse</div><p><strong><code>Lock</code></strong> — one holder at a time (mutual exclusion). <strong><code>RLock</code></strong> — re-entrant; the same thread can acquire it twice (handy when a locked method calls another locked method). <strong><code>Queue</code></strong> (from <code>queue</code>) — a thread-safe FIFO, so producers and consumers hand off work without their own locks. <strong>Optimistic locking</strong> — don't lock; attach a version number and retry if it changed. We use each of these in the cases below.</p></div></div>
+          </section>
+
+          <!-- 3. THE PATTERN MAP -->
+          <section class="section reveal" id="map">
+            <h2><span class="section-num">03</span> &nbsp;The nine cases, and what each teaches</h2>
+            <p>Take them top-to-bottom — they escalate from a pure data-structure build to a concurrency-heavy capstone. Each links the patterns and SOLID ideas from earlier modules.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>#</th><th>Case</th><th>Headline skill / patterns</th><th>Concurrency</th></tr></thead>
+                <tbody>
+                  <tr><td>1</td><td><a href="../advanced/lru-cache.html">LRU / LFU cache</a></td><td>Custom data structure: HashMap + doubly linked list, O(1) get/put</td><td>thread-safe variant</td></tr>
+                  <tr><td>2</td><td><a href="../advanced/logging-framework.html">Logging framework</a></td><td><strong>Chain of Responsibility</strong> · Open/Closed</td><td>light</td></tr>
+                  <tr><td>3</td><td><a href="../advanced/file-system.html">In-memory file system</a></td><td><strong>Composite</strong> · tree recursion</td><td>light</td></tr>
+                  <tr><td>4</td><td><a href="../advanced/elevator-system.html">Elevator system</a></td><td><strong>State</strong> + scheduling <strong>Strategy</strong> (SCAN)</td><td>conceptual</td></tr>
+                  <tr><td>5</td><td><a href="../advanced/splitwise.html">Splitwise</a></td><td>Split <strong>Strategy</strong> + debt-simplification graph</td><td>moderate</td></tr>
+                  <tr><td>6</td><td><a href="../advanced/rate-limiter.html">Rate limiter</a></td><td><strong>Strategy</strong>: token bucket vs sliding window · locks</td><td>real</td></tr>
+                  <tr><td>7</td><td><a href="../advanced/movie-booking.html">Movie booking</a></td><td>Seat locking · optimistic concurrency · payment hold</td><td>real (centerpiece)</td></tr>
+                  <tr><td>8</td><td><a href="../advanced/pubsub-queue.html">Pub/Sub queue</a></td><td>async <strong>Observer</strong> · thread-safe queues · thread pool</td><td>real</td></tr>
+                  <tr><td>9</td><td><a href="../advanced/ride-hailing.html">Ride-hailing</a></td><td>Matching <strong>Strategy</strong> + <strong>Observer</strong> + geospatial grid</td><td>real (capstone)</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why is <code>self.value += 1</code> unsafe across threads even with CPython's GIL?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>It isn't — the GIL makes all Python operations atomic</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>It's three bytecodes (read, add, write) and a thread can be switched out between them</button>
+                <button class="quiz-opt"><span class="mark"></span>Because integers are immutable in Python</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> the GIL serialises individual bytecodes, not your logical operation. The read–modify–write can be interrupted mid-way, so two threads can both read the same value and one update is lost. A lock makes the three steps indivisible.</div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">What's the rule of thumb for the size of a critical section (the code under a lock)?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>As large as possible — lock the whole method to be safe</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>As small as possible — just the lines that touch shared mutable state</button>
+                <button class="quiz-opt"><span class="mark"></span>It doesn't matter for correctness or speed</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> a lock serialises everything inside it, so a big critical section throttles throughput and risks deadlock. Lock the minimum — read/modify/write the shared data, then release.</div>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../lld/notification-service.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: Notification service</span></a>
+            <a class="next" href="../advanced/lru-cache.html"><span class="pn-k">Next ›</span><span class="pn-t">Case: LRU / LFU cache</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#what">What's "advanced"</a>
+          <a href="#concurrency">Concurrency primer</a>
+          <a href="#map">The nine cases</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Advanced cases · Overview</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

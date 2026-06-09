@@ -1,0 +1,166 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">React &middot; effects</span>
+            <h1>useEffect &mdash; the right mental model</h1>
+            <p class="lead">Most <code>useEffect</code> pain comes from one wrong belief: that it&rsquo;s a lifecycle hook. It isn&rsquo;t. It&rsquo;s a tool to <b>synchronize your component with an external system</b> &mdash; and most of the time you don&rsquo;t need it at all.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">An effect <b>syncs React with the outside world</b> &mdash; a subscription, the DOM, a timer, an analytics SDK. It is not &ldquo;run code after render.&rdquo;</p>
+            <p>You declare: &ldquo;given this state, this external thing should be set up like so.&rdquo; React runs the effect after commit, re-runs it when the dependencies change, and runs your <em>cleanup</em> before each re-run and on unmount. Think continuous synchronization, not a sequence of lifecycle events.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>A <b>thermostat</b>. You set a target (your state); the thermostat keeps the room (an external system) in sync with it. When the target changes it adjusts; when you leave it shuts off the heating (cleanup). It&rsquo;s not &ldquo;do X once&rdquo; &mdash; it&rsquo;s &ldquo;keep the world matching this value.&rdquo;</p>
+              </div>
+            </div>
+
+            <figure class="viz efftimeline" data-efftimeline>
+              <figcaption class="viz-title">Mount &rarr; dep change &rarr; unmount</figcaption>
+              <script type="application/json" class="et-config">
+              {
+                "title": "An effect over a component's life",
+                "lanes": ["render", "commit (DOM)", "effect", "cleanup"],
+                "passes": ["mount", "count: 0→1", "unmount"],
+                "frames": [
+                  { "col": "mount", "lane": "render", "caption": "Mount: React renders the component to get its JSX." },
+                  { "col": "mount", "lane": "commit (DOM)", "caption": "React commits the DOM. The screen is now painted." },
+                  { "col": "mount", "lane": "effect", "note": "subscribe", "caption": "After paint, the effect runs: it subscribes / sets up the external system." },
+                  { "col": "count: 0→1", "lane": "render", "caption": "A dep changed, so React re-renders with the new value." },
+                  { "col": "count: 0→1", "lane": "cleanup", "note": "unsubscribe", "caption": "Cleanup from the PREVIOUS run fires first — tearing down the old subscription." },
+                  { "col": "count: 0→1", "lane": "effect", "note": "re-subscribe", "caption": "Then the effect re-runs with the new deps, re-syncing the external system." },
+                  { "col": "unmount", "lane": "cleanup", "note": "unsubscribe", "caption": "On unmount only cleanup runs — no new effect. The world is left tidy." }
+                ]
+              }
+              </script>
+              <p class="viz-fallback">On mount: render, commit to the DOM, then the effect runs (subscribe). On a dependency change: re-render, the previous cleanup runs (unsubscribe), then the effect re-runs (re-subscribe). On unmount: only cleanup runs. Cleanup always runs before the next effect and on teardown.</p>
+            </figure>
+          </section>
+
+          <section class="section reveal" id="deps">
+            <h2><span class="section-num">01</span> Dependencies &amp; cleanup</h2>
+            <p>The deps array means <b>&ldquo;re-sync when any of these change.&rdquo;</b> It is not an optimization knob &mdash; it is the list of every reactive value the effect reads. Cleanup is the inverse of setup: it undoes whatever the effect did, and runs <b>before every re-run</b> and on unmount.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">ChatRoom.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">useEffect(() =&gt; {
+  const conn = createConnection(roomId); // setup
+  conn.connect();
+  return () =&gt; conn.disconnect();        // cleanup
+}, [roomId]); // re-sync whenever roomId changes</code></pre>
+            </div>
+            <p>Change <code>roomId</code> and React tears down the old connection, then opens the new one &mdash; automatically. That&rsquo;s synchronization, expressed declaratively.</p>
+          </section>
+
+          <section class="section reveal" id="not-an-effect">
+            <h2><span class="section-num">02</span> When you don&rsquo;t need an effect</h2>
+            <p>Two huge categories don&rsquo;t belong in effects. <b>Derived data</b> &mdash; anything you can compute from existing props/state &mdash; should be computed <em>during render</em>. <b>Event logic</b> &mdash; &ldquo;do X when the user clicks&rdquo; &mdash; belongs in the event handler, not a reactive effect.</p>
+            <div class="versus">
+              <div class="vs-col vs-bad">
+                <div class="vs-h">Anti-pattern: derive in an effect</div>
+                <div class="codeblock"><pre><code data-lang="tsx">const [list, setList] = useState(items);
+const [full, setFull] = useState("");
+// ❌ extra render + stale risk
+useEffect(() =&gt; {
+  setFull(first + " " + last);
+}, [first, last]);</code></pre></div>
+              </div>
+              <div class="vs-col vs-good">
+                <div class="vs-h">Better: derive during render</div>
+                <div class="codeblock"><pre><code data-lang="tsx">const [first, setFirst] = useState("");
+const [last, setLast] = useState("");
+// ✅ just compute it — no effect, no extra state
+const full = first + " " + last;</code></pre></div>
+              </div>
+            </div>
+            <p class="takeaway">If a value can be calculated from what you already have, <b>calculate it in render</b>. Reserve effects for genuinely external systems.</p>
+          </section>
+
+          <section class="section reveal" id="strict-and-event">
+            <h2><span class="section-num">03</span> Strict Mode &amp; non-reactive values</h2>
+            <p>In development, <b>Strict Mode</b> mounts each component, unmounts it, and mounts it again &mdash; so every effect runs setup &rarr; cleanup &rarr; setup. This is a feature: it surfaces missing or wrong cleanup loudly. A correct effect is unbothered by it.</p>
+            <p>Sometimes an effect reads a value it should <em>not</em> re-sync on (the latest callback, say). React 19.2&rsquo;s <code>useEffectEvent</code> extracts that non-reactive logic so it always sees fresh values without becoming a dependency.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">useEffectEvent.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">// onConnected always sees the latest theme,
+// but theme is NOT a dependency — no needless re-sync.
+const onConnected = useEffectEvent(() =&gt; {
+  showToast("Connected!", theme);
+});
+useEffect(() =&gt; {
+  const conn = createConnection(roomId);
+  conn.on("open", onConnected);
+  return () =&gt; conn.disconnect();
+}, [roomId]); // theme intentionally absent</code></pre>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p><b>Don&rsquo;t lie to the deps array.</b> Removing a value just to silence the lint rule doesn&rsquo;t stop the effect needing it &mdash; it just makes the effect read a <em>stale</em> copy. Either list every reactive value you read, or restructure (functional updaters, <code>useEffectEvent</code>) so you genuinely don&rsquo;t depend on it.</p>
+              </div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">In React Strict Mode (dev), your effect&rsquo;s setup and cleanup each run twice on mount. What does that usually indicate?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Nothing&rsquo;s wrong &mdash; it&rsquo;s the intentional double-invoke to verify your cleanup is correct.</button>
+                <button class="quiz-opt"><span class="mark"></span>A bug in your effect that doubles the work in production too.</button>
+                <button class="quiz-opt"><span class="mark"></span>That you forgot the dependency array.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Strict Mode double-invokes effects in development only, to expose missing/incorrect cleanup. If the second cleanup+setup leaves you in a bad state, your cleanup is incomplete &mdash; that&rsquo;s the bug it&rsquo;s catching.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is useEffect actually for?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Synchronizing your component with an <em>external</em> system &mdash; subscriptions, the DOM, timers, non-React widgets. It&rsquo;s not a lifecycle hook. Derived data goes in render; user-action logic goes in event handlers.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;It synchronizes React with the outside world. If I&rsquo;m not touching an external system, I probably don&rsquo;t need an effect &mdash; I compute in render or handle it in an event.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why does my effect run twice in development?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Strict Mode deliberately mounts, unmounts, and remounts components in dev, so effects run setup&ndash;cleanup&ndash;setup. It&rsquo;s a probe for missing cleanup; production runs once. A correctly written effect handles it without side effects leaking.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Strict Mode double-invokes effects in dev to catch missing cleanup. If that breaks something, the cleanup&rsquo;s wrong &mdash; not the double-invoke.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What are the classic deps-array footguns?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Omitting values to dodge re-runs (causes stale reads), and unstable deps &mdash; an inline object/function that&rsquo;s new each render &mdash; causing an infinite re-sync loop. Fix with functional updaters, stable identities, or <code>useEffectEvent</code> for non-reactive values.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Two traps: lying about deps gives stale values, and an unstable dep loops forever. I never trim the array to silence lint &mdash; I restructure instead.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="hooks-deep-dive.html"><span class="pn-k">Previous</span><span class="pn-t">Hooks, identity &amp; memoization</span></a>
+            <a class="next" href="composition-and-context.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Composition &amp; context</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#deps">Dependencies &amp; cleanup</a>
+          <a href="#not-an-effect">When you don&rsquo;t need one</a>
+          <a href="#strict-and-event">Strict Mode &amp; events</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

@@ -1,0 +1,170 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Design round &middot; autocomplete</span>
+            <h1>Design an autocomplete</h1>
+            <p class="lead">The classic warm-up: a search box that suggests as you type. It looks tiny, but a strong answer touches debouncing, race conditions, caching, and full keyboard accessibility &mdash; which is exactly why interviewers love it.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">An autocomplete is an input that <b>fetches suggestions as you type</b>. The hard parts aren&rsquo;t the UI &mdash; they&rsquo;re <b>not over-fetching</b>, <b>not showing stale results</b>, and <b>keyboard control</b>.</p>
+            <p>User types, you query a backend, you render a dropdown of matches they can pick with mouse or keyboard. Get there with the six-step method &mdash; the interesting decisions are all in steps 3&ndash;5 (data, perf, a11y).</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>A librarian narrowing suggestions as you describe a book. You don&rsquo;t want them sprinting to the stacks after every single word &mdash; they wait a beat until you pause (debounce). And if you change your mind mid-sentence, they should drop the old search, not hand you the book you no longer want (cancel stale requests).</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="walk">
+            <h2><span class="section-num">01</span> The six steps, on a typeahead</h2>
+            <p>A quick pass so you have the full shape before we go deep on the tricky parts.</p>
+            <dl class="kv">
+              <dt>1 &middot; Requirements</dt><dd>Remote or local data? Min characters before searching? How many results, and is there a &ldquo;no matches&rdquo; state? Single-select.</dd>
+              <dt>2 &middot; API &amp; state</dt><dd>Props: <code>onSelect(item)</code>, <code>placeholder</code>, optional <code>minChars</code>. State: <code>query</code>, <code>results</code>, <code>status</code>, <code>activeIndex</code>, <code>open</code>.</dd>
+              <dt>3 &middot; Data &amp; caching</dt><dd>Debounce the query; cancel in-flight requests; cache results by query key so re-typing is instant.</dd>
+              <dt>4 &middot; Rendering &amp; perf</dt><dd>Don&rsquo;t fire a request per keystroke. Render a bounded list; only re-render on real changes.</dd>
+              <dt>5 &middot; A11y &amp; edges</dt><dd>Combobox roles, arrow/enter/escape, <code>aria-activedescendant</code>. Empty, loading, error, and out-of-order states.</dd>
+              <dt>6 &middot; Trade-offs</dt><dd>Debounce delay vs snappiness; client cache vs always-fresh; how it scales to huge result sets.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="trace">
+            <h2><span class="section-num">02</span> What happens on a keystroke</h2>
+            <p>The whole lifecycle of one character typed &mdash; this is the trace you should draw on the whiteboard.</p>
+            <div class="steps">
+              <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Keystroke</h4><p>User types; <code>query</code> state updates and the input re-renders immediately (input stays controlled and snappy).</p></div></div>
+              <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Debounce</h4><p>Wait ~250&nbsp;ms of no typing before doing anything network-y. Rapid typing resets the timer, so we fetch once at the pause, not per key.</p></div></div>
+              <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Cancel previous</h4><p>Before the new fetch, <code>abort()</code> the prior in-flight request so a slow earlier response can&rsquo;t overwrite a newer one.</p></div></div>
+              <div class="step"><span class="step-num">4</span><div class="step-body"><h4>Fetch</h4><p>If under <code>minChars</code>, skip. Otherwise request suggestions for the debounced query and set <code>status: "loading"</code>.</p></div></div>
+              <div class="step"><span class="step-num">5</span><div class="step-body"><h4>Cache</h4><p>Store results keyed by the query string. Re-typing a seen query is served from cache &mdash; zero network, instant list.</p></div></div>
+              <div class="step"><span class="step-num">6</span><div class="step-body"><h4>Render list</h4><p>Show the dropdown with roles wired up; arrow keys move <code>activeIndex</code>, Enter selects, Escape closes.</p></div></div>
+            </div>
+
+            <div class="diagram"><div class="dg-title">Keystroke &rarr; suggestions pipeline</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">input</div><div class="fn-t">Type</div><div class="fn-d">update query</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">wait</div><div class="fn-t">Debounce</div><div class="fn-d">~250ms idle</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">abort</div><div class="fn-t">Cancel prior</div><div class="fn-d">stale request</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">net</div><div class="fn-t">Fetch + cache</div><div class="fn-d">by query key</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">ui</div><div class="fn-t">Render list</div><div class="fn-d">keyboard nav</div></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">03</span> A debounced, cancelable fetch hook</h2>
+            <p>The core of step&nbsp;3 in ~15 lines: debounce the query, then fetch with an <code>AbortController</code> whose cleanup cancels the previous request. Out-of-order responses simply can&rsquo;t land.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">useAutocomplete.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">function useAutocomplete(query: string, minChars = 2) {
+  const [results, setResults] = useState&lt;Item[]&gt;([]);
+
+  useEffect(() =&gt; {
+    if (query.length &lt; minChars) { setResults([]); return; }
+    const ctrl = new AbortController();
+    const t = setTimeout(async () =&gt; {        // debounce
+      const res = await fetch(`/api/search?q=${query}`, { signal: ctrl.signal });
+      setResults(await res.json());           // only the latest survives
+    }, 250);
+    return () =&gt; { clearTimeout(t); ctrl.abort(); }; // cancel prior
+  }, [query, minChars]);
+
+  return results;
+}</code></pre>
+            </div>
+            <div class="callout note">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Heads up &mdash; in a real app <span class="tag">note</span></div>
+                <p>In production you&rsquo;d reach for <b>TanStack Query v5</b>: <code>useQuery</code> keyed by <code>["search", query]</code> gives you the caching, dedupe, and stale handling for free &mdash; you just debounce the <em>key</em>. The hand-rolled hook is the version to <em>explain</em> so the interviewer sees you understand the mechanics underneath.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="a11y">
+            <h2><span class="section-num">04</span> Keyboard &amp; ARIA (the senior signal)</h2>
+            <p>This is where most candidates stop short. A real autocomplete is a <b>combobox</b>, and it must be fully operable without a mouse.</p>
+            <dl class="kv">
+              <dt>Roles</dt><dd>Input has <code>role="combobox"</code>, <code>aria-expanded</code>, <code>aria-controls</code> pointing at the listbox; the dropdown is <code>role="listbox"</code> with <code>role="option"</code> children.</dd>
+              <dt>Active option</dt><dd>Keep DOM focus on the input; mark the highlighted option with <code>aria-activedescendant</code> so screen readers announce it without moving focus.</dd>
+              <dt>Keys</dt><dd><b>&darr;/&uarr;</b> move <code>activeIndex</code>, <b>Enter</b> selects, <b>Escape</b> closes the list, typing reopens it.</dd>
+              <dt>States</dt><dd>Empty (&ldquo;type to search&rdquo;), loading, no-matches, and error each need a visible, announced message.</dd>
+            </dl>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap &mdash; out-of-order responses <span class="tag">gotcha</span></div>
+                <p>Type &ldquo;re&rdquo; then &ldquo;react&rdquo;. The slow &ldquo;re&rdquo; request can resolve <em>after</em> &ldquo;react&rdquo; and clobber the correct list &mdash; a classic race condition. Fix it by <b>aborting</b> the prior request (as above) or <b>ignoring</b> any response whose query no longer matches the current one. Never just &ldquo;await and setState&rdquo; blindly.</p>
+              </div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why debounce the input instead of fetching on every keystroke?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>To avoid a flood of requests &mdash; you only need results once the user pauses typing.</button>
+                <button class="quiz-opt"><span class="mark"></span>Because React can&rsquo;t update state faster than once per 250&nbsp;ms.</button>
+                <button class="quiz-opt"><span class="mark"></span>Debouncing makes the dropdown accessible.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Debounce collapses a burst of keystrokes into one request at the pause &mdash; less load, fewer races, and a smoother list. It&rsquo;s about <em>request volume</em>, not React or a11y.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you prevent stale suggestions from a slow response?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Cancel the previous request with an <code>AbortController</code> before starting the next, or tag each response with its query and ignore any whose query no longer matches the current input. That kills out-of-order races so only the latest result renders.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;I abort the in-flight request on each new keystroke, or drop responses whose query is stale &mdash; so a slow old request can never overwrite a newer one.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Debounce vs throttle &mdash; which here, and why?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Debounce. We only care about the final query after the user stops typing, so we wait for a pause and fire once. Throttle (fire at a steady rate) suits continuous streams like scroll or resize, not &ldquo;settle then act&rdquo; search.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Debounce &mdash; I want to act once the user settles, not on a fixed cadence. Throttle is for continuous events like scroll.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you make the dropdown accessible?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Build it as a combobox: input with <code>role="combobox"</code> and <code>aria-expanded</code>, a <code>listbox</code> of <code>option</code>s, focus staying on the input, and the highlighted item exposed via <code>aria-activedescendant</code>. Wire arrow keys, Enter, and Escape.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;It&rsquo;s a combobox &mdash; focus stays on the input, the active option is announced with aria-activedescendant, and arrows, Enter, and Escape all work.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="index.html"><span class="pn-k">Previous</span><span class="pn-t">The frontend design round</span></a>
+            <a class="next" href="data-table.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Design a data table</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#walk">The six steps</a>
+          <a href="#trace">On a keystroke</a>
+          <a href="#code">Debounced fetch hook</a>
+          <a href="#a11y">Keyboard &amp; ARIA</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

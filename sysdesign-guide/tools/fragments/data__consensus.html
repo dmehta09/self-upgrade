@@ -1,0 +1,92 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Data at scale · consensus</span>
+  <h1>Consensus &amp; leader election.</h1>
+  <p class="lead">Once data lives on many machines, they have to <em>agree</em> on things — who's the leader, what order writes happened in, whether a value is committed. Consensus algorithms (Raft, Paxos) are how a cluster reaches agreement even when machines crash and networks drop messages. You won't implement Raft in an interview, but you absolutely need the intuition: leader election, quorums, and why "split-brain" is the nightmare they prevent.</p>
+</section>
+
+<section class="section reveal" id="why">
+  <h2><span class="section-num">01</span> &nbsp;The problem: split-brain</h2>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Picture a committee that can only act through one chairperson. If a network glitch splits the committee into two rooms and <em>each</em> elects its own chair, you now have two people both issuing orders — and the org tears itself apart making contradictory decisions. That's <strong>split-brain</strong>. Consensus is the committee's rule for making sure there's only ever one legitimate chair, even when the room splits.</p>
+    </div>
+  </div>
+  <p>Many systems pick a single <strong>leader</strong> to take writes (recall <a href="replication.html">leader–follower replication</a>). If two nodes both believe they're the leader, they accept conflicting writes and corrupt the data. Consensus exists to guarantee <strong>at most one leader</strong> and an agreed order of operations — the bedrock of correctness in distributed systems.</p>
+</section>
+
+<section class="section reveal" id="election">
+  <h2><span class="section-num">02</span> &nbsp;Leader election (the Raft intuition)</h2>
+  <p>Raft makes consensus approachable. Nodes are <em>followers</em> until one's randomised timeout fires; it becomes a <em>candidate</em>, asks everyone for a vote, and if it wins a <strong>majority</strong> it becomes leader and sends heartbeats to keep the role. Watch it:</p>
+  <figure class="viz" data-viz aria-label="Leader election">
+    <figcaption class="viz-title">A candidate wins a majority → leader</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "graph",
+      "meta": {
+        "width": 520, "height": 260,
+        "nodes": [
+          { "id": "N1", "label": "N1", "x": 260, "y": 35 },
+          { "id": "N2", "label": "N2", "x": 360, "y": 105 },
+          { "id": "N3", "label": "N3", "x": 322, "y": 222 },
+          { "id": "N4", "label": "N4", "x": 198, "y": 222 },
+          { "id": "N5", "label": "N5", "x": 160, "y": 105 }
+        ],
+        "edges": [ ["N1","N2"], ["N1","N3"], ["N1","N4"], ["N1","N5"] ]
+      },
+      "frames": [
+        { "caption": "Five replicas, all followers. No leader right now." },
+        { "active": ["N1"], "caption": "N1's election timeout fires first → it becomes a candidate and votes for itself (1)." },
+        { "active": ["N1"], "edgesOn": [["N1","N2"],["N1","N3"],["N1","N4"],["N1","N5"]], "caption": "It requests votes from every other node." },
+        { "active": ["N1"], "visited": ["N2","N3"], "edgesOn": [["N1","N2"],["N1","N3"]], "caption": "N2 and N3 grant their votes — that's 3 of 5, a majority." },
+        { "active": ["N1"], "visited": ["N2","N3","N4","N5"], "caption": "Majority reached → N1 is leader. It sends periodic heartbeats so the others stay followers." }
+      ]
+    }
+    </script>
+  </figure>
+  <p>Key Raft words to drop: a <strong>term</strong> (a numbered election round), <strong>heartbeats</strong> (the leader's "I'm alive" pings), and randomised <strong>timeouts</strong> (so two nodes rarely time out at once, avoiding split votes). If the leader dies, a follower times out and a new election begins.</p>
+</section>
+
+<section class="section reveal" id="quorum">
+  <h2><span class="section-num">03</span> &nbsp;Why a majority — and odd numbers</h2>
+  <p>The magic ingredient is the <strong>majority quorum</strong>: an action needs agreement from more than half the nodes. Two majorities can't exist at once, so two leaders can't be elected — split-brain is mathematically prevented. It also means the cluster keeps working as long as a majority is alive.</p>
+  <div class="kv">
+    <dt>3 nodes</dt><dd>Majority = 2. Tolerates <strong>1</strong> failure.</dd>
+    <dt>5 nodes</dt><dd>Majority = 3. Tolerates <strong>2</strong> failures.</dd>
+    <dt>Why odd?</dt><dd>4 nodes also tolerate only 1 failure (majority = 3) — same fault tolerance as 3, but more cost and a higher chance of a tie. Odd sizes are strictly better.</dd>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Same idea as quorum reads/writes</div><p>This is the cousin of the <a href="replication.html#quorum">W + R &gt; N</a> rule from replication. There, overlapping read/write majorities guarantee fresh reads; here, a single election majority guarantees one leader. Majorities are the universal trick for agreement under failure.</p></div></div>
+</section>
+
+<section class="section reveal" id="uses">
+  <h2><span class="section-num">04</span> &nbsp;Where it shows up &amp; distributed locks</h2>
+  <p>You rarely build consensus yourself — you lean on a coordination service that has: <strong>ZooKeeper</strong> or <strong>etcd</strong> (and increasingly Raft built into the database). They provide leader election, configuration, and <strong>distributed locks</strong> (only one holder at a time) as a service.</p>
+  <ul>
+    <li><strong>Database failover</strong> — electing the new primary when the old one dies (without two primaries).</li>
+    <li><strong>Kafka / schedulers</strong> — a single controller/coordinator chosen by election.</li>
+    <li><strong>Distributed locks &amp; leases</strong> — "only one worker runs this job," with a time-bounded lease so a crashed holder's lock expires.</li>
+    <li><strong>Service config &amp; membership</strong> — a consistent view of who's in the cluster.</li>
+  </ul>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Consensus is a CP choice — use it sparingly</div><p>Reaching a majority costs round trips and blocks when a majority isn't reachable (it favours consistency over availability). So put consensus only on the small, critical decisions — who's the leader, is this committed — and keep it off the high-throughput data path. Coordinate rarely; serve often.</p></div></div>
+  <div class="quiz" data-quiz>
+    <p class="q">Why must a new leader win a <em>majority</em> of votes rather than just any votes?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Majorities make elections faster</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Two majorities can't exist simultaneously, so requiring one guarantees at most one leader — preventing split-brain</button>
+      <button class="quiz-opt"><span class="mark"></span>Because nodes always come in even numbers</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> any two majorities of the same cluster must overlap on at least one node, and a node won't vote for two leaders in the same term — so only one candidate can ever reach a majority. That overlap is exactly what makes split-brain impossible.</div>
+  </div>
+</section>

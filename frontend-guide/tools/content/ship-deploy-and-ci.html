@@ -1,0 +1,131 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Ship it &middot; deploy</span>
+            <h1>Deploy &amp; CI</h1>
+            <p class="lead">Deploying is the easy part &mdash; <em>safely</em> deploying is the skill. A pro pipeline gives every pull request a live preview and runs automated gates that block a merge until the code typechecks, lints, tests, and builds. This is how broken changes never reach production.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> A pipeline with gates</h2>
+            <p class="takeaway">CI is a <b>factory line</b>: code only advances to production after it passes every quality gate. The gates run automatically on each PR, so &ldquo;works locally&rdquo; is never enough to merge.</p>
+            <p>Continuous Integration runs your checks on a server for every push. Continuous Delivery then deploys what passes. The point isn&rsquo;t the deploy command &mdash; it&rsquo;s that nothing ships without clearing the same gates every time, removing &ldquo;I forgot to run tests&rdquo; from the equation.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>A factory assembly line with inspection stations. A part moves down the belt and hits gate after gate &mdash; dimensions, stress test, paint &mdash; and only a unit that clears them all gets boxed and shipped. CI is those stations; a failed gate stops the line before a defect ever leaves the building.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="vercel">
+            <h2><span class="section-num">01</span> The Vercel model in 2026</h2>
+            <p>Vercel&rsquo;s platform is built on <b>Fluid compute</b>, and the <b>Node.js runtime is the default</b> for Vercel Functions. Standalone <b>Edge Functions were deprecated</b> (Apr 2026) &mdash; the Edge runtime now lives where it&rsquo;s genuinely needed: routing and proxy (e.g. <code>proxy.ts</code>), not your general server logic.</p>
+            <dl class="kv">
+              <dt>Fluid compute</dt><dd>The execution model: functions stay warm and share resources, so you get low latency without paying per-request cold starts everywhere.</dd>
+              <dt>Default runtime</dt><dd><b>Node.js</b> on Fluid compute. Full Node APIs, no edge constraints &mdash; the recommended default for app code.</dd>
+              <dt>Edge runtime</dt><dd>Still used for lightweight routing/proxy at the network edge; not the place for your data-heavy handlers anymore.</dd>
+              <dt>Env &amp; secrets</dt><dd>Set per environment (preview vs production) in project settings; secrets are injected at build/runtime, never committed.</dd>
+            </dl>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>Don&rsquo;t reach for the Edge runtime by default &ldquo;because it&rsquo;s faster.&rdquo; Since Apr 2026 the recommendation is <b>Node on Fluid compute</b> &mdash; it avoids edge limitations (restricted APIs, bundle limits) while Fluid keeps latency low. Reserve Edge for true routing/proxy work.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="pipeline">
+            <h2><span class="section-num">02</span> From PR to production</h2>
+            <p>Open a PR and the flow runs itself: a <b>preview deployment</b> goes live at a unique URL so reviewers (and QA, and design) click the real thing, while CI runs the gates in parallel. Only when both are green does it merge and promote to production.</p>
+
+            <div class="diagram"><div class="dg-title">The deploy pipeline</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">1</div><div class="fn-t">Push PR</div><div class="fn-d">commit to a branch</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">2</div><div class="fn-t">Preview deploy</div><div class="fn-d">live URL per PR</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">3</div><div class="fn-t">CI checks</div><div class="fn-d">typecheck &middot; lint &middot; test &middot; build</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">4</div><div class="fn-t">Merge</div><div class="fn-d">blocked until green</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">5</div><div class="fn-t">Production</div><div class="fn-d">auto-promoted</div></div>
+              </div>
+            </div>
+
+            <p>The CI gates run cheapest-first so failures surface fast. A typical command sequence in the pipeline:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">ci script</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="bash"># Run in order; first failure stops the merge.
+pnpm typecheck   # tsc --noEmit — catch type errors
+pnpm lint        # eslint / biome — patterns &amp; bugs
+pnpm test        # vitest run — unit/integration
+pnpm build       # next build — must compile clean</code></pre>
+            </div>
+          </section>
+
+          <section class="section reveal" id="quiz">
+            <h2><span class="section-num">03</span> Check yourself</h2>
+            <div class="quiz" data-quiz>
+              <p class="q">For a data-heavy API route in a Next.js app on Vercel in mid-2026, which runtime is the recommended default?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>The <b>Node.js</b> runtime on Fluid compute &mdash; full Node APIs, no edge limits, low latency.</button>
+                <button class="quiz-opt"><span class="mark"></span>A standalone Edge Function, because the edge is always fastest.</button>
+                <button class="quiz-opt"><span class="mark"></span>It must run client-side to avoid a server entirely.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Standalone Edge Functions were deprecated in Apr 2026. Node on Fluid compute is the default &mdash; it keeps latency low without the Edge runtime&rsquo;s API and bundle constraints. Edge is reserved for routing/proxy.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What do preview deployments give you?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Every PR gets its own live, production-like URL built from that branch. Reviewers, QA, and design can click the real running app instead of reading a diff or trusting screenshots &mdash; you catch UX and integration issues before merge, and each preview is isolated with its own env.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;A real, shareable URL per PR. People review the running app, not a diff &mdash; so UX and integration bugs get caught before it ever merges.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Which CI gates do you run, and in what order?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Typecheck, lint, test, then build &mdash; cheapest and fastest-failing first so feedback is quick. All of them are required status checks that block the merge, so a red gate physically prevents shipping. The build gate ensures the app actually compiles for production, not just in dev.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Typecheck, lint, test, build &mdash; fast checks first. They&rsquo;re required status checks, so a failure blocks the merge instead of relying on discipline.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Edge vs Node runtime on Vercel &mdash; how do you pick?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>As of 2026, default to the <b>Node.js</b> runtime on Fluid compute &mdash; full Node APIs, no bundle or API limits, and Fluid keeps latency low without per-request cold starts. Standalone Edge Functions were deprecated; the Edge runtime now earns its place only for lightweight routing/proxy work at the network edge.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Node on Fluid compute by default &mdash; full APIs, low latency, no edge limits. Standalone Edge Functions are deprecated; I only use Edge for routing or proxy.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="accessibility.html"><span class="pn-k">Previous</span><span class="pn-t">Accessibility interviewers test</span></a>
+            <a class="next" href="../interview/index.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">How frontend interviews work</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">A pipeline with gates</a>
+          <a href="#vercel">The Vercel model</a>
+          <a href="#pipeline">From PR to production</a>
+          <a href="#quiz">Check yourself</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

@@ -1,0 +1,191 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Expert · user management</span>
+  <h1>Design a user management system.</h1>
+  <p class="lead">The service that owns the <strong>user as a durable entity</strong> — accounts, profiles, lifecycle — and that every other system foreign-keys to. The senior move is to draw the boundary first: this page owns <em>who exists</em>; <a href="authentication.html">authentication</a> owns <em>how they prove it</em> and <a href="authorization.html">authorization</a> owns <em>what they can do</em>. The hardest part isn't CRUD — it's that you usually <strong>cannot actually <span class="mono">DELETE</span> a user</strong>, so "right to erasure" becomes anonymize-in-place.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; the scope boundary</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Create accounts, verify email, manage profile/preferences, deactivate, delete (GDPR), export data. Self-service <em>and</em> admin/DSAR flows.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>The user object is a <strong>fan-in dependency</strong> (everything reads it) → must be highly available + cached; PII-safe + GDPR/CCPA-compliant; correct under concurrent signups.</p></div>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">A "user" is not an "identity"</div><p>A person can present multiple identities (Email+Password, Google, corporate SAML) — what ties them together is the <strong>email address</strong>: control of that inbox grants access to every account based on it. So the user is the stable anchor; auth identities <em>attach</em> to it many-to-one. That's exactly why credentials don't live in the <span class="mono">users</span> table.</p></div></div>
+</section>
+
+<section class="section reveal" id="lifecycle">
+  <h2><span class="section-num">02</span> &nbsp;The account lifecycle &amp; email verification</h2>
+  <p>An account is a state machine: <span class="mono">invited → registered → (verify) → active → suspended/locked → deactivated → deleted</span>. <strong>Suspended</strong> (admin/policy) and <strong>locked</strong> (security, e.g. failed-login throttle) are distinct — different reactivation paths. Verification gates trust:</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Signup → verify → active</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Signup + email verification",
+      "nodes": [
+        { "id": "user", "label": "User", "type": "user", "col": 0, "row": 1 },
+        { "id": "api", "label": "User API", "type": "stateless", "col": 1, "row": 1 },
+        { "id": "db", "label": "Users DB", "type": "store", "col": 2, "row": 1 },
+        { "id": "mail", "label": "Email provider", "type": "async", "col": 2, "row": 0 }
+      ],
+      "edges": [
+        { "from": "user", "to": "api", "label": "POST /users" },
+        { "from": "api", "to": "db", "label": "insert" },
+        { "from": "api", "to": "mail", "label": "verify link" },
+        { "from": "api", "to": "user", "label": "verify token" }
+      ],
+      "steps": [
+        { "edge": ["user","api"], "caption": "POST /users — create account in status=registered." },
+        { "edge": ["api","db"], "caption": "Insert user; a UNIQUE email constraint resolves concurrent signups (§8)." },
+        { "edge": ["api","mail"], "caption": "Send a HASHED, single-use, short-TTL (15–60 min) verification token." },
+        { "edge": ["api","user"], "caption": "User clicks the link → POST /emails/verify { token }; sets email_verified_at, status→active.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+  <p class="small">Enterprise note: SCIM deprovisioning maps <span class="mono">active:false</span> to <strong>suspended/deactivated</strong> (not hard delete), with a 30–90 day retention window so accidental offboarding is recoverable.</p>
+</section>
+
+<section class="section reveal" id="model">
+  <h2><span class="section-num">03</span> &nbsp;Data model: separate identity, profile &amp; emails</h2>
+  <p>Separate things that change at different rates and have different sensitivity: the small hot <strong>anchor</strong>, the security-critical <strong>identities</strong>, and the read-hot <strong>profile</strong>.</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">users.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">-- THE ANCHOR: small, hot, cached everywhere; FK target for the whole company.
+CREATE TABLE users (
+  id           uuid PRIMARY KEY DEFAULT uuidv7(),   -- time-ordered, index-local
+  status       text NOT NULL DEFAULT 'registered',  -- registered|active|suspended|...
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  deleted_at   timestamptz                          -- soft-delete tombstone (NULL = live)
+);
+
+CREATE EXTENSION IF NOT EXISTS citext;              -- case-insensitive email compare
+CREATE TABLE emails (
+  id          uuid PRIMARY KEY DEFAULT uuidv7(),
+  user_id     uuid NOT NULL REFERENCES users(id),
+  email       citext NOT NULL,
+  is_primary  boolean NOT NULL DEFAULT false,
+  verified_at timestamptz
+);
+CREATE UNIQUE INDEX uq_email   ON emails (email);                       -- global uniqueness
+CREATE UNIQUE INDEX uq_primary ON emails (user_id) WHERE is_primary;    -- one primary/user
+
+-- One row per login method; credentials themselves live in the AUTH store, not here.
+CREATE TABLE identities (
+  user_id      uuid NOT NULL REFERENCES users(id),
+  provider     text NOT NULL,            -- 'password' | 'google' | 'saml:acme' | 'passkey'
+  provider_uid text NOT NULL,
+  UNIQUE (provider, provider_uid)
+);
+-- Profile/preferences: bigger, mutable, read-hot, lower sensitivity, safe to cache hard.
+CREATE TABLE profiles ( user_id uuid PRIMARY KEY REFERENCES users(id),
+                        display_name text, avatar_url text, locale text, timezone text );</code></pre></div>
+  </div>
+  <p>Why split? Blast radius (a profile read never touches credentials), cardinality (one human, many login methods → one <span class="mono">user_id</span>), and change-rate/caching. <strong>UUIDv7</strong> gives index-local inserts; expose an opaque external handle in public URLs since v7 leaks creation time.</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">04</span> &nbsp;API</h2>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/v1/users · /v1/emails/verify</span><span class="ep-note">signup → 201 {status:registered}; verify token → active</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/v1/users/me · /v1/users/me/export</span><span class="ep-note">read; export is async → signed download (Art. 20)</span></div>
+  <div class="endpoint"><span class="verb put">DELETE</span><span class="path">/v1/users/me</span><span class="ep-note">begin erasure: soft-delete → grace → anonymize</span></div>
+  <p>Verification/recovery endpoints are <strong>rate-limited</strong>; <span class="mono">export</span> and <span class="mono">delete</span> are <strong>async</strong> (fan out across many stores); admin actions are audit-logged with actor + reason.</p>
+</section>
+
+<section class="section reveal" id="erasure">
+  <h2><span class="section-num">05</span> &nbsp;GDPR/CCPA erasure: you can't just DELETE</h2>
+  <p>Financial ledgers, fraud/audit logs, and immutable event stores must survive (GDPR Art. 17(3) carves out legal-obligation + legal-claims retention). So "right to erasure" in practice = <strong>anonymize the PII in place and leave a tombstone</strong>, deleting only what you're free to. Anonymized data — <em>if truly irreversible</em> — falls outside GDPR because it's no longer personal data.</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Deletion strategies",
+      "axisLabel": "How do we honour 'delete my account'?",
+      "stops": [
+        { "label": "Hard delete", "dims": { "Privacy": 90, "Referential integrity": 20, "Reversibility": 5, "Legal retention": 10 }, "note": "Physically remove rows. Cleanest privacy story, but breaks FKs in ledgers/audit/event stores you're legally required to keep — and a fat-finger is permanent." },
+        { "label": "Soft delete", "dims": { "Privacy": 25, "Referential integrity": 95, "Reversibility": 95, "Legal retention": 90 }, "note": "Set deleted_at, keep the row. Reversible, FK-safe — but the PII is STILL stored, so it does NOT satisfy GDPR erasure on its own. A grace-window state, not the end." },
+        { "label": "Anonymize + tombstone", "dims": { "Privacy": 90, "Referential integrity": 90, "Reversibility": 10, "Legal retention": 85 }, "note": "Scrub identifying PII in place, keep a non-identifying tombstone so ledgers/audit stay valid. If truly irreversible, falls outside GDPR. The pragmatic real-world erasure." }
+      ]
+    }
+    </script>
+  </div>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">erase.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">BEGIN;
+  UPDATE users SET status='deleted', deleted_at=now() WHERE id=:uid;   -- tombstone
+  -- Replace PII with an UNRECOVERABLE placeholder (not a reversible hash).
+  UPDATE emails  SET email=('deleted+'||gen_random_uuid()||'@anonymized.invalid')::citext,
+                     verified_at=NULL WHERE user_id=:uid;
+  UPDATE profiles SET display_name=NULL, avatar_url=NULL, locale=NULL WHERE user_id=:uid;
+  DELETE FROM identities WHERE user_id=:uid;        -- cut auth links
+  INSERT INTO erasure_log(user_id, completed_at, method)               -- record the FACT
+       VALUES (:uid, now(), 'anonymize+tombstone'); --   (not the PII) for accountability
+COMMIT;
+-- Then emit user.deleted -> fan out async: revoke sessions, scrub search index,
+-- bust caches, notify downstream services + processors (CCPA), backup-exclusion list.</code></pre></div>
+  </div>
+  <p class="small"><strong>Crypto-shredding</strong> elegantly solves immutable backups: encrypt PII with a per-user key; "delete" = destroy the key → ciphertext is inert. CCPA's right-to-delete also <strong>fans out downstream</strong> (notify service providers/third parties) — deletion is a distributed operation, not one SQL statement.</p>
+</section>
+
+<section class="section reveal" id="sessions">
+  <h2><span class="section-num">06</span> &nbsp;Lifecycle → session revocation fan-out</h2>
+  <p>Token <em>mechanics</em> belong to the <a href="authentication.html">auth page</a>; what user-management owns is the <strong>trigger</strong>. On suspend/lock/deactivate/delete, emit a <span class="mono">user.suspended</span> event and revoke access. Because access tokens are short-lived JWTs you can't instantly kill one — so either revoke <strong>refresh tokens</strong> (≤15-min exposure) or bump a <strong>token-version / epoch</strong> on the user that every token carries and resource servers check (instant mass revocation). The event bus fans the change out to every node holding a session.</p>
+</section>
+
+<section class="section reveal" id="uniqueness">
+  <h2><span class="section-num">07</span> &nbsp;Uniqueness, normalization &amp; account merge</h2>
+  <div class="kv">
+    <dt>Email uniqueness</dt><dd>Enforce with a <strong>DB UNIQUE constraint</strong>, not a read-then-write check — two concurrent signups both pass a <span class="mono">SELECT</span> and both <span class="mono">INSERT</span>; only the constraint stops the dupe (handle <span class="mono">23505</span> gracefully).</dd>
+    <dt>Normalization</dt><dd>Treat email case-insensitively (store lowercased / use <span class="mono">citext</span>); keep the original for display. <strong>Don't</strong> globally strip <span class="mono">+tags</span>/dots — that's Gmail-specific; you'd wrongly collide distinct accounts. Compute a provider-specific anti-abuse key only for fraud dedup.</dd>
+    <dt>Account merge</dt><dd>"Signed up with Google, then password, same email." <strong>Never silently auto-link</strong> on an unverified email (account-takeover vector); require proof of control of both, re-parent child rows to a surviving record, keep an immutable audit trail.</dd>
+    <dt>Email change</dt><dd>Verify the <em>new</em> address before flipping primary, and notify the <em>old</em> (detect takeover, allow "this wasn't me").</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="scale">
+  <h2><span class="section-num">08</span> &nbsp;Scale: the user service is fan-in</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Population</td><td>100M users × ~250 B core</td><td>≈ <strong>25 GB</strong> — RAM-resident; you don't shard for size</td></tr>
+        <tr><td>Read QPS</td><td>20M DAU × ~50 user-resolving reads/day</td><td>≈ <strong>11.6k/s avg</strong>, ~35–60k peak (it's fan-in)</td></tr>
+        <tr><td>With 95% cache hit</td><td>cache the user object by id</td><td>origin sees ~600/s avg → trivial on primary + replicas</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Everything reads the user object (auth, billing, feed, notifications), so <strong>a per-request cache miss is a company-wide latency tax.</strong> Cache hard, invalidate on <span class="mono">user.updated</span>/<span class="mono">user.suspended</span>.</p>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">09</span> &nbsp;Failure modes &amp; observability</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🧱</span><h4>Critical dependency</h4><p>If the user service is down, everything that resolves "who is this" degrades. Aggressive caching (serve stale on failure), circuit breakers on callers, read replicas + multi-AZ.</p></div>
+    <div class="card feature"><span class="f-ic fx">📉</span><h4>Funnel metrics</h4><p>Signups started → completed → <strong>email-verification rate</strong> (a drop usually means deliverability: SPF/DKIM/DMARC), invite-acceptance, reactivation.</p></div>
+    <div class="card feature"><span class="f-ic fx">⚖️</span><h4>Compliance SLAs</h4><p>Erasure/export request volume + SLA (GDPR: respond within 1 month); duplicate-account + merge rates.</p></div>
+    <div class="card feature"><span class="f-ic fx">🎯</span><h4>SLOs</h4><p>Read availability ~99.99% (it's everyone's dependency); read p99 single-digit-ms from cache; export/delete jobs get a throughput SLO (done &lt; 24h).</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">10</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A user invokes their GDPR right to erasure, but they have years of immutable transaction-ledger entries. What do you do?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Hard-delete everything including the ledger</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Anonymize the PII in place and keep a non-identifying tombstone, retaining the ledger under Art. 17(3)'s legal-obligation exception</button>
+      <button class="quiz-opt"><span class="mark"></span>Refuse the request</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> you can't delete records you're legally required to keep, and you can't truly delete from immutable stores. Anonymize (irreversibly scrub identifying fields) so the rows stop being "personal data," keep the tombstone for referential integrity, and crypto-shred where backups make in-place deletion impossible.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"The user is the stable anchor; identities (password, Google, SAML) attach to it many-to-one, linked by email — so I separate identity, profile, and the small cached <span class="mono">users</span> anchor everything FKs to. Uniqueness is a DB constraint, not a read-then-write. Lifecycle is a state machine, and a status change fans out to revoke sessions. Erasure is anonymize-in-place plus a tombstone, because ledgers and immutable stores can't be truly deleted — with crypto-shredding for backups. And because the user object is fan-in, I cache it hard and treat a miss as a company-wide cost."</p></div></div>
+</section>

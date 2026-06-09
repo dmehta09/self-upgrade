@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design authorization (RBAC, ABAC, ReBAC) | The System Design Field Guide</title>
+  <meta name="description" content="What can you do? RBAC vs ABAC vs ReBAC/Zanzibar relationship tuples, the check API at scale, and multi-tenant permission scoping." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="expert" data-page="expert-authorization" data-lesson="expert-authorization">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Expert designs</span><span class="sep">/</span><span class="current">Design authorization (RBAC, ABAC, ReBAC)</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Expert · authorization</span>
+  <h1>Design authorization.</h1>
+  <p class="lead">"What can you do?" — the decision made on <em>every</em> request, often many times per request, that decides whether a known principal may act on a resource. The arc of the field is <strong>RBAC → ABAC → ReBAC</strong>: from coarse roles, to attribute policies, to Google <strong>Zanzibar</strong>'s relationship graph that powers Drive/Docs-style per-object sharing. This is the canonical permissions page; <a href="authentication.html">authentication</a> proves identity, and this consumes it.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; the three models</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p><span class="mono">check(user, action, resource)</span>; answer "who can access X?" and "what can U access?"; scoped per tenant/org; policy + relationship changes are audited.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>On the hot path → single-digit-ms p99 even with fan-out; correct (no cross-tenant or stale-after-revoke leaks); fails closed.</p></div>
+  </div>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "RBAC vs ABAC vs ReBAC",
+      "axisLabel": "How is 'allowed?' expressed?",
+      "stops": [
+        { "label": "RBAC", "dims": { "Simplicity": 95, "Fine-grained sharing": 25, "Context-awareness": 20, "Reverse queries": 70 }, "note": "Roles → permissions. Simple, fast, auditable — but coarse. Access on multiple axes (50 roles × 20 locations × 10 projects) causes ROLE EXPLOSION, and it can't express 'this specific document's parent folder'." },
+        { "label": "ABAC", "dims": { "Simplicity": 45, "Fine-grained sharing": 60, "Context-awareness": 100, "Reverse queries": 20 }, "note": "Rules over attributes (user / resource / environment). Context-aware (business hours, IP, data classification) — but hard to audit: answering 'who can access X?' means evaluating every rule against all data." },
+        { "label": "ReBAC", "dims": { "Simplicity": 50, "Fine-grained sharing": 100, "Context-awareness": 55, "Reverse queries": 95 }, "note": "Zanzibar relationship tuples: 'is U related to O via R?'. Models per-object, hierarchical sharing (folder→doc inheritance) that RBAC can't, and answers who/what by graph walk. More moving parts — needs a dedicated store." }
+      ]
+    }
+    </script>
+  </div>
+  <p><strong>Sequencing:</strong> start with RBAC for coarse policy; add ABAC <em>only</em> for genuine contextual rules; add ReBAC <em>only</em> when users share resources with each other. Modern engines (Cedar, SpiceDB, OpenFGA) express all three.</p>
+</section>
+
+<section class="section reveal" id="rbac">
+  <h2><span class="section-num">02</span> &nbsp;RBAC deep dive</h2>
+  <p>Users → roles → permissions, with the role assignment scoped <strong>per org</strong> (the binding lives on the <a href="org-management.html">membership</a>, not the global user):</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">rbac.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">roles(id, org_id, name)                       -- roles are tenant-scoped
+permissions(id, resource, action)             -- e.g. ('document','edit')
+role_permissions(role_id, permission_id)
+user_roles(user_id, org_id, role_id)          -- the (user, org) -> role binding
+
+-- The permission check (flat). The org_id predicate is what prevents escalation.
+SELECT EXISTS (
+  SELECT 1 FROM user_roles ur
+  JOIN role_permissions rp ON rp.role_id = ur.role_id
+  JOIN permissions p       ON p.id = rp.permission_id
+  WHERE ur.user_id = :user AND ur.org_id = :org      -- MANDATORY tenant scope
+    AND p.resource = :resource AND p.action = :action
+);</code></pre></div>
+  </div>
+  <p>NIST role <em>hierarchies</em> (senior inherits junior) handle role→role inheritance; that's different from <strong>resource-hierarchy</strong> inheritance (folder→doc), which is fundamentally ReBAC.</p>
+</section>
+
+<section class="section reveal" id="zanzibar">
+  <h2><span class="section-num">03</span> &nbsp;Zanzibar / ReBAC: the relationship graph</h2>
+  <p>Zanzibar (Google) stores ACLs as <strong>relation tuples</strong> <span class="mono">object#relation@user</span>, e.g. <span class="mono">doc:readme#viewer@user:anne</span>. A <strong>userset</strong> (<span class="mono">@group:eng#member</span>) points at a set; <strong>rewrites</strong> compute relations — <span class="mono">computed_userset</span> (viewer ⊇ editor) and <span class="mono">tuple_to_userset</span> (a doc's viewers = its parent folder's viewers — the inheritance primitive). <span class="mono">Check</span> is graph reachability:</p>
+  <figure class="viz" data-viz aria-label="Zanzibar check graph walk">
+    <figcaption class="viz-title">check(doc:readme#viewer@user:anne) walks the relationship graph</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "graph",
+      "meta": {
+        "directed": true, "width": 520, "height": 220,
+        "nodes": [
+          { "id": "doc", "label": "doc:readme", "x": 420, "y": 40 },
+          { "id": "folder", "label": "folder:a", "x": 420, "y": 150 },
+          { "id": "eng", "label": "group:eng", "x": 210, "y": 150 },
+          { "id": "anne", "label": "user:anne", "x": 70, "y": 50 }
+        ],
+        "edges": [ ["doc","folder"], ["folder","eng"], ["eng","anne"] ]
+      },
+      "frames": [
+        { "active": ["doc"], "caption": "Check: can user:anne view doc:readme? Start at the object." },
+        { "visited": ["doc"], "active": ["folder"], "edgesOn": [["doc","folder"]], "caption": "No direct viewer tuple for Anne — but a tuple-to-userset rule inherits viewers from the parent folder (doc#parent@folder:a)." },
+        { "visited": ["doc","folder"], "active": ["eng"], "edgesOn": [["folder","eng"]], "caption": "folder:a#viewer@group:eng#member — viewers ARE the members of group:eng (a userset)." },
+        { "visited": ["doc","folder","eng","anne"], "edgesOn": [["eng","anne"]], "caption": "group:eng#member@user:anne — Anne is a member. The walk reaches her → ALLOW." }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">check.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python"># Zanzibar-style Check via graph walk (object#relation@user)
+def check(obj, relation, user, seen):
+    if (obj, relation) in seen: return False          # cycle guard
+    seen.add((obj, relation))
+    rule = config[obj.type][relation]                 # the rewrite
+
+    for t in tuples(obj, relation):                   # 1) direct tuples
+        if t.user == user: return True
+        if t.is_userset and check(t.group, t.rel, user, seen):  # group:eng#member
+            return True
+    for r2 in rule.computed_usersets:                 # 2) same object, e.g. viewer⊇editor
+        if check(obj, r2, user, seen): return True
+    for ttu in rule.tuple_to_usersets:                # 3) inheritance: doc -> parent folder
+        for t in tuples(obj, ttu.tupleset_relation):  # doc#parent@folder:Y
+            if check(t.target, ttu.computed_relation, user, seen): return True
+    return False</code></pre></div>
+  </div>
+  <p class="small">For deeply nested groups, the recursive walk is too slow → the <strong>Leopard index</strong> precomputes a flattened, transitively-closed membership set and answers "is U in G?" as a set intersection. 2026 implementations: <strong>OpenFGA</strong> (CNCF Incubating), <strong>SpiceDB</strong> (Authzed, full set algebra + arrow inheritance), Ory Keto, AWS <strong>Cedar</strong> / Verified Permissions.</p>
+</section>
+
+<section class="section reveal" id="consistency">
+  <h2><span class="section-num">04</span> &nbsp;Consistency: the "new enemy" problem</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Why a global ordering matters</div><p>Alice removes Bob from a doc, then adds sensitive content. If a check reads a <em>stale</em> ACL replica, Bob — the "new enemy" — sees content he should never have. Zanzibar runs on Spanner/TrueTime for external consistency and hands clients a <strong>zookie</strong> (an opaque timestamp): pass it on a check to demand "at least this fresh," so a check observes all ACL writes causally prior to the content it protects. SpiceDB calls it a <span class="mono">ZedToken</span>; the consistency knobs are <span class="mono">fully_consistent</span> / <span class="mono">at_least_as_fresh</span> / <span class="mono">minimize_latency</span>.</p></div></div>
+</section>
+
+<section class="section reveal" id="pdp">
+  <h2><span class="section-num">05</span> &nbsp;Policy-as-data vs policy-as-code; PEP/PDP/PIP</h2>
+  <p>The reference architecture: the <strong>PEP</strong> (enforcement point — your middleware/gateway) asks the <strong>PDP</strong> (decision point) "allowed?", which evaluates policy using data from the <strong>PIP</strong> (information point — attributes/tuples).</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">A permission check (PEP → PDP → PIP)</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "check(anne, edit, doc:readme)",
+      "nodes": [
+        { "id": "client", "label": "Client", "type": "user", "col": 0, "row": 1 },
+        { "id": "pep", "label": "App / PEP", "type": "stateless", "col": 1, "row": 1 },
+        { "id": "pdp", "label": "PDP (authz)", "type": "L7", "col": 2, "row": 1 },
+        { "id": "pip", "label": "Tuples / attrs (PIP)", "type": "store", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "client", "to": "pep", "label": "edit doc" },
+        { "from": "pep", "to": "pdp", "label": "check()" },
+        { "from": "pdp", "to": "pip", "label": "read" },
+        { "from": "pdp", "to": "pep", "label": "allow/deny" }
+      ],
+      "steps": [
+        { "edge": ["client","pep"], "caption": "Request: edit doc:readme." },
+        { "edge": ["pep","pdp"], "caption": "PEP asks the PDP: check(anne, edit, doc:readme)?" },
+        { "edge": ["pdp","pip"], "caption": "PDP reads relationship tuples / attributes and walks the graph (or evaluates policy)." },
+        { "edge": ["pdp","pep"], "caption": "Returns allow/deny in a few ms; the PEP enforces it.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+  <p><strong>Policy-as-code</strong>: OPA/Rego (general PDP, often a sidecar), <strong>Cedar</strong> (AWS; PARC model, statically analyzable, "RBAC+ABAC+ReBAC in one language"), Casbin. <strong>Policy-as-data</strong>: the decision is a relationship lookup (Zanzibar/OpenFGA/SpiceDB). Centralized PDP = simple to audit but a hop + SPOF (make it HA); sidecar = sub-ms, no hop, but you must distribute policy + data to every node.</p>
+</section>
+
+<section class="section reveal" id="performance">
+  <h2><span class="section-num">06</span> &nbsp;Performance: the hot path</h2>
+  <p>Authz runs on every request, often many times (a list page → N object checks: the <strong>"N+1 authz" problem</strong>). The budget is brutal:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Authz QPS</td><td>50k req/s × ~8 checks/req</td><td>≈ <strong>400k checks/s</strong> — batch the fan-out</td></tr>
+        <tr><td>Latency budget</td><td>p99 API budget ~200 ms</td><td>even a 20 ms check is 10% <em>per check</em> → cache + denormalize</td></tr>
+        <tr><td>Zanzibar published</td><td>&gt;2 trillion tuples, &gt;10M QPS</td><td>Check p50 ~3 ms / <strong>p99 ~20 ms</strong>, &gt;99.999% avail</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Mitigations: cache decisions (and sub-results), denormalize/precompute (Leopard-style flattened membership), <strong>batch</strong> the fan-out, and read from bounded-staleness replicas (<span class="mono">at_least_as_fresh</span>) rather than fully-consistent every time.</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">07</span> &nbsp;API, multi-tenancy &amp; failure modes</h2>
+  <div class="endpoint"><span class="verb post">CHECK</span><span class="path">check(user, action, resource) · batch-check([…])</span><span class="ep-note">the hot-path decision; batch cures N+1</span></div>
+  <div class="endpoint"><span class="verb get">EXPAND</span><span class="path">expand(obj, rel) · list-objects(user, action)</span><span class="ep-note">"who can access X?" / "what can U access?"</span></div>
+  <div class="kv">
+    <dt>Multi-tenancy</dt><dd>Every tuple/role is scoped to a tenant (prefix object ids <span class="mono">tenant_42/doc:readme</span> or carry <span class="mono">org_id</span> and predicate every check). The cardinal bug is a check resolving across a tenant boundary — make tenant scope a <strong>non-optional</strong> parameter.</dd>
+    <dt>Fail-closed vs fail-open</dt><dd>On PDP outage, <strong>fail-closed (deny)</strong> for security-sensitive systems; mitigate the availability cost with HA + local cache (fail-static = serve last-known-good), not by failing open.</dd>
+    <dt>Other failure modes</dt><dd>Stale-after-revoke (the new-enemy problem — bound staleness); role explosion / over-broad roles (least privilege); <strong>confused deputy</strong> — always thread the <em>caller's</em> identity into the check, never act with ambient service authority.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">08</span> &nbsp;Observability &amp; 2026</h2>
+  <div class="kv">
+    <dt>Metrics</dt><dd>Decision latency p50/p99 + batch sizes (watch N+1 fan-out); allow/deny rates (a deny spike = misconfig/attack, an allow spike = policy regression); policy/tuple <strong>change audit log</strong> (who changed what, when); decision logging (principal, action, resource, decision, policy version) for forensic replay.</dd>
+    <dt>Reverse-query reporting</dt><dd><span class="mono">expand</span>/<span class="mono">list-objects</span> drive access reviews ("who has access to X?", "what can U access?") for offboarding + least-privilege audits.</dd>
+    <dt>2026</dt><dd>Zanzibar-inspired ReBAC (OpenFGA / SpiceDB / Cedar) is the modern standard for fine-grained, sharing-heavy authz; externalized PDPs over scattered <span class="mono">if user.is_admin</span> checks; AWS Bedrock AgentCore Policy (Cedar) extends authz to <strong>AI agents</strong>.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">09</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Your product is Google-Docs-style: any user can share any document with any other, and folders grant access to the docs inside them. Which model?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>RBAC — one role per document</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>ReBAC (Zanzibar-style) — per-object relationship tuples with folder→doc inheritance via tuple-to-userset rewrites</button>
+      <button class="quiz-opt"><span class="mark"></span>ABAC — a rule per document</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> per-object, per-user, hierarchical sharing is exactly what RBAC can't express (you'd need an unbounded role per document). ReBAC models access as a graph — "is Anne related to this doc via viewer, possibly through its parent folder or a group?" — answered by reachability.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"I'd start with org-scoped RBAC for coarse policy, then reach for ReBAC if the product has per-object sharing — Zanzibar relationship tuples with computed-userset and tuple-to-userset rewrites for inheritance, where Check is a graph walk. I'd externalize it into a PDP (OpenFGA/SpiceDB/Cedar) behind a PEP, batch checks to kill N+1, cache decisions within a freshness bound (zookies prevent the new-enemy stale-revoke leak), and fail closed. Every check carries the tenant scope and the caller's identity to avoid cross-tenant leaks and confused-deputy bugs."</p></div></div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../expert/authentication.html"><span class="pn-k">‹ Back</span><span class="pn-t">Design authentication (login, SSO, MFA)</span></a>
+            <a class="next" href="../expert/ecommerce-catalog.html"><span class="pn-k">Next ›</span><span class="pn-t">Design e-commerce: catalog, search & cart</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements & the three models</a>
+          <a href="#rbac">RBAC deep dive</a>
+          <a href="#zanzibar">Zanzibar / ReBAC: the relationship graph</a>
+          <a href="#consistency">Consistency: the "new enemy" problem</a>
+          <a href="#pdp">Policy-as-data vs policy-as-code; PEP/PDP/PIP</a>
+          <a href="#performance">Performance: the hot path</a>
+          <a href="#api">API, multi-tenancy & failure modes</a>
+          <a href="#ops">Observability & 2026</a>
+          <a href="#recap">Trade-offs & interview recap</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Expert designs · Design authorization (RBAC, ABAC, ReBAC)</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+  <script src="../assets/js/tradeoff.js"></script>
+  <script src="../assets/js/visualizer.js"></script>
+</body>
+</html>

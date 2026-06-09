@@ -1,0 +1,130 @@
+<section class="hero reveal">
+  <span class="eyebrow">Git &amp; CI/CD · delivery</span>
+  <h1>Continuous delivery.</h1>
+  <p class="lead">CI ends with a tested artifact. Continuous delivery is everything after: that one artifact is promoted through environments — same bytes, different config — until it's sitting on the loading dock, ready to ship the instant a human says "go."</p>
+</section>
+
+<section class="section reveal" id="delivery-vs-deployment">
+  <h2><span class="section-num">01</span> Delivery vs deployment</h2>
+  <p class="takeaway">Continuous <b>delivery</b> = every green build is automatically packaged and <em>always ready</em> to release; a human approves the prod push. Continuous <b>deployment</b> = that final push is automatic too — green reaches prod with no gate.</p>
+  <p>The pipeline is identical up to the last step. Delivery keeps a human in the loop for the production release; deployment removes that click. The difference is one approval, not one technology.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p><b>Delivery</b> = the package is boxed, labelled, and sitting on the loading dock — it ships the second someone says "go." <b>Deployment</b> = the package ships itself automatically the moment it's boxed, no one waiting at the door.</p></div></div>
+
+  <div class="versus">
+    <div class="vs-col"><div class="vs-h">Continuous delivery</div>
+      <ul><li>Auto-built, auto-tested, auto-staged.</li><li>Always <b>releasable</b> at a button press.</li><li>Human approves the <b>prod</b> release.</li><li>Fits regulated/high-blast-radius systems.</li></ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Continuous deployment</div>
+      <ul><li>Everything above, <b>plus</b> auto-release.</li><li>Green commit → prod, no manual gate.</li><li>Needs strong tests + safe rollout (canary).</li><li>Highest velocity; demands confidence.</li></ul>
+    </div>
+  </div>
+
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">Heads up <span class="tag">scope</span></div><p>The telemetry that tells you a release is healthy — metrics, traces, dashboards, SLO burn-rate alerts — lives in the companion <strong>Observability guide</strong>. Here we cover the DevOps side: the pipeline, promotion, gates, and rollback.</p></div></div>
+</section>
+
+<section class="section reveal" id="promotion">
+  <h2><span class="section-num">02</span> Promote one artifact across environments</h2>
+  <p class="takeaway">After CI, the <b>same image</b> walks through dev → staging → prod, passing gates. You don't rebuild per environment — you <b>promote the identical bytes</b> and only swap config.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">One artifact promoted to prod</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "Promotion pipeline",
+      "nodes": [
+        { "id": "art", "label": "Image @sha256", "type": "artifact", "col": 0, "row": 1 },
+        { "id": "stg", "label": "Staging", "type": "environment", "col": 1, "row": 1 },
+        { "id": "gate", "label": "Approval gate", "type": "human", "col": 2, "row": 0 },
+        { "id": "prod", "label": "Production", "type": "environment", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "art", "to": "stg", "label": "deploy (staging config)" },
+        { "from": "stg", "to": "gate", "label": "tests pass" },
+        { "from": "gate", "to": "prod", "label": "promote SAME image" }
+      ],
+      "steps": [
+        { "node": "art", "caption": "CI produced one versioned image, pinned by digest." },
+        { "edge": ["art","stg"], "caption": "Deploy that image to staging with staging env vars + secrets." },
+        { "edge": ["stg","gate"], "caption": "Integration/smoke tests run; results gate the release.", "status": "hit" },
+        { "node": "gate", "caption": "A human reviews and approves the production release (delivery). Auto-approve = deployment." },
+        { "edge": ["gate","prod"], "caption": "Promote the IDENTICAL image to prod — only the config differs.", "status": "hit" }
+      ] }
+    </script>
+    <p class="viz-fallback">One image from CI is deployed to staging with staging config, passes gated tests, a human approves, and the exact same image is promoted to prod with prod config — never rebuilt.</p>
+  </figure>
+
+  <dl class="kv">
+    <dt>Same image</dt><dd>The artifact pinned by digest is byte-identical from staging to prod.</dd>
+    <dt>Different config</dt><dd>Per-environment env vars + secrets (DB URLs, keys) injected at deploy — pulled from SSM Parameter Store / Secrets Manager.</dd>
+    <dt>Gate</dt><dd>An automated check (tests, scan) and/or a manual approval that must pass to advance.</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Rebuilding the artifact for each environment breaks the core guarantee: "tested in staging == runs in prod." A fresh build can pull a newer base layer or dependency, so prod runs <em>different bytes</em> than you validated. <b>Build once, promote the identical image</b> — vary only config, never the binary.</p></div></div>
+</section>
+
+<section class="section reveal" id="deploy-vs-release">
+  <h2><span class="section-num">03</span> Deploy is not release</h2>
+  <p class="takeaway"><b>Deploy</b> = the new code is running on prod servers. <b>Release</b> = users can actually see it. A <b>feature flag</b> lets you deploy code "dark" and flip it on later — decoupling shipping risk from launch timing.</p>
+
+  <div class="steps">
+    <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Deploy dark</h4><p>The new version is live in prod but the feature is behind an off flag. Zero user impact.</p></div></div>
+    <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Validate in prod</h4><p>Enable for internal users / 1% of traffic. Real environment, tiny blast radius.</p></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Release</h4><p>Flip the flag to 100%. No redeploy — and if it misbehaves, flip it <b>off</b> instantly.</p></div></div>
+  </div>
+
+  <p>This is also your fastest <b>rollback</b>: toggling a flag is instant and reversible, whereas redeploying the previous artifact takes a full pipeline cycle. Keep the prior image one promotion away so a code rollback is also quick.</p>
+
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">tip</span></div><p>Rollback readiness is a feature, not an afterthought. Always be able to answer "how do we undo this in 60 seconds?" — usually a flag flip, or re-promoting the last known-good digest.</p></div></div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">You merged a risky feature and it's now running in production behind an off feature flag. Has it been released?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>No — it's <b>deployed</b> (running) but not <b>released</b> (no user can see it until the flag is on).</button>
+      <button class="quiz-opt"><span class="mark"></span>Yes — any code running in prod is by definition released.</button>
+      <button class="quiz-opt"><span class="mark"></span>Only if it passed the staging gate.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Deploy and release are separate events. The bytes are on prod (deployed), but the flag gates visibility (not released) — which is exactly what lets you ship continuously yet launch on your own schedule.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Continuous delivery vs continuous deployment?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Both auto-build, auto-test, and auto-promote through environments so the artifact is always releasable. <b>Delivery</b> stops at a human approval for the production release; <b>deployment</b> automates that final step too — a green commit reaches prod with no gate. The pipeline is the same; the only difference is whether a person clicks "go."</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Delivery keeps every build shippable but a human approves prod. Deployment removes even that click — green goes straight to production. Same pipeline, one extra gate."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What's the difference between deploy and release?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Deploy = the new code is running on production infrastructure. Release = users can actually experience it. Decouple them with a <b>feature flag</b>: deploy dark (flag off), validate in prod on a sliver of traffic, then flip the flag to release. It separates the technical risk of shipping from the business decision of launching — and makes rollback a one-toggle action.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Deploy is the code being live; release is users seeing it. A feature flag lets me ship dark and turn it on later — so launch timing and rollback become a toggle, not a redeploy."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>How does this pair with a canary? (Deploy the new version, then flag/route a small % before widening.)</li><li>Downside of flags? (They accumulate as tech debt — clean up stale ones.)</li></ul></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you promote one build across environments without rebuilding?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>CI builds <b>one</b> image, tagged by commit SHA and pinned by digest. That same digest is deployed to dev, then staging, then prod — config (env vars + secrets from SSM/Secrets Manager) is injected per environment at deploy time. The binary never changes; only configuration does. That's what makes "passed in staging" a real guarantee for prod, and lets a rollback re-promote the last known-good digest.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Build once, pin the digest, promote the same image through every environment and inject config per env. The bytes are constant, so staging genuinely predicts prod — and rollback is just re-promoting the last good digest."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

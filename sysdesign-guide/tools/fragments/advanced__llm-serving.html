@@ -1,0 +1,165 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Advanced · 2026 · LLM serving</span>
+  <h1>Design an LLM serving system.</h1>
+  <p class="lead">Serving a large language model breaks the usual rules: work happens on scarce, expensive <strong>GPUs</strong>; each request generates <strong>token by token</strong> over seconds; and throughput hinges on <strong>batching</strong> many requests together. The mental model to anchor on: generation has two phases — <strong>prefill</strong> (process the whole prompt at once, compute-bound) and <strong>decode</strong> (one token per step, memory-bandwidth-bound) — and the <strong>KV cache</strong> usually dominates GPU memory.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; what's different</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Accept a prompt, run inference, stream tokens back as produced. Many concurrent users, variable-length prompts/outputs.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>Low <strong>TTFT</strong> (time-to-first-token), high tokens/s, efficient use of very expensive GPUs (utilisation = cost), graceful overload. Stateful within a request (the KV cache must persist for the whole generation).</p></div>
+  </div>
+  <p>Why decode loves batching: producing one token still loads <em>all</em> model weights from HBM, so it's bandwidth-bound at low arithmetic intensity — batching amortises that weight load across many sequences. Prefill is already compute-bound, so it doesn't.</p>
+</section>
+
+<section class="section reveal" id="estimate">
+  <h2><span class="section-num">02</span> &nbsp;Capacity: the KV-cache budget</h2>
+  <p>GPU memory = model weights + KV cache + activations. The KV cache is the variable that decides how many concurrent tokens you can serve:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">kv_cache.txt</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">KV_bytes = 2 (K and V) × layers × kv_heads × head_dim × bytes × seq_len × batch
+
+Llama-3-70B (80 layers, 8 KV heads via GQA, head_dim 128, BF16):
+  2 × 80 × 8 × 128 × 2 × 4096 × 8  ≈  10.7 GB   (batch 8, 4k context)
+  -> ~0.31 MB per token; one 128k-context sequence ≈ ~40 GB of KV alone</code></pre></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Figure</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>70B weights (BF16)</td><td>140 GB</td><td>&gt; one 80 GB GPU → tensor-parallel ×2, or FP8 (~70 GB) to fit one</td></tr>
+        <tr><td>Throughput (MLPerf 5.1, Llama-2-70B)</td><td>8×H100 ≈ 24.5k tok/s · 8×B200 ≈ 102.7k tok/s</td><td>~4× via FP4 + Blackwell</td></tr>
+        <tr><td>Latency SLO (interactive)</td><td>TTFT ≤ 200–500 ms · TPOT ≤ 20–50 ms</td><td>50 ms/token ≈ faster than reading</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>GQA's 8 KV heads (vs 64 query heads) is an 8× KV reduction — which is why grouped-query attention is universal in 2026, and why FP8/FP4 (shrinking weights <em>and</em> KV) is standard.</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">03</span> &nbsp;API &amp; the request path</h2>
+  <p>OpenAI-compatible is the de-facto standard: <span class="mono">messages</span> + sampling params + <span class="mono">stream: true</span>, emitting data-only <strong>SSE</strong> deltas (server→client, plain HTTP, proxy-friendly) ending with <span class="mono">[DONE]</span>. The router does auth, rate-limiting, and — increasingly — <strong>prefix/KV-aware routing</strong> (send requests sharing a system prompt to the replica that already holds those KV blocks).</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Prompt → batch → GPU → streamed tokens</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Inference path",
+      "nodes": [
+        { "id": "client", "label": "Client", "type": "prompt", "col": 0, "row": 1 },
+        { "id": "gw", "label": "Router", "type": "KV-aware", "col": 1, "row": 1 },
+        { "id": "sched", "label": "Batch scheduler", "type": "queue", "col": 2, "row": 1 },
+        { "id": "gpu", "label": "GPU worker", "type": "PagedAttn KV", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "client", "to": "gw", "label": "prompt" },
+        { "from": "gw", "to": "sched" },
+        { "from": "sched", "to": "gpu", "label": "batch/step" },
+        { "from": "gpu", "to": "client", "label": "stream tokens" }
+      ],
+      "steps": [
+        { "edge": ["client","gw"], "caption": "Prompt arrives; the router authenticates, rate-limits, and routes to a replica that may already hold this prefix's KV." },
+        { "edge": ["gw","sched"], "caption": "It joins the scheduler's queue under admission control." },
+        { "edge": ["sched","gpu"], "caption": "Each token-step the scheduler tops up the batch from waiting + runs all in-flight sequences in one forward pass." },
+        { "node": "gpu", "caption": "Prefill computes the prompt's KV; decode emits one token/step. PagedAttention stores KV in paged blocks.", "status": "hit" },
+        { "edge": ["gpu","client"], "caption": "Tokens stream back as SSE deltas — TTFT feels instant even though the full answer takes seconds." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="batching">
+  <h2><span class="section-num">04</span> &nbsp;Continuous batching</h2>
+  <p><strong>Static batching</strong> fixes a batch and runs it to completion — so the whole batch waits for the <em>longest</em> sequence (head-of-line blocking) while finished sequences leave their GPU slots idle. <strong>Continuous (in-flight) batching</strong> operates per token-step: add waiting requests and evict finished ones every step, so a slot frees the instant a sequence hits EOS. Up to ~23× throughput over static.</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Batching strategy",
+      "axisLabel": "How many sequences per forward pass, and when do they enter/leave?",
+      "stops": [
+        { "label": "Small static", "dims": { "Throughput": 30, "Low latency": 90, "GPU utilization": 30, "Cost-efficiency": 30 }, "note": "Few sequences per pass → fast per-token latency, but the GPU is mostly idle (it loads all weights to produce a handful of tokens). Wastes the expensive hardware." },
+        { "label": "Large static", "dims": { "Throughput": 80, "Low latency": 35, "GPU utilization": 75, "Cost-efficiency": 75 }, "note": "Many sequences amortize the weight load → high throughput, but mixed lengths cause head-of-line blocking (everyone waits for the longest) and slots idle as sequences finish — inflating tail latency." },
+        { "label": "Continuous", "dims": { "Throughput": 95, "Low latency": 78, "GPU utilization": 95, "Cost-efficiency": 95 }, "note": "Add/evict sequences each token-step; a finished sequence frees its slot immediately for a waiting one. Up to ~23× throughput over static with good latency. The 2026 default (vLLM/TGI/TensorRT-LLM)." }
+      ]
+    }
+    </script>
+  </div>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">scheduler.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">running, waiting = [], deque()
+
+def step():
+    # 1) SCHEDULE: top up the batch from the queue under the token budget
+    while waiting and kv_cache.has_free_blocks() and token_budget_left():
+        seq = waiting.popleft()
+        if not kv_cache.allocate(seq):       # not enough KV blocks
+            waiting.appendleft(seq); break
+        running.append(seq)                  # prefill happens this step
+
+    # 2) FORWARD: one fused pass over all running seqs -> next token each
+    tokens = sample(model.forward(running))  # prefill chunks + decodes, batched
+
+    # 3) RETIRE finished sequences, freeing their slot THIS step
+    for seq, tok in zip(running, tokens):
+        seq.append(tok); stream_to_client(seq, tok)      # SSE delta
+        if tok == EOS or seq.len &gt;= seq.max_tokens:
+            kv_cache.free(seq); running.remove(seq)
+
+    # 4) OVERLOAD: out of KV blocks -> preempt a low-priority seq (recompute later)
+    if kv_cache.exhausted():
+        victim = lowest_priority(running)
+        kv_cache.free(victim); running.remove(victim); waiting.appendleft(victim)</code></pre></div>
+  </div>
+</section>
+
+<section class="section reveal" id="kvcache">
+  <h2><span class="section-num">05</span> &nbsp;KV cache &amp; PagedAttention</h2>
+  <p>Classic systems store each sequence's KV in one <em>contiguous</em> buffer pre-sized to the max length — wasting <strong>60–80%</strong> of KV memory to internal fragmentation. <strong>PagedAttention</strong> (vLLM) treats KV like OS virtual memory: fixed-size <strong>blocks</strong> (16 tokens), non-contiguous in HBM, mapped via a per-sequence block table. Allocate blocks on demand → fragmentation drops <strong>under 4%</strong>, enabling far larger batches (up to ~24× throughput over naive HF).</p>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Prefix caching is the biggest cost lever</div><p>Because blocks are content-addressable, identical prefixes <strong>share</strong> physical KV blocks — a large shared system prompt's prefill is paid <em>once</em> across all requests. Stable prompts (agents, RAG) hit <strong>80%+ prefix-cache hit rates</strong>, the single biggest TTFT and cost win. This is why the router is prefix-aware.</p></div></div>
+</section>
+
+<section class="section reveal" id="modern">
+  <h2><span class="section-num">06</span> &nbsp;2026 techniques, autoscaling &amp; failure</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔀</span><h4>Disaggregated prefill/decode</h4><p>The big 2025→2026 shift: prefill is compute-bound, decode is bandwidth-bound, so co-locating them interferes. Put them on <strong>separate GPU pools</strong> (transfer KV over the interconnect) → up to ~7.4× more requests / 12.6× tighter SLO. In Dynamo, llm-d, vLLM, SGLang.</p></div>
+    <div class="card feature"><span class="f-ic fx">⚡</span><h4>Quantization &amp; spec decoding</h4><p>FP8 mainstream, <strong>FP4 native on Blackwell</strong> (~2× FP8 TFLOPS, ~1.4× cheaper/token). Speculative decoding: a small draft proposes K tokens, the target verifies in one pass. Chunked prefill interleaves long prompts with decodes.</p></div>
+    <div class="card feature"><span class="f-ic fx">📈</span><h4>Autoscaling</h4><p>Scale on <strong>queue depth / KV-cache utilisation / TTFT</strong> — not CPU, not raw GPU util (which pegs at 100% during batching). Cold start is brutal (load 70–140 GB weights) → keep a warm pool, avoid scale-to-zero for latency tiers.</p></div>
+    <div class="card feature"><span class="f-ic fx">💥</span><h4>Failure modes</h4><p><strong>KV exhaustion</strong> → preempt a running seq (drop + recompute later). Pathologically long sequences starve others → cap <span class="mono">max_tokens</span>. Replica crash loses all in-flight KV (it's ephemeral, in-GPU) → retry from scratch; router re-routes.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">07</span> &nbsp;Multi-region, cost &amp; observability</h2>
+  <div class="kv">
+    <dt>Cost</dt><dd>GPU cost dominates — optimise <strong>throughput per dollar (cost/M tokens)</strong>, not raw latency. Levers: quantization (FP8→FP4), continuous batching + high KV utilisation, prefix caching (skip repeated prefill), disaggregation, bigger batches for throughput tiers. Tier: interactive (warm pools, tight SLO, small batches) vs batch/async (scale-to-zero OK, huge batches, cheapest hardware).</dd>
+    <dt>Multi-region</dt><dd>Route to regions with GPU capacity (GPUs are scarce); accept some cross-region latency to land on a warm, in-region replica with prefix-cache hits.</dd>
+    <dt>Metrics &amp; SLOs</dt><dd><strong>TTFT</strong> + <strong>TPOT/inter-token latency</strong> (joint SLO, e.g. "p95 TTFT &lt; 500 ms AND p95 TPOT &lt; 50 ms" — goodput is the north star), tokens/s, KV-cache utilisation (alert &gt; 85–90%), queue depth, <strong>preemption rate</strong> (KV thrashing), prefix-cache hit rate.</dd>
+    <dt>2026 stack</dt><dd>vLLM (reference: PagedAttention + prefix caching + V1 scheduler), TensorRT-LLM, SGLang, TGI; NVIDIA Dynamo + llm-d for orchestration/disaggregation.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">08</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why is continuous batching so central to serving LLMs efficiently?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>It reduces the model's accuracy to save time</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Decode is bandwidth-bound, so batching amortizes the weight load; adding/evicting sequences per step keeps the expensive GPU full despite variable output lengths</button>
+      <button class="quiz-opt"><span class="mark"></span>It avoids the need for a network</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> a GPU producing one token still loads all weights from HBM, so one request wastes it. Continuous batching packs many sequences through together and frees slots the instant a sequence finishes — maximising tokens/s/GPU, which (since GPUs dominate cost) is the whole game.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"Generation is prefill (compute-bound) then decode (bandwidth-bound), and the KV cache dominates memory. So: continuous batching to keep the GPU full, PagedAttention to kill KV fragmentation, and prefix caching so shared system prompts prefill once — the biggest TTFT/cost lever. I'd autoscale on KV utilisation and queue depth (not CPU), shed load via admission control, and in 2026 disaggregate prefill and decode onto separate pools with FP4 on Blackwell. SLOs are joint TTFT + TPOT, and the optimisation target is cost per million tokens."</p></div></div>
+</section>

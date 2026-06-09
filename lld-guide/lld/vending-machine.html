@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLD case study — Vending machine | The Design Field Guide</title>
+  <meta name="description" content="A low-level design case study of a vending machine built around the State pattern: an Idle → HasMoney → Dispensing state machine in idiomatic Python 3.13, with a state-transition diagram, UML, a runnable walkthrough, and SoldOut / refund extensions." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="lld" data-page="lld-vending-machine" data-lesson="lld-vending-machine">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../lld/index.html" style="color:var(--accent)">LLD</a><span class="sep">/</span><span class="current">Vending machine</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">LLD case study · the State pattern</span>
+            <h1>Designing a vending machine.</h1>
+            <p class="lead">A vending machine is the friendliest possible introduction to the <strong>State pattern</strong>. It does completely different things depending on what's happening inside it — and that "it depends on the state" is exactly the smell that the pattern was invented for.</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Clarify the requirements</h2>
+            <p>Before any code, pin down what the machine must do. In an interview you'd say these out loud and confirm scope with the interviewer. Our machine should:</p>
+            <ul>
+              <li>Accept <strong>coins</strong> one at a time, tracking a running balance.</li>
+              <li>Let the user <strong>select a product</strong> from the inventory.</li>
+              <li><strong>Dispense</strong> the product only when there is enough money <em>and</em> stock.</li>
+              <li><strong>Return change</strong> if the user paid more than the price.</li>
+              <li>Allow <strong>cancel / refund</strong> at any point before dispensing.</li>
+            </ul>
+            <p>Notice how every rule is phrased as "if the machine is in <em>this</em> situation, then…". The same button (insert a coin) means different things at different moments: it's fine while idle, but pointless while a product is already being dispensed. That is the tell-tale sign of a <strong>finite state machine</strong> — a thing that lives in exactly one of a handful of named states, and whose reaction to an event depends on which state it's in.</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Scope we'll defer</div><p>Real machines worry about exact change, multiple coin denominations, card payments, and concurrency. We'll keep coins as plain integer cents and a single-threaded flow so the <em>design</em> stays in focus. The extensions section adds a couple of the trickier requirements back.</p></div></div>
+          </section>
+
+          <!-- 2. STATES -->
+          <section class="section reveal" id="states">
+            <h2><span class="section-num">02</span> &nbsp;Why this is a State machine</h2>
+            <p>The naive version of this code is a swamp of <code>if</code> statements: "if balance is zero do X, unless a product is selected, unless we're mid-dispense…". Every method ends up re-checking the same flags. The State pattern flips that around: instead of one object asking "what state am I in?" everywhere, you give each state its <em>own object</em> that knows how to behave.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A traffic light <span class="tag">analogy</span></div><p>A traffic light is always exactly one of <em>red</em>, <em>green</em>, or <em>amber</em>. The "next" event does something different in each: red→green, green→amber, amber→red. The light doesn't keep a tangle of booleans; it simply <em>is</em> a colour, and each colour knows what comes next. Swap "colour" for "machine state" and you have the State pattern.</p></div></div>
+            <p>Concretely, our machine moves between these states:</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>State</th><th>Meaning</th><th>What "select" does here</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Idle</strong></td><td>Waiting, balance is zero</td><td>Rejects — "insert money first"</td></tr>
+                  <tr><td><strong>HasMoney</strong></td><td>Coins inserted, awaiting a choice</td><td>Picks the product, moves to dispensing</td></tr>
+                  <tr><td><strong>Dispensing</strong></td><td>Vending + returning change</td><td>Rejects — "already dispensing"</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>Each state is a class. The machine (the <em>context</em>) just holds a reference to "the state I'm currently in" and forwards every event to it. Adding a new state later means adding a class, not editing a giant <code>if</code> ladder — the <a href="../solid/principles.html">Open/Closed Principle</a> at work.</p>
+          </section>
+
+          <!-- 3. DIAGRAM -->
+          <section class="section reveal" id="diagram">
+            <h2><span class="section-num">03</span> &nbsp;The state machine, drawn out</h2>
+            <p>First, the transitions. Each arrow is an <em>event</em> that flips the machine from one state to the next:</p>
+            <div class="diagram">
+              <div class="dg-title">Idle → HasMoney → Dispensing → Idle</div>
+              <div class="flow">
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">state</div><div class="fn-t">Idle</div><div class="fn-d">balance = 0, waiting</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">state</div><div class="fn-t">HasMoney</div><div class="fn-d">coins in, pick a product</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">state</div><div class="fn-t">Dispensing</div><div class="fn-d">vend + return change</div></div>
+              </div>
+              <div class="cap">insert_coin moves Idle → HasMoney · select moves HasMoney → Dispensing · dispensing finishes and resets back to Idle.</div>
+            </div>
+            <p>And the class structure: a <code>VendingState</code> interface with one concrete class per state. The hollow triangle means "is-a" — each concrete state <em>implements</em> the interface.</p>
+            <div class="diagram">
+              <div class="dg-title">VendingState «interface» and its concrete states</div>
+              <div class="uml-stack">
+                <div class="umlclass is-interface" style="min-width:240px">
+                  <div class="umlc-name"><span class="umlc-stereo">«interface»</span>VendingState</div>
+                  <div class="umlc-methods">
+                    <span>+ insert_coin(machine, amount)</span>
+                    <span>+ select(machine, product)</span>
+                    <span>+ dispense(machine)</span>
+                  </div>
+                </div>
+                <div class="uml-rel">
+                  <svg viewBox="0 0 96 30" fill="none"><line x1="48" y1="28" x2="48" y2="9" stroke="currentColor" stroke-width="1.6"/><path d="M41 9 L48 2 L55 9 Z" fill="var(--bg-elev)" stroke="currentColor" stroke-width="1.6"/></svg>
+                  <span class="ur-label">implements</span>
+                </div>
+                <div class="uml-row">
+                  <div class="umlclass"><div class="umlc-name">IdleState</div><div class="umlc-methods"><span>+ insert_coin()</span><span>+ select()</span><span>+ dispense()</span></div></div>
+                  <div class="umlclass"><div class="umlc-name">HasMoneyState</div><div class="umlc-methods"><span>+ insert_coin()</span><span>+ select()</span><span>+ dispense()</span></div></div>
+                  <div class="umlclass"><div class="umlc-name">DispensingState</div><div class="umlc-methods"><span>+ insert_coin()</span><span>+ select()</span><span>+ dispense()</span></div></div>
+                </div>
+              </div>
+              <div class="cap">The <code>VendingMachine</code> context holds one of these at a time and delegates every call to it.</div>
+            </div>
+          </section>
+
+          <!-- 4. CODE -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">04</span> &nbsp;The implementation</h2>
+            <p>We start with the shared contract. Each state implements the three events; the default ABC version of each rejects the action, so a state only overrides the events it actually allows.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-tabs"><button class="code-tab active">states.py</button><button class="code-tab">machine.py</button></span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from __future__ import annotations
+from abc import ABC, abstractmethod
+
+# Prices in whole cents, keeps the math exact and deterministic.
+PRICES: dict[str, int] = {"cola": 125, "water": 100, "chips": 150}
+
+
+class VendingState(ABC):
+    """One object per state. Each method reacts to an event; the
+    default is to reject it, so subclasses override only what they allow."""
+
+    @abstractmethod
+    def name(self) -&gt; str: ...
+
+    def insert_coin(self, machine: "VendingMachine", amount: int) -&gt; None:
+        print(f"  [rejected] can't insert coins while {self.name()}")
+
+    def select(self, machine: "VendingMachine", product: str) -&gt; None:
+        print(f"  [rejected] can't select while {self.name()}")
+
+    def dispense(self, machine: "VendingMachine") -&gt; None:
+        print(f"  [rejected] nothing to dispense while {self.name()}")
+
+
+class IdleState(VendingState):
+    def name(self) -&gt; str:
+        return "idle"
+
+    def insert_coin(self, machine: "VendingMachine", amount: int) -&gt; None:
+        machine.balance += amount
+        print(f"  inserted {amount}c, balance = {machine.balance}c")
+        machine.set_state(HasMoneyState())   # transition Idle -&gt; HasMoney
+
+
+class HasMoneyState(VendingState):
+    def name(self) -&gt; str:
+        return "has-money"
+
+    def insert_coin(self, machine: "VendingMachine", amount: int) -&gt; None:
+        machine.balance += amount            # stay in HasMoney, just add coins
+        print(f"  inserted {amount}c, balance = {machine.balance}c")
+
+    def select(self, machine: "VendingMachine", product: str) -&gt; None:
+        if machine.inventory.get(product, 0) &lt;= 0:
+            print(f"  [rejected] {product} is out of stock")
+            return
+        price = PRICES[product]
+        if machine.balance &lt; price:
+            short = price - machine.balance
+            print(f"  [rejected] {product} costs {price}c, insert {short}c more")
+            return
+        machine.selected = product
+        print(f"  selected {product} ({price}c)")
+        machine.set_state(DispensingState())  # transition HasMoney -&gt; Dispensing
+        machine.dispense()                    # auto-run the dispense step
+
+
+class DispensingState(VendingState):
+    def name(self) -&gt; str:
+        return "dispensing"
+
+    def dispense(self, machine: "VendingMachine") -&gt; None:
+        product = machine.selected
+        price = PRICES[product]
+        machine.inventory[product] -= 1
+        change = machine.balance - price
+        print(f"  dispensed {product}; change returned = {change}c")
+        # reset the context and go back to the start
+        machine.balance = 0
+        machine.selected = None
+        machine.set_state(IdleState())        # transition Dispensing -&gt; Idle</code></pre></div>
+              <div class="code-pane"><pre><code data-lang="python">class VendingMachine:
+    """The CONTEXT. It owns the inventory + balance and delegates every
+    event to whatever state object it currently holds."""
+
+    def __init__(self, inventory: dict[str, int]):
+        self.inventory = inventory
+        self.balance: int = 0
+        self.selected: str | None = None
+        self.state: VendingState = IdleState()   # always start idle
+
+    def set_state(self, state: VendingState) -&gt; None:
+        self.state = state                       # the single transition point
+
+    # --- the public API simply forwards to the current state ---
+    def insert_coin(self, amount: int) -&gt; None:
+        self.state.insert_coin(self, amount)
+
+    def select(self, product: str) -&gt; None:
+        self.state.select(self, product)
+
+    def dispense(self) -&gt; None:
+        self.state.dispense(self)</code></pre></div>
+            </div>
+            <p>The whole trick is in <code>VendingMachine</code>: its <code>insert_coin</code> / <code>select</code> / <code>dispense</code> methods contain <em>no</em> logic — they hand off to <code>self.state</code>. The states themselves decide what is legal and call <code>machine.set_state(...)</code> to move on.</p>
+          </section>
+
+          <!-- 5. WALKTHROUGH -->
+          <section class="section reveal" id="walkthrough">
+            <h2><span class="section-num">05</span> &nbsp;A runnable walkthrough</h2>
+            <p>Let's buy a cola (125c) by inserting a dollar and a quarter, then try a few illegal moves to watch the states reject them:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">run.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">vm = VendingMachine(inventory={"cola": 2, "water": 0, "chips": 5})
+
+print("State:", vm.state.name())
+vm.dispense()              # illegal while idle
+
+print("State:", vm.state.name())
+vm.insert_coin(100)        # Idle -&gt; HasMoney
+vm.insert_coin(25)         # stays HasMoney, balance 125
+
+print("State:", vm.state.name())
+vm.select("water")         # out of stock -&gt; rejected, still HasMoney
+vm.select("cola")          # enough money + in stock -&gt; dispense + reset
+
+print("State:", vm.state.name())
+print("Cola left:", vm.inventory["cola"])</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>State: idle
+  [rejected] nothing to dispense while idle
+State: idle
+  inserted 100c, balance = 100c
+  inserted 25c, balance = 125c
+State: has-money
+  [rejected] water is out of stock
+  selected cola (125c)
+  dispensed cola; change returned = 0c
+State: idle
+Cola left: 1</div>
+            <p>The machine ends right back in <code>idle</code>, balance cleared, inventory decremented — ready for the next customer. No flags, no nested conditionals; each state simply did its job and pointed at the next state.</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">The Pythonic way</div><p>For something this small you could replace the state classes with a single method that uses <code>match self._state:</code> and <code>case "idle":</code> branches. That's perfectly Pythonic for two or three states. But every new state then means editing that one growing method (and every event's <code>match</code>). Explicit state <em>classes</em> scale better: each state is isolated, independently testable, and adding one never touches the existing ones — exactly what we'll do in the extensions below.</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">Strategy and State are nearly identical in structure. What's the real difference?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>State uses inheritance; Strategy uses composition</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A State object can <em>change which state comes next</em>; a Strategy is chosen by the client and doesn't swap itself out</button>
+                <button class="quiz-opt"><span class="mark"></span>Strategy can only have two implementations</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> they share the "interface + interchangeable implementations" shape, but intent differs. With <em>Strategy</em> the caller picks an algorithm and it stays put. With <em>State</em> the objects themselves drive transitions — each state decides what the next state is by calling <code>set_state()</code>.</div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">In our design, what actually <em>triggers</em> a transition from one state to the next?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>The <code>VendingMachine</code> checks its balance after every call and decides</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A state's own method calls <code>machine.set_state(...)</code> in response to an event</button>
+                <button class="quiz-opt"><span class="mark"></span>A timer fires on a schedule</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> transitions live <em>inside the states</em>. <code>IdleState.insert_coin</code> moves to <code>HasMoneyState</code>; <code>HasMoneyState.select</code> moves to <code>DispensingState</code>. The context's <code>set_state</code> is just the one place the swap happens.</div>
+            </div>
+          </section>
+
+          <!-- 6. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">06</span> &nbsp;Extend it yourself</h2>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 1 · add a SoldOut state</div>
+              <p class="ex-q">Add a <code>SoldOutState</code> the machine enters when the <em>entire</em> inventory is empty. While sold out, inserting coins should be rejected. Where do you put the check, and what existing code must change?</p>
+              <p>Hint: the only place that removes stock is <code>DispensingState.dispense</code> — that's the natural spot to ask "is everything gone now?" before choosing the next state.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <p>You add one new class and tweak only the dispense transition — the other states are untouched.</p>
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">sold_out.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python">class SoldOutState(VendingState):
+    def name(self) -&gt; str:
+        return "sold-out"
+
+    def insert_coin(self, machine: "VendingMachine", amount: int) -&gt; None:
+        print("  [rejected] machine is sold out")
+    # select() and dispense() inherit the ABC's "rejected" defaults.
+
+
+# inside DispensingState.dispense, replace the final transition with:
+class DispensingState(VendingState):
+    def name(self) -&gt; str:
+        return "dispensing"
+
+    def dispense(self, machine: "VendingMachine") -&gt; None:
+        product = machine.selected
+        price = PRICES[product]
+        machine.inventory[product] -= 1
+        change = machine.balance - price
+        print(f"  dispensed {product}; change returned = {change}c")
+        machine.balance = 0
+        machine.selected = None
+        if sum(machine.inventory.values()) == 0:        # everything gone?
+            machine.set_state(SoldOutState())
+        else:
+            machine.set_state(IdleState())</code></pre></div>
+                  </div>
+                  <p>Because every state is its own class, "sold out" can't accidentally accept money — it simply doesn't override the methods that would let it.</p>
+                </div>
+              </div>
+            </div>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 2 · refund on cancel</div>
+              <p class="ex-q">Add a <code>cancel()</code> event that refunds the full balance and returns the machine to <code>Idle</code>. It should work in <code>HasMoneyState</code> but be rejected while <code>Dispensing</code> (you can't un-vend a snack).</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <p>Add a default <code>cancel</code> to the interface (rejecting, like the others), forward it from the context, then override it only where a refund makes sense.</p>
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">cancel.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python"># on VendingState (the ABC): a rejecting default
+    def cancel(self, machine: "VendingMachine") -&gt; None:
+        print(f"  [rejected] can't cancel while {self.name()}")
+
+# on VendingMachine (the context): forward it
+    def cancel(self) -&gt; None:
+        self.state.cancel(self)
+
+# on HasMoneyState: the real refund
+    def cancel(self, machine: "VendingMachine") -&gt; None:
+        refund = machine.balance
+        machine.balance = 0
+        machine.selected = None
+        print(f"  cancelled; refunded {refund}c")
+        machine.set_state(IdleState())
+
+# usage
+vm.insert_coin(100)        # Idle -&gt; HasMoney, balance 100
+vm.cancel()                # refunded 100c, back to Idle</code></pre></div>
+                  </div>
+                  <div class="io-out"><b>Output</b>  inserted 100c, balance = 100c
+  cancelled; refunded 100c</div>
+                  <p><code>DispensingState</code> never overrides <code>cancel</code>, so it falls through to the ABC's rejecting default — exactly the behaviour we want.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../lld/parking-lot.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: Parking lot</span></a>
+            <a class="next" href="../lld/notification-service.html"><span class="pn-k">Next ›</span><span class="pn-t">Case: Notification service</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements</a>
+          <a href="#states">Why it's a State machine</a>
+          <a href="#diagram">The state machine</a>
+          <a href="#code">Implementation</a>
+          <a href="#walkthrough">Walkthrough</a>
+          <a href="#extensions">Extend it yourself</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">LLD · Vending machine</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

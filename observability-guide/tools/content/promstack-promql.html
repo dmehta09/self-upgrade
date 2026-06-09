@@ -1,0 +1,156 @@
+<section class="hero reveal">
+  <span class="eyebrow">Prometheus &amp; Grafana &middot; PromQL</span>
+  <h1>PromQL, hands-on.</h1>
+  <p class="lead">PromQL is the query language for Prometheus time-series data. Learn five patterns — selectors, <code>rate()</code>, aggregations, percentiles, recording rules — and you can answer almost any metrics question an interviewer throws at you.</p>
+</section>
+
+<section class="section reveal" id="mental-model">
+  <h2><span class="section-num">01</span> The mental model</h2>
+  <p class="takeaway">PromQL is <b>SQL for time series</b>: you select a metric, filter by labels, apply functions, and aggregate. The key distinction from SQL is the time dimension — every result is a vector of current values or a range of values over a window.</p>
+  <p>Two core types: an <b>instant vector</b> (one value per matching series, at one point in time) and a <b>range vector</b> (a window of values, like <code>[5m]</code>). Functions like <code>rate()</code> require a range vector as input.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>SQL lets you <code>SELECT</code> rows from a table and <code>GROUP BY</code> a column. PromQL does the same but every "row" is a time-stamped sample and your "columns" are labels. The range window (<code>[5m]</code>) is like saying "give me the last 5 minutes of rows" before you aggregate.</p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>Instant vector</dt><dd><code>http_requests_total{status="500"}</code> — one latest value per matching series.</dd>
+    <dt>Range vector</dt><dd><code>http_requests_total{status="500"}[5m]</code> — all samples in the last 5 minutes per series. Required by <code>rate()</code>, <code>increase()</code>.</dd>
+    <dt>Scalar</dt><dd>A single number — e.g. <code>1024</code> or the result of arithmetic.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="selectors-rate">
+  <h2><span class="section-num">02</span> Selectors, matchers, and <code>rate()</code></h2>
+  <p>Label matchers filter which series you get. <code>rate()</code> turns a monotonically increasing counter into a per-second rate — the most useful function in PromQL.</p>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">selectors.promql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="promql"># Exact match
+http_requests_total{service="checkout", status="200"}
+
+# Regex match — all 5xx errors
+http_requests_total{status=~"5.."}
+
+# Negative match — exclude internal health checks
+http_requests_total{path!="/healthz"}
+
+# Rate of requests over a 5-minute window (per second)
+rate(http_requests_total[5m])</code></pre>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title"><code>rate()</code> needs a counter, not a gauge <span class="tag">gotcha</span></div>
+      <p><code>rate()</code> computes the per-second increase of a monotonically increasing counter. Applying it to a gauge (like <code>memory_bytes</code>, which can go up and down) produces nonsense. Use <code>avg_over_time()</code> or <code>delta()</code> for gauges.</p>
+    </div>
+  </div>
+
+  <figure class="viz queryexp" data-queryexp>
+    <figcaption class="viz-title">PromQL explorer — try these queries</figcaption>
+    <script type="application/json" class="qe-config">{}</script>
+    <p class="viz-fallback">Interactive PromQL explorer: rate(), sum by(), histogram_quantile(), and more — with explanations and preview charts for each query pattern.</p>
+  </figure>
+</section>
+
+<section class="section reveal" id="aggregation">
+  <h2><span class="section-num">03</span> Aggregation with <code>sum by</code></h2>
+  <p>Raw series are per-instance. <code>sum by (...)</code> collapses them into meaningful aggregates — total RPS by service, error rate fleet-wide, etc.</p>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">aggregation.promql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="promql"># Total RPS across all instances, grouped by service
+sum by (service) (rate(http_requests_total[5m]))
+
+# Error ratio — errors / total, by service
+sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))
+/
+sum by (service) (rate(http_requests_total[5m]))</code></pre>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Don't <code>sum</code> before <code>rate()</code> <span class="tag">gotcha</span></div>
+      <p>Always apply <code>rate()</code> first, then <code>sum by</code>. Summing counters across instances before computing the rate gives wrong results whenever an instance restarts — the counter resets to zero and the sum jumps.</p>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Which expression correctly computes the per-second request rate summed across all pods of the <code>api</code> service?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>sum by (service) (rate(http_requests_total{service="api"}[5m]))</code></button>
+      <button class="quiz-opt"><span class="mark"></span><code>rate(sum by (service) (http_requests_total{service="api"})[5m])</code></button>
+      <button class="quiz-opt"><span class="mark"></span><code>sum(http_requests_total{service="api"})</code></button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> <code>rate()</code> must operate on individual series before aggregation. Summing the raw counter first and then rate-ing would produce incorrect results when any pod restarts.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="percentiles-recording">
+  <h2><span class="section-num">04</span> Percentiles &amp; recording rules</h2>
+  <p><b>Latency percentiles</b> require a histogram metric. <code>histogram_quantile()</code> reconstructs a percentile estimate from the bucket counts. <b>Recording rules</b> precompute expensive queries so dashboards load instantly.</p>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">percentiles.promql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="promql"># p95 request latency by service
+histogram_quantile(0.95,
+  sum by (service, le) (
+    rate(http_request_duration_seconds_bucket[5m])
+  )
+)</code></pre>
+  </div>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">recording-rule.yaml</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="yaml">groups:
+  - name: slo_precompute
+    rules:
+      - record: job:http_requests_total:rate5m
+        expr: |
+          sum by (service) (
+            rate(http_requests_total[5m])
+          )</code></pre>
+  </div>
+
+  <dl class="kv">
+    <dt><code>le</code> label</dt><dd>Histogram buckets carry an <code>le</code> (less-than-or-equal) label. <code>histogram_quantile</code> reads these bucket counts to interpolate the requested percentile.</dd>
+    <dt>Recording rule</dt><dd>Prometheus evaluates the expression on a schedule and stores the result as a new metric name. Dashboards query the cheap pre-built metric instead of recomputing every load.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What's the difference between an instant vector and a range vector in PromQL?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>An instant vector gives one current value per matching series. A range vector (with a duration selector like <code>[5m]</code>) gives a set of timestamped samples over that window — it's the required input for functions like <code>rate()</code> that need to measure change over time.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Instant is a snapshot; range is a window. Rate needs the window so it can see how much the counter moved."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you compute a p95 latency in Prometheus?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>You need a histogram metric (with <code>_bucket</code>, <code>_count</code>, <code>_sum</code>). Apply <code>rate()</code> to the bucket series over a window, then pass it to <code>histogram_quantile(0.95, sum by (le) (...))</code>. The <code>le</code> label (bucket upper bound) is required.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Rate the histogram buckets, sum by le, then histogram_quantile of 0.95."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>What are native histograms in Prometheus 3.x?</li><li>Why is accuracy limited with classic histograms?</li></ul></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What are recording rules and when do you use them?</span><span class="pm-chip diff-warm">warm</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Recording rules let Prometheus evaluate an expression on a schedule and store the result as a new time series. Use them for expensive aggregations that dashboards query repeatedly — like pre-computing per-service error rates. Dashboards hit the cheap pre-built metric instead of re-executing the heavy query on every load.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"They precompute heavy queries into new metrics so dashboards query cheap pre-built series instead of re-evaluating every time."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

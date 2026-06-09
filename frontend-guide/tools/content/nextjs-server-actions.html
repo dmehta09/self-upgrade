@@ -1,0 +1,156 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Next.js &middot; Server Actions</span>
+            <h1>Server Actions &amp; mutations</h1>
+            <p class="lead">A Server Action is a <code>"use server"</code> function you call straight from a form or an event &mdash; no hand-written API route, no fetch boilerplate. It runs on the server, mutates data, and revalidates the cache, with progressive enhancement for free.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">A <code>"use server"</code> function is a <b>type-safe server endpoint</b> you invoke directly from the client &mdash; usually via <code>&lt;form action={fn}&gt;</code>.</p>
+            <p>You write the mutation as a normal async function, mark it <code>"use server"</code>, and pass it to a form&rsquo;s <code>action</code>. Next wires up the network call. Because it&rsquo;s a real form post, it works before JS loads, then upgrades to a fetch once hydrated.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>A form that posts straight into a typed function on the server &mdash; like running a wire from the submit button directly to your backend code. No envelope to address (an API route), no postal service to configure (fetch + JSON). You just call the function; Next runs the wire.</p>
+              </div>
+            </div>
+
+            <div class="diagram"><div class="dg-title">Mutation flow</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">1</div><div class="fn-t">form</div><div class="fn-d">action={createTodo}</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">2</div><div class="fn-t">action</div><div class="fn-d">"use server" runs</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">3</div><div class="fn-t">mutate</div><div class="fn-d">write to DB</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">4</div><div class="fn-t">revalidate</div><div class="fn-d">revalidateTag</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">5</div><div class="fn-t">UI</div><div class="fn-d">re-renders fresh</div></div>
+              </div>
+            </div>
+
+            <dl class="kv">
+              <dt>Define</dt><dd><code>"use server"</code> at the top of a function or file.</dd>
+              <dt>Call</dt><dd>From a form via <code>action={fn}</code>, or imperatively from an event handler.</dd>
+              <dt>After</dt><dd>Revalidate (<code>revalidateTag</code> / <code>updateTag</code>) so the UI reflects the write.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="define">
+            <h2><span class="section-num">01</span> Define &amp; call an action</h2>
+            <p>Mark the function, read the <code>FormData</code>, mutate, then revalidate. Pass it straight to a form &mdash; the markup is plain HTML.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">app/todos/actions.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">"use server";
+import { revalidateTag } from "next/cache";
+import { z } from "zod";
+
+const Todo = z.object({ title: z.string().min(1) });
+
+export async function createTodo(_prev: unknown, form: FormData) {
+  const parsed = Todo.safeParse({ title: form.get("title") });
+  if (!parsed.success) return { error: "Title required" };
+  await db.todo.create(parsed.data);   // mutate
+  revalidateTag("todos");              // refresh the list
+  return { ok: true };
+}</code></pre>
+            </div>
+          </section>
+
+          <section class="section reveal" id="pending">
+            <h2><span class="section-num">02</span> Pending &amp; error state</h2>
+            <p>Wrap the action in <code>useActionState</code> for the returned value and a <code>pending</code> flag; <code>useFormStatus</code> reads pending from inside the form (e.g. a submit button). Before JS loads, the form still posts &mdash; that&rsquo;s progressive enhancement.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">app/todos/todo-form.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">"use client";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
+import { createTodo } from "./actions";
+
+function Submit() {
+  const { pending } = useFormStatus();          // pending from the form
+  return &lt;button disabled={pending}&gt;{pending ? "Saving…" : "Add"}&lt;/button&gt;;
+}
+
+export function TodoForm() {
+  const [state, action] = useActionState(createTodo, null);
+  return (
+    &lt;form action={action}&gt;
+      &lt;input name="title" /&gt;
+      {state?.error &amp;&amp; &lt;p&gt;{state.error}&lt;/p&gt;}
+      &lt;Submit /&gt;
+    &lt;/form&gt;
+  );
+}</code></pre>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>A Server Action is a <b>public HTTP endpoint</b> &mdash; anyone can POST to it, form or not. The <code>"use server"</code> directive is not authorization. <b>Authenticate the session and validate the input inside the action</b> (e.g. with Zod), exactly as you would a hand-written API route.</p>
+              </div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why does a form using a Server Action still submit if the user&rsquo;s JavaScript hasn&rsquo;t loaded yet?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>It&rsquo;s a real <code>&lt;form&gt;</code> post to a server endpoint &mdash; progressive enhancement; JS only upgrades it.</button>
+                <button class="quiz-opt"><span class="mark"></span>It doesn&rsquo;t &mdash; Server Actions require hydration to work at all.</button>
+                <button class="quiz-opt"><span class="mark"></span>Because the action runs in a service worker.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Next renders a native form that posts to the action&rsquo;s endpoint. Without JS it submits the old-school way; once hydrated, React intercepts it for a smoother fetch &mdash; same handler either way.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is a Server Action?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>A function marked <code>"use server"</code> that runs on the server and is callable from the client &mdash; typically via a form&rsquo;s <code>action</code> or an event handler. It replaces a hand-written API route for mutations: you write the logic, Next handles the transport, and you revalidate the cache afterward.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;A &lsquo;use server&rsquo; function you call from the client &mdash; a typed mutation endpoint without writing an API route. Mutate, then revalidate.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What does progressive enhancement mean here?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>The form is rendered as a real HTML form pointing at the action&rsquo;s endpoint, so it submits and mutates even before (or without) client JS. Once hydrated, React intercepts the submit for a smoother in-page fetch &mdash; same server handler, just a better experience when JS is available.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;It works as a plain form post without JS, then upgrades to a client fetch after hydration &mdash; same endpoint, resilient by default.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you secure a Server Action?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Treat it as a public endpoint. Check the session/auth at the top of the action, authorize the specific operation, and validate every input (Zod) &mdash; never trust client-sent IDs. The <code>"use server"</code> marker only exposes it; it grants no protection, so the security lives inside the function.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;It&rsquo;s a public POST endpoint, so I authenticate, authorize, and validate inputs inside the action &mdash; the directive isn&rsquo;t security.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="data-fetching-and-caching.html"><span class="pn-k">Previous</span><span class="pn-t">Data fetching &amp; caching</span></a>
+            <a class="next" href="../styling/index.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Styling &mdash; Tailwind + shadcn</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#define">Define &amp; call an action</a>
+          <a href="#pending">Pending &amp; error state</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

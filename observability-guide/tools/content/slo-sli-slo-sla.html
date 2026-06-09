@@ -1,0 +1,117 @@
+<section class="hero reveal">
+  <span class="eyebrow">SLO/SLI · definitions</span>
+  <h1>SLI vs SLO vs SLA.</h1>
+  <p class="lead">Three terms that sound interchangeable but aren't. Get them precisely wrong in an interview and it signals you've never actually set reliability targets. Get them precisely right and you signal you've shipped with them.</p>
+</section>
+
+<section class="section reveal" id="definitions">
+  <h2><span class="section-num">01</span> The three terms, precisely</h2>
+  <p class="takeaway">An <b>SLI</b> measures reality. An <b>SLO</b> is your internal target for that measure. An <b>SLA</b> is the external contract that penalises you if you breach a looser line.</p>
+  <p>Each builds on the next. You can't set a target without a measure, and you can't sign a contract without a target to defend. The SLA is always looser than the SLO — you need a buffer so internal teams can catch problems before customers invoke contractual remedies.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Your <strong>SLI</strong> is your exam score — the raw measured number. Your <strong>SLO</strong> is the passing grade you set for yourself: "I want to score 90% or above." Your <strong>SLA</strong> is the scholarship contract that says "fall below 75% and you lose funding." You set your personal goal higher than the contract so you never accidentally breach it.</p>
+    </div>
+  </div>
+
+  <div class="diagram"><div class="dg-title">SLI → SLO → SLA relationship</div>
+    <div class="flow">
+      <div class="flow-node"><div class="fn-k">SLI</div><div class="fn-t">Measured ratio</div><div class="fn-d">good_events ÷ valid_events over time window. E.g. fraction of requests completing in &lt;200 ms.</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">SLO</div><div class="fn-t">Internal target</div><div class="fn-d">99.9% of requests &lt;200 ms over a rolling 28-day window. Internal — no penalty clause.</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">SLA</div><div class="fn-t">External contract</div><div class="fn-d">99.5% uptime guaranteed. Breach → service credits. Always looser than the SLO.</div></div>
+    </div>
+    <div class="cap">The gap between SLO (99.9%) and SLA (99.5%) is your buffer — time for engineering to react before customers invoke penalties.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="sli-craft">
+  <h2><span class="section-num">02</span> Crafting a good SLI</h2>
+  <p class="takeaway">A good SLI measures <b>user-visible outcome</b>, expressed as <b>good events ÷ valid events</b>.</p>
+  <p>The formula forces you to define what "good" means and what requests are even in scope. It produces a 0–1 ratio that's comparable across windows.</p>
+
+  <dl class="kv">
+    <dt>Availability SLI</dt><dd>Successful HTTP responses (2xx/3xx) ÷ all HTTP responses. Excludes client errors (4xx) from valid events.</dd>
+    <dt>Latency SLI</dt><dd>Requests completing under threshold (e.g. 200 ms) ÷ all requests. You pick the threshold from real user-experience data.</dd>
+    <dt>Correctness SLI</dt><dd>Responses returning the right data ÷ all responses. Harder to measure — requires a test oracle or synthetic probes.</dd>
+    <dt>Freshness SLI</dt><dd>Data refreshed within SLA window ÷ expected refreshes. Common for pipelines and caches.</dd>
+  </dl>
+
+  <p>SLIs should come from the user journey, not server internals. Ask: "Would a user notice if this got worse?" If no, don't track it as an SLI.</p>
+</section>
+
+<section class="section reveal" id="worked-example">
+  <h2><span class="section-num">03</span> A worked example</h2>
+  <p>A checkout service. The team picks two SLIs from the user's perspective — availability and latency — and sets tighter internal targets than the external SLA.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Layer</th><th>Availability</th><th>Latency (p99 &lt;500 ms)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><b>SLI formula</b></td><td>2xx ÷ (2xx+5xx)</td><td>requests &lt;500 ms ÷ all requests</td></tr>
+        <tr><td><b>SLO (internal)</b></td><td>99.9% / 28 days</td><td>99.5% / 28 days</td></tr>
+        <tr><td><b>SLA (external)</b></td><td>99.5% / calendar month</td><td>not contractually tracked</td></tr>
+        <tr><td><b>Consequence</b></td><td>Service credits if breached</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+      <p>Two classic mistakes in one: <strong>(1)</strong> Setting SLIs on causes instead of symptoms — tracking "CPU &lt; 80%" tells you nothing about whether users are actually happy. <strong>(2)</strong> Setting the SLO at 100% — it's infinitely expensive to achieve, leaves no error budget to deploy or experiment, and gives your team no signal about how much unreliability you can safely absorb.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="quiz-section">
+  <h2><span class="section-num">04</span> Check your model</h2>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Your team wants to SLI "database connection pool utilisation &lt; 70%". What's wrong with this?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>The threshold is too low — it should be 90%.</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>It measures a cause (internal resource), not a user-visible symptom. A user can't feel CPU utilisation.</button>
+      <button class="quiz-opt"><span class="mark"></span>Nothing — internal metrics make fine SLIs.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> SLIs must track something the user experiences: latency, availability, correctness. "Pool utilisation" is an implementation detail — it might predict a problem but it isn't the user's problem itself. SLI it on request success rate or latency instead.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is the difference between an SLI, an SLO, and an SLA?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>An SLI is a measured ratio: good events divided by valid events over a window — for example, the fraction of requests completing under 200 ms. An SLO is the internal target for that ratio — 99.9% over 28 days. An SLA is the external contract that penalises a breach, and it's always set looser than the SLO to give engineering a reaction window.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"SLI is the measurement — fraction of good events. SLO is the internal goal for that measurement. SLA is the external contract, and it's always a softer line than the SLO so you have time to fix things before customers get credits."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>Why is the SLA always looser than the SLO?</li><li>What makes a bad SLI? (Measuring causes, not symptoms.)</li></ul></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why is a 100% SLO the wrong target?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>100% is unachievable in practice — hardware fails, deploys introduce risk, and dependencies are unreliable. Chasing it is infinitely expensive and eliminates your error budget entirely, meaning any release or experiment that introduces even a single error is a breach. Setting a realistic target like 99.9% creates a budget you can deliberately spend on innovation.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"100% leaves no error budget. You can't deploy, can't experiment, and any blip is a contractual failure. A slightly lower target is deliberate — it's the unreliability you're allowed to spend on progress."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you choose which SLIs to track?</span><span class="pm-chip diff-warm">warm</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Start from the user journey — what does the user experience at each step? Common SLIs are availability (success rate), latency (fraction of requests under a threshold), and correctness (fraction returning right data). Reject any SLI that a user can't directly feel, like CPU utilisation or queue depth — those are causes, not symptoms.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"I start from the user journey and ask 'would a user notice if this got worse?' If yes, it's an SLI candidate — availability, latency, correctness. If no — CPU, memory — it's a diagnostic metric, not an SLI."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

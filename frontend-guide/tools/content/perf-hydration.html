@@ -1,0 +1,165 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Performance &middot; hydration</span>
+            <h1>Hydration, explained</h1>
+            <p class="lead">Server HTML paints fast &mdash; but it&rsquo;s a photograph, not a working machine. <b>Hydration</b> is React re-running on the client to wire up event handlers over that markup. The window between &ldquo;painted&rdquo; and &ldquo;wired&rdquo; is exactly where INP goes to die.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">Hydration = React <b>re-running on the client</b> over server HTML to attach handlers and state. The page is <b>visible before it&rsquo;s interactive</b>.</p>
+            <p>The server sends finished HTML, so it paints quickly. But buttons do nothing until the JS bundle loads and React walks the same tree, reconnecting event listeners and rebuilding component state. Until that finishes, every click is dropped or queued &mdash; the page looks done but isn&rsquo;t.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>It&rsquo;s a film set you can already see &mdash; walls up, furniture placed, perfectly lit (the server HTML is painted). But the actors aren&rsquo;t mic&rsquo;d and the lighting board isn&rsquo;t plugged in yet. You can shout from the audience all you like; until the crew wires it (the JS hydrates), nothing on stage responds.</p>
+              </div>
+            </div>
+
+            <figure class="viz waterfall" data-waterfall>
+              <figcaption class="viz-title">The &ldquo;looks ready but isn&rsquo;t&rdquo; dead zone</figcaption>
+              <script type="application/json" class="wf-config">
+              {
+                "title": "The “looks ready but isn’t” dead zone",
+                "scaleMs": 2200,
+                "legend": true,
+                "strategies": [
+                  { "name": "Heavy client app", "fcp": 400, "bars": [
+                    { "label": "HTML painted", "t": [0, 350], "kind": "html" },
+                    { "label": "download JS", "t": [350, 1100], "kind": "js" },
+                    { "label": "hydrate (interactive at end)", "t": [1100, 2000], "kind": "hydrate" }
+                  ]},
+                  { "name": "Few client islands", "fcp": 350, "bars": [
+                    { "label": "HTML painted", "t": [0, 300], "kind": "html" },
+                    { "label": "small JS", "t": [300, 600], "kind": "js" },
+                    { "label": "hydrate islands", "t": [600, 950], "kind": "hydrate" }
+                  ]},
+                  { "name": "Static article (RSC)", "fcp": 250, "bars": [
+                    { "label": "HTML painted", "t": [0, 250], "kind": "html" }
+                  ]}
+                ]
+              }
+              </script>
+              <p class="viz-fallback">A timeline of the gap between paint and interactivity. A heavy client app paints HTML at ~0.35 s but isn&rsquo;t interactive until ~2 s after a large JS download and long hydrate &mdash; a long dead zone. Few client islands hydrate small bundles and become interactive by ~0.95 s. A static RSC article paints at ~0.25 s with essentially no hydration, so there is no dead zone.</p>
+            </figure>
+
+            <dl class="kv">
+              <dt>The cost driver</dt><dd>Hydration work scales with the number and size of <b>client components</b> &mdash; React must walk and wire each one.</dd>
+              <dt>Why INP suffers</dt><dd>Clicks during the gap are dropped or queued; the main thread is busy hydrating, so the first interaction feels laggy.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="mismatch">
+            <h2><span class="section-num">01</span> Mismatches: when client &ne; server HTML</h2>
+            <p>Hydration assumes the client&rsquo;s first render produces the <em>same</em> tree the server sent. Non-deterministic render &mdash; <code>Date</code>, <code>Math.random()</code>, reading <code>window</code> &mdash; breaks that, and React warns (and may discard the server HTML for that subtree).</p>
+            <div class="versus">
+              <div class="vs-col vs-bad">
+                <div class="vs-h">Causes a mismatch</div>
+                <div class="codeblock"><pre><code data-lang="tsx">function Clock() {
+  // ❌ server time ≠ client time
+  return &lt;time&gt;{new Date().toLocaleTimeString()}&lt;/time&gt;;
+}</code></pre></div>
+              </div>
+              <div class="vs-col vs-good">
+                <div class="vs-h">Deterministic on first paint</div>
+                <div class="codeblock"><pre><code data-lang="tsx">"use client";
+function Clock() {
+  const [now, setNow] = useState&lt;string&gt;("");
+  // ✅ render time only after mount, client-side
+  useEffect(() =&gt; setNow(new Date().toLocaleTimeString()), []);
+  return &lt;time&gt;{now}&lt;/time&gt;;
+}</code></pre></div>
+              </div>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p><code>suppressHydrationWarning</code> is a scalpel, not a fix. It silences the warning for genuinely unavoidable cases (a timestamp, a locale-formatted number) &mdash; it does <em>not</em> reconcile the difference. Reach for it sparingly; fix the non-determinism first.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="reduce">
+            <h2><span class="section-num">02</span> Making hydration cheaper</h2>
+            <p>Less client JS = less to hydrate. The lever is the <b>client/server boundary</b>: keep components as server components by default and mark only genuinely interactive leaves with <code>"use client"</code>, so you ship a few small islands instead of one giant tree.</p>
+            <ul>
+              <li><b>Static content = ~no hydration.</b> A server-rendered article (RSC) ships almost no JS &mdash; nothing to wire up.</li>
+              <li><b>Isolate the island.</b> Push <code>"use client"</code> down to the smallest interactive leaf (a like button), not its whole page.</li>
+              <li><b>RSC + streaming compound.</b> Fewer client components shrink the hydration bill; streaming spreads the rest across paint.</li>
+            </ul>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">article/page.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">// Server component — zero client JS, nothing to hydrate.
+export default function Article({ post }) {
+  return (
+    &lt;article&gt;
+      &lt;Prose html={post.body} /&gt;
+      &lt;LikeButton id={post.id} /&gt;  {/* the only "use client" island */}
+    &lt;/article&gt;
+  );
+}</code></pre>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Two pages paint at the same time, but one is interactive far sooner. The likeliest reason?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>It ships fewer/smaller client components, so there&rsquo;s less to hydrate.</button>
+                <button class="quiz-opt"><span class="mark"></span>It uses a faster font.</button>
+                <button class="quiz-opt"><span class="mark"></span>Its HTML is gzipped and the other&rsquo;s isn&rsquo;t.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Paint depends on HTML; interactivity depends on hydration. Fewer, smaller client islands mean React finishes wiring handlers sooner &mdash; closing the &ldquo;looks ready but isn&rsquo;t&rdquo; gap and helping INP.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is hydration and why is it costly?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Hydration is React re-running on the client over the server&rsquo;s HTML to attach event handlers and rebuild component state &mdash; it makes a painted page interactive. It&rsquo;s costly because it&rsquo;s main-thread work that scales with how many client components you ship, and clicks during it are dropped or delayed, which hurts INP.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Hydration is React replaying on the client to wire handlers over server HTML. It&rsquo;s the gap where the page looks ready but isn&rsquo;t &mdash; and it scales with client JS.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What causes hydration mismatches?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Non-deterministic rendering &mdash; the client&rsquo;s first render differs from the server&rsquo;s HTML. Classic causes are <code>Date</code>/<code>Date.now()</code>, <code>Math.random()</code>, and reading browser-only globals like <code>window</code> or <code>localStorage</code> during render. The fix is to defer that work to <code>useEffect</code> so the first client render matches the server.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Anything non-deterministic at render &mdash; time, randomness, <code>window</code>. The first client render must equal the server HTML, so I move that into an effect.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you reduce hydration cost?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Ship less client JS. Keep components as server components by default and push <code>"use client"</code> down to the smallest interactive leaves, so you hydrate a few small islands instead of the whole tree. RSC plus streaming compounds the win &mdash; less to hydrate, and what remains is spread across paint.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Fewer, smaller client islands. Server components by default, <code>"use client"</code> only on the interactive leaves &mdash; and lean on RSC plus streaming.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="streaming-and-suspense.html"><span class="pn-k">Previous</span><span class="pn-t">Streaming SSR &amp; Suspense</span></a>
+            <a class="next" href="core-web-vitals.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Core Web Vitals: LCP, INP, CLS</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#mismatch">Mismatches: client &ne; server</a>
+          <a href="#reduce">Making hydration cheaper</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

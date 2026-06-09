@@ -1,0 +1,166 @@
+<section class="hero reveal">
+  <span class="eyebrow">Prometheus &amp; Grafana &middot; alerting</span>
+  <h1>Alerting with Alertmanager.</h1>
+  <p class="lead">Alert rules live in Prometheus — they evaluate a PromQL expression on a schedule. Routing, grouping, deduplication, and silencing live in <b>Alertmanager</b>. Keeping these two responsibilities separate is what makes the system composable and survivable.</p>
+</section>
+
+<section class="section reveal" id="alert-rules">
+  <h2><span class="section-num">01</span> Alert rules in Prometheus</h2>
+  <p class="takeaway">A rule defines a <b>PromQL expression</b> that, when true for a sustained duration (<code>for:</code>), transitions to <b>FIRING</b> and Prometheus sends the alert to Alertmanager.</p>
+  <p>The <code>for:</code> duration prevents flapping — a transient 1-second spike won't page anyone if the rule says "must be true for 5 minutes." Labels on the rule become labels on the alert, used for routing.</p>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">alerts.yaml</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="yaml">groups:
+  - name: api_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum by (service) (
+            rate(http_requests_total{status=~"5.."}[5m])
+          )
+          /
+          sum by (service) (
+            rate(http_requests_total[5m])
+          ) &gt; 0.05
+        for: 5m
+        labels:
+          severity: page
+          team: backend
+        annotations:
+          summary: "High error rate on {{ $labels.service }}"
+          description: "Error rate is {{ $value | humanizePercentage }}"</code></pre>
+  </div>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Prometheus is the smoke detector — it notices something is wrong. Alertmanager is the smart switchboard that decides: bundle all the "smoke in building" alarms into one call, figure out who's on duty right now, and send it to the right pager — not a separate call for every detector on every floor.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="alertmanager-routing">
+  <h2><span class="section-num">02</span> Alertmanager: routing &amp; grouping</h2>
+  <p>Alertmanager receives raw alerts from Prometheus and applies four operations before dispatching: <b>grouping</b>, <b>deduplication</b>, <b>inhibition</b>, and <b>silencing</b>. The routing tree then sends the group to the right receiver.</p>
+
+  <div class="diagram">
+    <div class="dg-title">Alert lifecycle through Alertmanager</div>
+    <div class="flow">
+      <div class="flow-node">
+        <div class="fn-k">source</div>
+        <div class="fn-t">Rule fires</div>
+        <div class="fn-d">Prometheus → Alertmanager</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">group</div>
+        <div class="fn-t">Group + Dedupe</div>
+        <div class="fn-d">same service/cluster → one notification</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">filter</div>
+        <div class="fn-t">Inhibit / Silence</div>
+        <div class="fn-d">suppress child alerts; mute during maintenance</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">route</div>
+        <div class="fn-t">Route tree</div>
+        <div class="fn-d">match labels → receiver</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">receiver</div>
+        <div class="fn-t">PagerDuty / Slack</div>
+        <div class="fn-d">pages on-call; posts to channel</div>
+      </div>
+    </div>
+    <div class="cap">Grouping is the key step. Without it, a single deployment failure spawns 200 individual alerts — one per pod.</div>
+  </div>
+
+  <dl class="kv">
+    <dt>Grouping</dt><dd>Combine alerts that share the same <code>group_by</code> labels into one notification. E.g. all <code>service=checkout</code> alerts → one PagerDuty incident.</dd>
+    <dt>Deduplication</dt><dd>If the same alert keeps firing, send one notification — not one per evaluation cycle.</dd>
+    <dt>Inhibition</dt><dd>If a critical "datacenter down" alert fires, suppress all the child "service down" alerts that are obviously caused by it.</dd>
+    <dt>Silences</dt><dd>Mute matching alerts for a time window (e.g. during scheduled maintenance) without touching rules.</dd>
+    <dt>Receivers</dt><dd>PagerDuty, OpsGenie, Slack, email, webhook. One routing tree, multiple receivers based on severity and team labels.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="alert-fatigue">
+  <h2><span class="section-num">03</span> Avoiding alert fatigue</h2>
+  <p>Alert fatigue kills on-call. The root causes are almost always the same: too granular (per-instance instead of per-service), too many (alerting on symptoms <em>and</em> all their possible causes), and no <code>for:</code> duration.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Alert fatigue anti-pattern</div>
+      <ul>
+        <li>Alert per pod: 200 pods = 200 alerts for one deployment failure</li>
+        <li>Alert on CPU &gt; 80% — who cares if requests are healthy?</li>
+        <li>No <code>for:</code> — fires on every transient spike</li>
+        <li>All alerts page on-call, even INFO-level</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Actionable alerting</div>
+      <ul>
+        <li>Group by service: one alert per service, regardless of pod count</li>
+        <li>Alert on error rate or latency SLO — user-visible symptoms</li>
+        <li><code>for: 5m</code> — must be sustained to page</li>
+        <li>Severity tiers: page only for SLO-breach; ticket for the rest</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Alert on symptoms, not causes <span class="tag">gotcha</span></div>
+      <p>Alerting on "CPU &gt; 80%" or "disk &gt; 90%" is alerting on <em>causes</em>. Users don't care about CPU — they care if requests are slow or failing. Alert on the SLO (error rate, latency) and let the dashboard guide root-cause analysis. The SLO module covers symptom-based alerting in depth.</p>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">A deployment rolls bad to all 50 pods simultaneously. Without Alertmanager grouping, how many pages does on-call receive?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Up to 50 — one per pod, one per evaluation cycle until grouped.</button>
+      <button class="quiz-opt"><span class="mark"></span>One — Prometheus automatically deduplicates per service.</button>
+      <button class="quiz-opt"><span class="mark"></span>Zero — Alertmanager always groups by default.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Without grouping configuration, Alertmanager dispatches every individual alert. With <code>group_by: [service]</code>, all 50 collapse into one incident notification.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What's the difference between an alert rule in Prometheus and routing in Alertmanager?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Alert rules live in Prometheus — they define <em>when</em> something is wrong (a PromQL condition held for a duration). Alertmanager decides <em>what to do</em> with those alerts: group related ones, deduplicate, inhibit child alerts, silence during maintenance, and route to the right receiver (PagerDuty, Slack). Separation of concerns: detection vs dispatch.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Rules say 'this is broken'; Alertmanager says 'group it, silence it if maintenance, then route it to the right team.'"</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you reduce alert fatigue in a large microservices system?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Three levers: (1) <b>group by service</b>, not instance; (2) alert on user-visible <b>symptoms</b> (error rate, latency) not internal causes (CPU, memory); (3) use a sustained <code>for:</code> duration to ignore transient spikes. Tier your alerts — only SLO breaches page on-call; everything else creates a ticket.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Group by service, alert on symptoms not causes, sustain with for: duration, and only page for SLO breaches."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>What is inhibition and when would you use it?</li><li>How does SLO-based alerting work? (tee-up to next module)</li></ul></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is inhibition in Alertmanager?</span><span class="pm-chip diff-warm">warm</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Inhibition suppresses lower-priority alerts when a higher-priority source alert is already firing. Example: if "datacenter unreachable" fires, suppress all the "service X down" alerts that are obviously caused by the same outage. It prevents the on-call from being flooded with symptoms when the root cause is already alerted.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"If the parent cause is already alerting, inhibit the child symptoms. Datacenter down → suppress all the individual service-down alerts it causes."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

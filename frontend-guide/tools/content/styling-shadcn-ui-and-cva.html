@@ -1,0 +1,145 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Styling &middot; shadcn/ui</span>
+            <h1>shadcn/ui &amp; the cn()/cva pattern</h1>
+            <p class="lead">shadcn/ui isn&rsquo;t a component library you install &mdash; it&rsquo;s accessible component <em>source</em> you copy into your repo and own. It pairs Radix primitives for behavior with <code>cva</code> for typed variants and <code>cn()</code> for class merging.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">shadcn/ui is <b>copy-in components you own</b> &mdash; not an installed dependency. Behavior comes from <b>Radix</b>; variants come from <b>cva</b>; classes merge via <b>cn()</b>.</p>
+            <p>You run a CLI that drops real <code>.tsx</code> files into your project. From then on the code is yours: edit markup, restyle, delete what you don&rsquo;t need. No version pinning, no fighting a library&rsquo;s API to change a border.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>A traditional component library is a sealed appliance &mdash; it works, but you can&rsquo;t open the case, and you&rsquo;re stuck with the vendor&rsquo;s knobs. shadcn is IKEA furniture: it ships as parts you assemble and <em>own</em>, so when you want a different leg, you just swap it. The trade: you also maintain it.</p>
+              </div>
+            </div>
+
+            <dl class="kv">
+              <dt>What you get</dt><dd>Real source files in <code>components/ui/</code> &mdash; not a <code>node_modules</code> package re-exported.</dd>
+              <dt>Accessibility</dt><dd>Built on <b>Radix primitives</b> (focus management, keyboard nav, ARIA) so the hard a11y is handled.</dd>
+              <dt>Styling</dt><dd>Tailwind utilities + CSS variables for theming; June-2026 default style is <b>new-york</b> with <b>OKLCH</b> colors.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="cli">
+            <h2><span class="section-num">01</span> Adding a component</h2>
+            <p>The CLI is <code>npx shadcn@latest</code>. It writes the component into your tree, wiring up <code>cn()</code> and your theme. (The old <code>shadcn-ui</code> package was renamed &mdash; <code>shadcn</code> is the current CLI.)</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="bash"># one-time init, then add components you own
+npx shadcn@latest init
+npx shadcn@latest add button dialog
+# → writes components/ui/button.tsx, dialog.tsx into YOUR repo</code></pre>
+            </div>
+          </section>
+
+          <section class="section reveal" id="cva">
+            <h2><span class="section-num">02</span> The cva + cn() pattern</h2>
+            <p><code>cva</code> (class-variance-authority) declares a base class plus named <b>variants</b> and gives you a fully typed function. <code>cn()</code> then merges the generated classes with any caller overrides &mdash; <code>twMerge(clsx(...))</code> so conflicts resolve cleanly.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">button.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">const button = cva("inline-flex items-center rounded-md", {
+  variants: {
+    variant: { default: "bg-primary text-white", ghost: "bg-transparent" },
+    size:    { sm: "h-8 px-3", md: "h-10 px-4" },
+  },
+  defaultVariants: { variant: "default", size: "md" },
+});
+
+// data-slot, ref as a normal prop (no forwardRef in 2026)
+function Button({ className, variant, size, ...props }: Props) {
+  return &lt;button data-slot="button"
+    className={cn(button({ variant, size }), className)} {...props} /&gt;;
+}</code></pre>
+            </div>
+            <p>Variant props are type-checked from the <code>cva</code> config, so <code>&lt;Button variant="ghost" size="sm" /&gt;</code> autocompletes and a typo fails to compile. The trailing <code>className</code> through <code>cn()</code> lets callers override safely.</p>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>shadcn/ui is <b>not a dependency</b> &mdash; there&rsquo;s no package to bump. The code lives in your repo, so <em>you</em> maintain it; upstream fixes aren&rsquo;t auto-applied. Also note the CLI rename: it&rsquo;s <code>npx shadcn@latest</code>, not the old <code>shadcn-ui</code>. And modern components use <code>ref</code> as a normal prop &mdash; no <code>forwardRef</code>.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="compare">
+            <h2><span class="section-num">03</span> shadcn vs a traditional library</h2>
+            <p>The difference is ownership. A packaged library gives you upgrades for free but hides the source; shadcn gives you the source but makes you the maintainer.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Dimension</th><th>shadcn/ui</th><th>Traditional library (e.g. MUI)</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Ownership</strong></td><td>Source in your repo &mdash; you own it</td><td>Installed package &mdash; vendor owns it</td></tr>
+                  <tr><td><strong>Customization</strong></td><td>Edit the file directly, unlimited</td><td>Theme API / overrides; bounded by what&rsquo;s exposed</td></tr>
+                  <tr><td><strong>Accessibility</strong></td><td>Radix primitives under the hood</td><td>Library&rsquo;s own a11y implementation</td></tr>
+                  <tr><td><strong>Upgrades</strong></td><td>Manual &mdash; you maintain the code</td><td>Bump the version</td></tr>
+                  <tr><td><strong>Bundle</strong></td><td>Only the components you copied in</td><td>Whatever the package ships (tree-shaking varies)</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Your designer wants a Button with a totally custom focus ring and layout that the library&rsquo;s theme API can&rsquo;t express. Why does shadcn/ui make this easy?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>The component source lives in your repo, so you edit the markup and classes directly &mdash; no API ceiling.</button>
+                <button class="quiz-opt"><span class="mark"></span>You file a feature request with the shadcn npm package maintainers.</button>
+                <button class="quiz-opt"><span class="mark"></span>You override it with <code>!important</code> because the source is sealed.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> shadcn copies real source into your project, so customization is just editing your own file. The trade-off is that you also own maintenance &mdash; there&rsquo;s no package to upgrade.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What actually is shadcn/ui?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>It&rsquo;s a collection of accessible components you copy into your project via a CLI &mdash; not an installed dependency. Behavior comes from Radix primitives, styling from Tailwind plus CSS variables, and variants from <code>cva</code>. Once added, the source is yours to edit.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;It&rsquo;s copy-in components built on Radix, not a library you install. The CLI drops the source into your repo and you own it from there.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Explain the cva + cn() pattern.</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p><code>cva</code> defines a base class plus typed variants (variant, size) and returns a function that produces the right class string for given props. <code>cn()</code> &mdash; <code>twMerge(clsx(...))</code> &mdash; merges that with any caller <code>className</code>, joining conditionals and resolving Tailwind conflicts so overrides win predictably.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;<code>cva</code> gives me typed variants, <code>cn()</code> merges them with caller overrides via <code>twMerge(clsx(...))</code> &mdash; so variants are safe and overridable.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What&rsquo;s the trade-off of &ldquo;owning the code&rdquo;?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Total customization in exchange for maintenance. Because the components live in my repo, I can change anything &mdash; but upstream bug fixes and improvements aren&rsquo;t auto-applied; I pull them in deliberately. For a design system I control, that ownership is usually a win; for a team that wants hands-off upgrades, a packaged library may fit better.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;You trade free upgrades for full control. The code is yours, so customization is unlimited &mdash; but you own maintenance and pull upstream fixes manually.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="tailwind-v4.html"><span class="pn-k">Previous</span><span class="pn-t">Tailwind v4: CSS-first</span></a>
+            <a class="next" href="../data/index.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Data &amp; state &mdash; three buckets</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#cli">Adding a component</a>
+          <a href="#cva">The cva + cn() pattern</a>
+          <a href="#compare">shadcn vs a library</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

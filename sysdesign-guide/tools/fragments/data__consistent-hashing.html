@@ -1,0 +1,109 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Data at scale · consistent hashing</span>
+  <h1>Consistent hashing.</h1>
+  <p class="lead">When you spread keys across N nodes with <span class="mono">hash(key) % N</span>, changing N — adding or removing a single node — reshuffles <em>almost every</em> key. At scale that's catastrophic: every cache entry invalidated, terabytes moved. Consistent hashing fixes this so that adding or removing a node moves only about <strong>1/N of the keys</strong>. It's the algorithm behind distributed caches, Dynamo, Cassandra, and load balancers everywhere.</p>
+</section>
+
+<section class="section reveal" id="problem">
+  <h2><span class="section-num">01</span> &nbsp;The problem with hash % N</h2>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Imagine assigning students to dorms by "ID number mod number-of-dorms." Build one new dorm and suddenly <em>almost everyone</em> has to move rooms, because every remainder changed. Consistent hashing is a smarter rule where opening a new dorm only makes the students nearest it move in — everyone else stays put.</p>
+    </div>
+  </div>
+  <p>With <span class="mono">% N</span>, going from 4 to 5 nodes changes the target of roughly 80% of keys. For a cache, that's a near-total wipe and a stampede onto the database. We need a scheme where the mapping barely changes when the node count does.</p>
+</section>
+
+<section class="section reveal" id="ring">
+  <h2><span class="section-num">02</span> &nbsp;The ring</h2>
+  <p>Hash both <strong>servers</strong> and <strong>keys</strong> onto the same circle (say 0…2³²). A key is owned by the <strong>first server clockwise</strong> from it. Now adding a server only steals the keys in the arc just before it — everyone else is untouched. Step through adding a node:</p>
+  <figure class="viz" data-viz aria-label="Consistent hashing ring">
+    <figcaption class="viz-title">Add a server → only its neighbour's keys move</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "graph",
+      "meta": {
+        "width": 540, "height": 320,
+        "nodes": [
+          { "id": "S1", "label": "S1", "x": 400, "y": 160 },
+          { "id": "S2", "label": "S2", "x": 270, "y": 45 },
+          { "id": "S3", "label": "S3", "x": 140, "y": 160 },
+          { "id": "S4", "label": "S4", "x": 270, "y": 275 },
+          { "id": "S5", "label": "S5", "x": 360, "y": 78 },
+          { "id": "A", "label": "A", "x": 318, "y": 50 },
+          { "id": "B", "label": "B", "x": 180, "y": 250 },
+          { "id": "C", "label": "C", "x": 405, "y": 235 }
+        ],
+        "edges": [ ["A","S2"], ["A","S5"], ["B","S4"], ["C","S1"] ]
+      },
+      "frames": [
+        { "dim": ["S5","A","B","C"], "caption": "Four servers (S1–S4) sit at fixed points on the ring." },
+        { "dim": ["S5"], "caption": "Hash each key onto the same ring: keys A, B, C." },
+        { "dim": ["S5"], "edgesOn": [["A","S2"],["B","S4"],["C","S1"]], "visited": ["S2","S4","S1"], "caption": "Each key is owned by the first server clockwise: A→S2, B→S4, C→S1." },
+        { "active": ["S5"], "edgesOn": [["A","S2"],["B","S4"],["C","S1"]], "caption": "Now add a new server S5, in the arc just before A." },
+        { "active": ["S5"], "edgesOn": [["A","S5"],["B","S4"],["C","S1"]], "visited": ["S5"], "caption": "Only key A moves — to S5. B and C don't budge." },
+        { "edgesOn": [["A","S5"],["B","S4"],["C","S1"]], "visited": ["S5"], "caption": "1 of 3 keys moved, not all of them. With hash % N, nearly every key would have moved." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="vnodes">
+  <h2><span class="section-num">03</span> &nbsp;Virtual nodes &amp; the lookup</h2>
+  <p>One problem remains: with few servers, the arcs are uneven, so some servers own far more of the ring than others. The fix is <strong>virtual nodes</strong> — place each physical server at <em>many</em> points around the ring (e.g., 150 each). The load smooths out, and when a server leaves, its share is redistributed across many others instead of dumping on a single neighbour.</p>
+  <p>The lookup is a binary search: keep the servers' ring positions sorted, and for a key's hash, find the next position clockwise.</p>
+  <div class="deeper">
+    <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> The ring in ~15 lines of Python <span class="tag">code</span></summary>
+    <div class="deeper-body">
+      <div class="codeblock">
+        <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">ring.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+        <div class="code-pane active"><pre><code data-lang="python">import bisect, hashlib
+
+class Ring:
+    def __init__(self, nodes, vnodes=150):
+        self.vnodes = vnodes
+        self.ring = {}          # position -> node
+        self.sorted_keys = []
+        for n in nodes:
+            self.add(n)
+
+    def _hash(self, key):
+        return int(hashlib.md5(key.encode()).hexdigest(), 16)
+
+    def add(self, node):
+        for i in range(self.vnodes):           # many points per node
+            pos = self._hash(f"{node}#{i}")
+            self.ring[pos] = node
+            bisect.insort(self.sorted_keys, pos)
+
+    def get(self, key):
+        h = self._hash(key)
+        i = bisect.bisect(self.sorted_keys, h) % len(self.sorted_keys)
+        return self.ring[self.sorted_keys[i]]   # first node clockwise</code></pre></div>
+      </div>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">A 100-node cache cluster adds one node (now 101). Roughly what fraction of keys must move?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Nearly all of them</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>About 1% — only the keys in the new node's arc</button>
+      <button class="quiz-opt"><span class="mark"></span>Exactly half</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> consistent hashing moves only ~1/N of keys when a node joins or leaves — here ~1/100. That minimal reshuffling is the whole reason it underpins distributed caches and databases.</div>
+  </div>
+</section>

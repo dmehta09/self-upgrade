@@ -1,0 +1,152 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Expert · billing &amp; subscriptions</span>
+  <h1>Design billing, subscriptions &amp; metering.</h1>
+  <p class="lead">The layer that decides <strong>how much to charge and when</strong> — plans, subscriptions, and (increasingly) usage-based metering — sitting above the <a href="../advanced/payments.html">payment system</a> that moves the money. It's a <strong>correctness</strong> problem, not a throughput one: metering is high-volume (billions of events/day), but the bar is never double-charge, never leak revenue, always reproducible and auditable. Idempotency and an append-only ledger are the spine.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Plans/prices; subscriptions (seats); <strong>usage metering</strong> (ingest → aggregate → rate); invoicing with proration + tax; dunning on failed payments.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>Idempotent everywhere (a double-counted event = overcharge); reproducible/auditable rating; the billing ledger is the source of truth.</p></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption (100k subs, metered)</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Usage events/s</td><td>~1 event per API call, bursty</td><td>~100k/s avg → <strong>~8.6B events/day</strong> (Metronome: &gt;20B/mo)</td></tr>
+        <tr><td>Raw storage</td><td>8.6B × ~300 B</td><td>~2.6 TB/day → <strong>pre-aggregate</strong>; archive raw, keep ~35–90 d</td></tr>
+        <tr><td>Invoice run</td><td>100k invoices, per-customer anchor</td><td>amortised; reads small <strong>rollups, not raw events</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Say it out loud: <strong>~10⁵ events/s, ~10⁹–10¹⁰/day, ~10⁵ subscriptions — pre-aggregate so invoicing reads KB, not TB.</strong></p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">02</span> &nbsp;API &amp; data model</h2>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/v1/usage</span><span class="ep-note">{ event_name, customer_id, value, ts, identifier } → 202 (async; dedup on identifier)</span></div>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/v1/subscriptions · PUT /v1/subscriptions/{id}</span><span class="ep-note">create; change plan with proration_behavior</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/v1/invoices/{id}</span><span class="ep-note">lines[], subtotal, tax, total, amount_due</span></div>
+  <div class="kv">
+    <dt>Price book</dt><dd><span class="mono">products → prices → tiers</span>, <strong>immutable + versioned</strong> — you never mutate a price a customer is on; you create a new version. Read-mostly, heavily cached.</dd>
+    <dt>Metering</dt><dd><span class="mono">usage_events(event_id PK, meter, customer, value, ts)</span> append-only; <span class="mono">usage_aggregates(customer, meter, period, agg_value)</span> rolled up.</dd>
+    <dt>Subscription state machine</dt><dd><span class="mono">trialing → active → past_due → (canceled | unpaid)</span>, plus <span class="mono">incomplete</span> (first invoice unpaid) — these are literally Stripe's statuses.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="architecture">
+  <h2><span class="section-num">03</span> &nbsp;Architecture: ingest → aggregate → rate → invoice</h2>
+  <p>Metering is async/eventually-consistent (events trickle in, late events happen); invoicing is a transactional point-in-time snapshot that <strong>freezes</strong> usage at cycle close. Getting that freeze boundary right is the crux.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Usage → invoice</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Metering → invoicing",
+      "nodes": [
+        { "id": "app", "label": "Product", "type": "user", "col": 0, "row": 1 },
+        { "id": "ingest", "label": "Meter ingest", "type": "stateless", "col": 1, "row": 1 },
+        { "id": "agg", "label": "Aggregator", "type": "store", "col": 2, "row": 0 },
+        { "id": "inv", "label": "Invoicing engine", "type": "L7", "col": 2, "row": 1 },
+        { "id": "pay", "label": "Payments", "type": "source", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "app", "to": "ingest", "label": "usage event" },
+        { "from": "ingest", "to": "agg", "label": "dedup+store" },
+        { "from": "agg", "to": "inv", "label": "rated aggregate" },
+        { "from": "inv", "to": "pay", "label": "amount due" }
+      ],
+      "steps": [
+        { "edge": ["app","ingest"], "caption": "The product emits a usage event (API call / GB / GPU-second) with a unique identifier." },
+        { "edge": ["ingest","agg"], "caption": "Idempotent ingest — dedup by identifier (double-count = overcharge); append-only store → aggregate per meter/period.", "status": "hit" },
+        { "edge": ["agg","inv"], "caption": "At cycle close, FREEZE the aggregate and rate it against the price book (tiered/graduated)." },
+        { "edge": ["inv","pay"], "caption": "Invoice = recurring + rated usage + proration + tax → hand amount due to the payment system." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="metering">
+  <h2><span class="section-num">04</span> &nbsp;Usage metering: ingest → aggregate → rate</h2>
+  <p>Each stage has a correctness trap. <strong>Ingest must be idempotent</strong> — at-least-once delivery is a given, so every event carries a client-generated <span class="mono">identifier</span> and the store enforces uniqueness (double-counting overcharges the customer — the cardinal sin). The meter is <strong>append-only</strong>; corrections are new compensating events, never edits.</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">meter.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">-- 1) Idempotent ingest: ON CONFLICT makes a duplicate event_id a no-op (no double count).
+INSERT INTO usage_events (event_id, meter, customer_id, value, ts)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (event_id) DO NOTHING;           -- dedup is the whole game
+
+-- 2) Pre-aggregate per meter/customer/period into compact buckets so invoicing
+--    reads rollups, not raw events. (sum | count | max | unique-count per meter.)
+SELECT customer_id, date_trunc('hour', ts) AS bucket,
+       sum(value) AS agg_value, max(ts) AS last_event_ts
+FROM   usage_events
+WHERE  meter = $1 AND ts &gt;= $period_start AND ts &lt; $period_end
+GROUP  BY customer_id, bucket;</code></pre></div>
+  </div>
+  <p class="small"><strong>Late / out-of-order events</strong> are the hard part. A query-over-immutable-events model (Orb-style) handles them naturally — a late event just changes the query result. Define a <strong>watermark / grace window</strong>: finalize the invoice in <em>draft</em> at cycle end, hold a few hours for stragglers, then finalize; truly-late events become adjustments on the next invoice. (Stripe rejects events older than 35 days.)</p>
+</section>
+
+<section class="section reveal" id="pricing">
+  <h2><span class="section-num">05</span> &nbsp;Pricing models</h2>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Pricing models",
+      "axisLabel": "How is the charge computed?",
+      "stops": [
+        { "label": "Flat / seat", "dims": { "Customer predictability": 95, "Revenue alignment": 40, "Simplicity": 95, "AI/API fit": 30 }, "note": "quantity × unit price. The per-seat SaaS default — predictable and simple, but revenue doesn't track usage." },
+        { "label": "Tiered (volume)", "dims": { "Customer predictability": 60, "Revenue alignment": 75, "Simplicity": 60, "AI/API fit": 70 }, "note": "The reached tier's rate applies to ALL units. 6 units in the 6-10 tier @ $6.50 = $39. A volume discount that lowers the whole bill retroactively." },
+        { "label": "Tiered (graduated)", "dims": { "Customer predictability": 70, "Revenue alignment": 80, "Simplicity": 55, "AI/API fit": 75 }, "note": "Each tier's rate applies only to units IN that tier, summed. 6 units = 5×$7 + 1×$6.50 = $41.50. Marginal pricing — what most metered SaaS uses." },
+        { "label": "Usage / hybrid", "dims": { "Customer predictability": 40, "Revenue alignment": 95, "Simplicity": 50, "AI/API fit": 100 }, "note": "Base subscription + per-unit overage. Revenue scales with consumption — the native model for AI/API products and the dominant 2026 trend (~61% hybrid)." }
+      ]
+    }
+    </script>
+  </div>
+  <p>The volume-vs-graduated distinction is a classic interview test: same 6 units, same tiers, but <strong>$39 (volume)</strong> vs <strong>$41.50 (graduated)</strong>. Keep rating <strong>pure and reproducible</strong> — same aggregate + same price version → the same amount forever (needed for audit/recompute).</p>
+</section>
+
+<section class="section reveal" id="invoicing">
+  <h2><span class="section-num">06</span> &nbsp;Invoicing, proration &amp; dunning</h2>
+  <div class="kv">
+    <dt>Invoice run</dt><dd>At each cycle boundary: recurring items + frozen rated usage + prorations + credits → subtotal → <strong>tax</strong> (Stripe Tax / Avalara, computed at finalize by geo) → total → draft → finalize → charge. Draft/finalize separation lets late usage land before the invoice is immutable; reduce a finalized invoice with a <strong>credit note</strong>, never an edit.</dd>
+    <dt>Proration</dt><dd>Mid-cycle plan change: credit unused time on the old price + charge the prorated new. $10→$20 halfway = −$5 + $10 = <strong>+$5</strong>. Behaviors: settle on next invoice / invoice immediately / none. Downgrades usually become credit balance, not a cash refund.</dd>
+    <dt>Dunning</dt><dd>On a failed renewal: <span class="mono">active → past_due</span>, smart retries (Stripe: up to 8 over ~2 weeks; sweet spot 4–6), decline-code aware (soft <span class="mono">insufficient_funds</span> → delay + retry; hard decline → request new card, don't retry), grace period, then <span class="mono">canceled</span>/<span class="mono">unpaid</span>. Retries reuse the same idempotency key. Failed payments are a large share of <strong>involuntary churn</strong>.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">07</span> &nbsp;Correctness, observability &amp; 2026</h2>
+  <div class="kv">
+    <dt>Ledger &amp; RevRec</dt><dd>The <a href="../advanced/payments.html">double-entry ledger</a> is the source of truth — invoices/charges/refunds/credits post balanced entries; balances are derived. <strong>Billing ≠ revenue</strong>: recognize revenue when the obligation is satisfied (ASC 606) — usage as consumed, annual upfront ratably — via a RevRec layer.</dd>
+    <dt>Failure modes</dt><dd>Double-counting (dedup + idempotent aggregation), missed events (reconcile raw vs rated; alert on per-tenant rate anomalies), late events (watermark), revenue leakage (an "unbilled usage" dashboard), double-charge (idempotency end-to-end).</dd>
+    <dt>Metrics</dt><dd>Ingest p99 + dedup rate, aggregation lag, invoice success rate, <strong>failed-payment recovery rate</strong> (target ~60–75%), reconciliation breaks → 0, MRR/ARR + net revenue retention.</dd>
+    <dt>2026 landscape</dt><dd>Stripe Billing + meters (sum/count/last; acquired <strong>Metronome</strong> ~$1B, Jan 2026 — "metered pricing is the native model for the AI era"); Orb (SQL billable metrics over raw events); Lago (open-source). Usage-based / hybrid pricing is the structural shift driving event-based metering.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">08</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Your metering pipeline receives usage events at-least-once (clients retry). Why is the event's <span class="mono">identifier</span> the most important field?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>It sorts the events</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>It's the idempotency key — dedup on it (INSERT … ON CONFLICT DO NOTHING) so a retried/duplicate event isn't counted twice, which would overcharge the customer</button>
+      <button class="quiz-opt"><span class="mark"></span>It identifies the customer</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> at-least-once delivery means duplicates are inevitable, and a double-counted usage event is a double-charge — the cardinal billing sin. The unique <span class="mono">identifier</span> + a uniqueness constraint makes ingestion idempotent; the meter is append-only and corrections are compensating events.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"Billing sits above payments and is a correctness problem. The metering pipeline ingests usage idempotently (dedup by event id — double-count = overcharge), stores append-only, pre-aggregates per period, and rates against an immutable, versioned price book — keeping rating pure so it's reproducible for audit. Invoicing freezes the aggregate at cycle close with a grace window for late events, applies proration (volume vs graduated math) and tax, and posts to a double-entry ledger. Failed payments go through smart-retry dunning. The whole thing is idempotent end-to-end because a double-charged customer is a disaster."</p></div></div>
+</section>

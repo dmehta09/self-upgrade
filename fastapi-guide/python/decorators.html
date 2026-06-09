@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Python — Decorators &amp; closures | FastAPI Field Guide</title>
+  <meta name="description" content="Understand decorators from the ground up: functions as objects, closures that remember state, writing your own decorator with functools.wraps, decorators that take arguments, and stacking — the machinery behind @app.get and @field_validator." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13 2 4 14h6l-1 8 9-12h-6z' fill='%231ec9b0'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="python" data-page="py-decorators" data-lesson="python-decorators">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="FastAPI Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="#06140f" stroke="#06140f" stroke-width="1.2" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>
+        <span class="brand-text"><b>FastAPI Field Guide</b><span>Runnable visual guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here"><h4>Start here</h4><a class="nav-link" href="../index.html">Home</a></nav>
+      <nav class="nav-group is-py" aria-label="Python">
+        <h4><span class="dot"></span>Python</h4>
+        <a class="nav-link" href="../python/index.html">Setup &amp; tooling</a>
+        <a class="nav-link" href="../python/concepts.html">The refresher</a>
+        <a class="nav-link" href="../python/oop.html">Classes &amp; OOP</a>
+        <a class="nav-link" href="../python/decorators.html">Decorators &amp; closures</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#objects">Functions are objects</a>
+          <a class="nav-link" href="#closures">Closures</a>
+          <a class="nav-link" href="#writing">Writing a decorator</a>
+          <a class="nav-link" href="#args">Decorators with arguments</a>
+          <a class="nav-link" href="#stacking">Stacking</a>
+        </div>
+        <a class="nav-link" href="../python/errors.html">Errors &amp; exceptions</a>
+        <a class="nav-link" href="../python/generators.html">Generators &amp; context</a>
+        <a class="nav-link" href="../python/typing.html">Typing in depth</a>
+        <a class="nav-link" href="../python/async.html">Async in depth</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="FastAPI core">
+        <h4><span class="dot"></span>FastAPI core</h4>
+        <a class="nav-link" href="../fastapi/index.html">Overview</a>
+        <a class="nav-link" href="../fastapi/routing.html">Routing &amp; params</a>
+        <a class="nav-link" href="../fastapi/request-body.html">Request body &amp; models</a>
+        <a class="nav-link" href="../fastapi/validation.html">Validation &amp; errors</a>
+        <a class="nav-link" href="../fastapi/dependencies.html">Dependency injection</a>
+      </nav>
+      <nav class="nav-group is-db" aria-label="Databases"><h4><span class="dot"></span>Databases</h4><a class="nav-link" href="../fastapi/databases.html">SQLModel &amp; CRUD</a></nav>
+      <nav class="nav-group is-auth" aria-label="Auth"><h4><span class="dot"></span>Auth &amp; security</h4><a class="nav-link" href="../fastapi/auth.html">OAuth2 &amp; JWT</a></nav>
+      <nav class="nav-group is-adv" aria-label="Advanced"><h4><span class="dot"></span>Advanced</h4><a class="nav-link" href="../fastapi/advanced.html">Async &amp; structure</a></nav>
+      <nav class="nav-group" aria-label="Ship it"><h4>Ship it</h4><a class="nav-link" href="../deploy/index.html">Testing &amp; deployment</a></nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../python/index.html" style="color:var(--accent)">Python</a><span class="sep">/</span><span class="current">Decorators &amp; closures</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Python · decorators &amp; closures</span>
+            <h1>Functions that wrap functions.</h1>
+            <p class="lead">A <strong>decorator</strong> is a function that takes another function and returns an enhanced version of it — that's the <code>@something</code> line you've already seen on <code>@app.get</code> and <code>@field_validator</code>. To really get decorators, we build up through two ideas first: functions as values, and <strong>closures</strong>.</p>
+          </section>
+
+          <!-- 1 · functions are objects -->
+          <section class="section reveal" id="objects">
+            <h2><span class="section-num">01</span> &nbsp;Functions are objects</h2>
+            <p>In Python a function is just another <strong>value</strong>. You can store it in a variable, pass it to another function, or return it — all <em>without calling it</em>. The trick: <code>shout</code> is the function; <code>shout()</code> <em>calls</em> it. Leave off the parentheses and you're handling the function itself.</p>
+            <div class="runpad" data-needs="">
+              <div class="rp-head"><span class="rp-title">first_class.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+              <textarea class="rp-editor" spellcheck="false" rows="11">
+def shout(text):
+    return text.upper() + "!"
+
+f = shout              # assign the function itself (no parentheses)
+print(f("hello"))
+
+def apply(fn, value):  # a function that takes a function
+    return fn(value)
+
+print(apply(shout, "hi"))
+</textarea>
+              <div class="rp-output"><pre class="rp-expected">HELLO!
+HI!</pre></div>
+            </div>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A recipe card vs cooking the meal <span class="tag">analogy</span></div><p><code>shout</code> is the recipe card — you can hand it to someone (pass it around) or photocopy it (assign it). <code>shout("hi")</code> is actually cooking the dish. Decorators work by passing recipe cards around before anyone cooks.</p></div></div>
+          </section>
+
+          <!-- 2 · closures -->
+          <section class="section reveal" id="closures">
+            <h2><span class="section-num">02</span> &nbsp;Closures</h2>
+            <p>A function defined <em>inside</em> another can keep using the outer function's variables even after the outer function has returned. That captured, remembered state is a <strong>closure</strong>. It's the mechanism that lets a decorator's inner <code>wrapper</code> remember the function it's wrapping.</p>
+            <div class="runpad" data-needs="">
+              <div class="rp-head"><span class="rp-title">closure.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+              <textarea class="rp-editor" spellcheck="false" rows="12">
+def multiplier(factor):
+    def multiply(n):          # inner function
+        return n * factor     # "remembers" factor from the outer scope
+    return multiply           # return the inner function (not called)
+
+double = multiplier(2)
+triple = multiplier(3)
+print(double(10))             # uses factor=2
+print(triple(10))             # uses factor=3
+</textarea>
+              <div class="rp-output"><pre class="rp-expected">20
+30</pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title"><code>double</code> and <code>triple</code> are independent</div><p>Each call to <code>multiplier</code> creates a fresh closure with its own captured <code>factor</code>. That's why <code>double</code> and <code>triple</code> don't interfere — each remembers its own value.</p></div></div>
+          </section>
+
+          <!-- 3 · writing a decorator -->
+          <section class="section reveal" id="writing">
+            <h2><span class="section-num">03</span> &nbsp;Writing a decorator</h2>
+            <p>Now combine the two: a <strong>decorator</strong> takes a function, defines a <code>wrapper</code> (a closure that remembers it), and returns the wrapper. The <code>@logged</code> line above a definition is pure shorthand — <code>add = logged(add)</code>. The <code>*args, **kwargs</code> let the wrapper forward any arguments through.</p>
+            <div class="runpad" data-needs="">
+              <div class="rp-head"><span class="rp-title">decorator.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+              <textarea class="rp-editor" spellcheck="false" rows="18">
+import functools
+
+def logged(func):
+    @functools.wraps(func)            # keep func's name & docstring
+    def wrapper(*args, **kwargs):
+        print(f"calling {func.__name__}")
+        result = func(*args, **kwargs)
+        print(f"-> {result}")
+        return result
+    return wrapper
+
+@logged                               # add = logged(add)
+def add(a, b):
+    return a + b
+
+add(2, 3)
+print(add.__name__)                   # "add", thanks to functools.wraps
+</textarea>
+              <div class="rp-output"><pre class="rp-expected">calling add
+-> 5
+add</pre></div>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Don't forget <code>functools.wraps</code></div><p>Without it, the wrapped <code>add</code> would report its name as <code>"wrapper"</code> and lose its docstring — which breaks debugging and, in FastAPI, can confuse tools that introspect your functions. Always wrap the wrapper.</p></div></div>
+          </section>
+
+          <!-- 4 · decorators with arguments -->
+          <section class="section reveal" id="args">
+            <h2><span class="section-num">04</span> &nbsp;Decorators with arguments</h2>
+            <p>How does <code>@app.get("/items")</code> take an argument? With <strong>one more layer</strong>: an outer function takes the option(s) and <em>returns a decorator</em>. So <code>@repeat(times=3)</code> first calls <code>repeat(times=3)</code>, which returns the real decorator that then wraps your function.</p>
+            <div class="runpad" data-needs="">
+              <div class="rp-head"><span class="rp-title">deco_args.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+              <textarea class="rp-editor" spellcheck="false" rows="18">
+import functools
+
+def repeat(times):                     # 1) takes the argument
+    def decorator(func):               # 2) takes the function
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):  # 3) does the work
+            for _ in range(times):
+                result = func(*args, **kwargs)
+            return result
+        return wrapper
+    return decorator
+
+@repeat(times=3)
+def greet(name):
+    print(f"hi {name}")
+
+greet("Ada")
+</textarea>
+              <div class="rp-output"><pre class="rp-expected">hi Ada
+hi Ada
+hi Ada</pre></div>
+            </div>
+            <div class="diagram" style="background-image:none;">
+              <div class="dg-title">Three layers, decoded</div>
+              <div class="kv">
+                <dt>repeat(times=3)</dt><dd>returns <code>decorator</code></dd>
+                <dt>decorator(greet)</dt><dd>returns <code>wrapper</code></dd>
+                <dt>greet = wrapper</dt><dd>now calling <code>greet(...)</code> runs the loop</dd>
+              </div>
+            </div>
+          </section>
+
+          <!-- 5 · stacking -->
+          <section class="section reveal" id="stacking">
+            <h2><span class="section-num">05</span> &nbsp;Stacking decorators</h2>
+            <p>You can apply several decorators to one function. They stack from the <strong>bottom up</strong>: the one closest to the <code>def</code> wraps it first. Reading the example below, it's exactly <code>exclaim(shout(greet))</code>.</p>
+            <div class="runpad" data-needs="">
+              <div class="rp-head"><span class="rp-title">stack.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+              <textarea class="rp-editor" spellcheck="false" rows="18">
+def exclaim(func):
+    def wrapper():
+        return func() + "!"
+    return wrapper
+
+def shout(func):
+    def wrapper():
+        return func().upper()
+    return wrapper
+
+@exclaim          # applied second (outer)
+@shout            # applied first (inner, nearest the def)
+def greet():
+    return "hi"
+
+print(greet())    # shout uppercases -> "HI", then exclaim adds "!"
+</textarea>
+              <div class="rp-output"><pre class="rp-expected">HI!</pre></div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">The line <code>@logged</code> written above <code>def add(...)</code> is shorthand for what?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span><code>logged(add())</code> — it calls add immediately</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>add = logged(add)</code> — rebinds add to the wrapped version</button>
+                <button class="quiz-opt"><span class="mark"></span>Nothing — it's only a comment for readers</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> A decorator replaces the name with the result of calling the decorator on the original function. That single idea explains every <code>@</code> you'll ever read.</div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">FastAPI is decorators all the way down</div><p><code>@app.get("/")</code> is a decorator-with-arguments that <em>registers</em> your function as a route. <code>@field_validator("name")</code> registers a validator on a Pydantic model. You now know precisely what those lines do.</p></div></div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">routes.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/items")        # decorator with an argument: registers this route
+def list_items():
+    return [{"id": 1}]
+# same as: list_items = app.get("/items")(list_items)</code></pre></div>
+            </div>
+          </section>
+
+          <!-- exercise -->
+          <div class="exercise reveal">
+            <div class="ex-tag">Exercise</div>
+            <p class="ex-q">Write a decorator <code>squared</code> that <strong>squares</strong> whatever a function returns.</p>
+            <p>With <code>@squared</code> on an <code>add(a, b)</code> function, <code>add(2, 3)</code> should give <code>25</code> (because <code>(2+3)**2</code>). Use <code>*args, **kwargs</code> so it works on any function.</p>
+            <div class="runpad" data-needs="" style="margin-top:14px;">
+              <div class="rp-head"><span class="rp-title">exercise.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+              <textarea class="rp-editor" spellcheck="false" rows="13">
+import functools
+
+def squared(func):
+    # return a wrapper that squares func(...)'s result
+    ...
+
+@squared
+def add(a, b):
+    return a + b
+
+print(add(2, 3))   # want: 25
+</textarea>
+              <div class="rp-output"><pre class="rp-expected">(write your solution and press Run)</pre></div>
+            </div>
+            <details class="deeper">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show solution <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="codeblock">
+                  <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">solution.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                  <div class="code-pane active"><pre><code data-lang="python">import functools
+
+def squared(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs) ** 2
+    return wrapper
+
+@squared
+def add(a, b):
+    return a + b
+
+print(add(2, 3))   # (2 + 3) ** 2 = 25</code></pre></div>
+                </div>
+                <p>The <code>wrapper</code> calls the original <code>func</code>, then squares its result before returning. Because of <code>*args, **kwargs</code>, the same decorator works on any function regardless of its signature.</p>
+              </div>
+            </details>
+          </div>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../python/oop.html"><span class="pn-k">‹ Back</span><span class="pn-t">Classes &amp; OOP</span></a>
+            <a class="next" href="../python/errors.html"><span class="pn-k">Next ›</span><span class="pn-t">Errors &amp; exceptions</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#objects">Functions are objects</a>
+          <a href="#closures">Closures</a>
+          <a href="#writing">Writing a decorator</a>
+          <a href="#args">Decorators with arguments</a>
+          <a href="#stacking">Stacking</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Python · Decorators &amp; closures</span>
+        <span class="fmono">FastAPI Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/runpad.js"></script>
+  <script src="../assets/js/playground.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

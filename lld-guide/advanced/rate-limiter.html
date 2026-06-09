@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced case — Rate limiter | The Design Field Guide</title>
+  <meta name="description" content="Designing a rate limiter in Python — token bucket vs sliding window as interchangeable Strategies, with thread-safe counters." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="adv" data-page="adv-rate-limiter" data-lesson="adv-rate-limiter">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../advanced/index.html" style="color:var(--accent)">Advanced</a><span class="sep">/</span><span class="current">Rate limiter</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Advanced case · Strategy + concurrency</span>
+            <h1>Case study: a rate limiter.</h1>
+            <p class="lead">Cap how many requests a client may make per time window, and reject the overflow. The catch: there are two classic algorithms — <strong>token bucket</strong> and <strong>sliding window</strong> — and a good design hides both behind one interface so you can swap them freely. Then make the whole thing safe when many threads call it at once.</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Step 1 — Requirements &amp; assumptions</h2>
+            <p>A rate limiter answers one yes/no question per request: <strong>is this client allowed right now?</strong> The contract is "allow at most <code>N</code> requests per client per time window; reject the rest." And because requests arrive from many connections at once, it must stay correct under <strong>concurrent calls</strong>.</p>
+            <p><strong>Clarifying questions I'd ask:</strong> Per-user or global? One limit, or different tiers per client? Is this a single process, or distributed across many servers (which changes everything)? When we reject, do we drop the request or queue it? And which window semantics do they want — fixed, sliding, or smooth-burst?</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Assumptions that keep the demo honest</div><p>We pass <code>now</code> (in seconds) into <code>allow()</code> explicitly instead of reading the clock, so every run is <strong>deterministic</strong> — you can read the output and trust it. We assume a <strong>single process</strong>, and <strong>one limiter per client</strong> (the caller picks the right limiter by client id). Distribution across servers is discussed at the end, not built.</p></div></div>
+            <div class="grid grid-2">
+              <div class="card"><h4>In scope</h4><p>A single <code>allow(now) → bool</code> decision; two interchangeable algorithms behind one interface; correct behaviour when many threads share one limiter; controlled bursts.</p></div>
+              <div class="card"><h4>Out of scope</h4><p>Per-client routing and tier config; a distributed/shared store (Redis); queuing or back-pressure on rejection; HTTP plumbing (headers like <code>Retry-After</code>). All sketched, none built.</p></div>
+            </div>
+          </section>
+
+          <!-- 2. THE ALGORITHMS -->
+          <section class="section reveal" id="algorithms">
+            <h2><span class="section-num">02</span> &nbsp;Step 2 — The algorithms behind one interface</h2>
+            <p>The naive design is a <strong>fixed window</strong>: count requests in the current wall-clock window (say each calendar second), reset the count when the window rolls over. It's trivial — and it has one ugly flaw.</p>
+            <p><strong>The boundary burst.</strong> Suppose the limit is <code>N</code> per second. A client sends <code>N</code> requests in the last 10&nbsp;ms of one window, then <code>N</code> more in the first 10&nbsp;ms of the next. Both windows are individually under the limit, yet the client just pushed <strong>2N requests in 20&nbsp;ms</strong>. Fixed window counts within rigid boxes, so traffic that straddles a box edge slips through.</p>
+            <p>Two better algorithms fix this:</p>
+            <div class="kv">
+              <dt>Token bucket</dt><dd>A bucket holds up to <code>capacity</code> tokens and refills at <code>refill_rate</code> tokens/second. Each request spends one token; no token, no entry. It <strong>smooths</strong> the rate while still allowing a controlled <em>burst</em> up to the bucket size — great when occasional spikes are fine.</dd>
+              <dt>Sliding-window log</dt><dd>Keep the <em>timestamps</em> of recent allowed requests; on each call, drop the ones older than the window and admit only if fewer than <code>limit</code> remain. It's <strong>exact</strong> — no boundary burst at all — at the cost of storing one timestamp per recent request (more memory).</dd>
+            </div>
+            <p>Both expose the same shape — <code>allow(now) → bool</code> — so they're interchangeable <strong>Strategies</strong>. The caller holds a <code>RateLimiter</code> and never knows (or cares) which algorithm is inside; you swap token bucket for sliding window by changing one line at construction.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A bowl of arcade tokens <span class="tag">analogy</span></div><p>The token bucket is a bowl of arcade tokens that refills slowly on its own. Play a game, drop a token in the slot. If the bowl's empty, you wait for it to top up — no token, no play. Because the bowl can hold a few, you can play a small burst back-to-back, but you can't run forever: the refill rate is the real ceiling.</p></div></div>
+          </section>
+
+          <!-- 3. IMPLEMENTATION -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">03</span> &nbsp;Step 3 — The implementation</h2>
+            <p>Two small classes, one shared method name. Each owns its state and a lock; each answers <code>allow(now)</code>. That shared signature is what makes them drop-in replacements for each other.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">token_bucket.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import threading
+
+class TokenBucket:
+    def __init__(self, capacity, refill_rate):
+        self.capacity = capacity            # max tokens (burst size)
+        self.refill_rate = refill_rate      # tokens added per second
+        self.tokens = capacity
+        self.last = 0.0                     # time of last refill (seconds)
+        self._lock = threading.Lock()
+
+    def allow(self, now):                   # now = current time, in seconds
+        with self._lock:                    # check-and-decrement must be atomic
+            elapsed = now - self.last
+            self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+            self.last = now
+            if self.tokens >= 1:
+                self.tokens -= 1
+                return True
+            return False</code></pre></div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">sliding_window.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import threading
+from collections import deque
+
+class SlidingWindow:
+    def __init__(self, limit, window):
+        self.limit = limit                  # max requests per window
+        self.window = window                # window length, seconds
+        self.hits = deque()                 # timestamps of recent allowed requests
+        self._lock = threading.Lock()
+
+    def allow(self, now):
+        with self._lock:
+            while self.hits and now - self.hits[0] >= self.window:
+                self.hits.popleft()         # drop timestamps older than the window
+            if len(self.hits) &lt; self.limit:
+                self.hits.append(now)
+                return True
+            return False</code></pre></div>
+            </div>
+            <p>Same method, same return type, two completely different internals. Pass either object wherever a limiter is expected — that's the Strategy pattern doing its job.</p>
+          </section>
+
+          <!-- 4. THREAD-SAFE -->
+          <section class="section reveal" id="threadsafe">
+            <h2><span class="section-num">04</span> &nbsp;Why the lock matters</h2>
+            <p>Look closely at the token bucket. The core is a <strong>read–modify–write</strong> on <code>self.tokens</code>: read the count, check it's at least 1, decrement, return. Those are separate steps, and a thread can be paused between any two of them.</p>
+            <p>Picture two threads when exactly <strong>one</strong> token remains. Thread A reads <code>tokens == 1</code>, sees <code>1 &gt;= 1</code>, and is about to decrement. Before it does, Thread B also reads <code>tokens == 1</code>, also sees the check pass. Now both decrement: <code>tokens</code> goes to <code>-1</code>, and <em>both</em> requests were admitted. You just <strong>over-admitted</strong> — handed out a token that didn't exist.</p>
+            <p>The fix is <code>with self._lock:</code> wrapping the whole check-and-decrement. The lock makes that sequence <strong>atomic</strong>: while one thread holds it, no other thread can read <code>tokens</code>, so the second thread arrives only after the first has already decremented to <code>0</code> — and is correctly rejected. The sliding window has the same shape (read the deque length, then append) and is guarded the same way. For the underlying mechanics — race conditions, why the GIL doesn't save you, keeping critical sections small — see the <a href="../advanced/index.html#concurrency">concurrency primer</a>.</p>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">"Check then act" is never one step</div><p>Anytime you <em>test a condition and then mutate based on it</em> — "is there a token? then take one", "is there a free seat? then book it" — that's two operations, and another thread can sneak between them. The whole test-and-act must sit inside one lock. The decision (the <code>if</code>) and the change (the <code>-=</code>) have to be indivisible, or the decision can be stale by the time you act on it.</p></div></div>
+          </section>
+
+          <!-- 5. WALKTHROUGH -->
+          <section class="section reveal" id="walkthrough">
+            <h2><span class="section-num">05</span> &nbsp;Walk a scenario</h2>
+            <p>A bucket of capacity 3 refilling at 1 token/sec. Three requests fire instantly at <code>t=0</code> and drain the bucket; the next two are blocked. Two seconds later the bucket has refilled by ~2 tokens, so two more get through.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">demo.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">bucket = TokenBucket(capacity=3, refill_rate=1)   # burst 3, then +1/sec
+t = 0.0
+for i in range(5):
+    print(f"t={t:.1f} req{i}: {'OK' if bucket.allow(t) else 'BLOCKED'}")
+print("--- 2 seconds later ---")
+t = 2.0
+for i in range(5, 7):
+    print(f"t={t:.1f} req{i}: {'OK' if bucket.allow(t) else 'BLOCKED'}")</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>t=0.0 req0: OK
+t=0.0 req1: OK
+t=0.0 req2: OK
+t=0.0 req3: BLOCKED
+t=0.0 req4: BLOCKED
+--- 2 seconds later ---
+t=2.0 req5: OK
+t=2.0 req6: OK</div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why can a fixed-window limiter allow ~2N requests in a short span?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>The counter overflows past N when traffic is heavy</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Bursts straddling the window boundary — N at the end of one window, N at the start of the next.</button>
+                <button class="quiz-opt"><span class="mark"></span>It rounds the timestamp, double-counting the same request</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> each window is judged in isolation, so a client can send N just before a boundary and N just after. Two adjacent windows are each within limit, yet 2N requests landed in a tiny span across the edge. Token bucket and sliding window both close this gap.</div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why must <code>allow()</code> hold a lock around the token check-and-decrement?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Locks make the code run faster under load</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>It's a read-modify-write; without the lock two threads can both pass when only one token remains (over-admission).</button>
+                <button class="quiz-opt"><span class="mark"></span>The GIL already makes it atomic, so the lock is only documentation</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> reading <code>tokens</code>, checking <code>&gt;= 1</code>, and decrementing are separate steps. Two threads can both read the last token, both pass the check, and both decrement to <code>-1</code> — admitting one request too many. The lock makes the whole check-and-decrement indivisible.</div>
+            </div>
+          </section>
+
+          <!-- 6. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">06</span> &nbsp;Extensions — your turn</h2>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 1 · the fixed-window limiter</div>
+              <p class="ex-q">Build the simplest algorithm of all: a <strong>fixed window</strong>. Keep a counter and the start time of the current window; reset the counter when a new window begins. Then explain, in one line, why it has the burst flaw from §02.</p>
+              <p>Hint: store <code>count</code> and <code>window_start</code>. On each call, if <code>now</code> has crossed into a new window, reset both. Admit while <code>count</code> is under the limit.</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <div class="codeblock">
+                    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">fixed_window.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+                    <div class="code-pane active"><pre><code data-lang="python">import threading
+
+class FixedWindow:
+    def __init__(self, limit, window):
+        self.limit = limit
+        self.window = window
+        self.count = 0
+        self.window_start = 0.0
+        self._lock = threading.Lock()
+
+    def allow(self, now):
+        with self._lock:
+            if now - self.window_start >= self.window:
+                self.window_start = now     # roll into a fresh window
+                self.count = 0
+            if self.count &lt; self.limit:
+                self.count += 1
+                return True
+            return False</code></pre></div>
+                  </div>
+                  <p><strong>The burst flaw:</strong> the window resets on a rigid clock, so a client can spend its full <code>limit</code> in the last instant of one window and its full <code>limit</code> again in the first instant of the next — up to <code>2 × limit</code> requests across the boundary, even though each window stayed within its quota. Sliding window stores timestamps precisely to avoid exactly this.</p>
+                </div>
+              </div>
+            </div>
+            <div class="exercise">
+              <div class="ex-tag">Exercise 2 · distribute it across servers</div>
+              <p class="ex-q">Our limiter lives in one process. Behind a load balancer you have ten servers, and the limit is <em>per client across all of them</em>. A local in-memory counter on each server lets a client do 10× the limit. How do you make the count shared?</p>
+              <div class="deeper">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show a solution <span class="tag">solution</span></summary>
+                <div class="deeper-body">
+                  <p>Move the shared state out of process memory and into a <strong>shared store</strong> every server can reach — typically Redis. The lock we used between threads becomes the store's own atomicity between servers:</p>
+                  <ul>
+                    <li><strong>Fixed window, the easy way:</strong> a key per <code>(client, window)</code> and Redis <code>INCR</code> — atomic on the server, so no two app servers can lose an update. Set the key to expire at the window's end. One round-trip per request.</li>
+                    <li><strong>Sliding window, the precise way:</strong> a Redis <strong>sorted set</strong> per client keyed by timestamp. Each request removes entries older than the window (<code>ZREMRANGEBYSCORE</code>), counts what's left (<code>ZCARD</code>), and adds itself (<code>ZADD</code>) — wrapped in a Lua script or <code>MULTI</code> so the whole sequence is atomic across servers, exactly mirroring our <code>with self._lock:</code>.</li>
+                    <li><strong>Token bucket, the cheap way:</strong> store <code>tokens</code> and <code>last</code> in Redis and run the same refill-then-decrement logic inside a Lua script, so the read-modify-write happens atomically server-side.</li>
+                  </ul>
+                  <p>The shape is identical to the single-process design — the only change is <em>where</em> the critical section is enforced: a network store's atomic op instead of a local <code>Lock</code>. That's a clean way to show an interviewer you understand the pattern, not just one implementation.</p>
+                </div>
+              </div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">What this design used — the toolkit recap</div><p><strong>Strategy</strong> — token bucket and sliding window hide behind one <code>allow(now)</code> interface, swappable at construction. A single <strong><code>threading.Lock</code></strong> per limiter guards the critical section so check-and-decrement stays atomic and we never over-admit. A <strong><code>deque</code></strong> gives the sliding-window log O(1) appends and O(1) pops from the front as old timestamps age out. And the senior move: knowing the <em>same</em> pattern moves to a shared store (Redis <code>INCR</code> / sorted set) when you go distributed.</p></div></div>
+            <p>Next: a concurrency centrepiece — <a href="../advanced/movie-booking.html">booking seats without double-selling them</a>.</p>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../advanced/splitwise.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: Splitwise</span></a>
+            <a class="next" href="../advanced/movie-booking.html"><span class="pn-k">Next ›</span><span class="pn-t">Case: Movie booking</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements</a>
+          <a href="#algorithms">The algorithms</a>
+          <a href="#code">Implementation</a>
+          <a href="#threadsafe">Why the lock matters</a>
+          <a href="#walkthrough">Walkthrough</a>
+          <a href="#extensions">Extensions</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Advanced · Rate limiter</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

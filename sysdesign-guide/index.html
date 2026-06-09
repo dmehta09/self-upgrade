@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The System Design Field Guide — distributed systems &amp; HLD, made visual</title>
+  <meta name="description" content="A visual, interview-focused guide to high-level system design: the core concepts (estimation, CAP/PACELC, load balancing, caching, sharding, replication, queues, consistent hashing) and the famous case studies (URL shortener, rate limiter, news feed, chat, Uber, YouTube, payments, LLM serving) — explained in plain English then in depth, with animated request flows, a live capacity calculator, and trade-off sliders. Updated June 2026." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="assets/css/styles.css" />
+  <link rel="stylesheet" href="assets/css/theme.css" />
+  <script>window.SITE_BASE = "./";</script>
+  <style>
+    .hero-bg { position: absolute; inset: -40px -40px auto; height: 380px; pointer-events: none; z-index: -1;
+      background: radial-gradient(60% 100% at 50% 0%, rgba(var(--accent-rgb), .16), transparent 70%); filter: blur(8px); }
+    .trk-card .tc-icon { color: var(--tc, var(--accent)); border-color: color-mix(in srgb, var(--tc) 36%, transparent); background: color-mix(in srgb, var(--tc) 12%, transparent); }
+    .trk-card { border-top: 3px solid var(--tc, var(--accent)); }
+    .trk-card:hover { border-color: var(--tc); }
+    .trk-card .tc-go { color: var(--tc); }
+    .mods { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 4px; }
+    .mods span { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); background: var(--bg-elev); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+    /* the 14 famous designs grid */
+    .designs { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 12px; margin-top: 22px; }
+    .dz { display: flex; flex-direction: column; gap: 5px; padding: 15px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); border-left: 3px solid var(--dz, var(--accent)); transition: transform .2s var(--ease), border-color .2s; }
+    .dz:hover { transform: translateY(-3px); border-color: var(--dz); }
+    .dz .dz-top { display: flex; align-items: center; gap: 8px; }
+    .dz .dz-diff { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--dz); border: 1px solid color-mix(in srgb, var(--dz) 40%, transparent); background: color-mix(in srgb, var(--dz) 11%, transparent); border-radius: 5px; padding: 1px 6px; }
+    .dz .dz-name { font-family: var(--font-display); font-weight: 600; font-size: 1.04rem; color: var(--text); }
+    .dz .dz-teach { font-size: 12.5px; color: var(--text-muted); line-height: 1.45; }
+    .dz.warm { --dz: #fbbf24; } .dz.core { --dz: #fb923c; } .dz.adv { --dz: #fb7185; } .dz.expert { --dz: #a855f7; }
+  </style>
+</head>
+<body data-page="home">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <!-- ================= Sidebar ================= -->
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="blocks/caching.html">Caching</a>
+        <a class="nav-link" href="blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="data/indexing.html">Indexing</a>
+        <a class="nav-link" href="data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="expert/user-management.html">User management</a>
+        <a class="nav-link" href="expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <!-- ================= Main ================= -->
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">All guides</a><span class="sep">/</span><span class="current">Home</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <main class="content" id="main">
+        <div class="hero-bg" aria-hidden="true"></div>
+
+        <!-- ===== Hero ===== -->
+        <section class="hero reveal">
+          <span class="eyebrow">High-level design · for the interview &amp; for real systems</span>
+          <h1>System design, made visual.</h1>
+          <p class="lead">The famous case studies — URL shortener, rate limiter, news feed, chat, Uber, YouTube, payments, even LLM serving — plus the core concepts behind them. Every idea is explained <strong>twice</strong>: once in plain English with an everyday analogy, then precisely the way you'd say it to an interviewer. You watch requests flow through each architecture, run the capacity math live, and drag the trade-offs yourself.</p>
+          <div class="hero-meta">
+            <a class="btn btn-primary" href="fundamentals/index.html">
+              Start with the fundamentals
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </a>
+            <a class="btn btn-ghost" href="warmup/url-shortener.html">Jump to the first case study</a>
+          </div>
+          <div class="statline">
+            <span class="st"><b>23</b><span>case studies</span></span>
+            <span class="st"><b>17</b><span>core concepts</span></span>
+            <span class="st"><b>4</b><span>interactive tools</span></span>
+            <span class="st"><b>100%</b><span>offline</span></span>
+          </div>
+        </section>
+
+        <!-- ===== Live request-flow teaser ===== -->
+        <section class="reveal" style="margin-top: 48px;">
+          <h2 class="mt-0">First, the one diagram behind every design</h2>
+          <p class="muted" style="max-width: 66ch;">Almost every system is the same handful of boxes between a user and their data — a load balancer, some stateless servers, a cache, a database. Press <strong>▶</strong> and watch a single request travel through them. This animated player reappears on every case study, drawn for that specific system.</p>
+          <figure class="reqflow" data-reqflow>
+            <figcaption class="rf-title">A read request through a typical web backend</figcaption>
+            <div class="rf-stage"></div>
+            <div class="rf-caption" aria-live="polite"></div>
+            <div class="rf-controls">
+              <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+              <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+              <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+              <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+              <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+              <span class="rf-step">1 / 1</span>
+              <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+            </div>
+            <script type="application/json" class="rf-config">
+            {
+              "title": "A read request through a typical web backend",
+              "nodes": [
+                { "id": "client", "label": "Client", "type": "browser", "col": 0, "row": 1 },
+                { "id": "dns", "label": "DNS", "type": "lookup", "col": 1, "row": 0 },
+                { "id": "lb", "label": "Load balancer", "type": "L7", "col": 1, "row": 2 },
+                { "id": "svc", "label": "App server", "type": "stateless", "col": 2, "row": 2 },
+                { "id": "cache", "label": "Cache", "type": "redis", "col": 3, "row": 1 },
+                { "id": "db", "label": "Database", "type": "primary", "col": 3, "row": 2 }
+              ],
+              "edges": [
+                { "from": "client", "to": "dns", "label": "resolve" },
+                { "from": "client", "to": "lb", "label": "GET" },
+                { "from": "lb", "to": "svc" },
+                { "from": "svc", "to": "cache" },
+                { "from": "svc", "to": "db" }
+              ],
+              "steps": [
+                { "node": "client", "caption": "It starts with a user — tapping a link, loading a page." },
+                { "edge": ["client","dns"], "caption": "First the browser resolves the domain name to an IP via DNS.", "latency": "~20 ms (cached: ~0)" },
+                { "edge": ["client","lb"], "caption": "The request hits a load balancer — the single public front door.", "latency": "~5 ms" },
+                { "edge": ["lb","svc"], "caption": "It's routed to one of many identical, stateless app servers. Any of them can handle it." },
+                { "edge": ["svc","cache"], "caption": "The server checks the cache first — the fastest place to find an answer." },
+                { "node": "cache", "caption": "Cache hit! The data is returned in-memory. Most reads end right here.", "status": "hit", "latency": "~1 ms" },
+                { "edge": ["svc","db"], "caption": "On a cache miss, the server falls back to the database — slower, but the source of truth.", "status": "miss", "latency": "~10 ms" }
+              ]
+            }
+            </script>
+          </figure>
+          <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">If you remember one thing</div><p>Scaling a system is mostly about answering, for each of these boxes: <em>how do I add more of them, and what breaks when I do?</em> Every concept in the Foundations track is a tool for one of those boxes; every case study wires them together for a real product.</p></div></div>
+        </section>
+
+        <!-- ===== Two tracks ===== -->
+        <section class="reveal" style="margin-top: 48px;">
+          <h2 class="mt-0">Two tracks: the concepts, then the designs</h2>
+          <p class="muted" style="max-width: 64ch;">Learn the building blocks once in <strong>Foundations</strong>, then see them combined in the <strong>Case studies</strong>. New to system design? Go top to bottom. Brushing up before an interview? Jump straight to a design and follow the links back to any concept you're shaky on.</p>
+          <div class="grid grid-2 stagger" style="margin-top: 22px;">
+
+            <a class="card tool-card trk-card" href="fundamentals/index.html" style="--tc:#38bdf8;">
+              <span class="tc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="8" cy="7" r="1.6" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="10" cy="17" r="1.6" fill="currentColor" stroke="none"/></svg></span>
+              <span class="tc-role">Track A · Foundations · 17 lessons</span>
+              <h3>The core concepts</h3>
+              <p>Estimation, latency numbers, availability &amp; SLAs, CAP/PACELC, load balancing, caching, CDNs, message queues, SQL vs NoSQL, sharding, replication, and consistent hashing — each with its own visual.</p>
+              <div class="mods"><span>Fundamentals</span><span>Building blocks</span><span>Data at scale</span></div>
+              <span class="tc-foot"><span class="badge ver">start here</span><span class="tc-go">Open track <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></span>
+            </a>
+
+            <a class="card tool-card trk-card" href="warmup/index.html" style="--tc:#fb923c;">
+              <span class="tc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="6" rx="1.5"/><rect x="14" y="4" width="7" height="6" rx="1.5"/><rect x="8.5" y="14" width="7" height="6" rx="1.5"/><path d="M6.5 10v2h11v-2M12 12v2"/></svg></span>
+              <span class="tc-role">Track B · Case studies · 23 designs</span>
+              <h3>The famous systems</h3>
+              <p>Run the interview framework end-to-end on each classic: scope it, estimate it, sketch the API and data model, watch the architecture handle a request, then deep-dive the two or three trade-offs it's famous for.</p>
+              <div class="mods"><span>Warm-up · 3</span><span>Core · 6</span><span>Advanced · 5</span><span>Expert · 9</span></div>
+              <span class="tc-foot"><span class="badge ver">interview-ready</span><span class="tc-go">Open track <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></span>
+            </a>
+          </div>
+        </section>
+
+        <!-- ===== The 14 designs ===== -->
+        <section class="reveal" style="margin-top: 48px;">
+          <h2 class="mt-0">The 23 case studies — and what each one teaches</h2>
+          <p class="muted" style="max-width: 64ch;">Chosen so that, together, they cover every core concept with little overlap. Each is the canonical vehicle for the idea in <strong>bold</strong>. Ordered warm-up → core → advanced.</p>
+          <div class="designs">
+            <a class="dz warm" href="warmup/url-shortener.html"><div class="dz-top"><span class="dz-diff">warm-up</span></div><div class="dz-name">URL shortener</div><div class="dz-teach"><strong>Hashing &amp; read-heavy caching</strong>, key generation, base62.</div></a>
+            <a class="dz warm" href="warmup/rate-limiter.html"><div class="dz-top"><span class="dz-diff">warm-up</span></div><div class="dz-name">Rate limiter</div><div class="dz-teach"><strong>Token bucket</strong> &amp; sliding window, distributed counters in Redis.</div></a>
+            <a class="dz warm" href="warmup/unique-id.html"><div class="dz-top"><span class="dz-diff">warm-up</span></div><div class="dz-name">Unique ID generator</div><div class="dz-teach"><strong>Snowflake IDs</strong> — time-ordered, no coordination, clock skew.</div></a>
+            <a class="dz core" href="core/distributed-cache.html"><div class="dz-top"><span class="dz-diff">core</span></div><div class="dz-name">Distributed cache</div><div class="dz-teach"><strong>Consistent hashing</strong>, eviction, replication, hot keys.</div></a>
+            <a class="dz core" href="core/web-crawler.html"><div class="dz-top"><span class="dz-diff">core</span></div><div class="dz-name">Web crawler</div><div class="dz-teach"><strong>BFS frontier</strong>, dedup with Bloom filters, politeness.</div></a>
+            <a class="dz core" href="core/notification-system.html"><div class="dz-top"><span class="dz-diff">core</span></div><div class="dz-name">Notification system</div><div class="dz-teach"><strong>Queues &amp; fan-out</strong>, multi-channel, retries, idempotency.</div></a>
+            <a class="dz core" href="core/news-feed.html"><div class="dz-top"><span class="dz-diff">core</span></div><div class="dz-name">News feed (Twitter)</div><div class="dz-teach"><strong>Fan-out on write vs read</strong>, the celebrity problem.</div></a>
+            <a class="dz core" href="core/file-sync.html"><div class="dz-top"><span class="dz-diff">core</span></div><div class="dz-name">Dropbox / file sync</div><div class="dz-teach"><strong>Chunking &amp; dedup</strong>, delta sync, object storage, metadata.</div></a>
+            <a class="dz core" href="core/chat.html"><div class="dz-top"><span class="dz-diff">core</span></div><div class="dz-name">Chat (WhatsApp)</div><div class="dz-teach"><strong>WebSockets &amp; presence</strong>, delivery, ordering, fan-out.</div></a>
+            <a class="dz adv" href="advanced/uber.html"><div class="dz-top"><span class="dz-diff">advanced</span></div><div class="dz-name">Uber / ride-hailing</div><div class="dz-teach"><strong>Geospatial indexing</strong> (geohash/QuadTree), matching, ETA.</div></a>
+            <a class="dz adv" href="advanced/youtube.html"><div class="dz-top"><span class="dz-diff">advanced</span></div><div class="dz-name">YouTube / streaming</div><div class="dz-teach"><strong>CDN, transcoding</strong> &amp; adaptive bitrate, blob storage.</div></a>
+            <a class="dz adv" href="advanced/payments.html"><div class="dz-top"><span class="dz-diff">advanced</span></div><div class="dz-name">Payment system</div><div class="dz-teach"><strong>Idempotency &amp; ledgers</strong>, exactly-once, reconciliation.</div></a>
+            <a class="dz adv" href="advanced/llm-serving.html"><div class="dz-top"><span class="dz-diff">advanced · 2026</span></div><div class="dz-name">LLM serving</div><div class="dz-teach"><strong>GPU batching &amp; KV-cache</strong>, token streaming, autoscaling.</div></a>
+            <a class="dz adv" href="advanced/vector-recommender.html"><div class="dz-top"><span class="dz-diff">advanced · 2026</span></div><div class="dz-name">Vector search &amp; recsys</div><div class="dz-teach"><strong>ANN &amp; embeddings</strong>, candidate generation + ranking.</div></a>
+            <a class="dz expert" href="expert/multi-tenancy.html"><div class="dz-top"><span class="dz-diff">expert</span></div><div class="dz-name">Multi-tenant SaaS</div><div class="dz-teach"><strong>Tenant isolation</strong> — silo vs pool, Postgres RLS, cells.</div></a>
+            <a class="dz expert" href="expert/user-management.html"><div class="dz-top"><span class="dz-diff">expert</span></div><div class="dz-name">User management</div><div class="dz-teach"><strong>Account lifecycle</strong> — identity vs profile, GDPR erasure.</div></a>
+            <a class="dz expert" href="expert/org-management.html"><div class="dz-top"><span class="dz-diff">expert</span></div><div class="dz-name">Organizations &amp; teams</div><div class="dz-teach"><strong>The membership graph</strong> — roles, invites, seats, last-owner.</div></a>
+            <a class="dz expert" href="expert/authentication.html"><div class="dz-top"><span class="dz-diff">expert</span></div><div class="dz-name">Authentication</div><div class="dz-teach"><strong>Who are you?</strong> — Argon2id, sessions vs JWT, passkeys, OIDC.</div></a>
+            <a class="dz expert" href="expert/authorization.html"><div class="dz-top"><span class="dz-diff">expert</span></div><div class="dz-name">Authorization</div><div class="dz-teach"><strong>What can you do?</strong> — RBAC, ABAC, ReBAC / Zanzibar.</div></a>
+            <a class="dz expert" href="expert/ecommerce-catalog.html"><div class="dz-top"><span class="dz-diff">expert</span></div><div class="dz-name">E-commerce: catalog</div><div class="dz-teach"><strong>Read-heavy commerce</strong> — faceted search, cart ≠ reservation.</div></a>
+            <a class="dz expert" href="expert/ecommerce-checkout.html"><div class="dz-top"><span class="dz-diff">expert</span></div><div class="dz-name">E-commerce: checkout</div><div class="dz-teach"><strong>Write correctness</strong> — the saga, oversell prevention, outbox.</div></a>
+            <a class="dz expert" href="expert/billing.html"><div class="dz-top"><span class="dz-diff">expert</span></div><div class="dz-name">Billing &amp; subscriptions</div><div class="dz-teach"><strong>Money over time</strong> — usage metering, proration, dunning.</div></a>
+            <a class="dz expert" href="expert/audit-log.html"><div class="dz-top"><span class="dz-diff">expert</span></div><div class="dz-name">Audit log</div><div class="dz-teach"><strong>Tamper-evident</strong> — hash-chained, append-only, WORM.</div></a>
+          </div>
+        </section>
+
+        <!-- ===== How to read ===== -->
+        <section class="reveal" style="margin-top: 48px;">
+          <h2 class="mt-0">How this guide works</h2>
+          <div class="grid grid-3 stagger" style="margin-top: 18px;">
+            <div class="card feature"><span class="f-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><h4>Explained twice</h4><p>A plain-English analogy first (the <strong>in-plain-English</strong> callouts), then the precise technical version you'd give an interviewer. Read whichever lands first.</p></div>
+            <div class="card feature"><span class="f-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h4l2 5 3-10 2 5h3"/></svg></span><h4>You drive the visuals</h4><p>Step a request through each architecture, move the sliders on a trade-off, and plug numbers into the capacity calculator. Seeing it beats reading it.</p></div>
+            <div class="card feature"><span class="f-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><h4>It remembers you</h4><p>Hit <strong>Mark as learned</strong> on any page — progress shows in the sidebar and the dashboard below, saved in your browser. Press <kbd>/</kbd> to search anytime.</p></div>
+          </div>
+        </section>
+
+        <!-- ===== Progress dashboard ===== -->
+        <section class="reveal" style="margin-top: 48px;">
+          <h2 class="mt-0">Your progress</h2>
+          <p class="muted" style="max-width: 60ch;">Saved locally in this browser — nothing leaves your machine.</p>
+          <div class="progress-dash" style="margin-top: 16px;">
+            <div class="pd-top">
+              <span class="pd-count"><b>0</b> of 41 lessons complete</span>
+              <button class="pd-reset" type="button">Reset progress</button>
+            </div>
+            <div class="pd-track"><div class="pd-fill"></div></div>
+            <div class="pd-modules"></div>
+          </div>
+        </section>
+
+        <!-- ===== Learning path ===== -->
+        <section class="reveal" style="margin-top: 48px;">
+          <h2 class="mt-0">A path that won't overwhelm you</h2>
+          <div class="steps" style="margin-top: 24px;">
+            <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Get the fundamentals</h4><p>Estimation, the latency numbers, availability, and the consistency models (CAP/PACELC). The vocabulary every later page assumes.</p><div class="meta">→ Fundamentals</div></div></div>
+            <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Learn the building blocks &amp; the data tier</h4><p>Load balancers, caches, CDNs, queues; then SQL vs NoSQL, indexing, sharding, replication, consistent hashing.</p><div class="meta">→ Building blocks · Data at scale</div></div></div>
+            <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Warm up on small designs</h4><p>URL shortener, rate limiter, unique-ID generator — small enough to hold in your head, but they teach the framework.</p><div class="meta">→ Warm-up designs</div></div></div>
+            <div class="step"><span class="step-num">4</span><div class="step-body"><h4>Work the core &amp; advanced cases</h4><p>News feed, chat, Dropbox, Uber, YouTube, payments, LLM serving — each adds a signature concept on top of the basics.</p><div class="meta">→ Core &amp; Advanced designs</div></div></div>
+          </div>
+        </section>
+
+        <!-- ===== References ===== -->
+        <section class="reveal" style="margin-top: 48px;">
+          <h2 class="mt-0">Where this comes from <span class="badge gray" style="vertical-align:middle;">verified Jun 2026</span></h2>
+          <p class="muted" style="max-width: 64ch;">Grounded in the current interview canon. Use these to go deeper on any topic.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Source</th><th>Best for</th></tr></thead>
+              <tbody>
+                <tr><td><strong>ByteByteGo</strong> · Alex Xu, <em>System Design Interview</em> Vol 1 &amp; 2</td><td>The visual canon; problem-by-problem walkthroughs (incl. the 2026 GenAI &amp; ML system-design books).</td></tr>
+                <tr><td><strong>donnemartin/system-design-primer</strong></td><td>Free, comprehensive concept reference with Anki flashcards.</td></tr>
+                <tr><td><strong>Hello Interview</strong> · "System Design in a Hurry"</td><td>A clear delivery framework and answer keys for the common questions.</td></tr>
+                <tr><td><strong>Engineering blogs</strong> — Netflix, Discord, Uber, Meta, Stripe</td><td>How these systems are really built — streaming, real-time, geo, feeds, payments.</td></tr>
+                <tr><td><strong>karanpratapsingh/system-design</strong> · <strong>ashishps1/awesome-system-design-resources</strong></td><td>Free, well-organized course notes and a curated link hub.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="muted" style="font-size:13.5px;">Full links live on the <a href="reference/cheatsheet.html">cheat sheet</a>.</p>
+        </section>
+
+        <!-- ===== Page nav ===== -->
+        <nav class="page-nav reveal">
+          <a href="reference/glossary.html"><span class="pn-k">Reference</span><span class="pn-t">Glossary &amp; cheat sheet</span></a>
+          <a class="next" href="fundamentals/index.html"><span class="pn-k">Start ›</span><span class="pn-t">Reading a design question</span></a>
+        </nav>
+      </main>
+
+      <footer class="footer">
+        <span class="fmono">The System Design Field Guide · a visual field guide</span>
+        <span class="fmono">Content verified Jun 2026 · built to open offline</span>
+      </footer>
+    </div>
+  </div>
+  <script src="assets/js/lessons.js"></script>
+  <script src="assets/js/search-index.js"></script>
+  <script src="assets/js/main.js"></script>
+  <script src="assets/js/search.js"></script>
+  <script src="assets/js/progress.js"></script>
+  <script src="assets/js/reqflow.js"></script>
+</body>
+</html>

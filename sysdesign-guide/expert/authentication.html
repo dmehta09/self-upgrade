@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design authentication (login, SSO, MFA) | The System Design Field Guide</title>
+  <meta name="description" content="Who are you? Argon2id passwords, sessions vs JWT with refresh rotation, passkeys/WebAuthn, OAuth2/OIDC, and enterprise SSO." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="expert" data-page="expert-authentication" data-lesson="expert-authentication">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Expert designs</span><span class="sep">/</span><span class="current">Design authentication (login, SSO, MFA)</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Expert · authentication</span>
+  <h1>Design authentication.</h1>
+  <p class="lead">"Who are you?" — proving identity, then carrying that proof safely on every request. The two decisions that define the system are <strong>how you store credentials</strong> (Argon2id, never a fast hash) and <strong>how you carry the session</strong> (revocable server-side sessions vs stateless JWTs, which can't be revoked before they expire). Authorization — <em>what</em> you can do — is a separate page; authn produces the identity that authz consumes.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scope</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Register/login; sessions; password reset; MFA; social login (OAuth/OIDC); enterprise SSO (SAML/OIDC) + SCIM provisioning; logout / "log out everywhere".</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>Phishing-resistant where possible; token validation on the API hot path (every request); a hard-availability dependency; resilient to credential stuffing + ATO.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="passwords">
+  <h2><span class="section-num">02</span> &nbsp;Password storage: Argon2id</h2>
+  <p>Passwords are never encrypted (reversible) — they're run through a slow, salted, memory-hard function. The 2026 OWASP default is <strong>Argon2id</strong> (min 19 MiB / 2 iterations / 1 parallelism); bcrypt (cost ≥ 10, 72-byte limit) only for legacy. <strong>Never</strong> a fast hash — GPUs do tens of billions of SHA-256/s.</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">password.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">from argon2 import PasswordHasher          # OWASP minimum params
+ph = PasswordHasher(memory_cost=19456, time_cost=2, parallelism=1)
+
+def hash_password(plain, pepper):
+    pre = hmac_sha384(key=pepper, data=plain)     # pepper: app-wide secret in KMS, NOT the DB
+    return ph.hash(pre)            # PHC string embeds algo + params + a random per-pw SALT
+
+def verify_password(stored, plain, pepper):
+    try:
+        ph.verify(stored, hmac_sha384(key=pepper, data=plain))   # constant-time internally
+    except Exception:
+        return False
+    if ph.check_needs_rehash(stored):   # params bumped over time -> upgrade transparently
+        rehash_and_store(plain)
+    return True</code></pre></div>
+  </div>
+  <p class="small"><strong>Salt</strong> (per-password, in the hash) defeats rainbow tables; <strong>pepper</strong> (one app-wide secret, stored separately in KMS) makes a DB-only dump uncrackable. Never compare hashes with <span class="mono">==</span> — the PHF does a timing-safe compare. NIST SP 800-63B-4 (2025): ≥15 chars for single-factor, no composition rules, no forced rotation, mandatory breach screening.</p>
+</section>
+
+<section class="section reveal" id="sessions">
+  <h2><span class="section-num">03</span> &nbsp;Sessions vs JWT, &amp; refresh rotation</h2>
+  <p>The core trade-off is <strong>revocability vs statelessness</strong>:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Session strategy",
+      "axisLabel": "How do we carry identity across requests?",
+      "stops": [
+        { "label": "Opaque session", "dims": { "Revocability": 100, "Scalability": 60, "Cross-service": 50, "Simplicity": 85 }, "note": "Random session id in an httpOnly cookie; state in Redis/DB. Instant revocation (delete the key), tiny cookie, no PII on the wire — but a store lookup on EVERY request puts the session store on the hot path." },
+        { "label": "Stateless JWT", "dims": { "Revocability": 15, "Scalability": 100, "Cross-service": 95, "Simplicity": 70 }, "note": "Signed token validated by signature alone — no store hit, scales horizontally across services. But you CANNOT revoke before exp: a stolen access token is valid until it expires." },
+        { "label": "JWT + rotation", "dims": { "Revocability": 70, "Scalability": 90, "Cross-service": 95, "Simplicity": 50 }, "note": "Short-lived access (5-15 min) + rotating refresh tokens with reuse detection + a tiny jti denylist. The 2026 reconciliation: mostly stateless with a bounded revocation window." }
+      ]
+    }
+    </script>
+  </div>
+  <p>The standard 2026 design: <strong>5–15 min access token</strong> + a rotating refresh token (each refresh issues a new one, single-use). If an already-used refresh token reappears, it's theft — <strong>revoke the whole token family</strong> (RFC 9700):</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">refresh.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">def refresh(presented):
+    rec = store.get_refresh(hash(presented))         # tokens stored HASHED, never raw
+    if rec is None:
+        raise Reject("unknown")
+    if rec.used:                                     # a rotated token replayed = THEFT
+        store.revoke_family(rec.family_id)           # nuke the whole lineage
+        alert_security(rec.user_id); raise Reject("reuse detected")
+    if rec.revoked or now() &gt; rec.expires_at:
+        raise Reject("revoked or expired")
+    rec.used = True; store.save(rec)                 # mark old as spent (single-use)
+    new_rt = random_token()
+    store.put_refresh(hash(new_rt), family_id=rec.family_id, user_id=rec.user_id)
+    new_at = sign_jwt(sub=rec.user_id, exp=now()+ACCESS_TTL, jti=uuid())
+    return new_at, new_rt</code></pre></div>
+  </div>
+  <p class="small"><strong>Where tokens live (SPA gold standard):</strong> refresh token in an <span class="mono">httpOnly; Secure; SameSite</span> cookie (XSS can't read it), access token <strong>in memory only</strong> (re-minted via refresh). localStorage is CSRF-immune but fully XSS-exposed — don't put session tokens there.</p>
+</section>
+
+<section class="section reveal" id="mfa">
+  <h2><span class="section-num">04</span> &nbsp;MFA &amp; passkeys</h2>
+  <div class="kv">
+    <dt>Passkeys / WebAuthn (FIDO2)</dt><dd>The <strong>2026 direction</strong>: a keypair bound to the <em>origin</em>, so a proxy phishing site can't get a usable signature — <strong>phishing-resistant by construction</strong>, defeating the AitM attack that breaks passwords/TOTP/SMS. The private key never leaves the device; the server stores only a public key (a breach yields nothing). Synced passkeys (iCloud/Google) solve device-loss; ~5B in use by mid-2026.</dd>
+    <dt>TOTP</dt><dd>Authenticator app, 30-s codes. Good baseline MFA, but real-time relay/AitM-phishable.</dd>
+    <dt>SMS OTP</dt><dd><strong>Discouraged</strong> — NIST 800-63B-4 made it a "restricted authenticator" (SIM-swap, SS7). Treat a recent SIM change as a risk signal.</dd>
+  </div>
+  <p>Direction: passwords + SMS → app TOTP/push → <strong>passkey-primary (passwordless)</strong>, with a hardware key or recovery codes as fallback.</p>
+</section>
+
+<section class="section reveal" id="oauth">
+  <h2><span class="section-num">05</span> &nbsp;OAuth2 / OIDC</h2>
+  <p>OAuth 2.0 = delegated <em>authorization</em>; <strong>OIDC</strong> adds an identity layer (the <span class="mono">id_token</span>) for <em>authentication</em>. The 2026 default for <em>all</em> client types is the <strong>authorization code flow + PKCE</strong> (OAuth 2.1 removes implicit + password grants). PKCE binds the code to the originating client, so a stolen code is useless without the verifier.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Authorization code flow + PKCE</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "OIDC auth code + PKCE",
+      "nodes": [
+        { "id": "user", "label": "User", "type": "user", "col": 0, "row": 1 },
+        { "id": "client", "label": "Client app", "type": "stateless", "col": 1, "row": 1 },
+        { "id": "as", "label": "Auth server (IdP)", "type": "source", "col": 2, "row": 1 },
+        { "id": "api", "label": "Resource API", "type": "store", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "user", "to": "client", "label": "login" },
+        { "from": "client", "to": "as", "label": "/authorize" },
+        { "from": "as", "to": "client", "label": "code" },
+        { "from": "client", "to": "api", "label": "bearer" }
+      ],
+      "steps": [
+        { "edge": ["user","client"], "caption": "Click log in. Client makes code_verifier=rand(), code_challenge=SHA256(verifier)." },
+        { "edge": ["client","as"], "caption": "Redirect to /authorize (code flow + PKCE) with state (CSRF guard)." },
+        { "node": "as", "caption": "AS authenticates the user (password or passkey) + MFA + consent.", "status": "hit" },
+        { "edge": ["as","client"], "caption": "302 back with ?code=… (state verified)." },
+        { "node": "client", "caption": "POST /token with code + code_verifier; AS checks SHA256(verifier)==challenge → access + id_token + refresh." },
+        { "edge": ["client","api"], "caption": "Call the API with Authorization: Bearer; the resource server validates the JWT signature via JWKS — no DB hit." }
+      ]
+    }
+    </script>
+  </figure>
+  <p>OIDC adds the signed <span class="mono">id_token</span> (who logged in: <span class="mono">sub</span>, <span class="mono">email</span>, <span class="mono">nonce</span>), a UserInfo endpoint, and discovery (<span class="mono">/.well-known/openid-configuration</span> + JWKS). Use OAuth/OIDC for delegated access and social login.</p>
+</section>
+
+<section class="section reveal" id="sso">
+  <h2><span class="section-num">06</span> &nbsp;Enterprise SSO &amp; SCIM</h2>
+  <div class="kv">
+    <dt>SAML vs OIDC</dt><dd><strong>SAML 2.0</strong> still dominates the enterprise install base; OIDC is preferred for new/mobile. Prefer <strong>SP-initiated</strong> flows (request-bound, replay-resistant; OIDC mandates it).</dd>
+    <dt>SCIM</dt><dd>Login (SAML/OIDC) only handles the moment of auth; <strong>SCIM</strong> handles lifecycle — the IdP creates/updates/<strong>deprovisions</strong> accounts (offboarding kills access, which SSO alone wouldn't).</dd>
+    <dt>Per-org SSO</dt><dd>Each B2B tenant brings its own IdP + config (entity id, ACS URL, certs / OIDC issuer), keyed per org, with IdP discovery by email domain and a self-serve admin portal. This is what WorkOS/Clerk productize.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="capacity">
+  <h2><span class="section-num">07</span> &nbsp;Capacity &amp; token validation</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption (10M MAU / 1M DAU)</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Logins/s</td><td>~1M/day, peak 5×</td><td>~12/s avg, ~60/s peak — Argon2id (tens of ms) sized to the <em>login</em> rate</td></tr>
+        <tr><td>Token validations/s</td><td>1M DAU × ~100 API calls</td><td>~1,160/s avg, ~6,000/s peak — <strong>the dominant number</strong></td></tr>
+        <tr><td>Stateless JWT validate</td><td>RS256 signature, ~&lt; 1 ms</td><td>a few cores, <strong>zero store hits</strong> → why JWT scales</td></tr>
+        <tr><td>Opaque sessions</td><td>1M sessions × ~1 KB</td><td>~1 GB Redis + a lookup per request (HA store on the hot path)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Validate JWTs with the AS public key (RS256/ES256 via JWKS, cached) and <strong>pin the algorithm</strong> (reject the header's <span class="mono">alg</span> — stops <span class="mono">alg:none</span> / confusion). Asymmetric signing means a compromised service can't forge tokens for the fleet (unlike HS256's shared secret).</p>
+</section>
+
+<section class="section reveal" id="failure">
+  <h2><span class="section-num">08</span> &nbsp;Failure modes &amp; security</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🎯</span><h4>Credential stuffing</h4><p>The #1 vector (billions of attempts/mo). Defend with a <strong>breached-password check</strong> (HIBP k-anonymity — send the first 5 hex of the SHA-1, match the rest locally; the password never leaves you), per-account + per-IP rate limits, and MFA/passkeys.</p></div>
+    <div class="card feature"><span class="f-ic fx">🔓</span><h4>Token theft</h4><p>Short access TTL + refresh rotation/reuse-detection + <strong>sender-constrained tokens</strong> (DPoP / mTLS) so a stolen token is useless without the key.</p></div>
+    <div class="card feature"><span class="f-ic fx">🪤</span><h4>Session fixation</h4><p>Regenerate the session id on login/privilege change; never accept a session id from a URL.</p></div>
+    <div class="card feature"><span class="f-ic fx">🤖</span><h4>Bots / brute force</h4><p>Exponential backoff + lockout; escalate to CAPTCHA only on suspicion (protect UX); device fingerprinting + WAF.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">09</span> &nbsp;Observability, SLOs &amp; 2026 notes</h2>
+  <div class="kv">
+    <dt>Metrics &amp; SLOs</dt><dd>Login success/failure rate (a failure spike = stuffing in progress; segment by IP/ASN/geo), MFA + <strong>passkey adoption</strong>, token-validation latency (p99 &lt; 10 ms), Argon2id verify latency, <strong>refresh-reuse/family-revocation events</strong> (security alerts). Auth-service availability ≥ 99.99% — it's a hard dependency for everything.</dd>
+    <dt>2026 shifts</dt><dd><strong>OAuth 2.1</strong> (PKCE mandatory, implicit/ROPC removed) + <strong>RFC 9700</strong> security BCP; passkeys mainstream; <strong>CAEP / Shared Signals</strong> — trusted transmitters push near-real-time events (session revoked, risk changed) so receivers attenuate access mid-session instead of waiting for token expiry (the ecosystem answer to "JWTs can't be revoked").</dd>
+    <dt>Build vs buy</dt><dd>Most teams buy the IdP (Auth0/Okta, WorkOS, Clerk, Stytch) and own the session + authorization model.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">10</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You use stateless JWTs for scale. How do you handle "log this user out everywhere right now"?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>You can't — JWTs are forever</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Keep access tokens short-lived (5-15 min) and revoke the refresh tokens / bump a token-version; for instant kill, add the jti to a small denylist — bounded-window revocation without a per-request store hit</button>
+      <button class="quiz-opt"><span class="mark"></span>Rotate the signing key for everyone</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> JWTs can't be revoked before exp, so you bound exposure with short TTLs + refresh rotation, and bump a per-user token-version (or denylist the jti) for immediate revocation. The trade-off is the whole sessions-vs-JWT decision: statelessness costs you revocability.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"Store passwords with Argon2id (salt + a KMS pepper), never a fast hash. For sessions I'd use short-lived access JWTs + rotating refresh tokens with reuse detection — stateless validation scales, and the short TTL + rotation bounds the revocation gap; refresh token in an httpOnly cookie, access token in memory. Login is OIDC auth-code + PKCE; enterprise tenants bring their own IdP via SAML/OIDC plus SCIM for provisioning. I'd push toward passkeys because they're phishing-resistant by origin-binding, screen passwords against HIBP, and pin the JWT algorithm to avoid alg-confusion."</p></div></div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../expert/org-management.html"><span class="pn-k">‹ Back</span><span class="pn-t">Design organizations & teams</span></a>
+            <a class="next" href="../expert/authorization.html"><span class="pn-k">Next ›</span><span class="pn-t">Design authorization (RBAC, ABAC, ReBAC)</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements & scope</a>
+          <a href="#passwords">Password storage: Argon2id</a>
+          <a href="#sessions">Sessions vs JWT, & refresh rotation</a>
+          <a href="#mfa">MFA & passkeys</a>
+          <a href="#oauth">OAuth2 / OIDC</a>
+          <a href="#sso">Enterprise SSO & SCIM</a>
+          <a href="#capacity">Capacity & token validation</a>
+          <a href="#failure">Failure modes & security</a>
+          <a href="#ops">Observability, SLOs & 2026 notes</a>
+          <a href="#recap">Trade-offs & interview recap</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Expert designs · Design authentication (login, SSO, MFA)</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+  <script src="../assets/js/tradeoff.js"></script>
+</body>
+</html>

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design a chat system (WhatsApp) | The System Design Field Guide</title>
+  <meta name="description" content="Real-time messaging: WebSockets, presence, delivery and ordering guarantees, and group fan-out." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="core" data-page="core-chat" data-lesson="core-chat">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Core designs</span><span class="sep">/</span><span class="current">Design a chat system (WhatsApp)</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Core · WhatsApp / Messenger</span>
+  <h1>Design a chat system.</h1>
+  <p class="lead">Real-time messaging flips request/response: the server must <strong>push</strong> a message the instant it arrives. That one requirement pulls in persistent connections (WebSockets), a registry to find which gateway holds a user's socket, careful delivery/ordering guarantees, and presence. The deep truth at scale: connections are nearly free if you use epoll — the engineering goes into <strong>fan-out</strong>.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>1:1 and group messaging; delivered/read receipts; online presence; history; offline delivery (deliver on reconnect); multi-device.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>Feels instant; hundreds of millions of concurrent connections; messages never lost and ordered within a conversation; available + horizontally scalable.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="estimate">
+  <h2><span class="section-num">02</span> &nbsp;Capacity estimation</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Message rate</td><td>100B msg/day (WhatsApp scale), peak 3–5×</td><td>~1.16M/s avg → <strong>~3.5–6M msg/s</strong> peak</td></tr>
+        <tr><td>Concurrent connections</td><td>~300M online</td><td>at 1M conns/box → <strong>~300+ gateway boxes</strong> (+ redundancy)</td></tr>
+        <tr><td>Memory/connection</td><td>epoll + zero-copy ≈ 4–5 KB (naive 10 MB!)</td><td>1M conns ≈ ~4 GB socket state — trivial on a 64 GB box</td></tr>
+        <tr><td>Real ceiling</td><td>not RAM</td><td><strong>file descriptors, ephemeral ports, msg rate (CPU)</strong></td></tr>
+        <tr><td>Group fan-out</td><td>1 msg to a G-member group</td><td>= <strong>G deliveries</strong> — the dominant amplifier</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Real data point: WhatsApp ran ~1M connections/box (demonstrated 2M) and 147M peak concurrent on ~550 servers — with ~50 engineers. Connection memory is cheap with epoll; <strong>fan-out (group + presence) is what you optimise.</strong></p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">03</span> &nbsp;API &amp; transport</h2>
+  <div class="endpoint"><span class="verb post">WS</span><span class="path">send(conv_id, client_msg_id, ciphertext)</span><span class="ep-note">client → server over the open socket</span></div>
+  <div class="endpoint"><span class="verb get">WS</span><span class="path">receive / delivery_ack / read_receipt</span><span class="ep-note">server → client push; receipts fan back to sender</span></div>
+  <p><strong>WebSocket</strong> is the fit: one full-duplex TLS connection, low per-message overhead, server-initiated push. <strong>Long-poll</strong> is the fallback through hostile proxies (higher latency); <strong>SSE</strong> is server→client only (fine for presence, no native send path). Use WebSocket with long-poll fallback.</p>
+</section>
+
+<section class="section reveal" id="model">
+  <h2><span class="section-num">04</span> &nbsp;Data model</h2>
+  <div class="kv">
+    <dt><span class="mono">messages</span> (wide-column)</dt><dd>partition key <span class="mono">(conversation_id, time_bucket)</span>, clustering key = sequence/timestamp. "Last N in conversation X" is a single-partition range scan, not a scatter-gather. <strong>Why wide-column (Cassandra/ScyllaDB/HBase):</strong> append-heavy, time-ordered, range-read — exactly the <a href="../data/indexing.html">LSM-tree</a> sweet spot (memtable → immutable SSTables sustains very high write rates).</dd>
+    <dt><span class="mono">conversation_membership</span></dt><dd><span class="mono">conv_id → [user_ids]</span> and reverse.</dd>
+    <dt><span class="mono">mailbox</span> / <span class="mono">device_sessions</span></dt><dd>per-user offline queue (TTL ~30 d); <span class="mono">user_id → [device → {gateway, last_seen}]</span> for multi-device. WhatsApp historically kept only <em>in-transit</em> state (Mnesia), deleting messages after delivery.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="routing">
+  <h2><span class="section-num">05</span> &nbsp;Routing a message across gateways</h2>
+  <p>The core question: the recipient's socket lives on gateway G2, the sender on G1. On connect, each gateway writes <span class="mono">user → {gateway, conn}</span> into a <strong>session registry</strong> (Redis / consistent-hashed store). To deliver, look up the recipient's gateway and route via a pub/sub <strong>backplane</strong>; that gateway writes the frame to the local socket. Offline → mailbox + push.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Ann messages Bob (on a different gateway)</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Deliver a message over WebSockets",
+      "nodes": [
+        { "id": "ann", "label": "Ann", "type": "ws client", "col": 0, "row": 1 },
+        { "id": "g1", "label": "Gateway 1", "type": "ws server", "col": 1, "row": 1 },
+        { "id": "msg", "label": "Message svc", "type": "store + route", "col": 2, "row": 1 },
+        { "id": "reg", "label": "Session registry", "type": "user→gateway", "col": 2, "row": 0 },
+        { "id": "g2", "label": "Gateway 2", "type": "ws server", "col": 3, "row": 1 },
+        { "id": "bob", "label": "Bob", "type": "ws client", "col": 4, "row": 1 }
+      ],
+      "edges": [
+        { "from": "ann", "to": "g1", "label": "send" },
+        { "from": "g1", "to": "msg" },
+        { "from": "msg", "to": "reg", "label": "where is Bob?" },
+        { "from": "msg", "to": "g2" },
+        { "from": "g2", "to": "bob", "label": "push" }
+      ],
+      "steps": [
+        { "edge": ["ann","g1"], "caption": "Ann sends over her open WebSocket to Gateway 1." },
+        { "edge": ["g1","msg"], "caption": "The message service persists it (store-before-ack) and assigns a per-conversation sequence." },
+        { "edge": ["msg","reg"], "caption": "It asks the session registry which gateway holds Bob's connection." },
+        { "edge": ["msg","g2"], "caption": "Bob is on Gateway 2 — route there over the backplane (pub/sub)." },
+        { "edge": ["g2","bob"], "caption": "Gateway 2 pushes it down Bob's socket. If offline, it waits in his mailbox + a push wakes him.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">route.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">def handle_send(sender, conv_id, client_msg_id, ciphertext):
+    if dedup.seen(conv_id, client_msg_id):              # at-least-once -> effectively-once
+        return ack(dedup.server_id(conv_id, client_msg_id))
+
+    seq = seq_allocator.next(conv_id)                   # monotonic PER CONVERSATION (cheap)
+    msg = Message(conv_id, seq, sender, client_msg_id, ciphertext, ts=now())
+
+    store.append(conv_id, seq, msg)                     # STORE-BEFORE-ACK: durable first
+    dedup.record(conv_id, client_msg_id, msg.id)
+    ack_to_sender(sender, client_msg_id, seq)           # only NOW ack the sender
+
+    for r in members(conv_id):                          # 1:1 -> one; group -> G recipients
+        route_to_recipient(r, msg)
+
+def route_to_recipient(user, msg):
+    sess = session_registry.get(user)                  # user -> {gateway, conn} or None
+    if sess and sess.alive:
+        backplane.publish(sess.gateway, msg)           # cross-gateway hop
+    else:
+        mailbox.enqueue(user, msg)                     # offline queue (TTL ~30d)
+        push.notify(user, msg.meta)                    # APNs / FCM wake-up</code></pre></div>
+  </div>
+</section>
+
+<section class="section reveal" id="delivery">
+  <h2><span class="section-num">06</span> &nbsp;Delivery, ordering &amp; groups</h2>
+  <div class="kv">
+    <dt>At-least-once + dedup</dt><dd>Reconnects cause resends; the <span class="mono">client_msg_id</span> is the idempotency key — "already seen → skip + re-ack."</dd>
+    <dt>Ordering</dt><dd>A <strong>per-conversation monotonic sequence</strong> (not global — users only order within a conversation, so it's one cheap counter per partition). Clients reorder by <span class="mono">seq</span>.</dd>
+    <dt>Store-before-ack</dt><dd>Persist durably <em>before</em> acking the sender, so a crash never loses a message. (A latency-optimised variant acks first and persists via a Kafka consumer — faster ack, small loss window. State the trade-off.)</dd>
+    <dt>Receipt ladder &amp; groups</dt><dd>sent (one tick) → delivered (two ticks) → read (blue) — separate flows. Groups fan out to each member's inbox; large groups deliver <strong>one copy per gateway</strong> then fan out locally (turning "10k across 50 gateways" into 50 cross-network sends), the way Discord's Manifold parallelizes fan-out.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="presence">
+  <h2><span class="section-num">07</span> &nbsp;Presence &amp; failure modes</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🟢</span><h4>Presence is expensive</h4><p>Heartbeats update <span class="mono">last_seen</span> in Redis. One presence change notifies all F subscribers → <strong>N×F amplification</strong> that dwarfs message traffic (presence fires far more often than messages). Mitigate: reuse the existing socket for presence frames, coalesce/batch updates, and subscribe only to <em>visible</em> conversations.</p></div>
+    <div class="card feature"><span class="f-ic fx">💥</span><h4>Gateway crash</h4><p>Sockets drop; clients reconnect to <em>any</em> gateway (state is external — no pinning), re-register, and <strong>resume from last seq</strong> (server replays after it). Persist-before-ack prevents loss.</p></div>
+    <div class="card feature"><span class="f-ic fx">🌩️</span><h4>Reconnect storm</h4><p>A region failure makes millions reconnect at once, keeping the fleet down longer than the outage. Use <strong>exponential backoff with jitter</strong>, server <span class="mono">Retry-After</span> hints, staggered token TTLs, and edge admission control.</p></div>
+    <div class="card feature"><span class="f-ic fx">🐌</span><h4>Slow consumers</h4><p>A client that can't drain its socket must not OOM the gateway — apply back-pressure and load-shedding (Discord uses GenStage).</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">08</span> &nbsp;Multi-region, E2E, observability &amp; cost</h2>
+  <div class="kv">
+    <dt>Multi-region</dt><dd>Connect to the nearest gateway region (GeoDNS/anycast); the session registry is <strong>region-aware</strong> so cross-region pairs route over the backplane. Messages favour availability + eventual consistency (per-conversation order preserved via seq); Cassandra/ScyllaDB give multi-DC replication natively.</dd>
+    <dt>E2E encryption</dt><dd>Signal Protocol (X3DH/PQXDH + Double Ratchet). The server routes <strong>ciphertext only</strong> — it can't read, search, rank, or moderate content; it still sees metadata (who→whom, when). Push carries placeholders, decrypted on-device.</dd>
+    <dt>Observability &amp; cost</dt><dd>Message delivery latency p99 (headline SLO), concurrent-connection count, reconnect rate (spike = failure/storm), undelivered-mailbox depth, per-conversation seq gaps (loss detector). Cost = persistent-connection memory (cheap with epoll: ~1.5 TB for 300M conns) but is dominated by <strong>fan-out CPU/network</strong> — which is why these systems run on tiny teams using BEAM/epoll gateways.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">09</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why are WebSockets preferred over plain HTTP request/response for chat delivery?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>They use less bandwidth per message header</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>They keep a persistent, bidirectional connection so the server can push a message the instant it arrives, without the client polling</button>
+      <button class="quiz-opt"><span class="mark"></span>HTTP can't carry text</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> chat needs server-initiated delivery. A persistent WebSocket lets the server push instantly; with plain request/response the client would have to keep asking "anything new?", adding latency and load.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"Persistent WebSockets on a gateway fleet, with a session registry mapping user → gateway and a pub/sub backplane to route across gateways. Persist before ack so messages are never lost; order with a per-conversation sequence; dedup by client message id for at-least-once. Offline → mailbox + APNs/FCM. The hard part isn't connections — those are ~4 KB each with epoll — it's fan-out: group delivery is O(members) and presence is N×F, so I deliver one copy per gateway and coalesce presence. Cross-region uses a region-aware registry; E2E means the server only ever handles ciphertext."</p></div></div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../core/file-sync.html"><span class="pn-k">‹ Back</span><span class="pn-t">Design Dropbox / file sync</span></a>
+            <a class="next" href="../advanced/uber.html"><span class="pn-k">Next ›</span><span class="pn-t">Design Uber / ride-hailing</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements & scale</a>
+          <a href="#estimate">Capacity estimation</a>
+          <a href="#api">API & transport</a>
+          <a href="#model">Data model</a>
+          <a href="#routing">Routing a message across gateways</a>
+          <a href="#delivery">Delivery, ordering & groups</a>
+          <a href="#presence">Presence & failure modes</a>
+          <a href="#ops">Multi-region, E2E, observability & cost</a>
+          <a href="#recap">Trade-offs & interview recap</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Core designs · Design a chat system (WhatsApp)</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+</body>
+</html>

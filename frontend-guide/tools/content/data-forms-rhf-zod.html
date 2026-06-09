@@ -1,0 +1,148 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Data &amp; state &middot; forms</span>
+            <h1>Forms: react-hook-form + Zod</h1>
+            <p class="lead">react-hook-form keeps inputs uncontrolled so typing doesn&rsquo;t re-render your whole form, and Zod gives you one schema that defines the shape once &mdash; then validates it on both the client and the server.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">RHF tracks inputs via <b>refs</b>, not state, so keystrokes don&rsquo;t re-render the tree. Zod is the <b>single source of truth</b> for the form&rsquo;s shape, reused everywhere.</p>
+            <p>You <code>register</code> each field to wire it up, <code>handleSubmit</code> to validate-then-submit, and read <code>formState.errors</code> to show messages. The <code>zodResolver</code> bridges your Zod schema into RHF&rsquo;s validation.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>One Zod schema is the master blueprint for the form &mdash; the door frame everything must fit. The browser checks the blueprint for fast feedback while the user types; the server checks the <em>same</em> blueprint before trusting anything. One drawing, two checkpoints &mdash; so client and server can never drift apart.</p>
+              </div>
+            </div>
+
+            <div class="diagram"><div class="dg-title">One schema, two checkpoints</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">define once</div><div class="fn-t">Zod schema</div><div class="fn-d">shape + rules</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">bridge</div><div class="fn-t">zodResolver</div><div class="fn-d">feeds RHF</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">client (UX)</div><div class="fn-t">form validates</div><div class="fn-d">inline errors</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">server (security)</div><div class="fn-t">re-validate</div><div class="fn-d">same schema, parse</div></div>
+              </div>
+            </div>
+
+            <dl class="kv">
+              <dt>Uncontrolled by default</dt><dd>Inputs hold their own value via <code>ref</code>; RHF reads them on submit. Typing doesn&rsquo;t set React state, so it doesn&rsquo;t re-render the form &mdash; a big win on large forms.</dd>
+              <dt><code>register</code> / <code>handleSubmit</code></dt><dd><code>register('email')</code> wires an input to RHF. <code>handleSubmit(onValid)</code> runs validation first and only calls your handler with typed, valid data.</dd>
+              <dt><code>zodResolver</code></dt><dd>From <code>@hookform/resolvers/zod</code>. It runs your <b>Zod 4</b> schema as RHF&rsquo;s validator and maps each issue into <code>formState.errors</code>.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="wireup">
+            <h2><span class="section-num">01</span> Schema &rarr; form</h2>
+            <p>Define the schema, infer the TypeScript type from it for free, then hand it to <code>useForm</code> through the resolver.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">schema.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">import { z } from 'zod'; // Zod 4
+
+export const signupSchema = z.object({
+  email: z.string().email('Enter a valid email'),
+  password: z.string().min(8, 'At least 8 characters'),
+});
+export type Signup = z.infer&lt;typeof signupSchema&gt;; // single source of truth</code></pre>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">SignupForm.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+
+const { register, handleSubmit, formState: { errors } } =
+  useForm&lt;Signup&gt;({ resolver: zodResolver(signupSchema) });
+
+&lt;form onSubmit={handleSubmit(onValid)}&gt;
+  &lt;input {...register('email')} /&gt;
+  {errors.email &amp;&amp; &lt;p&gt;{errors.email.message}&lt;/p&gt;}
+&lt;/form&gt;</code></pre>
+            </div>
+          </section>
+
+          <section class="section reveal" id="server">
+            <h2><span class="section-num">02</span> Reuse the schema on the server</h2>
+            <p>Import the very same schema in a server action and <code>parse</code> the payload. Client validation is for fast UX; the server check is the one that actually protects you.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">actions.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">'use server';
+import { signupSchema } from './schema'; // SAME schema as the client
+
+export async function signup(raw: unknown) {
+  const data = signupSchema.parse(raw); // throws on bad input -> never trust the client
+  await db.users.create(data);
+}</code></pre>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>Client validation is <b>UX, not security</b>. Anyone can bypass the browser and POST raw JSON, so you must re-validate on the server with the same schema (<code>schema.parse</code>). Skipping the server check is how invalid or malicious data reaches your database.</p>
+              </div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why is react-hook-form uncontrolled by default?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Inputs hold their own value via refs, so typing doesn&rsquo;t set state or re-render the form.</button>
+                <button class="quiz-opt"><span class="mark"></span>Because controlled inputs can&rsquo;t be validated.</button>
+                <button class="quiz-opt"><span class="mark"></span>So the server can read the inputs directly.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> RHF reads values from the DOM via <code>ref</code> on submit instead of mirroring each keystroke into React state &mdash; that&rsquo;s why it re-renders far less than a fully controlled form.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why is RHF uncontrolled, and why does that matter?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>It subscribes to inputs through refs rather than React state, so each keystroke doesn&rsquo;t trigger a re-render of the form. On large forms that&rsquo;s a major perf win versus a fully controlled approach where every change re-renders the component.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;It reads inputs via refs, not state, so typing doesn&rsquo;t re-render the form &mdash; which keeps big forms fast.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What does zodResolver actually do?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>It adapts a Zod schema into RHF&rsquo;s validation pipeline. On submit (or per the mode), RHF runs the schema, and the resolver maps any Zod issues into <code>formState.errors</code> keyed by field &mdash; plus you get the inferred type for free.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;It plugs a Zod schema into RHF as the validator and maps Zod errors onto formState.errors per field.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you share validation between client and server?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Define one Zod schema in a shared module. The client uses it via <code>zodResolver</code> for inline UX feedback; the server imports the same schema and calls <code>parse</code> on the payload before persisting. One definition guarantees the rules can&rsquo;t drift, and the server check is the real security boundary.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;One schema in a shared file &mdash; zodResolver on the client for UX, schema.parse on the server for security. No drift.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="zustand.html"><span class="pn-k">Previous</span><span class="pn-t">Zustand for client state</span></a>
+            <a class="next" href="state-decision-guide.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Where should this state live?</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#wireup">Schema &rarr; form</a>
+          <a href="#server">Reuse the schema on the server</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

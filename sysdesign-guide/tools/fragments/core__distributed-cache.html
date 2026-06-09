@@ -1,0 +1,194 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Core · Redis / Memcached at scale</span>
+  <h1>Design a distributed cache.</h1>
+  <p class="lead">A single Redis box is easy. The real problem is a cache spanning hundreds of machines that stays fast as nodes join and leave, survives a node dying without stampeding the database, and copes with one wildly popular key. It pulls together <a href="../data/consistent-hashing.html">consistent hashing</a>, replication, and eviction — the in-memory layer half your other designs depend on.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p><span class="mono">get(key)</span>, <span class="mono">put(key, value, ttl)</span>, <span class="mono">delete(key)</span>, plus atomic ops (<span class="mono">incr</span>, CAS) and batch (<span class="mono">mget</span>). Values are small blobs; any entry may be evicted.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>Sub-millisecond reads, millions of ops/s, horizontally scalable, tolerant of node failure (a lost node must not lose everything or stampede the DB). It's a performance optimisation — <strong>AP over CP</strong>: a stale or missing entry is recoverable from the source of truth.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="estimate">
+  <h2><span class="section-num">02</span> &nbsp;Capacity estimation</h2>
+  <p>Size the <strong>hit ratio</strong> (it decides DB load), <strong>memory</strong> (the working set, not the whole DB), and <strong>ops/s per node</strong>. Worked example fronting a read-heavy DB at 1M reads/s:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>DB load @ 95% hit</td><td>1M reads/s × 5% miss</td><td><strong>50k reads/s</strong> reach the DB (20× shielding)</td></tr>
+        <tr><td>DB load @ 99% hit</td><td>1M reads/s × 1% miss</td><td><strong>10k reads/s</strong> — a 4-pt hit gain → 5× less DB load</td></tr>
+        <tr><td>Working set</td><td>50M hot objects × 1 KB + ~100 B/key overhead</td><td>≈ 55 GB → provision <strong>~70 GB</strong> (frag + replicas)</td></tr>
+        <tr><td>Ops/node</td><td>~100k–200k ops/s/shard (planning)</td><td>1M reads/s → <strong>a handful of shards</strong>, not hundreds</td></tr>
+        <tr><td>Network</td><td>950k hits/s × ~1.1 KB</td><td>≈ <strong>8 Gbps</strong> egress — big values go NIC-bound first</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Takeaway: hit ratio matters <strong>super-linearly</strong> near the top, and memory + NIC bandwidth — not CPU — are the usual ceilings. Keep values small.</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">03</span> &nbsp;API &amp; data model</h2>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">get(key) / mget(k1,k2,…)</span><span class="ep-note">→ value | null · batch collapses N round trips into 1</span></div>
+  <div class="endpoint"><span class="verb post">SET</span><span class="path">set(key, value, EX ttl) [NX|XX]</span><span class="ep-note">TTL is first-class · NX/XX = set-if-absent/present (CAS)</span></div>
+  <div class="endpoint"><span class="verb post">ATOMIC</span><span class="path">incr · getdel · WATCH/MULTI · Lua</span><span class="ep-note">server-side atomicity for counters &amp; leases</span></div>
+  <p>Stored values are small, self-contained, <strong>eviction-eligible</strong> blobs (serialized objects, rendered fragments, query results, sessions). Memcached caps items at 1 MB and uses a <strong>slab allocator</strong> (fixed size-classes, 1.25× growth → no external fragmentation, some internal slack); Redis uses jemalloc over one keyspace and actively defrags. In a <em>cluster</em>, multi-key ops must hit the same shard, so co-locate related keys with <strong>hash tags</strong> <span class="mono">{user123}:profile</span>.</p>
+</section>
+
+<section class="section reveal" id="architecture">
+  <h2><span class="section-num">04</span> &nbsp;Partitioning &amp; the read path</h2>
+  <p>Data is too big for one box, so shard it with <strong>consistent hashing</strong> (or Redis Cluster's 16384 CRC16 slots — keys→slots→nodes, so resharding moves slots, not keys). A smart client owns the topology, hashes the key, and talks straight to the owning node — no proxy on the hot path.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">get(key) routed to the owning shard + replica</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "get(key)",
+      "nodes": [
+        { "id": "client", "label": "Client lib", "type": "app", "col": 0, "row": 1 },
+        { "id": "router", "label": "Hash ring", "type": "routing", "col": 1, "row": 1 },
+        { "id": "n2", "label": "Cache node 2", "type": "primary", "col": 2, "row": 1 },
+        { "id": "r2", "label": "Replica 2", "type": "follower", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "client", "to": "router", "label": "hash(key)" },
+        { "from": "router", "to": "n2" },
+        { "from": "n2", "to": "r2", "label": "replicate" }
+      ],
+      "steps": [
+        { "edge": ["client","router"], "caption": "The client hashes the key onto the ring to find its owning node." },
+        { "edge": ["router","n2"], "caption": "Node 2 owns this key's slot. Read it in-memory.", "status": "hit", "latency": "~0.5 ms" },
+        { "edge": ["n2","r2"], "caption": "Writes replicate to a follower so a node failure doesn't drop the data or stampede the database." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="hashing">
+  <h2><span class="section-num">05</span> &nbsp;Consistent hashing deep dive</h2>
+  <p><span class="mono">hash(key) % N</span> is fatal for a cache: change N and ~<span class="mono">N/(N+1)</span> of keys remap — adding 1 node to 10 moves <strong>~91%</strong> of keys to cold nodes → mass miss → DB stampede. The <strong>ring</strong> maps nodes and keys into one hash space; a key is owned by the first node clockwise, so membership changes move only <strong>~1/N</strong> of keys. <strong>Virtual nodes</strong> (100–200 points/node) even out load and spread an orphaned slice across many survivors.</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">ring.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">import bisect, hashlib
+
+class HashRing:
+    def __init__(self, nodes=(), vnodes=150):
+        self.vnodes = vnodes
+        self._keys = []        # sorted ring positions
+        self._ring = {}        # position -> node
+        for n in nodes:
+            self.add(n)
+
+    def _h(self, k):
+        return int(hashlib.md5(k.encode()).hexdigest(), 16)
+
+    def add(self, node):
+        for i in range(self.vnodes):       # scatter many points per node
+            h = self._h(f"{node}#{i}")
+            bisect.insort(self._keys, h)
+            self._ring[h] = node
+
+    def get_node(self, key):
+        if not self._ring:
+            return None
+        i = bisect.bisect(self._keys, self._h(key))   # first vnode clockwise
+        if i == len(self._keys):
+            i = 0                                       # wrap around the ring
+        return self._ring[self._keys[i]]</code></pre></div>
+  </div>
+  <p class="small">Traps the snippet handles: find the <em>next</em> point clockwise (<span class="mono">bisect</span>), and wrap around when the key hashes past the last point. With 150 vnodes this distributes ~evenly and moves ≈1/N of keys on a membership change.</p>
+</section>
+
+<section class="section reveal" id="replication">
+  <h2><span class="section-num">06</span> &nbsp;Replication &amp; failure</h2>
+  <p>Each shard = one primary + async replicas. On primary death a coordinator (Redis Sentinel, or cluster gossip + quorum) promotes a replica in <strong>single-digit seconds</strong>; consistent hashing confines the impact to that shard. Replication is async, so an acked write can be lost on failover — an accepted trade for a cache (the DB is truth).</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why a cache picks AP</div><p>A node with no surviving replica loses its slice → those keys become misses and refill from the DB. The danger is a <strong>correlated miss storm</strong> on the DB for the lost slice — which is why you keep replicas (limit loss to ~1/N), use consistent hashing, and add stampede protection (next section). A cache that blocked to guarantee consistency would defeat its own purpose.</p></div></div>
+</section>
+
+<section class="section reveal" id="hotkey">
+  <h2><span class="section-num">07</span> &nbsp;Eviction, hot keys &amp; the stampede</h2>
+  <p>At <span class="mono">maxmemory</span>, evict by <strong>LRU/LFU</strong> + TTL. Redis approximates LRU by sampling (default 5 keys) and LFU with an 8-bit decaying counter. Two scaling traps remain. First, the <strong>hot key</strong>: consistent hashing balances <em>keys</em>, not <em>request rate</em>, so one viral key melts its single shard.</p>
+  <figure class="viz" data-viz aria-label="Hot key">
+    <figcaption class="viz-title">One hot key melts its node</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "array",
+      "meta": { "values": ["N0","N1","N2","N3"] },
+      "frames": [
+        { "match": [0,1,2,3], "caption": "Four nodes, load nicely balanced." },
+        { "match": [0,2,3], "reject": [1], "caption": "A celebrity post lives on N1. Its traffic alone overwhelms N1 while others idle." },
+        { "match": [0,1,2,3], "active": [0,2,3], "caption": "Fix: replicate the hot key across nodes (read a random copy), or add a tiny in-process local cache on the app servers." }
+      ]
+    }
+    </script>
+  </figure>
+  <p>Second, the <strong>cache stampede</strong>: when a hot key <em>expires</em>, every concurrent request misses at once and hammers the DB. Fix with <strong>single-flight</strong> (first miss recomputes; others wait for that one result), <strong>TTL jitter</strong> (so keys written together don't expire in lockstep), and <strong>serve-stale</strong> while one worker refreshes. RESP3 client-side caching (server pushes invalidations) productises the local-cache layer.</p>
+</section>
+
+<section class="section reveal" id="writes">
+  <h2><span class="section-num">08</span> &nbsp;Write policies &amp; consistency</h2>
+  <p>How writes touch the cache vs the DB is its own trade-off:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Cache write policies",
+      "axisLabel": "How does a write reach the cache and the DB?",
+      "stops": [
+        { "label": "Cache-aside", "dims": { "Write latency": 90, "Read freshness": 70, "Durability": 95, "Simplicity": 85 }, "note": "App writes the DB, then DELETES (not updates) the cache key; reads lazy-fill on miss. The default. Watch the read-repopulates-stale race; bound it with short TTLs / lease tokens." },
+        { "label": "Write-through", "dims": { "Write latency": 50, "Read freshness": 95, "Durability": 95, "Simplicity": 70 }, "note": "Write cache + DB synchronously. Cache always fresh, but every write pays cache latency even for keys never read (DynamoDB DAX works this way)." },
+        { "label": "Write-back", "dims": { "Write latency": 98, "Read freshness": 80, "Durability": 30, "Simplicity": 40 }, "note": "Write cache now, flush to DB async. Lowest write latency / highest throughput — but data loss if the cache dies before flush. Complex." }
+      ]
+    }
+    </script>
+  </div>
+  <p>Default: <strong>cache-aside + TTL</strong> (keeps the cache off the write path; TTL is a staleness bound, not a consistency mechanism). <strong>Delete, don't update</strong> on writes, and drive invalidation from the DB change log (CDC) when correctness matters.</p>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">09</span> &nbsp;Multi-region, observability &amp; cost</h2>
+  <div class="kv">
+    <dt>Multi-region</dt><dd>Default to a <strong>local cache per region</strong> (low latency, blast-radius contained), filled from a regional DB; rely on TTL or a cross-region invalidation fan-out. A globally-replicated cache (Redis Enterprise Active-Active / CRDTs) is eventually consistent across regions (tens–hundreds of ms lag).</dd>
+    <dt>Metrics &amp; SLOs</dt><dd><strong>Hit ratio</strong> (top-line; alert on level and slope), evictions/s + memory pressure, p99 GET (SLO sub-ms to low-ms), per-shard ops skew (hot-shard detection), connection/NIC saturation. Alert when one shard's load far exceeds the median.</dd>
+    <dt>Cost</dt><dd>RAM-dominated — pay for memory-optimised nodes 24×7 plus replicas (~2×). Levers: keep values small/compressed, and push the hottest keys into a free in-process local cache so you buy fewer shards.</dd>
+    <dt>2026 landscape</dt><dd>Redis is tri-licensed (AGPL added, Redis 8 GA May 2025); <strong>Valkey</strong> (Linux Foundation fork) is a cheaper drop-in on AWS/GCP/Azure; Memcached for a lean blob cache; DynamoDB DAX for write-through in front of DynamoDB; Dragonfly for multi-threaded single-box scale.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">10</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why is consistent hashing preferred over <span class="mono">hash(key) % N</span> for a cache cluster?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>It's faster to compute</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Adding/removing a node remaps only ~1/N of keys, avoiding a near-total cache wipe and a database stampede</button>
+      <button class="quiz-opt"><span class="mark"></span>It guarantees no hot keys</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> with <span class="mono">% N</span>, changing N reshuffles almost every key — catastrophic for a cache. Consistent hashing limits churn to one node's share. (It doesn't solve hot keys — that needs replicating the key itself.)</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"Shard with consistent hashing + virtual nodes so a membership change moves ~1/N of keys, not everything. Primary + async replica per shard, AP because the DB is the source of truth. Cache-aside with TTL and delete-on-write. The two things that bite are hot keys — fix with key replication or an in-process local cache — and stampedes on expiry — fix with single-flight, TTL jitter, and serve-stale. Hit ratio is the metric I'd watch, because a few points of hit ratio is a multiple of DB load."</p></div></div>
+</section>

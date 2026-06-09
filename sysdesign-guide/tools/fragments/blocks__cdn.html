@@ -1,0 +1,73 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Building blocks · CDN</span>
+  <h1>CDN &amp; the edge.</h1>
+  <p class="lead">A Content Delivery Network is a fleet of cache servers spread across the globe. When a user requests an image, video, or script, it's served from an <strong>edge</strong> location physically near them instead of your origin server an ocean away. Since light itself takes ~150&nbsp;ms to cross the planet, moving bytes closer is the only way to feel fast everywhere.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> &nbsp;Why distance is the enemy</h2>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Instead of one central warehouse shipping every order across the country, a CDN is like having a local depot in every city. Popular items sit in the depot near you, so delivery is minutes not days. The first person in a city to order something triggers a restock from the warehouse; everyone after gets it locally.</p>
+    </div>
+  </div>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Edge hit, then a miss that fills the cache</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Edge hit, then a miss that fills the cache",
+      "nodes": [
+        { "id": "user", "label": "User (Tokyo)", "type": "client", "col": 0, "row": 1 },
+        { "id": "edge", "label": "Edge (Tokyo)", "type": "cache pop", "col": 1, "row": 1 },
+        { "id": "origin", "label": "Origin (US)", "type": "source", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "user", "to": "edge", "label": "GET /logo.png" },
+        { "from": "edge", "to": "origin", "label": "on miss" }
+      ],
+      "steps": [
+        { "edge": ["user","edge"], "caption": "User in Tokyo requests an image; it goes to the nearest edge, a few ms away.", "latency": "~5 ms" },
+        { "node": "edge", "caption": "Cache HIT — the image is already here from an earlier visitor. Returned instantly.", "status": "hit" },
+        { "edge": ["edge","origin"], "caption": "Cache MISS for a new asset — the edge fetches once from the distant origin…", "status": "miss", "latency": "~150 ms" },
+        { "node": "edge", "caption": "…then stores it. Every later Tokyo user gets the fast local copy until its TTL expires.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="what">
+  <h2><span class="section-num">02</span> &nbsp;What to put on a CDN</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🖼️</span><h4>Static assets</h4><p>Images, CSS, JS bundles, fonts, and especially <strong>video</strong> — the bulk of most apps' bandwidth. The obvious win.</p></div>
+    <div class="card feature"><span class="f-ic fx">⚡</span><h4>Dynamic acceleration &amp; edge compute</h4><p>Modern CDNs cache personalised fragments, run code at the edge (auth, A/B tests, redirects), and keep persistent connections back to origin.</p></div>
+  </div>
+  <p>The two control knobs are <strong>TTL</strong> (how long an edge keeps a copy before rechecking) and <strong>invalidation</strong> (forcing edges to drop a copy now). Because invalidation is slow and global, the common trick is <strong>versioned URLs</strong>: ship <span class="mono">app.v7.js</span> instead of editing <span class="mono">app.js</span>, so a new version is simply a new, un-cached URL.</p>
+</section>
+
+<section class="section reveal" id="gotchas">
+  <h2><span class="section-num">03</span> &nbsp;Cache hit ratio is the metric</h2>
+  <p>A CDN only helps to the extent it serves from cache. A <strong>95% hit ratio</strong> means only 1 in 20 requests bothers your origin — that's the difference between a small origin fleet and a giant one. You raise it by caching aggressively, normalising URLs, and not accidentally marking everything <span class="mono">no-cache</span>.</p>
+  <div class="quiz" data-quiz>
+    <p class="q">You deploy a CSS change but users still see the old styles for hours. The most robust fix going forward is…</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Set TTL to zero so nothing is ever cached</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Use versioned/fingerprinted filenames so each release is a new URL</button>
+      <button class="quiz-opt"><span class="mark"></span>Email users to clear their cache</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> fingerprinting (<span class="mono">styles.a1b2c3.css</span>) means a new build is a brand-new URL the CDN has never seen — instantly correct, while still caching old and new aggressively. TTL=0 throws away the entire benefit of the CDN.</div>
+  </div>
+</section>

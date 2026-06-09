@@ -1,0 +1,166 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Core · Twitter / X feed</span>
+  <h1>Design a news feed.</h1>
+  <p class="lead">A stream of recent posts from everyone you follow. It's the most iconic system-design question because it forces the field's most famous trade-off — <strong>fan-out on write vs read</strong>: do the work when someone posts, or when someone reads? Get that right, handle the celebrity who breaks it, and layer on the ML ranking that every real feed now runs.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Post. View a home timeline (posts from people you follow). Follow/unfollow. Start chronological; ranking is a layer on top.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p><strong>Extremely read-heavy</strong> (~100:1) — people scroll far more than they post. Timelines load &lt; 200 ms. Eventual consistency is fine (a post a second late is invisible) — except <em>read-your-own-writes</em> for your own posts.</p></div>
+  </div>
+  <div class="calc" data-calc>
+    <script type="application/json" class="calc-config">
+    {
+      "title": "Feed — capacity",
+      "preset": "X-scale",
+      "presets": [ { "label": "X-scale", "values": { "dau": 250000000, "writesPerUser": 2, "readWrite": 100, "bytesPerItem": 300, "retentionYears": 5, "replication": 3 } } ],
+      "outputs": ["writeQps","readQps","peakQps","storageTotal","servers"]
+    }
+    </script>
+  </div>
+  <p>The hidden cost is <strong>fan-out amplification</strong>: 500M posts/day × ~200 avg followers ≈ <strong>10¹¹ timeline writes/day</strong> (~1.2M/s avg). Reads dwarf writes ~100:1, so make reads cheap even if writes do more work.</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">02</span> &nbsp;API &amp; data model</h2>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/v1/posts</span><span class="ep-note">{ text, media_ids?, reply_to?, idempotency_key } → 201 { post_id, created_at }</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/v1/timeline/home?limit=20&amp;cursor=…</span><span class="ep-note">→ { items[], next_cursor } · cursor, never offset</span></div>
+  <div class="endpoint"><span class="verb put">PUT</span><span class="path">/v1/follows/{target}</span><span class="ep-note">follow / unfollow → 204</span></div>
+  <div class="kv">
+    <dt><span class="mono">posts</span></dt><dd>sharded by <span class="mono">author_id</span> (co-locates an author's posts → one shard hit to pull a celebrity's recent posts); <span class="mono">post_id</span> is a Snowflake (time-sortable). Secondary index <span class="mono">(author_id, post_id DESC)</span>.</dd>
+    <dt>Social graph</dt><dd>stored <strong>both directions</strong> — <span class="mono">followers</span> partitioned by followee (fan-out target) and <span class="mono">following</span> by follower (read-pull/merge). Real systems back this with a write-through graph cache (Meta's TAO over MySQL).</dd>
+    <dt>Per-user timeline (Redis)</dt><dd><span class="mono">LPUSH tl:home:{u} {post_id}; LTRIM 0 799</span> — store <strong>IDs, not objects</strong>, so a celebrity post is one cached object, not N copies. <strong>Hydrate</strong> at read with <span class="mono">MGET</span> (posts + authors + counts).</dd>
+  </div>
+  <p>Cursors are opaque (encode <span class="mono">snowflake_id</span> for chronological, or <span class="mono">(score, post_id)</span> + a session seed for ranked) — never offset, which is O(n) deep and breaks under inserts.</p>
+</section>
+
+<section class="section reveal" id="tradeoff">
+  <h2><span class="section-num">03</span> &nbsp;The core decision: fan-out</h2>
+  <p>Push the work to write time (precompute every follower's timeline) or read time (assemble on demand)? Drag through the trade-off:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Fan-out: write vs read",
+      "axisLabel": "When do we build each user's timeline?",
+      "stops": [
+        { "label": "On write (push)", "dims": { "Read speed": 95, "Write cost": 30, "Storage": 40, "Freshness": 90 }, "note": "On post, push the id into every follower's precomputed timeline. Reads are one fast lookup — but a 50M-follower post means 50M writes. Great for the common case." },
+        { "label": "Hybrid", "dims": { "Read speed": 80, "Write cost": 62, "Storage": 60, "Freshness": 82 }, "note": "Fan-out on write for normal users; for celebrities, DON'T fan out — pull their posts at read time and merge. The real-world answer." },
+        { "label": "On read (pull)", "dims": { "Read speed": 42, "Write cost": 92, "Storage": 82, "Freshness": 72 }, "note": "Store one copy per post; build the timeline by querying everyone you follow at read time. Cheap writes, but every read is a fan-in query — slow for users following thousands." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="architecture">
+  <h2><span class="section-num">04</span> &nbsp;Architecture — fan-out on write</h2>
+  <p>For most users, precompute. On post, the write service persists to the source of truth, then an async fan-out worker pushes the post id into each follower's timeline list — so the author's request returns instantly and each follower's read is a single lookup.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Post → fan-out → followers' timelines</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Post → fan-out → followers' timelines",
+      "nodes": [
+        { "id": "user", "label": "Author", "type": "post", "col": 0, "row": 1 },
+        { "id": "write", "label": "Write service", "type": "store post", "col": 1, "row": 1 },
+        { "id": "q", "label": "Fan-out queue", "type": "async", "col": 2, "row": 1 },
+        { "id": "f1", "label": "Timeline: Ann", "type": "redis list", "col": 3, "row": 0 },
+        { "id": "f2", "label": "Timeline: Bob", "type": "redis list", "col": 3, "row": 1 },
+        { "id": "f3", "label": "Timeline: Cara", "type": "redis list", "col": 3, "row": 2 }
+      ],
+      "edges": [
+        { "from": "user", "to": "write", "label": "tweet" },
+        { "from": "write", "to": "q" },
+        { "from": "q", "to": "f1" },
+        { "from": "q", "to": "f2" },
+        { "from": "q", "to": "f3" }
+      ],
+      "steps": [
+        { "edge": ["user","write"], "caption": "Author posts. The tweet is saved to the durable store and given a Snowflake id." },
+        { "edge": ["write","q"], "caption": "A fan-out job is queued (async, so the author's request returns instantly)." },
+        { "edge": ["q","f1"], "caption": "The post id is pushed into each follower's precomputed timeline list…" },
+        { "edge": ["q","f2"], "caption": "…Bob's timeline…" },
+        { "edge": ["q","f3"], "caption": "…Cara's. Now each follower's read is a single fast list lookup.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="celebrity">
+  <h2><span class="section-num">05</span> &nbsp;The celebrity problem → hybrid</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Fan-out on write breaks for celebrities</div><p>A 100M-follower account would trigger 100M Redis writes per post — at ~1 ms each that's ~28 hours to deliver one post. The fix is a <strong>hybrid</strong> gated by a follower-count threshold (a runtime config flag, not an architecture change): fan out for normal accounts, but for celebrities store once and <strong>pull at read time</strong>, merging into the precomputed timeline.</p></div></div>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">fanout.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">CELEB_THRESHOLD, CAP = 10_000, 800
+
+def on_post_created(ev):                       # fan-out worker (Kafka consumer)
+    if graph.follower_count(ev.author) >= CELEB_THRESHOLD:
+        redis.lpush(f"author:recent:{ev.author}", ev.post_id)   # celeb: park, don't fan out
+        redis.ltrim(f"author:recent:{ev.author}", 0, CAP - 1)
+        return
+    for batch in graph.iter_followers(ev.author, batch=5000):   # regular: push to each follower
+        pipe = redis.pipeline()
+        for f in batch:
+            pipe.lpush(f"tl:home:{f}", ev.post_id)
+            pipe.ltrim(f"tl:home:{f}", 0, CAP - 1)
+        pipe.execute()
+
+def get_home_timeline(user, cursor, limit=20):                 # read = push list + celeb pull
+    ids = set(redis.lrange(f"tl:home:{user}", 0, 400))
+    for celeb in graph.followed_celebrities(user):             # bounded set
+        ids |= set(redis.lrange(f"author:recent:{celeb}", 0, 50))
+    ranked = sorted(ids, reverse=True)                          # snowflake id ~ time order
+    return hydrate(paginate(ranked, cursor, limit))            # MGET posts + authors + counts</code></pre></div>
+  </div>
+  <p>One cached celebrity post is shared by all followers — the read does O(celebs followed) extra work instead of the write doing O(followers).</p>
+</section>
+
+<section class="section reveal" id="ranking">
+  <h2><span class="section-num">06</span> &nbsp;Ranking (the 2026 reality: ML, not chronological)</h2>
+  <p>The default "For You" feed on X, Instagram, and Threads is <strong>ML-ranked</strong> (chronological survives as an opt-in tab). Fan-out produces <em>candidates</em>; ranking decides <em>order</em>, on the read path, as a multi-stage funnel:</p>
+  <div class="kv">
+    <dt>Candidate sourcing</dt><dd>Narrow hundreds of millions of posts to ~1,500 — roughly half in-network (people you follow) and half out-of-network (graph/embedding signals: SimClusters, TwHIN).</dd>
+    <dt>Heavy ranker</dt><dd>A neural net scoring each candidate's engagement probabilities, combined as a weighted sum (with strong negative weights for "report"/negative feedback).</dd>
+    <dt>Heuristics &amp; filters</dt><dd>Visibility/safety filters, author diversity, dedupe — applied <em>last</em>.</dd>
+    <dt>2026 shift</dt><dd>X open-sourced a rewrite (Jan 2026) replacing the classic light/heavy-ranker funnel with a single <strong>Grok transformer</strong> that learns from engagement sequences — trading ML-pipeline complexity for heavier inference (GPU) cost.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="failure">
+  <h2><span class="section-num">07</span> &nbsp;Failure modes, multi-region &amp; cost</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🌊</span><h4>Fan-out backlog</h4><p>A celebrity past the threshold or a spike backs up Kafka → "post-to-visible" balloons. Mitigate with the threshold itself, per-author rate limits, priority lanes, autoscaled workers, and a DLQ. Alert on consumer lag.</p></div>
+    <div class="card feature"><span class="f-ic fx">🧊</span><h4>Timeline cache loss</h4><p>Redis is a cache, not truth. On node loss, rebuild a timeline lazily on read from posts + graph (pull followees' recent posts, re-materialize). Cap blast radius with sharding + replicas; warm hot users.</p></div>
+    <div class="card feature"><span class="f-ic fx">🌍</span><h4>Multi-region</h4><p>Geo-pin users; replicate graph + timeline cache near them; eventual consistency cross-region (hundreds of ms). For <strong>read-your-own-writes</strong>, route the author's reads to their home region and/or merge their own recent posts on top.</p></div>
+    <div class="card feature"><span class="f-ic fx">💰</span><h4>Cost</h4><p>Timeline-cache RAM (~13 TB working set × replication) is the big fixed cost — cache only active users, cap length, store IDs not objects. Fan-out compute scales with posts × followers; ML inference is now a first-order driver.</p></div>
+  </div>
+  <p class="small">Observability: home-timeline read p99 (SLO &lt; ~200 ms), <strong>fan-out lag / post-to-visible</strong> (SLO p99 &lt; ~5 s), cache hit ratios. Alert on a hit-ratio drop <em>combined with</em> a DB-read surge — the classic cache-failure → stampede signature.</p>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">08</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A feed is 100:1 read-heavy and most users have modest follower counts. What's the right default, and the exception?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Fan-out on read for everyone — writes stay cheap</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Fan-out on write by default (cheap reads), but pull at read time for celebrities to avoid fan-out storms</button>
+      <button class="quiz-opt"><span class="mark"></span>Store no timelines; recompute everything every request</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> with reads dominating, precomputing timelines on write makes the common read a single lookup. The only thing that breaks it — accounts with millions of followers — is handled by pulling their posts on read. That hybrid is the canonical answer.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"It's 100:1 read-heavy, so I precompute timelines: fan-out on write pushes post IDs into each follower's Redis list, and reads are one lookup + hydration. The celebrity case would be a fan-out storm, so I gate on a follower threshold and pull celebrities' posts at read time, merging them in. Timelines store IDs not objects so a viral post is one cached object. On top, a multi-stage ML ranker reorders the candidate set. The costs I'd watch are timeline-cache RAM and fan-out lag, and I'd guarantee read-your-own-writes by merging the author's own recent posts."</p></div></div>
+</section>

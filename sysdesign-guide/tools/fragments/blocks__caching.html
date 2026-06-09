@@ -1,0 +1,88 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Building blocks · caching</span>
+  <h1>Caching.</h1>
+  <p class="lead">A cache is a small, fast store (usually in-memory, like Redis) that holds copies of hot data so you don't recompute or re-fetch it. It's the single biggest scaling lever in most systems: a good cache turns a 10&nbsp;ms database read into a 1&nbsp;ms lookup and shields your database from the bulk of traffic. The whole art is deciding <em>what</em> to cache, <em>how</em> to write through it, and <em>when</em> to evict.</p>
+</section>
+
+<section class="section reveal" id="aside">
+  <h2><span class="section-num">01</span> &nbsp;The default: cache-aside</h2>
+  <p>The most common pattern. The application talks to the cache first and falls back to the database, filling the cache on a miss. Step through a read:</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Cache-aside read (miss → fill → hit)</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Cache-aside read",
+      "nodes": [
+        { "id": "svc", "label": "Service", "type": "app", "col": 0, "row": 1 },
+        { "id": "cache", "label": "Cache", "type": "redis", "col": 1, "row": 0 },
+        { "id": "db", "label": "Database", "type": "source", "col": 1, "row": 2 }
+      ],
+      "edges": [
+        { "from": "svc", "to": "cache", "label": "GET key" },
+        { "from": "svc", "to": "db", "label": "on miss" }
+      ],
+      "steps": [
+        { "edge": ["svc","cache"], "caption": "Read: the service asks the cache for the key." },
+        { "node": "cache", "caption": "Miss — the key isn't here (cold, or it expired).", "status": "miss" },
+        { "edge": ["svc","db"], "caption": "Fall back to the database for the real value.", "latency": "~10 ms" },
+        { "edge": ["svc","cache"], "caption": "Write the value back into the cache with a TTL, so next time it's a hit.", "status": "hit", "latency": "~1 ms" }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>It's keeping a few favourite books on your desk instead of walking to the library each time. First time you need one, you fetch it from the library (slow) and leave it on the desk; after that it's right there. When the desk fills up, you return the books you haven't touched in a while.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="writes">
+  <h2><span class="section-num">02</span> &nbsp;Write strategies — pick your trade-off</h2>
+  <p>Reads are easy; the interesting choices are about <em>writes</em> — how the cache and database stay in step. Switch between the three and watch the costs move:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Cache write strategies",
+      "axisLabel": "How does a write update the cache vs the database?",
+      "stops": [
+        { "label": "Cache-aside", "dims": { "Read speed": 85, "Write speed": 78, "Freshness": 65, "Safety": 90 }, "note": "Writes go to the DB and invalidate (or update) the cached key. Simple and safe — but the first read after a write is a miss, and there's a small stale window." },
+        { "label": "Write-through", "dims": { "Read speed": 88, "Write speed": 50, "Freshness": 95, "Safety": 90 }, "note": "Every write updates cache AND database synchronously. The cache is always fresh; writes pay for two stores. Great for read-heavy data that must never be stale." },
+        { "label": "Write-back", "dims": { "Read speed": 90, "Write speed": 96, "Freshness": 72, "Safety": 42 }, "note": "Write to the cache only; flush to the database asynchronously. Blazing writes — but if the cache dies before flushing, you lose data. For high-throughput, loss-tolerant counters/metrics." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="evict">
+  <h2><span class="section-num">03</span> &nbsp;Eviction, TTLs &amp; the hard parts</h2>
+  <p>A cache is small, so it must throw things out. <strong>LRU</strong> (least-recently-used) is the default; <strong>LFU</strong> (least-frequently-used) suits skewed popularity. A <strong>TTL</strong> caps how stale data can get. Two classic failure modes to name in interviews:</p>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔥</span><h4>Hot key</h4><p>One key (a celebrity, a viral post) gets so much traffic it overloads the single cache node holding it. Fix: replicate that key across nodes, or add a local in-process cache.</p></div>
+    <div class="card feature"><span class="f-ic fx">🌩️</span><h4>Cache stampede</h4><p>A popular key expires and thousands of requests miss at once, all hammering the DB. Fix: add jitter to TTLs, or let one request recompute while others serve stale ("request coalescing").</p></div>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">There are only two hard things…</div><p>"…cache invalidation and naming things." Keeping the cache in step with the source of truth is genuinely hard — which is why "what's your cache freshness requirement?" is one of the most useful questions you can ask in a design.</p></div></div>
+  <div class="quiz" data-quiz>
+    <p class="q">You're caching like-counts that can tolerate a few seconds of staleness and get enormous write volume. Which write strategy fits best?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Write-through — must be perfectly fresh</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Write-back (batch flushes to the DB) — writes are cheap and a little loss/staleness is fine</button>
+      <button class="quiz-opt"><span class="mark"></span>No cache at all</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> for high-volume, loss-tolerant counters, write-back (increment in the cache, flush to the DB periodically) gives huge write throughput. Reserve write-through for data that must always be fresh.</div>
+  </div>
+</section>

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sharding & partitioning | The System Design Field Guide</title>
+  <meta name="description" content="Splitting data across machines: shard keys, hot shards, range vs hash partitioning, and resharding." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="data" data-page="data-sharding" data-lesson="data-sharding">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../data/index.html" style="color:var(--accent)">Data at scale</a><span class="sep">/</span><span class="current">Sharding & partitioning</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Data at scale · sharding</span>
+  <h1>Sharding &amp; partitioning.</h1>
+  <p class="lead">When one database can't hold all your data or handle all your writes, you split it across many machines — each holding a <strong>shard</strong> (a slice of the rows). Done well, you scale writes and storage almost linearly. Done badly, you create a "hot shard" that takes all the traffic, or paint yourself into a corner where re-splitting means moving everything. The whole game is choosing the <strong>shard key</strong>.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> &nbsp;Splitting the data</h2>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>One librarian can't manage a billion books. So you open several branches and split the collection by a rule — "A–F here, G–M there." The rule is the shard key. A good rule keeps every branch equally busy; a bad rule sends everyone to the branch holding the one popular author.</p>
+    </div>
+  </div>
+  <p>Each record's shard is decided by hashing its shard key. Watch users land on shards by <span class="mono">hash(user_id) % 4</span> — the load spreads evenly:</p>
+  <figure class="viz" data-viz aria-label="Sharding by hash">
+    <figcaption class="viz-title">hash(key) % 4 → shard</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "array",
+      "meta": { "values": ["Shard 0","Shard 1","Shard 2","Shard 3"] },
+      "frames": [
+        { "caption": "Four shards. Each key is routed by hash(key) % 4." },
+        { "active": [1], "caption": "user 101 → hash → Shard 1." },
+        { "active": [3], "caption": "user 102 → hash → Shard 3." },
+        { "active": [0], "caption": "user 103 → hash → Shard 0." },
+        { "active": [2], "caption": "user 104 → hash → Shard 2." },
+        { "match": [0,1,2,3], "caption": "Evenly spread — each shard owns ~25% of users, so writes and storage divide by four." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="how">
+  <h2><span class="section-num">02</span> &nbsp;How to split — and the trade-off</h2>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Partitioning strategies",
+      "axisLabel": "How do you map a key to a shard?",
+      "stops": [
+        { "label": "Range", "dims": { "Even distribution": 45, "Range scans": 95, "Easy to reshard": 60, "Simplicity": 85 }, "note": "Split by key ranges (A–F, G–M…). Range scans are cheap, but sequential or skewed keys (timestamps, 'celebrity') create hot shards. Used by Bigtable/HBase with dynamic splits." },
+        { "label": "Hash", "dims": { "Even distribution": 92, "Range scans": 20, "Easy to reshard": 35, "Simplicity": 78 }, "note": "Shard = hash(key) % N. Spreads load evenly and kills hotspots — but you lose cheap range scans, and changing N (adding a shard) reshuffles almost everything." },
+        { "label": "Consistent hashing", "dims": { "Even distribution": 85, "Range scans": 18, "Easy to reshard": 92, "Simplicity": 55 }, "note": "Place shards and keys on a ring so adding/removing a node moves only a small slice of keys. The standard for elastic, rebalancing clusters." }
+      ]
+    }
+    </script>
+  </div>
+  <p>The reason plain <span class="mono">hash % N</span> is dangerous is the resharding cost — which is exactly the problem <a href="consistent-hashing.html">consistent hashing</a> solves, next.</p>
+</section>
+
+<section class="section reveal" id="pitfalls">
+  <h2><span class="section-num">03</span> &nbsp;Hot shards &amp; cross-shard pain</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔥</span><h4>Hot shard / celebrity key</h4><p>If your shard key is skewed (e.g., shard by <span class="mono">country</span> and 60% are in one), that shard melts. Pick a high-cardinality, evenly-distributed key — or split the hot key further.</p></div>
+    <div class="card feature"><span class="f-ic fx">🔗</span><h4>Cross-shard queries &amp; joins</h4><p>A query spanning shards must hit them all and merge — slow. Transactions across shards are hard. Choose the shard key so your common queries stay within one shard.</p></div>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">The shard key is a one-way door</div><p>Changing your shard key later means migrating the entire dataset — painful and risky. Spend real time choosing it: it should spread load evenly <em>and</em> keep your hottest queries on a single shard. This single decision shapes the whole design.</p></div></div>
+  <div class="quiz" data-quiz>
+    <p class="q">A messaging app shards its messages table by <span class="mono">message_id</span> (random). Reading "all messages in a conversation" is now slow. Why, and what's the better shard key?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Nothing's wrong; random keys are ideal</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A conversation's messages are scattered across all shards; shard by <span class="mono">conversation_id</span> so each conversation lives on one shard</button>
+      <button class="quiz-opt"><span class="mark"></span>Add more shards</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> sharding by a random message_id scatters one conversation across every shard, so reading it is a cross-shard fan-out. Sharding by conversation_id co-locates a conversation, turning the common query into a single-shard read.</div>
+  </div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../data/indexing.html"><span class="pn-k">‹ Back</span><span class="pn-t">Indexing</span></a>
+            <a class="next" href="../data/replication.html"><span class="pn-k">Next ›</span><span class="pn-t">Replication & quorums</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#idea">Splitting the data</a>
+          <a href="#how">How to split — and the trade-off</a>
+          <a href="#pitfalls">Hot shards & cross-shard pain</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Data at scale · Sharding & partitioning</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/visualizer.js"></script>
+  <script src="../assets/js/tradeoff.js"></script>
+</body>
+</html>

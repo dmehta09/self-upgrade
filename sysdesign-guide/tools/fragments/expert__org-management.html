@@ -1,0 +1,206 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Expert · organizations &amp; teams</span>
+  <h1>Design organizations &amp; teams.</h1>
+  <p class="lead">B2B SaaS isn't one user per account — it's a company (org/workspace) full of users, with teams, roles, and invitations. The whole thing rests on one structural insight: the <strong>membership is its own entity</strong>, a join between user and org that carries the role. Get that right and every permission check is tenant-aware by construction; get it wrong and you leak roles across customers.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; the core model</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Create orgs; invite/remove members with roles; nested teams; seats for billing; ownership transfer; org-scoped resources that survive members leaving.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>A user belongs to many orgs; an org has many users — and a user's role is <strong>per-org</strong>. Membership changes are audited (SOC 2); invites can't be abused.</p></div>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why membership is its own entity</div><p>Role is <em>not</em> a property of the user and <em>not</em> a property of the org — it's a property of the <strong>edge</strong>. The same person is <span class="mono">owner</span> in their startup and <span class="mono">guest</span> in a client's org simultaneously. Putting role on the <span class="mono">(user, org)</span> membership makes every authz decision tenant-scoped by construction — a role literally cannot exist outside an org boundary. The org is almost always <strong>== the tenant</strong> from <a href="multi-tenancy.html">multi-tenancy</a>.</p></div></div>
+</section>
+
+<section class="section reveal" id="model">
+  <h2><span class="section-num">02</span> &nbsp;Data model: the membership graph</h2>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">org.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">CREATE TABLE organizations ( id uuid PRIMARY KEY, name text, slug text UNIQUE );
+
+-- THE junction: one row = one user's relationship to one org. Carries role + status.
+CREATE TABLE memberships (
+  user_id           uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  org_id            uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  role              text NOT NULL DEFAULT 'member',  -- owner|admin|member|billing|guest
+  status            text NOT NULL DEFAULT 'active',  -- pending|active|inactive
+  directory_managed boolean NOT NULL DEFAULT false,  -- true if owned by SCIM (don't hand-edit)
+  joined_at         timestamptz,
+  PRIMARY KEY (user_id, org_id)                       -- a user is in an org at most once
+);
+CREATE INDEX idx_mem_user ON memberships(user_id, org_id);  -- "list my orgs"
+CREATE INDEX idx_mem_org  ON memberships(org_id, status);   -- "list org members" + seat count
+
+CREATE TABLE teams (
+  id             uuid PRIMARY KEY,
+  org_id         uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  parent_team_id uuid REFERENCES teams(id) ON DELETE CASCADE,  -- nesting
+  name           text NOT NULL, UNIQUE (org_id, name)
+);
+-- Every tenant-owned resource carries org_id NOT NULL — the isolation invariant.</code></pre></div>
+  </div>
+  <p>The <span class="mono">org_id</span> on every resource is the load-bearing invariant of shared-pool multi-tenancy; app code always filters by the session's active-org, with Postgres RLS as a backstop.</p>
+</section>
+
+<section class="section reveal" id="roles">
+  <h2><span class="section-num">03</span> &nbsp;Roles &amp; seats</h2>
+  <div class="kv">
+    <dt>The role ladder</dt><dd><strong>owner</strong> (full control incl. delete + transfer; ≥1 always required) · <strong>admin</strong> (manage members/settings, can't destroy) · <strong>member</strong> (default) · <strong>billing</strong> · <strong>guest</strong> (external/limited). Plus custom roles (a "logical grouping of permissions"; the deep model is on the <a href="authorization.html">authorization</a> page).</dd>
+    <dt>Per-org, not global</dt><dd>The role lives on the membership, so it's resolved per active org — usually baked into the session/JWT so runtime checks need no extra DB call.</dd>
+    <dt>Seats for billing</dt><dd>The <strong>membership table is the source of truth for seats</strong>. Emit a billing meter event on every add/remove/deactivate/reactivate; map to the subscription <span class="mono">quantity</span>; reconcile periodically (seat drift is a classic bug). Whether <span class="mono">guest</span>/<span class="mono">inactive</span> count is a product policy.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="hierarchy">
+  <h2><span class="section-num">04</span> &nbsp;Nested teams &amp; inheritance</h2>
+  <p>Teams nest via <span class="mono">parent_team_id</span>; permission flows <strong>down</strong> the tree — a member of a parent team implicitly belongs to all descendants for access. Resources can be owned at org, team, or user level (layered inheritance with local overrides, Notion-style):</p>
+  <figure class="viz" data-viz aria-label="Org hierarchy &amp; inheritance">
+    <figcaption class="viz-title">Permission inherits down the org → team tree</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "graph",
+      "meta": {
+        "directed": true, "width": 520, "height": 240,
+        "nodes": [
+          { "id": "org", "label": "Acme (org)", "x": 250, "y": 35 },
+          { "id": "eng", "label": "Engineering", "x": 150, "y": 120 },
+          { "id": "design", "label": "Design", "x": 390, "y": 120 },
+          { "id": "backend", "label": "Backend", "x": 150, "y": 205 }
+        ],
+        "edges": [ ["org","eng"], ["org","design"], ["eng","backend"] ]
+      },
+      "frames": [
+        { "active": ["org"], "caption": "The organization (the tenant) contains members and teams." },
+        { "visited": ["org"], "active": ["eng","design"], "edgesOn": [["org","eng"],["org","design"]], "caption": "Engineering and Design are teams within the org." },
+        { "visited": ["org","eng"], "active": ["backend"], "edgesOn": [["eng","backend"]], "caption": "Teams nest: Backend is a child of Engineering (parent_team_id)." },
+        { "visited": ["org","eng","backend"], "edgesOn": [["eng","backend"]], "caption": "Permission inherits DOWN: a member of Engineering implicitly has access to Backend and all descendants." }
+      ]
+    }
+    </script>
+  </figure>
+  <p>Deep, recursive permission resolution over this graph is exactly where teams migrate from RBAC to <strong>ReBAC</strong> (see <a href="authorization.html">authorization</a>).</p>
+</section>
+
+<section class="section reveal" id="invites">
+  <h2><span class="section-num">05</span> &nbsp;Invitations</h2>
+  <p>The challenge: you invite an <em>email</em>, which may not have an account yet. So the invitation exists independently of any user, keyed by <span class="mono">(org, email)</span>, and resolves to a membership only on accept.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Invite by email → accept → membership</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Invitation flow",
+      "nodes": [
+        { "id": "admin", "label": "Admin", "type": "user", "col": 0, "row": 0 },
+        { "id": "api", "label": "Org API", "type": "stateless", "col": 1, "row": 1 },
+        { "id": "mail", "label": "Email", "type": "async", "col": 2, "row": 0 },
+        { "id": "db", "label": "DB", "type": "store", "col": 2, "row": 1 },
+        { "id": "invitee", "label": "Invitee", "type": "user", "col": 0, "row": 2 }
+      ],
+      "edges": [
+        { "from": "admin", "to": "api", "label": "invite" },
+        { "from": "api", "to": "db", "label": "pending" },
+        { "from": "api", "to": "mail", "label": "token link" },
+        { "from": "invitee", "to": "api", "label": "accept" }
+      ],
+      "steps": [
+        { "edge": ["admin","api"], "caption": "Admin invites bob@acme.com as 'member' (authz: caller is owner/admin, has a free seat)." },
+        { "edge": ["api","db"], "caption": "Store a PENDING invite: hashed single-use token, role, 48h expiry, partial-unique on (org, email)." },
+        { "edge": ["api","mail"], "caption": "Email the raw token link — the raw token leaves the system exactly once." },
+        { "edge": ["invitee","api"], "caption": "Bob clicks → accept; if he has no account, he signs up and joins as part of acceptance.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">accept_invite.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">def accept_invite(raw_token, user):               # user is authenticated by here
+    inv = db.one("""SELECT * FROM invitations
+                    WHERE token_hash = %s AND status = 'pending'
+                    FOR UPDATE""", sha256(raw_token))     # row lock => single-use, no race
+    if inv is None or now() &gt; inv.expires_at:
+        raise Invalid("expired or already used")
+    if user.email.lower() != inv.email:           # token bound to the invited address
+        raise Forbidden("invite not for this account")
+    with tx():
+        db.upsert(memberships, user_id=user.id, org_id=inv.org_id,
+                  role=inv.role, status='active', joined_at=now())   # the grant
+        db.update(invitations, id=inv.id, status='accepted')
+        emit_seat_event(inv.org_id)               # bump billing quantity
+        audit_log('member.invite.accepted', org=inv.org_id, actor=user.id)</code></pre></div>
+  </div>
+  <p class="small">The <span class="mono">FOR UPDATE</span> lock + a partial-unique index on <span class="mono">(org_id, email) WHERE status='pending'</span> together close the documented <strong>invite-race</strong> (concurrent accepts / invite-limit bypass). <strong>Domain-based JIT</strong>: an org verifies a domain via DNS TXT, then matching emails auto-join (you can't verify a public domain like <span class="mono">@gmail.com</span>).</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">06</span> &nbsp;API &amp; the graph queries</h2>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/orgs/{org}/invitations · /invitations/accept</span><span class="ep-note">invite by email; accept by token</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/me/organizations · /orgs/{org}/memberships</span><span class="ep-note">"my orgs" (idx_mem_user); "org members" (idx_mem_org, paginate)</span></div>
+  <div class="endpoint"><span class="verb put">PUT</span><span class="path">/memberships/{id} · /orgs/{org}/transfer-ownership</span><span class="ep-note">change role (last-owner guard); atomic owner swap</span></div>
+  <p>"Who can access resource Y?" → resolve Y's <span class="mono">org_id</span> → members, then expand team nesting via a <strong>recursive CTE</strong> down <span class="mono">parent_team_id</span> (members of a parent team reach children).</p>
+</section>
+
+<section class="section reveal" id="ownership">
+  <h2><span class="section-num">07</span> &nbsp;Ownership transfer &amp; last-owner protection</h2>
+  <p>You may never delete or demote the <em>only</em> owner. Enforce server-side inside the same transaction, with a lock so two concurrent "demote owner" requests can't both pass:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">last_owner.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">-- Inside the demote/remove transaction, before committing:
+SELECT count(*) FROM memberships
+ WHERE org_id = :org AND role = 'owner' AND status = 'active'
+   AND user_id != :target
+FOR UPDATE;          -- must be >= 1, else abort: "org must keep an owner"</code></pre></div>
+  </div>
+  <p>Transfer = atomic two-row update (promote new, demote old) + reassign billing contact + audit. Leaving an org and deleting an org (cascade, usually soft-delete first) hit the same guard.</p>
+</section>
+
+<section class="section reveal" id="scale">
+  <h2><span class="section-num">08</span> &nbsp;Scale, failure modes &amp; observability</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Memberships</td><td>100k orgs × ~20 members</td><td>≈ <strong>2M rows</strong> (~400 MB) — trivially indexed, never the bottleneck</td></tr>
+        <tr><td>"List my orgs"</td><td>bounded by orgs/user (single digits)</td><td>sub-ms via <span class="mono">(user_id, org_id)</span>; cache in the session</td></tr>
+        <tr><td>"List org members"</td><td>enterprise org up to 500k members</td><td>must <strong>paginate</strong> + cache (Slack Grid scale)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The membership table is small; the real pressure is <strong>member-list pagination, permission resolution over team trees, and seat-count fan-out</strong> on the few giant tenants. Failure modes: orphaned resources (own them at the org, not the user, so they survive departures), invite abuse (rate-limit + token hashing + row-lock), seat drift (reconcile vs billing), and an append-only <strong>membership audit log</strong> (<span class="mono">invited / accepted / role.changed / removed / ownership.transferred</span>) — a SOC 2 hard requirement, retained ~15 months.</p>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">09</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why model role on a <span class="mono">memberships</span> join table instead of putting a <span class="mono">role</span> column on the user?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>It saves a table</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Role is a property of the user-org relationship — the same user is owner in one org and guest in another — so it must live on the edge, which also makes every authz check tenant-scoped by construction</button>
+      <button class="quiz-opt"><span class="mark"></span>Users can only be in one org</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> a global role column can't express different roles in different orgs and invites cross-tenant role leaks. The membership edge carries role + status + provenance, and a role literally can't exist outside an org boundary.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"Three entities: user, org, and the <strong>membership</strong> edge that carries the per-org role and status — so authz is tenant-scoped by construction and the membership table is the source of truth for seats. Teams nest with <span class="mono">parent_team_id</span> and permissions inherit downward; deep resolution pushes me toward ReBAC. Invitations are keyed by email (the invitee may have no account), with a hashed single-use token and a <span class="mono">FOR UPDATE</span> accept to kill the invite-race. I protect the last owner inside a locked transaction and audit every membership change for SOC 2."</p></div></div>
+</section>

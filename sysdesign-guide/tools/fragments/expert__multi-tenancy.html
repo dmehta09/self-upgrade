@@ -1,0 +1,183 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Expert · multi-tenant SaaS</span>
+  <h1>Design a multi-tenant SaaS architecture.</h1>
+  <p class="lead">One codebase and one fleet serving thousands of isolated customers. The defining decision is <strong>isolation vs density</strong>: how strongly do you separate tenants, and how many can you pack onto shared infrastructure? Get it wrong one way and you bleed money; the other way and one tenant's bad query — or worse, a missing <span class="mono">WHERE tenant_id</span> — leaks another tenant's data. The 2026 answer is <strong>tiered isolation</strong>: pool the long tail, silo the whales.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>One application serves many tenants (companies/workspaces). Each sees only its own data, config, and branding. Onboard a tenant in seconds; offboard (export + delete) cleanly.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p><strong>Hard tenant isolation</strong> (no cross-tenant leak — ever), high density/low cost for small tenants, no noisy-neighbour starvation, per-tenant compliance/residency, and migrations that don't take everyone down at once.</p></div>
+  </div>
+  <p>The whole design hangs on one question: <strong>what is the tenant boundary, and how is it enforced on every read and write?</strong></p>
+</section>
+
+<section class="section reveal" id="isolation">
+  <h2><span class="section-num">02</span> &nbsp;Isolation models: silo, pool, bridge</h2>
+  <p>AWS's SaaS Lens names three patterns — and the key insight is you can apply them <em>per service</em>, not just whole-app:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Tenant isolation models",
+      "axisLabel": "How separated is each tenant's data & compute?",
+      "stops": [
+        { "label": "Silo", "dims": { "Isolation": 100, "Cost efficiency": 20, "Blast-radius safety": 95, "Ops simplicity": 30 }, "note": "Stack / database per tenant. Strongest isolation, trivial residency + BYOK, one tenant's load can't touch another — but lowest density (highest $/tenant) and you operate thousands of stacks. Sell it as the enterprise/regulated tier." },
+        { "label": "Pool", "dims": { "Isolation": 40, "Cost efficiency": 100, "Blast-radius safety": 30, "Ops simplicity": 85 }, "note": "Shared DB, shared tables, every row carries tenant_id. Highest density (thousands of tenants per DB), one migration for all — but isolation is only logical, so a single missing predicate = cross-tenant breach. The SMB/free tier." },
+        { "label": "Bridge", "dims": { "Isolation": 70, "Cost efficiency": 55, "Blast-radius safety": 65, "Ops simplicity": 45 }, "note": "Mix: e.g. schema-per-tenant, or silo the noisy/regulated services and pool the rest. Middle ground; schema-per-tenant bloats the catalog past a few hundred tenants." }
+      ]
+    }
+    </script>
+  </div>
+  <p><strong>Tiered isolation</strong> is the staff answer: the same code, and the tenant's tier in the catalog decides its footprint — pool for self-serve, silo for enterprise, with a migration path between them.</p>
+</section>
+
+<section class="section reveal" id="estimate">
+  <h2><span class="section-num">03</span> &nbsp;Capacity &amp; density</h2>
+  <p>Density is why pooling exists. Worked example for 10,000 small tenants (a few MB, low QPS each):</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Model</th><th>Packing</th><th>~DB cost/tenant/mo</th></tr></thead>
+      <tbody>
+        <tr><td>Pool (shared tables)</td><td>10,000 tenants in <strong>1</strong> DB</td><td>~$180/mo ÷ 10k ≈ <strong>$0.018</strong></td></tr>
+        <tr><td>Silo (DB per tenant)</td><td>~100 small DBs/instance → ~100 instances*</td><td>~$18,000/mo ÷ 10k ≈ <strong>$1.80</strong> (~100×)</td></tr>
+        <tr><td>Schema-per-tenant</td><td>shared catalog bloats</td><td>"won't scale past a few hundred"</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="small">*Connection pooling is the real silo killer: PgBouncer pools are <em>per database</em>, so 10k DBs blow past <span class="mono">max_connections</span> long before storage matters. Pooling wins by ~1–2 orders of magnitude for small tenants; silo earns its cost only where per-tenant revenue + compliance justify it.</p>
+</section>
+
+<section class="section reveal" id="model">
+  <h2><span class="section-num">04</span> &nbsp;Data model: tenant_id everywhere</h2>
+  <div class="kv">
+    <dt>The discriminator</dt><dd>Every business table carries <span class="mono">tenant_id NOT NULL</span>; it's the <strong>leading column of every composite index and PK</strong> (<span class="mono">(tenant_id, id)</span>) and the shard/distribution key. FKs stay within a tenant.</dd>
+    <dt>The tenant catalog (control plane)</dt><dd>Authoritative registry: <span class="mono">tenant_id → {tier, isolation model, shard/cell, region, feature flags, plan limits, KMS key}</span>. Every request resolves identity → catalog → connection target.</dd>
+    <dt>Shared vs per-tenant config</dt><dd>Global reference data (countries, plans) in shared tables; per-tenant config (flags, limits, branding) keyed by <span class="mono">tenant_id</span>.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="routing">
+  <h2><span class="section-num">05</span> &nbsp;Tenant routing &amp; context propagation</h2>
+  <p>Resolve the tenant once at the edge, then enforce it automatically at every layer. <strong>Never trust a tenant id from the request body</strong> — derive it from the subdomain, a verified JWT claim, or the API key.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">acme.app.com → resolve tenant → scoped query</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Tenant context propagation",
+      "nodes": [
+        { "id": "client", "label": "acme.app.com", "type": "user", "col": 0, "row": 1 },
+        { "id": "edge", "label": "Edge / router", "type": "L7", "col": 1, "row": 1 },
+        { "id": "cat", "label": "Tenant catalog", "type": "source", "col": 2, "row": 0 },
+        { "id": "app", "label": "App (tenant ctx)", "type": "stateless", "col": 2, "row": 1 },
+        { "id": "db", "label": "DB (RLS)", "type": "store", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "client", "to": "edge", "label": "request" },
+        { "from": "edge", "to": "cat", "label": "resolve" },
+        { "from": "edge", "to": "app", "label": "+ tenant ctx" },
+        { "from": "app", "to": "db", "label": "scoped" }
+      ],
+      "steps": [
+        { "edge": ["client","edge"], "caption": "Request to acme.app.com (subdomain) or with a tenant-claim JWT." },
+        { "edge": ["edge","cat"], "caption": "Resolve → tenant_id + tier + shard/cell + region from the catalog.", "status": "hit" },
+        { "edge": ["edge","app"], "caption": "Forward with tenant context in async-local storage — derived, never from the body." },
+        { "edge": ["app","db"], "caption": "App sets SET LOCAL app.current_tenant; RLS scopes every query to this tenant.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+  <p>Automated onboarding (manual doesn't scale): create the catalog record → provision shard/schema/DB → configure DNS → apply default flags + limits → welcome email.</p>
+</section>
+
+<section class="section reveal" id="rls">
+  <h2><span class="section-num">06</span> &nbsp;Pool isolation with Postgres RLS</h2>
+  <p>In the pool model, the discriminator is just an app convention — <strong>one missing <span class="mono">WHERE tenant_id</span> anywhere = a breach.</strong> Push the predicate into the database with <strong>Row-Level Security</strong> so the engine enforces it even if the app forgets.</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">rls.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">-- App connects as a NON-OWNER, non-superuser role (owners/superusers bypass RLS).
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE events FORCE  ROW LEVEL SECURITY;          -- apply even to the table owner
+
+CREATE POLICY tenant_isolation ON events TO application
+  USING      (tenant_id = NULLIF(current_setting('app.current_tenant', TRUE), '')::uuid)
+  WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant', TRUE), '')::uuid);
+-- USING filters reads/updates/deletes; WITH CHECK blocks writing into another tenant.
+
+-- Per transaction: SET LOCAL (not SET) so the value dies at COMMIT and never
+-- leaks across a pooled (PgBouncer) connection to the next tenant's request.
+BEGIN;
+  SET LOCAL app.current_tenant = 'c4062d63-...';
+  SELECT * FROM events;        -- unscoped query, engine scopes it to this tenant
+COMMIT;</code></pre></div>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">The three RLS footguns</div><p>(1) <strong>Table owners and superusers bypass RLS</strong> unless you <span class="mono">FORCE</span> it and connect as a non-owner role; (2) any role with <span class="mono">BYPASSRLS</span> ignores policies — the app role must have neither; (3) plain <span class="mono">SET</span> persists on a pooled connection → the next request inherits the previous tenant's GUC → leak. Use <span class="mono">SET LOCAL</span>. RLS is defense-in-depth: keep ORM/query-rewrite scoping <em>and</em> RLS.</p></div></div>
+</section>
+
+<section class="section reveal" id="noisy">
+  <h2><span class="section-num">07</span> &nbsp;The noisy-neighbour problem</h2>
+  <p>Pooling shares CPU, memory, disk IO, connections, and locks — so one tenant's spike can starve the rest. Mitigations, by contention vector:</p>
+  <div class="kv">
+    <dt>Per-tenant rate limits / quotas</dt><dd>Token-bucket at the gateway; return <span class="mono">429</span> early (backpressure) rather than degrading everyone. Salesforce's "governor limits" (e.g. 100 SOQL / 50k rows per transaction) are the canonical example.</dd>
+    <dt>Connection-pool partitioning</dt><dd>Cap concurrent DB connections per tenant by tier (e.g. Enterprise 50 / Basic 5) so no tenant floods the pool; per-tier <span class="mono">statement_timeout</span>.</dd>
+    <dt>Fair queuing</dt><dd>Weighted round-robin on async work so a free tenant gets a small share but is never fully starved.</dd>
+    <dt>Tier the hot tenant</dt><dd>When a pooled tenant outgrows fair-share, promote it to its own silo/cell — the bridge model as an escape hatch.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="cells">
+  <h2><span class="section-num">08</span> &nbsp;Sharding tenants &amp; cell architecture</h2>
+  <p>Shard by <strong>tenant_id</strong> (e.g. Citus distribution column) so all of a tenant's rows + co-distributed tables live on one node → local joins, no cross-node traffic; reference tables replicate everywhere. A tenant can be rebalanced by relocating its shard.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Cells bound the blast radius</div><p>A <strong>cell</strong> is a complete, self-contained stack serving a <em>subset</em> of tenants, with a fixed capacity ceiling — you scale by <em>adding cells</em>, not growing them. With <strong>N cells, a single-cell failure hits at most 1/N of tenants</strong> (10 cells → ≤10% impact). A thin routing layer maps tenant→cell (consistent hashing so adding a cell remaps ~1/N), you deploy cell-by-cell in waves (bad deploys are contained too), and <strong>shuffle sharding</strong> assigns each tenant a distinct combination of cells so two tenants rarely share the same set. Pin a cell to one region for residency.</p></div></div>
+</section>
+
+<section class="section reveal" id="migrations">
+  <h2><span class="section-num">09</span> &nbsp;Migrations &amp; schema drift</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🟢</span><h4>Pool</h4><p>Migration runs <strong>once</strong> for everyone — the operational win. Risk: a long-locking DDL hits all tenants at once → use online expand-contract, <span class="mono">CREATE INDEX CONCURRENTLY</span>, batched backfills.</p></div>
+    <div class="card feature"><span class="f-ic fx">🟠</span><h4>Schema/DB per tenant</h4><p>The same migration must run across thousands of schemas/DBs → per-tenant version tracking, partial failures, and <strong>schema drift</strong> (a tenant stuck on an old version) become the dominant ops cost; catalog bloat slows every query.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="compliance">
+  <h2><span class="section-num">10</span> &nbsp;Compliance, residency &amp; per-tenant keys</h2>
+  <div class="kv">
+    <dt>Residency</dt><dd>Silo makes it trivial (host the tenant DB in-region). In pool/cell, pin residency at the <strong>cell/shard</strong> level — group EU tenants into EU cells, US into US cells.</dd>
+    <dt>Per-tenant encryption / BYOK</dt><dd>One customer-managed KMS key per tenant (~$1–3/mo each → key sprawl is real); BYOK / external key store lets the customer hold the key and <strong>crypto-shred</strong> (revoke the key → data is inert) — the fastest compliant "delete" at scale, and a premium-tier feature.</dd>
+    <dt>Export / delete</dt><dd>Because <span class="mono">tenant_id</span> threads every table, export/delete is scoped by it (pool) or a DB drop (silo). Enumerating every table is a data-model completeness problem.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">11</span> &nbsp;Observability &amp; cost</h2>
+  <div class="kv">
+    <dt>Cross-tenant leak detection</dt><dd>RLS as a backstop; <strong>automated tests asserting tenant A can't read tenant B</strong>; lint/ORM guards that every query carries a tenant predicate; alert if any query returns rows whose <span class="mono">tenant_id</span> ≠ the session tenant.</dd>
+    <dt>Tenant-aware telemetry</dt><dd>Stamp <span class="mono">tenant_id</span> on every metric, log line, and trace span. Track latency/error/throughput per tenant <em>and</em> per tier so a noisy tenant is visible and SLOs can differ by tier.</dd>
+    <dt>Cost per tenant</dt><dd>Silo segments cost by account naturally; pool requires <strong>metering</strong> actual consumption (requests, compute-s, storage, IO) and apportioning shared cost — the unit-economics number that decides pricing.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">12</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">In the pool model, what's the single most dangerous failure, and the primary defense?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>A slow query; fix it with an index</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A query missing its tenant_id predicate leaks another tenant's data — defend with Postgres RLS (FORCED, non-owner role, SET LOCAL) plus app-layer scoping</button>
+      <button class="quiz-opt"><span class="mark"></span>Running out of disk; add storage</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> logical isolation means one forgotten predicate = cross-tenant breach. RLS pushes the filter into the engine as defense-in-depth — but only if you FORCE it, connect as a non-owner role with no BYPASSRLS, and set the tenant with SET LOCAL so it doesn't leak across pooled connections.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"I'd default to <strong>tiered isolation</strong>: pool small tenants (shared tables, <span class="mono">tenant_id</span> on every row, Postgres RLS as a hard backstop) for density, and silo enterprise/regulated tenants for isolation + residency + BYOK. Resolve the tenant once at the edge from the subdomain or a verified claim — never the body — and propagate context so every query is scoped. I'd shard by tenant and group tenants into <strong>cells</strong> to bound the blast radius to 1/N, rate-limit per tenant to kill noisy neighbours, and meter per-tenant cost for unit economics. The one thing I never compromise is the tenant predicate — RLS plus tests that prove A can't read B."</p></div></div>
+</section>

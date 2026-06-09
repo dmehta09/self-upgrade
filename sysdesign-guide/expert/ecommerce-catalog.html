@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design e-commerce: catalog, search & cart | The System Design Field Guide</title>
+  <meta name="description" content="The read side: product/SKU model, faceted search over an inverted index, the shopping cart (cart ≠ reservation), pricing, and read-heavy caching." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="expert" data-page="expert-ecommerce-catalog" data-lesson="expert-ecommerce-catalog">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Expert designs</span><span class="sep">/</span><span class="current">Design e-commerce: catalog, search & cart</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Expert · e-commerce (read side)</span>
+  <h1>Design e-commerce: catalog, search &amp; cart.</h1>
+  <p class="lead">The read side of a store — browse, search, and the cart — is overwhelmingly <strong>read-dominated</strong> (browse-to-buy ratios of 100:1+). So it's an exercise in caching, a denormalized search read-model over an inverted index, and one subtle correctness rule: <strong>a cart does not reserve stock.</strong> The write side — <a href="ecommerce-checkout.html">checkout, inventory &amp; orders</a> — is a separate page where correctness, not throughput, rules.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Browse categories, full-text + <strong>faceted search</strong> (filter by brand/size/price with counts), product detail (variants), add to cart, see prices/promotions.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>Read-heavy (100:1+); fast (p99 detail &lt; ~150 ms, search &lt; ~300 ms); survives flash-sale spikes (3–5× + a viral "hot product"); catalog/price eventual consistency is fine.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="estimate">
+  <h2><span class="section-num">02</span> &nbsp;Capacity estimation</h2>
+  <p>Drag the model (here "writes/user/day" = purchases, "read:write" = the browse:buy ratio):</p>
+  <div class="calc" data-calc>
+    <script type="application/json" class="calc-config">
+    {
+      "title": "Catalog read load",
+      "preset": "Large retailer",
+      "presets": [ { "label": "Large retailer", "values": { "dau": 50000000, "writesPerUser": 0.8, "readWrite": 100, "bytesPerItem": 2000, "peakFactor": 4, "perServerQps": 5000 } } ],
+      "outputs": ["writeQps","readQps","peakQps","bandwidthOut","servers"]
+    }
+    </script>
+  </div>
+  <p>Tens of thousands of browse reads/s, hundreds of purchases/s. Real anchors: Algolia peaked <strong>119,680 search QPS</strong> on Black Friday 2025; Shopify served <strong>489M edge req/min</strong> (~8M/s) with a ~2,500:1 read:write ratio. The CDN + cache must absorb 90%+ of catalog reads, so origin QPS is low thousands.</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">03</span> &nbsp;API</h2>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/products/{id} · /categories/{id}/products</span><span class="ep-note">product+variants (CDN-cacheable); PLP = search with empty q + category filter</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/search?q=&amp;filter=brand:Nike,price:50..150&amp;facets=brand,size</span><span class="ep-note">→ { hits, facets:{brand:{Nike:42}}, nbHits }</span></div>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/cart/items · /cart/merge</span><span class="ep-note">add (idempotent on (cart,sku)); merge guest→user on login</span></div>
+</section>
+
+<section class="section reveal" id="model">
+  <h2><span class="section-num">04</span> &nbsp;Data model: product vs SKU</h2>
+  <div class="kv">
+    <dt>Product → variant/SKU</dt><dd>The <strong>product</strong> is the sellable concept ("Acme Trail Runner"); the <strong>SKU/variant</strong> is the purchasable unit ("red, size 10"). Product-level: title, description, category, brand, attribute schema. SKU-level: the immutable SKU code, distinguishing attributes, images, <strong>price, inventory</strong>.</dd>
+    <dt>Attributes (EAV)</dt><dd>Every product type has different attributes (a shoe has size, a laptop has RAM) → an EAV/pivot model for schema-free attributes, at the cost of expensive multi-attribute filtering joins (which is exactly why filtering moves to the search index).</dd>
+    <dt>Store choice</dt><dd><strong>Relational</strong> as the source of truth (constraints, joins, price/inventory FKs); a denormalized <strong>document / search read-model</strong> (fed async via CDC) for fast point reads and facets. Category tree = closure table / materialized path for "all descendants of Electronics" in one range query.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="architecture">
+  <h2><span class="section-num">05</span> &nbsp;Architecture: a derived search read-model</h2>
+  <p>Catalog is the system of record; <strong>search is a denormalized, async-fed read model</strong> that owns full-text, facets, and ranking — and is allowed to lag. Category browse is "search with an empty query + a category filter."</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Browse / search read path</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Browse & search",
+      "nodes": [
+        { "id": "client", "label": "Shopper", "type": "user", "col": 0, "row": 1 },
+        { "id": "cdn", "label": "CDN edge", "type": "edge", "col": 1, "row": 0 },
+        { "id": "gw", "label": "Gateway / BFF", "type": "L7", "col": 1, "row": 1 },
+        { "id": "search", "label": "Search (inverted idx)", "type": "source", "col": 2, "row": 0 },
+        { "id": "catalog", "label": "Catalog svc", "type": "stateless", "col": 2, "row": 1 },
+        { "id": "cache", "label": "Redis", "type": "cache", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "client", "to": "cdn", "label": "page/img" },
+        { "from": "client", "to": "gw", "label": "API" },
+        { "from": "gw", "to": "search", "label": "search/browse" },
+        { "from": "gw", "to": "catalog", "label": "product" },
+        { "from": "catalog", "to": "cache" }
+      ],
+      "steps": [
+        { "edge": ["client","cdn"], "caption": "Anonymous product pages + images served from the CDN edge — the bulk of reads." },
+        { "edge": ["client","gw"], "caption": "Dynamic calls (search, cart) hit the gateway / BFF." },
+        { "edge": ["gw","search"], "caption": "Search & category browse → the search service (inverted index) with facet aggregations." },
+        { "edge": ["gw","catalog"], "caption": "Product detail → catalog service." },
+        { "edge": ["catalog","cache"], "caption": "Hot products from Redis; miss → read replica. ~90%+ absorbed before the origin DB.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="search">
+  <h2><span class="section-num">06</span> &nbsp;Search &amp; faceted navigation</h2>
+  <p><span class="mono">SQL LIKE '%term%'</span> is a leading wildcard → full table scan, hopeless at 10⁶–10⁸ products. The right tool is an <strong>inverted index</strong> (term → posting list of doc ids; queries are set intersections, sublinear and shardable). <strong>Facets</strong> are value counts over the <em>filtered</em> set (so users never click into a zero-result filter), computed as bucket aggregations — and you must <strong>flatten</strong> nested SKU attributes to top-level <span class="mono">keyword</span> fields:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">search.json</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">POST /products/_search
+{
+  "query": { "bool": {
+    "must":   { "multi_match": { "query": "running shoes",
+                "fields": ["title^3","brand^2","description"], "fuzziness": "AUTO" } },
+    "filter": [ { "term": { "category": "footwear" } },          // filter = not scored,
+                { "term": { "brand": "Nike" } },                 //   CACHED as a bitset
+                { "range": { "price": { "gte": 50, "lte": 150 } } } ]
+  } },
+  "aggs": {                                    // facet COUNTS over the filtered set
+    "brands": { "terms": { "field": "brand", "size": 20 } },
+    "price":  { "range": { "field": "price",
+                "ranges": [ {"to":50}, {"from":50,"to":150}, {"from":150} ] } }
+  },
+  "size": 24
+}</code></pre></div>
+  </div>
+  <p>Relevance = BM25 base + multiplicative business boosts (popularity, margin, stock, personalization), plus typo tolerance (fuzzy), synonyms, and autocomplete. 2026: <strong>hybrid lexical + vector search</strong> (BM25 + embeddings fused with RRF) — pure keyword misses natural-language intent, pure vector misses exact SKUs.</p>
+</section>
+
+<section class="section reveal" id="cart">
+  <h2><span class="section-num">07</span> &nbsp;The cart (and why it doesn't reserve stock)</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Cart ≠ reservation</div><p>Adding to cart <strong>does not hold inventory</strong> — almost every major platform works this way. Reserving on add-to-cart would let idle/abandoned carts lock stock indefinitely. The consequence is an <em>oversell window</em>: the availability check and the stock decrement aren't atomic, so two carts can both hold "the last one." That's resolved on the <a href="ecommerce-checkout.html">write side</a> at checkout (atomic decrement / short reservation), never in the cart.</p></div></div>
+  <div class="kv">
+    <dt>Guest vs persistent</dt><dd>Guest cart keyed by session id in <strong>Redis</strong> (hash per cart, native TTL ~7 days so abandoned carts self-evict); logged-in cart keyed by user id, durable (write-through to DB so an eviction can't lose it). <strong>Merge on login</strong> with an explicit conflict policy.</dd>
+    <dt>Price-at-checkout</dt><dd>The cart may <em>display</em> an add-time price, but the <strong>authoritative price is recomputed at checkout</strong> — never trust a stale/client price as the charge amount.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="pricing">
+  <h2><span class="section-num">08</span> &nbsp;Pricing, promotions &amp; read scaling</h2>
+  <div class="kv">
+    <dt>Pricing is computed, not flat</dt><dd>The price a user sees is a function of a <strong>price book</strong> (per currency/segment) + active promotions + loyalty tier + region/tax + time. A flat column can't express "Nike 20% off this weekend for loyalty members in EUR" — a rules engine evaluates it on every cart mutation. Search indexes a representative base price for facets/sort, then overlays the personalized/promo price at render.</dd>
+    <dt>Caching layers</dt><dd>CDN (product pages/images/JSON for anonymous traffic — the bulk), Redis (hot products, category trees, facet results; TTL tiered by volatility), read replicas behind. <strong>Event-driven invalidation</strong> on price/inventory change.</dd>
+    <dt>The hot-product stampede</dt><dd>A viral item's cache key expires → thousands of concurrent misses hit the DB. Fix with <strong>TTL jitter</strong>, <strong>probabilistic early recompute</strong>, and <strong>single-flight</strong> (one request recomputes; others wait) — the same stampede pattern as the <a href="../core/distributed-cache.html">distributed cache</a>.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">09</span> &nbsp;Consistency, failure modes &amp; observability</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔁</span><h4>Eventual is fine here</h4><p>Catalog/price propagating to the index + caches in seconds is acceptable; "only 2 left" is an approximate, cached nudge, not a guarantee. Strong consistency is needed exactly once — the stock decrement at checkout.</p></div>
+    <div class="card feature"><span class="f-ic fx">🔎</span><h4>Search index lag</h4><p>New/edited products missing from results → monitor indexer lag (event→searchable time); alert + reindex jobs.</p></div>
+    <div class="card feature"><span class="f-ic fx">📊</span><h4>Business metrics</h4><p><strong>Zero-result rate</strong> (a direct conversion leak), search→click→add→buy funnel, search-influenced revenue. Use p99, not averages — tail latency kills conversion.</p></div>
+    <div class="card feature"><span class="f-ic fx">🧩</span><h4>2026 stack</h4><p>Headless / composable (MACH) with best-of-breed search/cart/checkout; semantic/vector + hybrid retrieval mainstream; catalog/search increasingly served to <strong>AI shopping agents</strong> via structured product feeds, not just HTML.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">10</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why not implement product search with <span class="mono">SELECT … WHERE name LIKE '%term%'</span>, and why doesn't the cart reserve inventory?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>LIKE is fine; carts should reserve stock</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A leading-wildcard LIKE can't use an index (full scan) — use an inverted index with facets/ranking; and reserving on add-to-cart would let abandoned carts lock stock, so reservation happens at checkout</button>
+      <button class="quiz-opt"><span class="mark"></span>LIKE is too expensive to write; carts are stateless</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> <span class="mono">%term%</span> forces an O(N) scan with no relevance/facets; a dedicated inverted index gives sublinear search, ranking, typo tolerance, and facet counts. And cart ≠ reservation: the oversell window is closed at checkout with an atomic decrement, not by holding stock for every browser.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"It's read-dominated, so I push everything to the edge + cache and serve search from a denormalized inverted index (Elasticsearch/Algolia) with flattened SKU attributes for facets — BM25 plus business boosts, now hybrid with vector for intent. Product vs SKU is the core model. The cart lives in Redis with a TTL and deliberately holds no stock — reservation happens at checkout. Pricing is computed from a price book + promo engine, not stored flat. The risk to watch is the hot-product stampede, which I'd handle with TTL jitter, early recompute, and single-flight."</p></div></div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../expert/authorization.html"><span class="pn-k">‹ Back</span><span class="pn-t">Design authorization (RBAC, ABAC, ReBAC)</span></a>
+            <a class="next" href="../expert/ecommerce-checkout.html"><span class="pn-k">Next ›</span><span class="pn-t">Design e-commerce: checkout, inventory & orders</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements & scale</a>
+          <a href="#estimate">Capacity estimation</a>
+          <a href="#api">API</a>
+          <a href="#model">Data model: product vs SKU</a>
+          <a href="#architecture">Architecture: a derived search read-model</a>
+          <a href="#search">Search & faceted navigation</a>
+          <a href="#cart">The cart (and why it doesn't reserve stock)</a>
+          <a href="#pricing">Pricing, promotions & read scaling</a>
+          <a href="#ops">Consistency, failure modes & observability</a>
+          <a href="#recap">Trade-offs & interview recap</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Expert designs · Design e-commerce: catalog, search & cart</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+  <script src="../assets/js/capacity.js"></script>
+</body>
+</html>

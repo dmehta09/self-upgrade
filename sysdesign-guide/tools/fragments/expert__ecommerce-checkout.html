@@ -1,0 +1,161 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Expert · e-commerce (write side)</span>
+  <h1>Design e-commerce: checkout, inventory &amp; orders.</h1>
+  <p class="lead">The write path is all about <strong>correctness</strong>: never sell the same last item twice, never double-charge a double-click, never lose a paid order. There's no distributed ACID transaction across inventory + payment + order — so correctness comes from a <strong>saga with compensations</strong>, <strong>idempotency</strong>, an <strong>atomic stock decrement</strong>, and the <strong>transactional outbox</strong>. The read side — <a href="ecommerce-catalog.html">catalog, search &amp; cart</a> — is a separate page.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Reserve stock, take payment, create an order, hand to fulfillment, track order state. Refunds + cancellation.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p><strong>Zero oversell</strong> as a hard target; exactly-once order despite retries; strong consistency where money/stock lives; survive flash-sale contention (100k req/s on one SKU).</p></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Orders/s</td><td>10M orders/day, peak 3–5×</td><td>~116/s avg → <strong>~350–580/s</strong> peak (Amazon Prime Day ~1,700/s)</td></tr>
+        <tr><td>Flash sale</td><td>1 hot SKU, 1,000 units</td><td><strong>100k+ req/s on one row</strong> — a contention problem, not throughput</td></tr>
+        <tr><td>Order size</td><td>~5 KB (header + lines + history)</td><td>10M/day ≈ ~50 GB/day — a correctness, not storage, problem</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">02</span> &nbsp;API</h2>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/orders</span><span class="ep-note">Idempotency-Key: … · cart snapshot + reservation token → 201 (or replays the prior response)</span></div>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">/inventory/reservations</span><span class="ep-note">atomic, conditional → { reservation_id, ttl }</span></div>
+  <div class="endpoint"><span class="verb get">GET</span><span class="path">/orders/{id}</span><span class="ep-note">state + history; PSP/OMS webhooks drive transitions (at-least-once → idempotent)</span></div>
+</section>
+
+<section class="section reveal" id="saga">
+  <h2><span class="section-num">03</span> &nbsp;The checkout saga</h2>
+  <p>Checkout spans inventory + payment + order across services. No 2PC — use a <strong>saga</strong>: a sequence of local transactions, each with a <strong>compensating transaction</strong> that semantically undoes it. <strong>Orchestrate</strong> the money-critical core (a durable-execution engine like Temporal makes compensations ordinary code with crash-replay); choreograph the post-order fulfillment fan-out.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Reserve → pay → order, with compensation</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Checkout saga",
+      "nodes": [
+        { "id": "client", "label": "Client", "type": "user", "col": 0, "row": 1 },
+        { "id": "orch", "label": "Checkout orchestrator", "type": "L7", "col": 1, "row": 1 },
+        { "id": "inv", "label": "Inventory", "type": "store", "col": 2, "row": 0 },
+        { "id": "pay", "label": "Payment (PSP)", "type": "source", "col": 2, "row": 1 },
+        { "id": "order", "label": "Order svc", "type": "stateless", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "client", "to": "orch", "label": "place order" },
+        { "from": "orch", "to": "inv", "label": "reserve" },
+        { "from": "orch", "to": "pay", "label": "authorize" },
+        { "from": "orch", "to": "order", "label": "create" }
+      ],
+      "steps": [
+        { "edge": ["client","orch"], "caption": "Place order with an idempotency key generated once on form render (double-click safe)." },
+        { "edge": ["orch","inv"], "caption": "Reserve inventory — atomic conditional decrement, with a TTL hold.", "status": "hit" },
+        { "edge": ["orch","pay"], "caption": "Authorize/capture payment — the PSP call lives OUTSIDE any DB txn, with the same idempotency key." },
+        { "edge": ["orch","order"], "caption": "Create the order row + an outbox event in ONE local txn; confirm the reservation." },
+        { "edge": ["orch","inv"], "caption": "COMPENSATION: if payment fails → release the reservation; if the order write fails after capture → refund.", "status": "miss" }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="inventory">
+  <h2><span class="section-num">04</span> &nbsp;Inventory reservation &amp; oversell prevention</h2>
+  <p>The race: two buyers both read <span class="mono">qty=1</span>, both decide "in stock," both write <span class="mono">qty=0</span> → you sold 2 of 1. Read-then-write without atomicity = oversell. The strategies:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Reservation strategies",
+      "axisLabel": "How do we decrement stock without overselling?",
+      "stops": [
+        { "label": "Pessimistic lock", "dims": { "Correctness": 95, "Contention throughput": 30, "Abandonment handling": 50, "Simplicity": 85 }, "note": "SELECT … FOR UPDATE locks the row for the txn. Simple and strongly correct — but serializes all buyers of a SKU, so throughput collapses under a flash sale (hot-row contention)." },
+        { "label": "Conditional update", "dims": { "Correctness": 95, "Contention throughput": 80, "Abandonment handling": 40, "Simplicity": 80 }, "note": "UPDATE … WHERE available >= n; the rows-affected count IS the success signal. No lock held across logic → high throughput; the loser just retries. The pragmatic default." },
+        { "label": "Redis atomic", "dims": { "Correctness": 70, "Contention throughput": 100, "Abandonment handling": 60, "Simplicity": 60 }, "note": "DECRBY/Lua admits exactly N winners at 1M+ ops/s — the ideal flash-sale gatekeeper. But Redis isn't the ledger, so you must reconcile back to the DB (durability gap)." },
+        { "label": "Reserved + TTL", "dims": { "Correctness": 85, "Contention throughput": 75, "Abandonment handling": 95, "Simplicity": 50 }, "note": "Split available/reserved; hold stock for N minutes during checkout, auto-release on abandonment. Models the real 'in someone's checkout' state — but needs a reaper or stock strands (under-sell)." }
+      ]
+    }
+    </script>
+  </div>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">reserve.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">-- Conditional update: the WHERE guard makes oversell impossible; rows-affected is the signal.
+UPDATE inventory
+   SET available = available - :qty
+ WHERE sku_id = :sku
+   AND available &gt;= :qty;        -- never go negative
+-- rows_affected == 1 -> reserved OK ;  == 0 -> OUT OF STOCK, do NOT proceed
+
+-- Flash sale: front the hot SKU with a Redis counter as gatekeeper (atomic DECRBY admits
+-- exactly N winners); the DB only ever sees the &lt;= N PAID orders. Reconcile periodically.
+-- Shopify's 2026 design: ONE ROW PER UNIT in MySQL + SELECT ... FOR UPDATE SKIP LOCKED,
+-- co-locating the reservation with the ledger so deduction is one ACID txn.</code></pre></div>
+  </div>
+  <p class="small"><strong>Over-sell vs under-sell:</strong> oversell → cancellations + refunds + reputational damage; under-sell → conservative TTLs + abandoned holds strand stock. Most retailers bias to <em>never oversell</em> and eat some under-sell — but the reaper that releases expired holds <strong>must</strong> run.</p>
+</section>
+
+<section class="section reveal" id="order">
+  <h2><span class="section-num">05</span> &nbsp;Order state machine + the outbox</h2>
+  <p>The order is a guarded state machine: <span class="mono">created → payment_pending → paid → fulfilling → shipped → delivered</span> (+ <span class="mono">cancelled</span> / <span class="mono">refunded</span>), every transition appending to a history table. You can't atomically "write the order row" <em>and</em> "publish <span class="mono">OrderCreated</span> to Kafka" (two systems) — so use the <strong>transactional outbox</strong>:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">place_order.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="text">BEGIN;
+  -- Idempotent create: a double-click carries the SAME key; the 2nd is a no-op.
+  INSERT INTO orders (id, idempotency_key, customer_id, status, total)
+  VALUES (:id, :key, :cust, 'paid', :total)
+  ON CONFLICT (idempotency_key) DO NOTHING;
+  -- Same local txn: enqueue the event in the outbox (no dual-write).
+  INSERT INTO outbox (aggregate_id, event_type, payload)
+  VALUES (:id, 'OrderCreated', :json);
+COMMIT;
+-- A relay (Debezium CDC on the WAL) ships outbox rows to Kafka within ~ms,
+-- partitioned by order_id (per-order ordering). At-least-once -> idempotent consumers.</code></pre></div>
+  </div>
+  <p>If the txn commits, the event is durably queued; if it rolls back, neither happened. Fulfillment, warehouse, and notifications consume the event and advance the order via inbound events (<span class="mono">ShipmentDispatched → shipped</span>).</p>
+</section>
+
+<section class="section reveal" id="payment">
+  <h2><span class="section-num">06</span> &nbsp;Payment &amp; consistency</h2>
+  <div class="kv">
+    <dt>PSP call outside the DB txn</dt><dd>Never hold a DB transaction open across a network call to Stripe/Adyen — it pins a connection and risks a DB timeout vs PSP success. Thread your idempotency key through to the PSP's key (see <a href="../advanced/payments.html">payments</a>).</dd>
+    <dt>The "did payment succeed?" unknown state</dt><dd>On a PSP timeout you genuinely don't know. <strong>Don't blindly retry</strong> (double charge) or fail (lost order): retry with the <em>same</em> idempotency key (PSP returns the original result), leave the order in <span class="mono">payment_pending</span>, and reconcile against PSP records/webhooks.</dd>
+    <dt>Consistency</dt><dd>Strong where money/stock lives (atomic decrement, linearizable order/payment writes); eventual on the read side. Exactly-once is engineered as <strong>at-least-once transport + idempotent processing</strong> — there is no true exactly-once delivery.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">07</span> &nbsp;Failure modes, multi-region &amp; observability</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">💸</span><h4>Payment ok, order write fails</h4><p>Outbox + saga compensation: retry the order write; if permanently failing, idempotent refund. A reconciliation job matches PSP charges to orders.</p></div>
+    <div class="card feature"><span class="f-ic fx">⏲️</span><h4>Reserved but abandoned</h4><p>Reservation TTL + reaper (or Redis key expiry): <span class="mono">reserved → available</span>. Must run, or stock silently strands.</p></div>
+    <div class="card feature"><span class="f-ic fx">🌍</span><h4>Multi-region</h4><p>Per-region/per-warehouse stock pools avoid one global hot row; order + payment writes pinned to a home region for strong consistency; cross-region rebalancing async.</p></div>
+    <div class="card feature"><span class="f-ic fx">📊</span><h4>Observability</h4><p><strong>Oversell count = 0</strong> (hard), reservation conflict/retry rate (rows-affected=0 ratio), checkout abandonment, saga compensation rate, outbox relay lag, PSP unknown-state rate. Instrument <em>transaction duration</em>, not just QPS.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">08</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Two shoppers race to buy the last unit. How do you guarantee you don't oversell — without serializing every buyer of that SKU?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>SELECT the quantity, check it in app code, then UPDATE</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>An atomic conditional update — UPDATE … SET available=available-n WHERE available >= n — and treat rows-affected=0 as "out of stock"; front flash sales with an atomic Redis counter</button>
+      <button class="quiz-opt"><span class="mark"></span>Reserve stock when the item is added to the cart</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> read-then-write in app code is the race itself. The conditional UPDATE makes the check-and-decrement a single atomic statement, the database rejects the loser (0 rows affected), and no lock is held across application logic — so it scales far better than SELECT … FOR UPDATE under contention.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"Checkout is a saga with compensations — reserve, pay, create order — because there's no distributed ACID across those services. Stock is an atomic conditional decrement (rows-affected is the truth), with a Redis gatekeeper + queue for flash sales and a TTL'd reservation for the checkout window. Orders are idempotent on a client-generated key (double-click safe) and published via the transactional outbox so I never dual-write. The PSP call sits outside the DB txn, and the unknown-payment-state case is resolved by same-key retry + reconciliation, never a blind retry. Oversell-count-zero is my hard SLO."</p></div></div>
+</section>

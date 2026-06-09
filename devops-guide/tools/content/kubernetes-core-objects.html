@@ -1,0 +1,162 @@
+<section class="hero reveal">
+  <span class="eyebrow">Kubernetes · objects</span>
+  <h1>Core Kubernetes objects.</h1>
+  <p class="lead">A handful of objects compose into every app on Kubernetes: <b>Pods</b> run containers, <b>Deployments</b> keep them alive and roll them out, and <b>Services</b> give them a stable address. Learn how they nest and how traffic reaches a pod.</p>
+</section>
+
+<section class="section reveal" id="the-cast">
+  <h2><span class="section-num">01</span> The cast of objects</h2>
+  <p class="takeaway">You mostly write a <b>Deployment</b> (it owns ReplicaSets → Pods) and a <b>Service</b> (a stable address in front of those pods). The rest — config, secrets, routing, namespaces — wrap around that core.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A <b>Deployment</b> is a shift manager who keeps N identical workers staffed — someone calls in sick, they pull in a replacement. A <b>Service</b> is the front-desk phone number: callers always reach <em>whoever is on shift right now</em>, never a specific person who might have gone home.</p></div></div>
+
+  <dl class="kv">
+    <dt>Pod</dt><dd>The smallest unit. One (or a few) containers that <b>share a network + storage</b> — same IP, same localhost, same volumes. Mortal: it gets a new IP when replaced.</dd>
+    <dt>ReplicaSet</dt><dd>Keeps <b>N identical pods</b> running. You rarely touch it directly.</dd>
+    <dt>Deployment</dt><dd>Manages ReplicaSets to do <b>rollouts + rollbacks</b>. This is what you actually write.</dd>
+    <dt>Service</dt><dd>A <b>stable virtual IP + DNS name</b> that load-balances across the current matching pods.</dd>
+    <dt>Ingress / Gateway API</dt><dd><b>L7 HTTP routing</b> into the cluster (host/path rules, TLS).</dd>
+    <dt>ConfigMap / Secret</dt><dd>Inject <b>non-secret</b> config / <b>sensitive</b> config into pods.</dd>
+    <dt>Namespace</dt><dd>Logical isolation — a folder to group and scope objects (teams, environments).</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="deployment">
+  <h2><span class="section-num">02</span> Deployment → ReplicaSet → Pod</h2>
+  <p>The nesting is the mental model: a Deployment creates a ReplicaSet, which creates Pods. The <code>selector</code> labels glue an object to the pods it owns or targets.</p>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">deployment.yaml</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="yaml">apiVersion: apps/v1
+kind: Deployment
+metadata: { name: web }
+spec:
+  replicas: 3              # desired pod count
+  selector:
+    matchLabels: { app: web }   # owns pods with this label
+  template:               # the pod blueprint
+    metadata:
+      labels: { app: web }
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/acme/web:1.4.2   # pin by tag/SHA</code></pre>
+  </div>
+
+  <div class="diagram"><div class="dg-title">How the objects nest</div>
+    <div class="flow">
+      <div class="flow-node"><div class="fn-k">you write</div><div class="fn-t">Deployment</div><div class="fn-d">replicas + template</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">it creates</div><div class="fn-t">ReplicaSet</div><div class="fn-d">keeps N alive</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">which runs</div><div class="fn-t">Pods ×3</div><div class="fn-d">your containers</div></div>
+    </div>
+    <div class="cap">You declare a Deployment; it owns a ReplicaSet; the ReplicaSet keeps the desired number of Pods running.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="traffic">
+  <h2><span class="section-num">03</span> How traffic reaches a pod</h2>
+  <p>Pods are mortal and get fresh IPs, so clients never target them directly. A <b>Service</b> gives a stable address; an <b>Ingress/Gateway</b> handles HTTP routing from outside. Follow one request in.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">External request → Ingress → Service → Pod</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "Request routing",
+      "nodes": [
+        { "id": "user", "label": "Client", "type": "external", "col": 0, "row": 1 },
+        { "id": "ing", "label": "Ingress / Gateway", "type": "L7 router", "col": 1, "row": 1 },
+        { "id": "svc", "label": "Service", "type": "stable VIP", "col": 2, "row": 1 },
+        { "id": "p1", "label": "Pod A", "type": "replica", "col": 3, "row": 0 },
+        { "id": "p2", "label": "Pod B", "type": "replica", "col": 3, "row": 1 },
+        { "id": "p3", "label": "Pod C", "type": "replica", "col": 3, "row": 2 }
+      ],
+      "edges": [
+        { "from": "user", "to": "ing", "label": "HTTPS" },
+        { "from": "ing", "to": "svc", "label": "route by host/path" },
+        { "from": "svc", "to": "p1", "label": "balance" },
+        { "from": "svc", "to": "p2", "label": "balance" },
+        { "from": "svc", "to": "p3", "label": "balance" }
+      ],
+      "steps": [
+        { "node": "user", "caption": "A user hits https://app.acme.com." },
+        { "edge": ["user","ing"], "caption": "The Ingress/Gateway terminates TLS and matches the host + path (L7)." },
+        { "edge": ["ing","svc"], "caption": "It forwards to the Service — a stable virtual IP + DNS name that never changes." },
+        { "edge": ["svc","p2"], "caption": "The Service load-balances to one healthy pod behind it. The client never knew the pod's IP.", "status": "hit" }
+      ] }
+    </script>
+    <p class="viz-fallback">A client hits the Ingress/Gateway, which terminates TLS and routes by host/path to a Service; the Service is a stable virtual IP that load-balances across the current healthy pods, so clients never target a pod IP directly.</p>
+  </figure>
+
+  <p class="takeaway"><b>Service types:</b> <code>ClusterIP</code> (internal-only, the default) → <code>NodePort</code> (opens a port on every node) → <code>LoadBalancer</code> (provisions a cloud LB, e.g. an AWS <b>NLB/ALB</b>). Ingress/Gateway usually sits in front for HTTP.</p>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Two traps. (1) <b>Pods are mortal</b> — they get new IPs on every restart, so <em>never</em> hard-code a pod IP; always go through a Service's stable name. (2) <b>Secrets are only base64-<em>encoded</em>, not encrypted</b> by default — anyone with read access decodes them in a second. Enable <b>encryption-at-rest</b> (KMS on EKS) or use an external store like AWS <b>Secrets Manager</b>.</p></div></div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Your app talks to a database by its pod's IP. After a node reboot, connections fail. Why?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The pod was recreated with a new IP. You should connect via the database's <b>Service</b> name, which stays stable.</button>
+      <button class="quiz-opt"><span class="mark"></span>Kubernetes blocks pod-to-pod traffic after a reboot for security.</button>
+      <button class="quiz-opt"><span class="mark"></span>The database lost its data, so it rejects connections.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Pod IPs are ephemeral by design. A Service gives a fixed virtual IP + DNS name (<code>db.ns.svc.cluster.local</code>) that always routes to the current pods — that's exactly the problem Services solve.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="config-secrets">
+  <h2><span class="section-num">04</span> Config vs secrets</h2>
+  <p>Keep configuration out of the image so the same artifact runs everywhere. <b>ConfigMap</b> holds plain config; <b>Secret</b> holds sensitive values. Both inject into pods as env vars or mounted files.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">ConfigMap</div>
+      <ul><li>Non-secret: log level, feature flags, URLs.</li><li>Stored as plain text in etcd.</li><li>Safe to commit (the values, not the rendered manifest of secrets).</li></ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Secret</div>
+      <ul><li>Sensitive: DB passwords, API keys, TLS certs.</li><li>Only <b>base64-encoded</b> — encrypt at rest with KMS.</li><li>Better: source from AWS <b>Secrets Manager</b> / External Secrets.</li></ul>
+    </div>
+  </div>
+
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">tip</span></div><p>Mount secrets as <b>files</b>, not env vars, where you can — env vars leak into crash dumps, child processes, and <code>kubectl describe</code>. And never commit a raw Secret manifest to Git; use sealed-secrets or an external store so Git holds only an encrypted reference.</p></div></div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Pod vs Deployment vs Service — what does each do?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>A <b>Pod</b> is the smallest unit — one or more containers sharing a network and storage. A <b>Deployment</b> manages ReplicaSets to keep N pods running and to do rolling updates and rollbacks. A <b>Service</b> is a stable virtual IP and DNS name that load-balances across whichever pods currently match its selector. You write Deployments and Services; pods are created for you.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Pod runs the containers, Deployment keeps the right number of pods and rolls them out safely, and a Service is the stable address in front of them — pods come and go behind it."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>Where does the ReplicaSet fit? (Deployment owns it; it's the thing that actually keeps N pods alive.)</li><li>What ties a Service to its pods? (Label selectors — the Service targets pods whose labels match.)</li></ul></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How does an external request reach a pod? And what are the Service types?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>External traffic hits an <b>Ingress or Gateway</b> (L7 — TLS + host/path routing), which forwards to a <b>Service</b>, which load-balances to one of the healthy pods behind it. Service types are <b>ClusterIP</b> (internal-only, default), <b>NodePort</b> (a port on every node), and <b>LoadBalancer</b> (provisions a cloud LB — an AWS NLB/ALB on EKS). The client never sees a pod IP.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Ingress or Gateway does HTTP routing and TLS, hands off to a Service, and the Service balances across pods. ClusterIP is internal, NodePort opens a node port, LoadBalancer spins up a cloud LB."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">ConfigMap vs Secret — and are Secrets actually secure?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Both inject config into pods as env vars or mounted files; <b>ConfigMap</b> is for non-sensitive data, <b>Secret</b> for sensitive. The catch: a Secret is only <b>base64-encoded, not encrypted</b> — anyone with read access decodes it instantly, and by default it sits as good-as-plaintext in etcd. You harden it by enabling <b>encryption-at-rest</b> (KMS-backed on EKS) and/or sourcing from AWS <b>Secrets Manager</b> via External Secrets, keeping raw secrets out of Git.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"ConfigMap for plain config, Secret for sensitive — but base64 is encoding, not encryption. I turn on encryption-at-rest with KMS and pull real secrets from Secrets Manager instead of committing them."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

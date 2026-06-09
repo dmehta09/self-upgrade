@@ -1,0 +1,199 @@
+/* ============================================================
+   The Design Field Guide — site theme + new components
+   Loaded AFTER styles.css. Reuses the langstack design-token
+   system (--accent, --surface, --border, --font-*, etc.) and
+   only (a) re-skins the accent palette per module and
+   (b) adds the components this content-first guide needs:
+     search · progress / exercises · UML class diagrams · output blocks
+   ============================================================ */
+
+/* ---------- Default brand accent → blueprint indigo ---------- */
+:root, [data-theme="dark"] {
+  --accent: #818cf8; --accent-2: #a5b4fc; --accent-rgb: 129, 140, 248;
+  --tok-builtin: #818cf8;
+}
+[data-theme="light"]:not([data-tool]) { --accent: #4f46e5; --accent-2: #6366f1; --accent-rgb: 79, 70, 229; }
+
+/* ---------- Per-module accents (mirror langstack's data-tool pattern) ---------- */
+[data-tool="oop"]      { --accent: #34d399; --accent-2: #6ee7b7; --accent-rgb: 52, 211, 153; }
+[data-tool="solid"]    { --accent: #fbbf24; --accent-2: #fcd34d; --accent-rgb: 251, 191, 36; }
+[data-tool="patterns"] { --accent: #a78bfa; --accent-2: #c4b5fd; --accent-rgb: 167, 139, 250; }
+[data-tool="lld"]      { --accent: #fb7185; --accent-2: #fda4af; --accent-rgb: 251, 113, 133; }
+[data-tool="adv"]      { --accent: #2dd4bf; --accent-2: #5eead4; --accent-rgb: 45, 212, 191; }
+
+[data-theme="light"][data-tool="oop"]      { --accent: #059669; --accent-2: #10b981; --accent-rgb: 5, 150, 105; }
+[data-theme="light"][data-tool="solid"]    { --accent: #b45309; --accent-2: #d97706; --accent-rgb: 180, 83, 9; }
+[data-theme="light"][data-tool="patterns"] { --accent: #7c3aed; --accent-2: #8b5cf6; --accent-rgb: 124, 58, 237; }
+[data-theme="light"][data-tool="lld"]      { --accent: #e11d48; --accent-2: #f43f5e; --accent-rgb: 225, 29, 72; }
+[data-theme="light"][data-tool="adv"]      { --accent: #0d9488; --accent-2: #14b8a6; --accent-rgb: 13, 148, 136; }
+
+/* sidebar nav-group dots per module */
+.nav-group.is-oop      { --g: #34d399; }
+.nav-group.is-solid    { --g: #fbbf24; }
+.nav-group.is-patterns { --g: #a78bfa; }
+.nav-group.is-lld      { --g: #fb7185; }
+.nav-group.is-adv      { --g: #2dd4bf; }
+
+/* small keyboard-hint chip (used in the search trigger + foot) */
+kbd {
+  font-family: var(--font-mono); font-size: 10.5px; line-height: 1;
+  padding: 3px 6px; border-radius: 6px; color: var(--text-muted);
+  background: var(--bg-elev); border: 1px solid var(--border);
+  box-shadow: 0 1px 0 var(--border-strong);
+}
+
+/* ============================================================
+   1 · SEARCH  (full-text overlay, file://-safe)
+   ============================================================ */
+.search-trigger {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-family: var(--font-body); font-size: 13.5px; color: var(--text-muted);
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 8px 12px; border-radius: 11px; cursor: pointer;
+  transition: all .2s var(--ease); max-width: 230px;
+}
+.search-trigger:hover { color: var(--text); border-color: var(--border-strong); }
+.search-trigger svg { width: 16px; height: 16px; flex: none; opacity: .8; }
+.search-trigger .st-label { flex: 1; text-align: left; white-space: nowrap; }
+.search-trigger kbd { flex: none; }
+@media (max-width: 640px) { .search-trigger .st-label, .search-trigger kbd { display: none; } .search-trigger { padding: 0; width: 40px; height: 40px; justify-content: center; border-radius: 11px; } }
+
+.search-overlay {
+  position: fixed; inset: 0; z-index: 200; display: none;
+  background: rgba(0,0,0,.5); backdrop-filter: blur(3px);
+  padding: clamp(40px, 12vh, 130px) 16px 16px; justify-content: center; align-items: flex-start;
+}
+.search-overlay.open { display: flex; }
+.search-modal {
+  width: 100%; max-width: 620px; background: var(--bg-elev);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg); overflow: hidden; display: flex; flex-direction: column;
+  max-height: min(70vh, 560px);
+}
+.search-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.search-head svg { width: 18px; height: 18px; color: var(--text-faint); flex: none; }
+.search-input {
+  flex: 1; background: none; border: none; outline: none;
+  font-family: var(--font-body); font-size: 17px; color: var(--text);
+}
+.search-input::placeholder { color: var(--text-faint); }
+.search-results { list-style: none; padding: 8px; margin: 0; overflow-y: auto; }
+.search-result { border-radius: 10px; }
+.search-result a { display: flex; flex-direction: column; gap: 3px; padding: 11px 13px; color: var(--text); border-radius: 10px; }
+.search-result.active a, .search-result a:hover { background: rgba(var(--accent-rgb), .12); }
+.search-result .sr-top { display: flex; align-items: center; gap: 9px; }
+.search-result .sr-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--srt, var(--accent)); box-shadow: 0 0 8px var(--srt, var(--accent)); }
+.search-result .sr-section { font-weight: 600; font-size: 14.5px; }
+.search-result .sr-page { font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: var(--text-faint); margin-left: auto; }
+.search-result .sr-snip { font-size: 13px; color: var(--text-muted); line-height: 1.45; padding-left: 17px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.search-result mark { background: rgba(var(--accent-rgb), .28); color: var(--text); border-radius: 3px; padding: 0 1px; }
+.search-empty { padding: 26px 18px; text-align: center; color: var(--text-faint); font-size: 14px; }
+.search-foot { display: flex; gap: 16px; padding: 9px 16px; border-top: 1px solid var(--border); color: var(--text-faint); font-size: 11.5px; font-family: var(--font-mono); }
+.search-foot span { display: inline-flex; align-items: center; gap: 6px; }
+/* per-module dot colors inside results */
+.sr-dot.t-oop{--srt:#34d399}.sr-dot.t-solid{--srt:#fbbf24}.sr-dot.t-patterns{--srt:#a78bfa}.sr-dot.t-lld{--srt:#fb7185}.sr-dot.t-home,.sr-dot.t-reference{--srt:#818cf8}
+
+/* ============================================================
+   2 · PROGRESS + EXERCISES
+   ============================================================ */
+/* "Mark as learned" toggle */
+.lesson-complete {
+  display: inline-flex; align-items: center; gap: 10px; cursor: pointer;
+  font-family: var(--font-body); font-weight: 600; font-size: 14.5px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 18px; transition: all .2s var(--ease); margin: 1.4em 0;
+}
+.lesson-complete:hover { border-color: var(--border-strong); }
+.lesson-complete .lc-box { width: 22px; height: 22px; border-radius: 7px; border: 1.5px solid var(--border-strong); display: grid; place-items: center; color: transparent; flex: none; transition: all .18s; font-size: 13px; }
+.lesson-complete.done { background: rgba(var(--accent-rgb),.1); border-color: var(--accent); }
+.lesson-complete.done .lc-box { background: var(--accent); border-color: var(--accent); color: #06120f; }
+.lesson-complete .lc-text::after { content: "Mark this lesson as learned"; }
+.lesson-complete.done .lc-text::after { content: "Learned — nice work"; }
+
+/* sidebar checkmark for completed lessons */
+.nav-link .nav-check { margin-left: auto; width: 15px; height: 15px; border-radius: 50%; display: none; place-items: center; background: var(--accent); color: #06120f; font-size: 10px; flex: none; }
+.nav-link.done .nav-check { display: grid; }
+.nav-link.done { color: var(--text); }
+
+/* home progress dashboard */
+.progress-dash { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; background: linear-gradient(180deg, var(--bg-elev), var(--surface)); }
+.pd-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.pd-count { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; color: var(--text); }
+.pd-count b { color: var(--accent); }
+.pd-reset { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-faint); background: none; border: none; cursor: pointer; text-decoration: underline; }
+.pd-reset:hover { color: var(--text-muted); }
+.pd-track { height: 12px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; margin: 12px 0 22px; }
+.pd-fill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .5s var(--ease-out); box-shadow: 0 0 12px rgba(var(--accent-rgb),.6); }
+.pd-modules { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+.pd-mod { font-size: 13px; }
+.pd-mod .pdm-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.pd-mod .pdm-name { font-weight: 600; color: var(--text); display: inline-flex; align-items: center; gap: 7px; }
+.pd-mod .pdm-name i { width: 8px; height: 8px; border-radius: 50%; background: var(--m, var(--accent)); }
+.pd-mod .pdm-frac { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-faint); }
+.pd-mod .pdm-track { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.pd-mod .pdm-fill { height: 100%; width: 0%; border-radius: 999px; background: var(--m, var(--accent)); transition: width .5s var(--ease-out); }
+.pd-mod[data-m="oop"]{--m:#34d399}.pd-mod[data-m="solid"]{--m:#fbbf24}.pd-mod[data-m="patterns"]{--m:#a78bfa}.pd-mod[data-m="lld"]{--m:#fb7185}.pd-mod[data-m="adv"]{--m:#2dd4bf}
+
+/* exercise block */
+.exercise { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius); background: var(--surface); padding: 20px 22px; margin: 1.8em 0; position: relative; }
+.exercise .ex-tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; display: inline-flex; align-items: center; gap: 7px; }
+.exercise .ex-tag::before { content: "✎"; font-size: 12px; }
+.exercise .ex-q { font-weight: 600; color: var(--text); margin: 0 0 6px; }
+.exercise .ex-q + p { color: var(--text-muted); font-size: 14.5px; }
+.exercise .deeper { margin-top: 14px; }
+
+/* ============================================================
+   3 · UML CLASS DIAGRAMS  (new — the OOP/LLD workhorse)
+   ============================================================ */
+/* A class box with up to three compartments: name · attributes · methods.
+   Drop it inline in prose, or arrange several in a .uml-row with connectors. */
+.umlclass {
+  display: inline-flex; flex-direction: column; min-width: 148px; max-width: 320px;
+  border: 1.5px solid var(--border-strong); border-radius: 10px;
+  background: var(--surface); overflow: hidden; text-align: left;
+  box-shadow: var(--shadow); vertical-align: top; margin: 4px 0;
+}
+.umlc-name {
+  font-family: var(--font-mono); font-weight: 700; font-size: 13px; color: var(--text);
+  text-align: center; padding: 9px 14px;
+  background: rgba(var(--accent-rgb), .14); border-bottom: 1.5px solid var(--border-strong);
+}
+.umlc-name .umlc-stereo { display: block; font-weight: 500; font-size: 10px; letter-spacing: .06em; color: var(--text-faint); }
+.umlclass.is-abstract .umlc-name, .umlclass.is-interface .umlc-name { font-style: italic; }
+.umlc-attrs, .umlc-methods {
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.75; color: var(--text-muted);
+  padding: 8px 14px; display: flex; flex-direction: column; gap: 1px;
+}
+.umlc-methods { border-top: 1px solid var(--border); }
+.umlc-attrs:empty, .umlc-methods:empty { display: none; }
+
+/* horizontal/responsive arrangement of class boxes + relationship connectors */
+.uml-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+.uml-stack { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.uml-rel { flex: 0 0 auto; display: grid; place-items: center; min-width: 78px; color: var(--text-faint); padding: 4px 0; }
+.uml-rel svg { width: 100%; min-width: 64px; max-width: 96px; height: 30px; overflow: visible; }
+.uml-rel .ur-label { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; margin-top: 2px; text-align: center; line-height: 1.3; }
+@media (max-width: 640px) {
+  .uml-row { flex-direction: column; }
+  .uml-rel svg { transform: rotate(90deg); height: 40px; }
+}
+
+/* notation legend (used once on the relationships page) */
+.uml-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 1.6em 0; }
+.uml-legend .ulg { display: flex; gap: 13px; align-items: center; border: 1px solid var(--border); border-radius: 11px; padding: 12px 15px; background: var(--surface); }
+.uml-legend .ulg svg { width: 50px; height: 22px; flex: none; color: var(--text-muted); overflow: visible; }
+.uml-legend .ulg b { display: block; color: var(--text); font-size: 13.5px; }
+.uml-legend .ulg span { color: var(--text-faint); font-size: 12px; }
+
+/* ============================================================
+   4 · INLINE OUTPUT BLOCK  (since code isn't runnable here)
+   Shows the result a snippet would print, right under the code.
+   ============================================================ */
+.io-out {
+  margin: -0.4em 0 1.7em; border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0; background: var(--bg-elev);
+  padding: 11px 16px; font-family: var(--font-mono); font-size: 12.6px; line-height: 1.6;
+  color: var(--text-muted); white-space: pre-wrap; word-break: break-word;
+}
+.io-out > b { color: var(--text-faint); font-weight: 600; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; display: block; margin-bottom: 6px; }
+.io-out .c { color: var(--text-faint); }      /* a dimmed comment / arrow inside output */

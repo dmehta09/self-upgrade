@@ -1,0 +1,84 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Building blocks · gateway</span>
+  <h1>API gateway &amp; reverse proxies.</h1>
+  <p class="lead">A reverse proxy sits in front of your services and speaks to the outside world on their behalf. An API gateway is a reverse proxy with opinions — it handles the cross-cutting concerns every service would otherwise re-implement: TLS, authentication, rate limiting, routing, and request shaping. It's the single, well-guarded front door.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> &nbsp;Why a front door</h2>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>It's the reception desk of an office building. Visitors don't wander straight to people's desks — they check in at reception, which verifies their ID, hands them a badge, and points them to the right floor. Your services stay focused on their work; reception handles security and directions once, for everyone.</p>
+    </div>
+  </div>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">A request through the gateway</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "A request through the gateway",
+      "nodes": [
+        { "id": "client", "label": "Client", "type": "user", "col": 0, "row": 1 },
+        { "id": "gw", "label": "API gateway", "type": "front door", "col": 1, "row": 1 },
+        { "id": "auth", "label": "Auth service", "type": "identity", "col": 2, "row": 0 },
+        { "id": "users", "label": "Users service", "type": "/users", "col": 2, "row": 1 },
+        { "id": "orders", "label": "Orders service", "type": "/orders", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "client", "to": "gw", "label": "HTTPS" },
+        { "from": "gw", "to": "auth", "label": "verify" },
+        { "from": "gw", "to": "users" },
+        { "from": "gw", "to": "orders" }
+      ],
+      "steps": [
+        { "edge": ["client","gw"], "caption": "Request arrives over HTTPS. The gateway terminates TLS here." },
+        { "node": "gw", "caption": "It checks the rate limit for this client — too many requests get a 429 immediately." },
+        { "edge": ["gw","auth"], "caption": "It validates the auth token (often by verifying a JWT or asking an auth service)." },
+        { "edge": ["gw","orders"], "caption": "Authenticated and allowed, it routes by path: /orders → the Orders service.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="jobs">
+  <h2><span class="section-num">02</span> &nbsp;What it takes off your services' plate</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔒</span><h4>TLS termination &amp; auth</h4><p>Decrypt HTTPS once; verify the caller's identity (token/JWT) once. Services behind it can trust the request.</p></div>
+    <div class="card feature"><span class="f-ic fx">🚦</span><h4>Rate limiting &amp; throttling</h4><p>Protect everything downstream from abuse and spikes in one place. (See the <a href="../warmup/rate-limiter.html">rate limiter</a> case study.)</p></div>
+    <div class="card feature"><span class="f-ic fx">🧭</span><h4>Routing &amp; service discovery</h4><p>Map public paths to internal services, which may move or scale. Clients see one stable API.</p></div>
+    <div class="card feature"><span class="f-ic fx">🪄</span><h4>Aggregation &amp; shaping</h4><p>Fan one client call out to several services and combine the results (the "backend for frontend" pattern); transform responses.</p></div>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Don't let it become a monolith</div><p>A gateway is great for <em>generic</em> cross-cutting concerns. Pushing business logic into it recreates the monolith you split up — now as a bottleneck everyone shares. Keep it thin; keep domain logic in the services.</p></div></div>
+</section>
+
+<section class="section reveal" id="proxy">
+  <h2><span class="section-num">03</span> &nbsp;Reverse proxy vs forward proxy vs load balancer</h2>
+  <p>Easy to confuse:</p>
+  <div class="kv">
+    <dt>Reverse proxy</dt><dd>Sits in front of <em>servers</em>, facing clients. Clients think they're talking to one server. (Nginx, Envoy.) An API gateway is a feature-rich reverse proxy.</dd>
+    <dt>Forward proxy</dt><dd>Sits in front of <em>clients</em>, facing the internet. Hides who's making the request (corporate proxy, VPN).</dd>
+    <dt>Load balancer</dt><dd>A reverse proxy whose main job is spreading traffic across a pool. In practice gateways and LBs overlap; the gateway adds auth/routing on top of balancing.</dd>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">Where's the best place to enforce a global "100 requests/minute per user" limit?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>At the API gateway — one choke point sees all traffic before it fans out</button>
+      <button class="quiz-opt"><span class="mark"></span>Inside each microservice separately</button>
+      <button class="quiz-opt"><span class="mark"></span>In the client app</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> the gateway is the one place every request passes through, so a limit there is consistent and protects all services. Per-service limits duplicate logic and miss cross-service abuse; client-side limits can't be trusted.</div>
+  </div>
+</section>

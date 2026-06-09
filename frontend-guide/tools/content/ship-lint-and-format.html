@@ -1,0 +1,140 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Ship it &middot; tooling</span>
+            <h1>ESLint, Biome &amp; formatting</h1>
+            <p class="lead">Linting and formatting are two different jobs that get lumped together. One finds bugs and bad patterns; the other makes every file look identical so diffs stay about logic, not whitespace. Knowing which tool does which &mdash; and the June-2026 lineup &mdash; is table-stakes for a pro setup.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> Two different jobs</h2>
+            <p class="takeaway">A <b>linter</b> catches mistakes and risky patterns. A <b>formatter</b> rewrites style so the layout is consistent. Don&rsquo;t make them fight over the same rules.</p>
+            <p>ESLint analyzes your code for likely bugs and anti-patterns; Prettier or Biome reprints it to one canonical style. Modern setups keep formatting <em>out</em> of the linter so the two never overlap &mdash; the linter judges meaning, the formatter judges shape.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>Linting is the spell-checker &mdash; it underlines actual mistakes (&ldquo;you used <code>==</code> here&rdquo;, &ldquo;this variable is unused&rdquo;). Formatting is auto-typesetting &mdash; it doesn&rsquo;t care what you wrote, it just lays out the page with consistent margins and spacing. You want both, doing their own job.</p>
+              </div>
+            </div>
+
+            <dl class="kv">
+              <dt>Linter (ESLint / Biome)</dt><dd>Finds bugs &amp; bad patterns: unused vars, missing hook deps, accidental <code>any</code>, <code>==</code> vs <code>===</code>. Many rules auto-fix.</dd>
+              <dt>Formatter (Prettier / Biome)</dt><dd>Reprints code to one style: quotes, semicolons, indentation, line width. No opinions about correctness.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="eslint">
+            <h2><span class="section-num">01</span> ESLint 10 is flat-config only</h2>
+            <p>As of <b>ESLint 10</b> (June 2026), the <b>flat config</b> file <code>eslint.config.js</code> is the <em>only</em> supported format &mdash; the legacy <code>.eslintrc</code> family and <code>eslintignore</code> are gone. Config is a plain array of objects; for TypeScript you compose <b>typescript-eslint 8</b>.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">eslint.config.js</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="js">import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+
+// Flat config: an exported array of config objects.
+export default [
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    rules: { "no-console": "warn" },
+  },
+];</code></pre>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>Copy-pasting an old <code>.eslintrc.json</code> (with <code>extends</code> / <code>env</code> / an <code>.eslintignore</code> file) silently does nothing in ESLint 10 &mdash; those formats were removed, not just deprecated. Use <code>eslint.config.js</code>; ignores live in an <code>{ ignores: [&hellip;] }</code> object inside it.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="biome">
+            <h2><span class="section-num">02</span> Biome 2 &mdash; the fast all-in-one</h2>
+            <p><b>Biome 2</b> is a Rust-based tool that does <em>both</em> linting and formatting in one binary, with near-zero config. It&rsquo;s dramatically faster than the ESLint + Prettier pair and a single command checks the whole repo.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="bash"># Lint + format check in one pass; --write applies safe fixes.
+npx @biomejs/biome check --write ./src</code></pre>
+            </div>
+            <p>The trade-off: ESLint + typescript-eslint still has the deepest rule ecosystem (custom plugins, type-aware rules). Biome covers the common ground at a fraction of the time &mdash; great for CI and on-save.</p>
+
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>&nbsp;</th><th>ESLint 10 + Prettier</th><th>Biome 2</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Scope</strong></td><td>Lint (ESLint) + format (Prettier) &mdash; two tools</td><td>Lint <em>and</em> format in one tool</td></tr>
+                  <tr><td><strong>Speed</strong></td><td>JS-based; slower on big repos</td><td>Rust; typically multiple times faster</td></tr>
+                  <tr><td><strong>Config</strong></td><td><code>eslint.config.js</code> + <code>.prettierrc</code></td><td>One <code>biome.json</code>, sensible defaults</td></tr>
+                  <tr><td><strong>Ecosystem</strong></td><td>Huge: plugins + type-aware rules</td><td>Growing; covers the common rules</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p>Either way, run it in <b>two places</b>: on save in the editor (instant feedback) and in <b>CI</b> as a blocking check (so unformatted or lint-failing code can&rsquo;t merge).</p>
+          </section>
+
+          <section class="section reveal" id="quiz">
+            <h2><span class="section-num">03</span> Check yourself</h2>
+            <div class="quiz" data-quiz>
+              <p class="q">You inherit a repo with a working <code>.eslintrc.json</code> and upgrade to ESLint 10. Lint now reports zero problems on obviously broken code. Why?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>ESLint 10 only reads flat <code>eslint.config.js</code>; the legacy <code>.eslintrc</code> format was removed, so no rules load.</button>
+                <button class="quiz-opt"><span class="mark"></span>ESLint 10 disables all rules by default and you must enable each one.</button>
+                <button class="quiz-opt"><span class="mark"></span>The code is actually fine; ESLint 10 has fewer rules than ESLint 9.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Flat config is the <em>only</em> format in ESLint 10. With no <code>eslint.config.js</code>, ESLint finds no config and effectively lints nothing &mdash; migrate the rules into the flat array.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What changed with ESLint flat config?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Config moved from a cascading <code>.eslintrc</code> with magic <code>extends</code>/<code>env</code> strings to a single <code>eslint.config.js</code> that exports a plain array of config objects you compose explicitly. As of ESLint 10 it&rsquo;s the only supported format &mdash; legacy <code>.eslintrc</code> is removed.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Flat config is just a JS array you compose &mdash; explicit imports, no cascading <code>.eslintrc</code>. In ESLint 10 it&rsquo;s the only format, so old configs just stop working.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">ESLint + Prettier or Biome &mdash; how do you choose?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Biome 2 is one fast Rust binary that lints and formats with almost no config &mdash; ideal when speed and simplicity win, especially in CI. ESLint + typescript-eslint still has the richest rule set and type-aware rules, so reach for it when you need plugins or deep custom rules.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Biome for speed and one-tool simplicity; ESLint when I need its ecosystem and type-aware rules. Many teams even run Biome to format and ESLint for the deep rules.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What&rsquo;s the difference between linting and formatting?</span><span class="pm-chip diff-warm">warm</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>A linter analyzes code for likely bugs and bad patterns (unused vars, missing hook deps); a formatter only reprints code to a consistent style (quotes, indentation, line width). One is about correctness, the other purely about layout &mdash; keep formatting rules out of the linter so they don&rsquo;t conflict.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Lint catches mistakes; format makes everything look the same. Spell-check versus typesetting &mdash; two jobs, don&rsquo;t let them overlap.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="index.html"><span class="pn-k">Previous</span><span class="pn-t">Ship it &mdash; tooling, a11y &amp; deploy</span></a>
+            <a class="next" href="accessibility.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Accessibility interviewers test</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">Two different jobs</a>
+          <a href="#eslint">ESLint 10 flat config</a>
+          <a href="#biome">Biome 2 all-in-one</a>
+          <a href="#quiz">Check yourself</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

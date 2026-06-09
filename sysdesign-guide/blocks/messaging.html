@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Queues, pub/sub & streams | The System Design Field Guide</title>
+  <meta name="description" content="Decoupling with asynchronous messaging: queues, pub/sub fan-out, Kafka logs, idempotency, and delivery guarantees." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="blocks" data-page="blocks-messaging" data-lesson="blocks-messaging">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../blocks/index.html" style="color:var(--accent)">Building blocks</a><span class="sep">/</span><span class="current">Queues, pub/sub & streams</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Building blocks · messaging</span>
+  <h1>Queues, pub/sub &amp; streams.</h1>
+  <p class="lead">A message queue lets one part of your system hand work to another <strong>asynchronously</strong> — the sender drops a message and moves on; a worker picks it up later. This one idea buys you decoupling, spike absorption, and resilience. It's how you keep the user's request fast while the slow work (emails, video encoding, analytics) happens in the background.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> &nbsp;Producers, queues, consumers</h2>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>It's the order rail in a kitchen. The waiter (producer) clips a ticket to the rail (queue) and immediately goes back to serving — they don't stand and watch it cook. Whichever chef (consumer) is free grabs the next ticket. If a rush hits, tickets pile up on the rail rather than blocking the waiters; chefs work through the backlog.</p>
+    </div>
+  </div>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Place an order, do the slow work async</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Async work via a queue",
+      "nodes": [
+        { "id": "svc", "label": "Order service", "type": "producer", "col": 0, "row": 1 },
+        { "id": "q", "label": "Queue", "type": "buffer", "col": 1, "row": 1 },
+        { "id": "email", "label": "Email worker", "type": "consumer", "col": 2, "row": 0 },
+        { "id": "ware", "label": "Warehouse worker", "type": "consumer", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "svc", "to": "q", "label": "order.placed" },
+        { "from": "q", "to": "email" },
+        { "from": "q", "to": "ware" }
+      ],
+      "steps": [
+        { "node": "svc", "caption": "User clicks Buy. The service saves the order and replies 'success' immediately." },
+        { "edge": ["svc","q"], "caption": "It publishes an 'order.placed' event to the queue and returns — the user waits for none of the rest." },
+        { "edge": ["q","email"], "caption": "An email worker consumes the event and sends the receipt, in the background." },
+        { "edge": ["q","ware"], "caption": "A warehouse worker consumes the same event and starts fulfilment. Each subscriber works at its own pace." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="patterns">
+  <h2><span class="section-num">02</span> &nbsp;Queue vs pub/sub vs stream</h2>
+  <div class="kv">
+    <dt>Work queue</dt><dd>Each message is processed by <em>one</em> consumer from a pool — work is shared out. (RabbitMQ, SQS.) Use for tasks: send email, resize image, charge card.</dd>
+    <dt>Pub/sub</dt><dd>Each message is delivered to <em>every</em> subscriber. (SNS, Redis pub/sub.) Use for fan-out: one event, many independent reactions.</dd>
+    <dt>Log / stream</dt><dd>An ordered, replayable log of events, partitioned for scale; consumers track their own position (offset). (Kafka, Kinesis, Pulsar.) Use for analytics, event sourcing, and high-throughput pipelines where you may re-read history.</dd>
+  </div>
+  <p>The big win in all three: the producer doesn't wait, and a slow or down consumer just makes the backlog grow rather than failing the user's request. That's <strong>decoupling</strong> and <strong>load-levelling</strong> — a queue absorbs a traffic spike that would otherwise crush a synchronous system.</p>
+</section>
+
+<section class="section reveal" id="guarantees">
+  <h2><span class="section-num">03</span> &nbsp;Delivery guarantees &amp; idempotency</h2>
+  <p>Distributed messaging can't promise perfection. You choose:</p>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">1️⃣</span><h4>At-most-once</h4><p>May drop a message, never duplicates. Fine for telemetry where a lost sample doesn't matter.</p></div>
+    <div class="card feature"><span class="f-ic fx">🔁</span><h4>At-least-once (the common default)</h4><p>Never drops, but may deliver twice (e.g., a worker crashes after doing the work but before acking). You must handle duplicates.</p></div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">"Exactly-once" = at-least-once + idempotency</div><p>True exactly-once delivery is nearly impossible, so the real-world recipe is at-least-once delivery plus <strong>idempotent consumers</strong>: design the work so doing it twice is harmless (e.g., key each message by a unique ID and skip ones you've already processed). This exact trick is the heart of the <a href="../advanced/payments.html">payments</a> design.</p></div></div>
+  <p>Messages that keep failing go to a <strong>dead-letter queue</strong> for inspection rather than blocking the line forever.</p>
+  <div class="quiz" data-quiz>
+    <p class="q">Your queue is at-least-once. A "charge the customer" worker occasionally sees the same message twice. The fix?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Switch to at-most-once so messages are never duplicated</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Make the consumer idempotent — dedupe on a message/charge ID so a repeat is a no-op</button>
+      <button class="quiz-opt"><span class="mark"></span>Add more workers</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> at-most-once would risk dropping charges entirely. Keep at-least-once and make processing idempotent: record processed IDs (or use the payment's idempotency key) so a duplicate delivery charges no one twice.</div>
+  </div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../blocks/caching.html"><span class="pn-k">‹ Back</span><span class="pn-t">Caching</span></a>
+            <a class="next" href="../data/index.html"><span class="pn-k">Next ›</span><span class="pn-t">SQL vs NoSQL</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#idea">Producers, queues, consumers</a>
+          <a href="#patterns">Queue vs pub/sub vs stream</a>
+          <a href="#guarantees">Delivery guarantees & idempotency</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Building blocks · Queues, pub/sub & streams</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+</body>
+</html>

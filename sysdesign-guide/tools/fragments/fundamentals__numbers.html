@@ -1,0 +1,90 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Fundamentals · the numbers</span>
+  <h1>Numbers you must know.</h1>
+  <p class="lead">A handful of latency and size numbers let you answer "is that fast?" and "will that fit?" on instinct. You don't need them to the nanosecond — you need the <strong>relative</strong> scale: memory is ~100× faster than SSD, which is ~100× faster than a cross-country network round trip. Internalise the ladder and estimation becomes intuition.</p>
+</section>
+
+<section class="section reveal" id="latency">
+  <h2><span class="section-num">01</span> &nbsp;Latency numbers every engineer should know</h2>
+  <p>The classic table (rounded to 2026 hardware). The story it tells: <strong>stay in memory if you can, batch your network calls, and never hit disk on the hot path.</strong></p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Operation</th><th>Time</th><th>In human terms</th></tr></thead>
+      <tbody>
+        <tr><td>L1 cache reference</td><td>~1 ns</td><td>1 second</td></tr>
+        <tr><td>Branch mispredict</td><td>~3 ns</td><td>3 seconds</td></tr>
+        <tr><td>Main memory (RAM) reference</td><td>~100 ns</td><td>~2 minutes</td></tr>
+        <tr><td>Read 1 MB sequentially from RAM</td><td>~3 µs</td><td>~1 hour</td></tr>
+        <tr><td>SSD random read</td><td>~16 µs</td><td>~4 hours</td></tr>
+        <tr><td>Round trip within a datacenter</td><td>~0.5 ms</td><td>~6 days</td></tr>
+        <tr><td>Read 1 MB sequentially from SSD</td><td>~1 ms</td><td>~12 days</td></tr>
+        <tr><td>Disk (HDD) seek</td><td>~3 ms</td><td>~1 month</td></tr>
+        <tr><td>Round trip, same continent</td><td>~30 ms</td><td>~1 year</td></tr>
+        <tr><td>Round trip, intercontinental</td><td>~150 ms</td><td>~5 years</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>If an L1 cache read were "grabbing a pen on your desk" (1 second), then reading from RAM is "walking to the next room" (2 minutes), reading from disk is "a road trip" (a month), and a call to another continent is "waiting five years." That's why we cache: to keep work on the desk.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="powers">
+  <h2><span class="section-num">02</span> &nbsp;Powers of two → data sizes</h2>
+  <p>Storage is counted in powers of two, but for estimation we round to powers of ten. Know the ladder so "16-byte IDs × 1 billion rows" lands as "~16&nbsp;GB" without a calculator.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Power</th><th>Exact</th><th>Approx</th><th>Name</th></tr></thead>
+      <tbody>
+        <tr><td>2¹⁰</td><td>1,024</td><td>~1 thousand</td><td>Kilobyte (KB)</td></tr>
+        <tr><td>2²⁰</td><td>1,048,576</td><td>~1 million</td><td>Megabyte (MB)</td></tr>
+        <tr><td>2³⁰</td><td>~1.07 billion</td><td>~1 billion</td><td>Gigabyte (GB)</td></tr>
+        <tr><td>2⁴⁰</td><td>~1.1 trillion</td><td>~1 trillion</td><td>Terabyte (TB)</td></tr>
+        <tr><td>2⁵⁰</td><td>—</td><td>~10¹⁵</td><td>Petabyte (PB)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Handy item sizes: a <strong>char</strong> = 1 B (ASCII), a <strong>UUID</strong> = 16 B, an <strong>int/long</strong> = 4–8 B, a <strong>timestamp</strong> = 8 B, a <strong>tweet</strong> ≈ 300 B, a <strong>web page</strong> ≈ 100 KB–2 MB, a <strong>photo</strong> ≈ 0.5–5 MB, a <strong>minute of HD video</strong> ≈ 50 MB.</p>
+</section>
+
+<section class="section reveal" id="rules">
+  <h2><span class="section-num">03</span> &nbsp;Rules of thumb that fall out</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">⚡</span><h4>Memory is ~100,000× faster than a network hop</h4><p>So a cache hit (~1 ms) vs a cross-region call (~100 ms) is the difference between instant and sluggish. Cache aggressively.</p></div>
+    <div class="card feature"><span class="f-ic fx">🌍</span><h4>Speed of light sets a floor</h4><p>You can't beat ~30 ms across a continent or ~150 ms around the world. To feel fast globally, you must move data <em>near</em> users (CDNs, regional replicas).</p></div>
+    <div class="card feature"><span class="f-ic fx">📦</span><h4>Sequential ≫ random</h4><p>Disks and SSDs love sequential reads. This is why databases use logs and B-trees, and why "append-only" designs are fast.</p></div>
+    <div class="card feature"><span class="f-ic fx">🔁</span><h4>One big call beats many small ones</h4><p>Network round trips dominate. Batch requests; a single 1&nbsp;MB read is far cheaper than 1,000 tiny ones.</p></div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">Your API makes 50 sequential calls to other services, each a ~1 ms datacenter round trip. Roughly what's the added latency — and the fix?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>~1 ms; nothing to fix</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>~50 ms; parallelise or batch the calls</button>
+      <button class="quiz-opt"><span class="mark"></span>~0 ms; network calls are free</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> 50 × ~1 ms in series ≈ 50 ms. Fan them out in parallel (latency drops to ~1 round trip) or batch them into one call. Round trips, not compute, are usually the bottleneck.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="percentiles">
+  <h2><span class="section-num">04</span> &nbsp;Percentiles: p50, p95, p99 (tail latency)</h2>
+  <p>Latency isn't one number — it's a distribution, so we quote <strong>percentiles</strong>. The "p" just means "percentile" and the number is the cutoff: <strong>p99 = 99% of requests are faster than this value; the slowest 1% are worse.</strong> So p50 is the median (half are faster), p95 the 95th percentile, and <span class="mono">p999</span> is shorthand for p99.9. Any <span class="mono">pN</span> works the same way — <span class="mono">p65</span> would be "the value 65% of requests beat" — but in practice you'll almost always see <strong>p50, p95, p99, and p999</strong>.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Percentile</th><th>Reads as</th><th>Describes the slowest…</th></tr></thead>
+      <tbody>
+        <tr><td>p50 (median)</td><td>half are faster</td><td>typical request</td></tr>
+        <tr><td>p90</td><td>90% are faster</td><td>1 in 10</td></tr>
+        <tr><td>p95</td><td>95% are faster</td><td>1 in 20</td></tr>
+        <tr><td>p99</td><td>99% are faster</td><td>1 in 100</td></tr>
+        <tr><td>p99.9 (p999)</td><td>99.9% are faster</td><td>1 in 1,000</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Why we obsess over the <strong>tail</strong> (p99/p999) rather than the average: <strong>averages hide spikes</strong> — a system at p50 = 20 ms but p99 = 2 s feels broken to 1 in 100 users, yet its mean looks fine. Worse, tail latency <em>compounds with fan-out</em>:</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">The tail-at-scale trap</div><p>If one page makes <strong>100</strong> backend calls and each has just a 1% chance of being slow (its own p99), the chance that <em>at least one</em> is slow is 1 − 0.99¹⁰⁰ ≈ <strong>63%</strong>. A "rare" per-call tail becomes the <em>common</em> case for the whole request. That's why every SLO in this guide is a p99 (not an average), and why you parallelise, set timeouts on the tail, and sometimes hedge (send a duplicate request and take the first reply).</p></div></div>
+</section>

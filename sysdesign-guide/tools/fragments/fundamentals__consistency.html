@@ -1,0 +1,65 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Fundamentals · consistency</span>
+  <h1>Consistency, CAP &amp; PACELC.</h1>
+  <p class="lead">When data lives on many machines, "what's the current value?" stops being obvious — different replicas can briefly disagree. <strong>Consistency</strong> is the promise about how fresh a read is. CAP and its 2026-standard refinement PACELC tell you the unavoidable trade-offs. This is the concept interviewers probe hardest, so we'll make it concrete.</p>
+</section>
+
+<section class="section reveal" id="models">
+  <h2><span class="section-num">01</span> &nbsp;Strong vs eventual consistency</h2>
+  <p>Two ends of a spectrum:</p>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🎯</span><h4>Strong consistency</h4><p>Every read returns the most recent write, always. Simple to reason about, but requires coordination between replicas — which costs latency and availability.</p></div>
+    <div class="card feature"><span class="f-ic fx">🌊</span><h4>Eventual consistency</h4><p>Replicas may briefly disagree, but converge "eventually" (usually milliseconds). Fast and highly available; you must tolerate reading slightly stale data.</p></div>
+  </div>
+  <p>Useful middle grounds: <strong>read-your-own-writes</strong> (you always see your own latest change), <strong>monotonic reads</strong> (you never see time go backwards), and <strong>causal consistency</strong> (effects never appear before their causes).</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Two bank tellers sharing one ledger. <strong>Strong:</strong> they lock the book so only one writes at a time — never wrong, sometimes you wait. <strong>Eventual:</strong> they each scribble in their own copy and reconcile every few seconds — never blocked, but for a moment your balance might look off. A bank picks strong; a "likes" counter happily picks eventual.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="cap">
+  <h2><span class="section-num">02</span> &nbsp;The CAP theorem</h2>
+  <p>CAP says: when a <strong>network partition</strong> happens (some machines can't talk to others — and at scale, it <em>will</em>), you must choose between two of three:</p>
+  <div class="kv">
+    <dt>C — Consistency</dt><dd>Every read sees the latest write (or an error).</dd>
+    <dt>A — Availability</dt><dd>Every request gets a non-error response (possibly stale).</dd>
+    <dt>P — Partition tolerance</dt><dd>The system keeps working despite dropped messages between nodes.</dd>
+  </div>
+  <p>Since partitions are a fact of distributed life, <strong>P is non-negotiable</strong> — so the real choice during a partition is <strong>C vs A</strong>:</p>
+  <ul>
+    <li><strong>CP</strong> (consistency over availability): refuse requests on the minority side rather than risk stale data. <em>Banking, inventory, locks.</em></li>
+    <li><strong>AP</strong> (availability over consistency): keep answering everywhere, reconcile later. <em>Feeds, likes, shopping carts, presence.</em></li>
+  </ul>
+</section>
+
+<section class="section reveal" id="pacelc">
+  <h2><span class="section-num">03</span> &nbsp;PACELC — the part interviewers want in 2026</h2>
+  <p>CAP only describes behaviour <em>during</em> a partition — which is rare. PACELC adds the everyday case: <strong>"if Partition, then A or C; Else (normal operation), Latency or Consistency."</strong> Even with a healthy network, keeping replicas in lockstep costs latency. So the deeper trade-off is constant: <strong>how much latency will you pay for fresher reads?</strong></p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Consistency ⇄ latency / availability",
+      "axisLabel": "Drag across the spectrum and watch the trade-offs move:",
+      "stops": [
+        { "label": "Strong (CP / PC)", "dims": { "Freshness": 98, "Availability": 55, "Read speed": 45, "Simplicity to reason": 90 }, "note": "Coordinate every write (consensus / leader). Reads are always current; a partition or a slow replica blocks. Used for money, inventory, locks." },
+        { "label": "Tunable (quorum)", "dims": { "Freshness": 80, "Availability": 80, "Read speed": 65, "Simplicity to reason": 55 }, "note": "Quorum reads + writes (R + W > N) let you dial freshness vs speed per request. Dynamo/Cassandra-style stores live here." },
+        { "label": "Eventual (AP / EL)", "dims": { "Freshness": 45, "Availability": 98, "Read speed": 92, "Simplicity to reason": 60 }, "note": "Replicas answer locally and converge later. Always on, very fast reads; you must tolerate brief staleness. Feeds, likes, presence." }
+      ]
+    }
+    </script>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">How to use this in an interview</div><p>Decide per-data, not per-system. In one design you might keep <em>payments</em> strongly consistent and <em>the activity feed</em> eventually consistent. Saying "I'd use strong consistency here because a double-charge is unacceptable, but eventual for the like-count because a 2-second lag is invisible" is exactly the judgement they're listening for.</p></div></div>
+  <div class="quiz" data-quiz>
+    <p class="q">During a network partition, a shopping-cart service keeps accepting "add to cart" on both sides and merges later. Which choice is that?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>CP — consistency over availability</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>AP — availability over consistency</button>
+      <button class="quiz-opt"><span class="mark"></span>It avoids CAP entirely</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> staying available on both sides and reconciling later is the AP choice — a great fit for carts, where losing a "stay available" moment costs sales and the rare merge conflict is easy to resolve.</div>
+  </div>
+</section>

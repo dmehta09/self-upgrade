@@ -1,0 +1,83 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Data at scale · replication</span>
+  <h1>Replication &amp; quorums.</h1>
+  <p class="lead">Replication keeps copies of your data on multiple machines. It buys you two things: <strong>durability</strong> (one machine dies, the data survives) and <strong>read scaling</strong> (spread reads across copies). The catch is keeping the copies in step — and the choices you make there (synchronous vs asynchronous, leader-based vs quorum) are pure CAP/PACELC trade-offs in practice.</p>
+</section>
+
+<section class="section reveal" id="leader">
+  <h2><span class="section-num">01</span> &nbsp;Leader–follower replication</h2>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>One person keeps the master notebook (the leader); a few others keep photocopies (followers) they update from it. Everyone writes to the master, but anyone can <em>read</em> from a copy. If the master is lost, a copy is promoted to be the new master. The only worry: a copy might be a few seconds behind.</p>
+    </div>
+  </div>
+  <p>The dominant model: one <strong>leader</strong> (primary) takes all writes and streams them to <strong>followers</strong> (replicas), which serve reads. To scale reads — and most systems are read-heavy — you simply add followers. When the leader fails, a follower is promoted (<strong>failover</strong>).</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Replication lag bites</div><p>If you write to the leader then immediately read from a follower that hasn't caught up, you see <em>old</em> data — "I posted a comment but it vanished!" Fixes: read your own writes from the leader, or wait for the follower to catch up. This is the classic read-after-write consistency problem.</p></div></div>
+</section>
+
+<section class="section reveal" id="syncasync">
+  <h2><span class="section-num">02</span> &nbsp;Synchronous vs asynchronous</h2>
+  <p>Does the leader wait for replicas to confirm before telling the client "done"? That single question is the durability-vs-speed dial:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Replication: sync vs async",
+      "axisLabel": "Does the leader wait for followers before acking a write?",
+      "stops": [
+        { "label": "Synchronous", "dims": { "Write speed": 40, "No data loss": 95, "Read scaling": 80, "Availability": 60 }, "note": "Leader waits for replicas to confirm before acking. Zero data loss on failover and strong guarantees — but writes are as slow as the slowest replica, and a down replica can block writes." },
+        { "label": "Semi-sync", "dims": { "Write speed": 65, "No data loss": 85, "Read scaling": 82, "Availability": 78 }, "note": "Wait for at least one replica to confirm, the rest async. A common middle ground: bounded data loss with reasonable write latency." },
+        { "label": "Asynchronous", "dims": { "Write speed": 92, "No data loss": 58, "Read scaling": 85, "Availability": 88 }, "note": "Leader acks immediately and ships changes in the background. Fast and highly available — but a leader crash can lose the last few unreplicated writes. The common default." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="quorum">
+  <h2><span class="section-num">03</span> &nbsp;Leaderless &amp; quorums</h2>
+  <p>Some stores (Dynamo, Cassandra) drop the single leader entirely: the client writes to several replicas and reads from several, using a <strong>quorum</strong> to stay consistent. With <strong>N</strong> replicas, a write needs <strong>W</strong> acks and a read queries <strong>R</strong> of them. If <strong>W + R &gt; N</strong>, any read overlaps at least one node with the latest write — so it sees fresh data.</p>
+  <p>Step through why that inequality works. With N = 3, a write to W = 2 replicas and a later read from R = 2 replicas <em>cannot</em> miss each other — their sets are too big to be disjoint, so they must share a node:</p>
+  <figure class="viz" data-viz aria-label="Quorum overlap: why W + R > N guarantees a fresh read">
+    <figcaption class="viz-title">Why W + R &gt; N always reads the latest write</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "array",
+      "meta": { "values": ["v1","v1","v1"] },
+      "frames": [
+        { "caption": "Three replicas (N = 3), each holding the old value v1. There's no leader — the client talks to replicas directly." },
+        { "values": ["v2","v2","v1"], "active": [0,1], "dim": [2], "pointers": [{"name":"W","at":0},{"name":"W","at":1}], "caption": "A write is acked once W = 2 replicas have stored it → replicas 0 and 1 now hold v2. Replica 2 is lagging — still v1." },
+        { "compare": [1,2], "dim": [0], "pointers": [{"name":"R","at":1},{"name":"R","at":2}], "caption": "Later a read queries R = 2 replicas — say 1 and 2. It gets v2 from one and a stale v1 from the other. Which to trust?" },
+        { "match": [1], "reject": [2], "dim": [0], "pointers": [{"name":"both","at":1}], "caption": "Because W + R = 4 > N = 3, the read set must overlap the write set — replica 1 is in both. It carries v2, the newest version, so the read returns v2 and discards the stale v1. Always fresh, even with a node behind." }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="kv">
+    <dt>W = N, R = 1</dt><dd>Fast reads, slow/fragile writes. Good for read-heavy, rarely-written data.</dd>
+    <dt>W = 1, R = N</dt><dd>Fast writes, slow reads. Good for write-heavy data.</dd>
+    <dt>W = R = ⌈(N+1)/2⌉</dt><dd>The balanced quorum (e.g., N=3, W=R=2): tolerate one node down and still stay consistent. The common choice.</dd>
+  </div>
+  <p>Tuning W and R is literally dialling the PACELC trade-off per workload — strong-ish consistency, or lower latency and higher availability.</p>
+  <div class="quiz" data-quiz>
+    <p class="q">With N = 3 replicas, you set W = 2 and R = 2. Is a read guaranteed to see the latest acknowledged write?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Yes — W + R = 4 &gt; N = 3, so the read and write sets overlap</button>
+      <button class="quiz-opt"><span class="mark"></span>No — you'd need W = R = 3</button>
+      <button class="quiz-opt"><span class="mark"></span>Only if there's a single leader</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> W + R &gt; N (4 &gt; 3) guarantees at least one node in the read set also received the latest write — so the freshest value is always seen. This is the quorum rule, and it survives one node being down.</div>
+  </div>
+</section>

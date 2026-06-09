@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FastAPI — Dependency injection | FastAPI Field Guide</title>
+  <meta name="description" content="FastAPI's dependency injection with Annotated + Depends: reusable dependencies, sub-dependencies, and yield dependencies for setup/teardown like database sessions." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13 2 4 14h6l-1 8 9-12h-6z' fill='%231ec9b0'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="fastapi" data-page="fa-deps" data-lesson="fastapi-dependencies">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="FastAPI Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="#06140f" stroke="#06140f" stroke-width="1.2" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>
+        <span class="brand-text"><b>FastAPI Field Guide</b><span>Runnable visual guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here"><h4>Start here</h4><a class="nav-link" href="../index.html">Home</a></nav>
+      <nav class="nav-group is-py" aria-label="Python">
+        <h4><span class="dot"></span>Python</h4>
+        <a class="nav-link" href="../python/index.html">Setup &amp; tooling</a>
+        <a class="nav-link" href="../python/concepts.html">The refresher</a>
+        <a class="nav-link" href="../python/oop.html">Classes &amp; OOP</a>
+        <a class="nav-link" href="../python/decorators.html">Decorators &amp; closures</a>
+        <a class="nav-link" href="../python/errors.html">Errors &amp; exceptions</a>
+        <a class="nav-link" href="../python/generators.html">Generators &amp; context</a>
+        <a class="nav-link" href="../python/typing.html">Typing in depth</a>
+        <a class="nav-link" href="../python/async.html">Async in depth</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="FastAPI core">
+        <h4><span class="dot"></span>FastAPI core</h4>
+        <a class="nav-link" href="../fastapi/index.html">Overview</a>
+        <a class="nav-link" href="../fastapi/routing.html">Routing &amp; params</a>
+        <a class="nav-link" href="../fastapi/request-body.html">Request body &amp; models</a>
+        <a class="nav-link" href="../fastapi/validation.html">Validation &amp; errors</a>
+        <a class="nav-link" href="../fastapi/dependencies.html">Dependency injection</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#what">What &amp; why</a>
+          <a class="nav-link" href="#depends">Annotated + Depends</a>
+          <a class="nav-link" href="#reuse">Reusable deps</a>
+          <a class="nav-link" href="#sub">Sub-dependencies</a>
+          <a class="nav-link" href="#yield">yield dependencies</a>
+        </div>
+      </nav>
+      <nav class="nav-group is-db" aria-label="Databases"><h4><span class="dot"></span>Databases</h4><a class="nav-link" href="../fastapi/databases.html">SQLModel &amp; CRUD</a></nav>
+      <nav class="nav-group is-auth" aria-label="Auth"><h4><span class="dot"></span>Auth &amp; security</h4><a class="nav-link" href="../fastapi/auth.html">OAuth2 &amp; JWT</a></nav>
+      <nav class="nav-group is-adv" aria-label="Advanced"><h4><span class="dot"></span>Advanced</h4><a class="nav-link" href="../fastapi/advanced.html">Async &amp; structure</a></nav>
+      <nav class="nav-group" aria-label="Ship it"><h4>Ship it</h4><a class="nav-link" href="../deploy/index.html">Testing &amp; deployment</a></nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../fastapi/index.html" style="color:var(--accent)">FastAPI</a><span class="sep">/</span><span class="current">Dependency injection</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">FastAPI · dependency injection</span>
+            <h1>Reusable plumbing, declared not wired.</h1>
+            <p class="lead">A <strong>dependency</strong> is a function FastAPI runs <em>before</em> your endpoint and passes the result in. It's how you share logic — pagination params, “get the current user”, a database session — across many routes without copy-paste. Declare what you need; FastAPI provides it.</p>
+          </section>
+
+          <section class="section reveal" id="what">
+            <h2><span class="section-num">01</span> &nbsp;What &amp; why</h2>
+            <p>Imagine ten endpoints that all need the logged-in user. Without dependencies you'd repeat the “read the token, look up the user, reject if invalid” code ten times. A dependency lets you write it <em>once</em> and just ask for it.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1 0 5.6l-1.4 1.4-5.6-5.6 1.4-1.4a4 4 0 0 1 5.6 0ZM3 21l4-1 11-11"/></svg></span><div class="co-body"><div class="co-title">Like ordering ingredients, not cooking them <span class="tag">analogy</span></div><p>Your endpoint is a recipe that says “I need a <em>prepped onion</em>.” The dependency is the prep cook who peels and dices it. The recipe never worries about <em>how</em> the onion got prepped — it just receives it ready to use.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="depends">
+            <h2><span class="section-num">02</span> &nbsp;Annotated + Depends</h2>
+            <p>The modern pattern: annotate a parameter with <code>Annotated[ReturnType, Depends(the_function)]</code>. FastAPI calls <code>the_function</code> (parsing <em>its</em> parameters from the request too) and injects the result.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">deps.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from typing import Annotated
+from fastapi import FastAPI, Depends
+
+app = FastAPI()
+
+# a dependency is just a function
+def pagination(skip: int = 0, limit: int = 10) -> dict:
+    return {"skip": skip, "limit": limit}
+
+# name the type once, reuse it everywhere
+PageParams = Annotated[dict, Depends(pagination)]
+
+@app.get("/items")
+def list_items(page: PageParams):
+    return {"page": page}
+
+@app.get("/users")
+def list_users(page: PageParams):    # same logic, zero duplication
+    return {"page": page}</code></pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Make a type alias</div><p>Defining <code>PageParams = Annotated[...]</code> once and reusing it keeps signatures short and readable. You'll see <code>SessionDep</code> and <code>CurrentUser</code> aliases used the same way on the next pages.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="reuse">
+            <h2><span class="section-num">03</span> &nbsp;Reusable dependencies</h2>
+            <p>Dependencies can do real work and raise errors. A classic is “get the current user, or reject” — used to protect routes:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">auth_dep.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from typing import Annotated
+from fastapi import Depends, Header, HTTPException
+
+def get_current_user(x_token: Annotated[str | None, Header()] = None) -> str:
+    if x_token != "secret":
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return "ada"          # in reality: decode the token, load the user
+
+CurrentUser = Annotated[str, Depends(get_current_user)]
+
+@app.get("/me")
+def read_me(user: CurrentUser):
+    return {"user": user}      # only reached if the token was valid</code></pre></div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="sub">
+            <h2><span class="section-num">04</span> &nbsp;Sub-dependencies</h2>
+            <p>Dependencies can depend on other dependencies. FastAPI resolves the whole chain for you and caches each one <em>within a single request</em>, so a shared dependency runs only once even if several things need it.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">sub.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">def get_db_user(user: CurrentUser) -> dict:        # depends on get_current_user
+    return {"name": user, "is_admin": user == "ada"}
+
+def require_admin(account: Annotated[dict, Depends(get_db_user)]) -> dict:
+    if not account["is_admin"]:
+        raise HTTPException(status_code=403, detail="Admins only")
+    return account
+
+@app.delete("/items/{id}")
+def delete_item(id: int, admin: Annotated[dict, Depends(require_admin)]):
+    return {"deleted": id, "by": admin["name"]}</code></pre></div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="yield">
+            <h2><span class="section-num">05</span> &nbsp;Dependencies with <code>yield</code> <span class="badge" style="vertical-align:middle">important</span></h2>
+            <p>A dependency that <code>yield</code>s can run <strong>teardown</strong> code after the response is sent — perfect for opening a resource, using it, then closing it. This is exactly how database sessions are managed (next page).</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">yield_dep.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">def get_session():
+    session = open_session()      # setup, before the endpoint
+    try:
+        yield session             # the endpoint runs with this value
+    finally:
+        session.close()           # teardown, after the response
+
+SessionDep = Annotated[Session, Depends(get_session)]
+
+@app.get("/items")
+def list_items(session: SessionDep):
+    return session.query(...)     # session is auto-closed afterwards</code></pre></div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">When does the code after <code>yield</code> in a dependency run?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Before the endpoint function</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>After the endpoint returns, as teardown</button>
+                <button class="quiz-opt"><span class="mark"></span>Never — <code>yield</code> deps can't clean up</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Everything before <code>yield</code> is setup; the yielded value is injected; the code after <code>yield</code> (typically in a <code>finally</code>) runs once the response is done. That's how sessions get reliably closed.</div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Bonus: overriding deps in tests</div><p>FastAPI lets you swap any dependency in tests with <code>app.dependency_overrides[get_session] = fake_session</code> — so you can point at a throwaway test database. We use this on the <a href="../deploy/index.html">Testing</a> page.</p></div></div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../fastapi/validation.html"><span class="pn-k">‹ Back</span><span class="pn-t">Validation &amp; errors</span></a>
+            <a class="next" href="../fastapi/databases.html"><span class="pn-k">Next ›</span><span class="pn-t">Databases (SQLModel)</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#what">What &amp; why</a>
+          <a href="#depends">Annotated + Depends</a>
+          <a href="#reuse">Reusable deps</a>
+          <a href="#sub">Sub-dependencies</a>
+          <a href="#yield">yield dependencies</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">FastAPI · Dependency injection</span>
+        <span class="fmono">FastAPI Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/runpad.js"></script>
+  <script src="../assets/js/playground.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

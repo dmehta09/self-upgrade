@@ -1,0 +1,87 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Reference · glossary</span>
+  <h1>Glossary.</h1>
+  <p class="lead">Every term used in this guide, defined in one line. Skim it before an interview, or jump here whenever a word on another page is fuzzy. Grouped by theme; press <kbd>/</kbd> to search the whole guide.</p>
+</section>
+
+<section class="section reveal" id="fundamentals">
+  <h2>Fundamentals</h2>
+  <div class="kv">
+    <dt>Latency</dt><dd>Time for one request to complete. You optimise the <em>tail</em> (p99), not just the average.</dd>
+    <dt>Percentile (p50 / p95 / p99)</dt><dd>The latency value a fraction of requests beat: <span class="mono">p99</span> = 99% are faster, the slowest 1% worse (p50 = median; p999 = p99.9). Optimise the <em>tail</em> — fan-out makes a rare slow call the common case. See <a href="../fundamentals/numbers.html#percentiles">the numbers</a>.</dd>
+    <dt>Throughput</dt><dd>Work done per unit time — e.g. requests/second (QPS) or tokens/second.</dd>
+    <dt>QPS</dt><dd>Queries per second. The headline load number you estimate first.</dd>
+    <dt>Back-of-the-envelope</dt><dd>Quick order-of-magnitude estimation of QPS, storage, and bandwidth from a few assumptions.</dd>
+    <dt>Availability</dt><dd>Fraction of time the system is up, quoted in "nines" (99.9% = three nines).</dd>
+    <dt>SLI / SLO / SLA</dt><dd>The measured <strong>indicator</strong> (good ÷ valid requests) / your internal <strong>objective</strong> for it / the contractual <strong>agreement</strong> with customers (looser, with penalties). See <a href="../fundamentals/availability.html#slas">availability</a>.</dd>
+    <dt>Error budget</dt><dd><span class="mono">100% − SLO</span> — the amount of failure you're allowed per window (99.9%/month ≈ 43 min). Spent on risky releases; when exhausted, freeze changes and fix reliability. See <a href="../fundamentals/availability.html#error-budget">error budgets</a>.</dd>
+    <dt>Horizontal vs vertical scaling</dt><dd>Add more machines (out) vs make one machine bigger (up). Horizontal scales further but needs statelessness.</dd>
+    <dt>Stateless service</dt><dd>A server that holds no per-user state, so any instance can serve any request — the basis of easy scaling.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="networking">
+  <h2>Networking &amp; delivery</h2>
+  <div class="kv">
+    <dt>Load balancer</dt><dd>Spreads requests across a server pool and routes around dead ones (L4 = transport, L7 = HTTP-aware).</dd>
+    <dt>Reverse proxy</dt><dd>Server-side proxy facing clients; basis of an API gateway.</dd>
+    <dt>API gateway</dt><dd>The front door: TLS, auth, rate limiting, and routing in one place.</dd>
+    <dt>CDN</dt><dd>Globally distributed caches that serve content from an edge near the user.</dd>
+    <dt>Cache hit ratio</dt><dd>Fraction of requests served from cache; the metric that decides how much load reaches your origin.</dd>
+    <dt>WebSocket</dt><dd>A persistent, bidirectional connection enabling the server to push data (real-time chat, presence).</dd>
+    <dt>Long polling / SSE</dt><dd>Hold a request open for updates / one-way server→client stream — lighter alternatives to WebSockets.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="data">
+  <h2>Data &amp; storage</h2>
+  <div class="kv">
+    <dt>ACID</dt><dd>The strong transaction guarantees of relational databases: <strong>A</strong>tomicity (all-or-nothing), <strong>C</strong>onsistency (a valid state moves only to another valid state), <strong>I</strong>solation (concurrent transactions don't see each other's half-done work), <strong>D</strong>urability (once committed, data survives a crash).</dd>
+    <dt>BASE</dt><dd>Basically Available, Soft state, Eventual consistency — the looser NoSQL philosophy.</dd>
+    <dt>Index</dt><dd>A sorted side structure that turns a full scan into an O(log n) lookup; speeds reads, slows writes.</dd>
+    <dt>LSM-tree</dt><dd>Write-optimised index: buffer writes in memory, flush to immutable sorted files, compact in the background (Cassandra, RocksDB). The B-tree's mirror image.</dd>
+    <dt>Inverted index</dt><dd>Term → documents-containing-it; the engine behind full-text search.</dd>
+    <dt>Sharding / partitioning</dt><dd>Splitting data across machines by a shard key to scale writes and storage.</dd>
+    <dt>Shard key</dt><dd>The field that decides a record's shard. A near-irreversible choice — pick for even load + local queries.</dd>
+    <dt>Replication</dt><dd>Keeping copies of data on multiple machines for durability and read scaling.</dd>
+    <dt>Leader–follower</dt><dd>One node takes writes and streams them to read replicas; a follower is promoted on failure.</dd>
+    <dt>Quorum (W + R &gt; N)</dt><dd>Requiring overlapping read/write majorities so reads see the latest write in leaderless stores.</dd>
+    <dt>Consistent hashing</dt><dd>Mapping keys to nodes on a ring so adding/removing a node moves only ~1/N of keys.</dd>
+    <dt>Object storage</dt><dd>Cheap, durable, near-infinite blob store (S3-like) for large immutable files.</dd>
+    <dt>Write-ahead log (WAL)</dt><dd>Append-only log written before applying changes, enabling durability and replication.</dd>
+    <dt>Bloom filter</dt><dd>Compact probabilistic set: "definitely not present" or "maybe present" — no false negatives.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="caching-messaging">
+  <h2>Caching &amp; messaging</h2>
+  <div class="kv">
+    <dt>Cache-aside</dt><dd>App reads cache, falls back to the DB on a miss and fills the cache. The default pattern.</dd>
+    <dt>Write-through / write-back</dt><dd>Write to cache+DB together / write to cache and flush to DB later (fast but loss-prone).</dd>
+    <dt>Eviction (LRU / LFU)</dt><dd>Policies for dropping data when the cache is full — least-recently / least-frequently used.</dd>
+    <dt>Hot key</dt><dd>One key so popular it overloads its single node; fixed by replicating the key.</dd>
+    <dt>Cache stampede</dt><dd>Many requests miss a just-expired key at once and hammer the DB; fixed with jitter/coalescing.</dd>
+    <dt>Message queue</dt><dd>Buffer that decouples producers from consumers for async work and spike absorption.</dd>
+    <dt>Pub/sub</dt><dd>One message delivered to every subscriber (fan-out), vs a work queue's one-of-N.</dd>
+    <dt>Kafka / event log</dt><dd>Partitioned, replayable, ordered log; consumers track their own offset.</dd>
+    <dt>Idempotency</dt><dd>An operation safe to repeat — doing it twice has the same effect as once (key the request).</dd>
+    <dt>Dead-letter queue</dt><dd>Where repeatedly-failing messages go for inspection instead of blocking the line.</dd>
+    <dt>Fan-out (write vs read)</dt><dd>Doing work at write time (push to all) vs read time (gather on demand) — the feed trade-off.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="reliability">
+  <h2>Reliability &amp; consistency</h2>
+  <div class="kv">
+    <dt>CAP theorem</dt><dd>During a partition, choose Consistency or Availability (Partition tolerance is mandatory).</dd>
+    <dt>PACELC</dt><dd>CAP plus the normal case: Else, trade Latency vs Consistency. The 2026-expected framing.</dd>
+    <dt>Strong consistency</dt><dd>Every read sees the latest write. Needs coordination → costs latency/availability.</dd>
+    <dt>Eventual consistency</dt><dd>Replicas converge over time; reads may be briefly stale. Fast and available.</dd>
+    <dt>Read-after-write</dt><dd>You always see your own latest change, even if others see it slightly later.</dd>
+    <dt>Failover</dt><dd>Detecting a failure and routing to a healthy replacement (active-passive / active-active).</dd>
+    <dt>Leader election / consensus</dt><dd>Algorithms (Raft, Paxos) for replicas to agree on one leader / one value.</dd>
+    <dt>Circuit breaker</dt><dd>Stop calling a failing dependency for a while so you don't pile on and cascade.</dd>
+    <dt>Rate limiter</dt><dd>Caps requests per client/window (token bucket, sliding window) to protect the system.</dd>
+    <dt>Idempotency key</dt><dd>A unique token attached to a request so retries are deduplicated — core to correct payments.</dd>
+  </div>
+</section>

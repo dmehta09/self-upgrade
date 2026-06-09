@@ -1,0 +1,157 @@
+<section class="hero reveal">
+  <span class="eyebrow">Prometheus &amp; Grafana &middot; the pull model</span>
+  <h1>The Prometheus model.</h1>
+  <p class="lead">Prometheus is a <b>pull-based</b> metrics system: it scrapes a <code>/metrics</code> endpoint on every target, on a schedule, and stores the results in a local time-series database. Understanding pull vs push, and the label-based data model, is the foundation for everything else.</p>
+</section>
+
+<section class="section reveal" id="pull-scrape">
+  <h2><span class="section-num">01</span> Pull / scrape model</h2>
+  <p class="takeaway">Prometheus <b>reaches out to each target</b> on a configurable interval (default 15 s) and reads its <code>/metrics</code> endpoint — targets don't call home.</p>
+  <p>Each target exposes metrics in the Prometheus text format (or OTLP — see below). Prometheus stores the scraped samples with a timestamp and the target's labels. No agent push loop; the scrape schedule is Prometheus's job.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>A census taker who visits every house on a fixed schedule and asks "how many people live here?" (pull) — versus every household mailing in a form whenever something changes (push). Pull means one authoritative schedule; push means each sender controls its own timing.</p>
+    </div>
+  </div>
+
+  <div class="diagram">
+    <div class="dg-title">Prometheus pull/scrape architecture</div>
+    <div class="flow">
+      <div class="flow-node">
+        <div class="fn-k">targets</div>
+        <div class="fn-t">App / Exporter</div>
+        <div class="fn-d">exposes <code>/metrics</code></div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">scrape</div>
+        <div class="fn-t">Prometheus</div>
+        <div class="fn-d">pulls on schedule → TSDB</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">consumers</div>
+        <div class="fn-t">Grafana / Alertmanager</div>
+        <div class="fn-d">queries &amp; alerts</div>
+      </div>
+    </div>
+    <div class="cap">Prometheus owns the scrape schedule. Grafana and Alertmanager query Prometheus; they don't receive pushes.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="exporters-sd">
+  <h2><span class="section-num">02</span> Exporters &amp; service discovery</h2>
+  <p>Not every service natively exposes Prometheus metrics. <b>Exporters</b> translate third-party systems into the text format. Service discovery lets Prometheus find targets automatically instead of hardcoding IPs.</p>
+
+  <dl class="kv">
+    <dt>node_exporter</dt><dd>Host-level CPU, memory, disk, network — the standard Linux exporter.</dd>
+    <dt>blackbox_exporter</dt><dd>Probes endpoints from the outside (HTTP/TCP/ICMP ping). Measures availability, not internals.</dd>
+    <dt>mysqld_exporter / redis_exporter</dt><dd>Database-specific translators — expose query latencies, connections, hit rates.</dd>
+    <dt>Service discovery</dt><dd>Kubernetes SD, Consul SD, EC2 SD — Prometheus calls the SD API and gets a fresh target list, so you never hand-edit scrape configs when pods scale.</dd>
+  </dl>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+      <p>The <b>Pushgateway is not a general push solution</b>. It's for short-lived batch jobs that finish before the next scrape. Treating it as a universal push endpoint leads to stale metrics and missed scrape gaps.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="tsdb-labels">
+  <h2><span class="section-num">03</span> TSDB &amp; the label-based data model</h2>
+  <p class="takeaway">Every metric is identified by its <b>name + a set of key=value labels</b>. Each unique label combination is a separate time series stored in the local TSDB.</p>
+  <p>Labels make aggregation and filtering powerful — e.g. <code>http_requests_total{method="POST", status="200", service="checkout"}</code>. But each new label value spawns new series.</p>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">example metrics</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="text"># HELP http_requests_total Total HTTP requests
+# TYPE http_requests_total counter
+http_requests_total{method="GET",status="200",service="api"} 1024
+http_requests_total{method="POST",status="500",service="api"} 3</code></pre>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">High-cardinality labels blow up the TSDB <span class="tag">gotcha</span></div>
+      <p>Adding a label like <code>user_id</code> or <code>request_id</code> creates one series per unique value — potentially millions. Prometheus's local TSDB is not designed for this. Keep label values bounded (tens to low hundreds, not millions).</p>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">You add a <code>user_id</code> label to a counter scraped from 1,000 users. How many new time series does that create?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>One series per unique user_id — up to 1,000 new series per existing label combination.</button>
+      <button class="quiz-opt"><span class="mark"></span>Just one extra series — labels are stored as metadata, not as separate series.</button>
+      <button class="quiz-opt"><span class="mark"></span>Zero — user_id is automatically dropped as high-cardinality.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Each unique label-set combination is an independent series in the TSDB. 1,000 users × existing combinations = explosive cardinality. This is why you never put unbounded IDs in labels.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="prom3-features">
+  <h2><span class="section-num">04</span> Prometheus 3.x &amp; scaling out</h2>
+  <p>Prometheus 3.x (3.7 shipped Oct 2025) added three features worth knowing for interviews: native OTLP ingestion, Remote-Write 2.0, and native histograms.</p>
+
+  <dl class="kv">
+    <dt>Native OTLP ingestion</dt><dd>Prometheus 3.x exposes <code>/api/v1/otlp/v1/metrics</code> — OTel SDKs can push directly without a separate Collector or sidecar.</dd>
+    <dt>Remote-Write 2.0</dt><dd>The push-to-remote-storage protocol — carries metadata, exemplars, created timestamps, and native histograms. Used to fan out to Mimir/Thanos.</dd>
+    <dt>Native histograms</dt><dd>Exponential bucket histograms that eliminate the fixed-bucket configuration problem. Still experimental (opt-in: <code>--enable-feature=native-histograms</code>).</dd>
+    <dt>Mimir / Thanos</dt><dd>Horizontal scale-out: Prometheus's single-node TSDB tops out in practice around a few million active series. Mimir and Thanos add multi-tenancy, long-term storage, and global query.</dd>
+  </dl>
+
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Single Prometheus</div>
+      <ul>
+        <li>One node, one TSDB</li>
+        <li>Limited retention (days–weeks)</li>
+        <li>No global query across regions</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Prometheus + Mimir/Thanos</div>
+      <ul>
+        <li>Remote-Write to object storage</li>
+        <li>Months–years of retention</li>
+        <li>Global query over multiple shards</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why does Prometheus use a pull model instead of push?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Pull gives Prometheus control over the scrape schedule and makes it immediately obvious when a target is down (missed scrape). It also means targets are passive — no agent needs credentials to send data. Push can work (via the Pushgateway for batch jobs) but it shifts reliability to each sender.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Pull means Prometheus owns the schedule and a missing scrape is instantly visible as a gap — push makes each target responsible for its own timing, which is harder to monitor."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>When would you use the Pushgateway?</li><li>How does native OTLP ingestion change this?</li></ul></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is high-cardinality and why is it a problem for Prometheus?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>High cardinality means a label has a huge number of distinct values — like <code>user_id</code> or <code>request_id</code>. In Prometheus, each unique label combination is a separate in-memory time series. Too many series exhausts RAM and degrades query performance. The fix is to keep labels bounded — use traces or logs for per-request detail.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Each label combo is its own series, so a million user IDs means a million series. Metrics are for aggregates — use traces for per-request detail."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you scale Prometheus beyond a single node?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Use Remote-Write 2.0 to ship samples to Mimir or Thanos. Both add multi-tenancy, long-term object-storage retention, and a global query layer that federates across multiple Prometheus shards. Prometheus stays as the local scraper; the remote backend handles scale and durability.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Keep Prometheus as the local scraper and remote-write to Mimir or Thanos for long-term storage and global queries."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

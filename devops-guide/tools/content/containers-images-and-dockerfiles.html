@@ -1,0 +1,176 @@
+<section class="hero reveal">
+  <span class="eyebrow">Containers · images</span>
+  <h1>Images &amp; Dockerfiles.</h1>
+  <p class="lead">An image is a sealed, layered snapshot of your app and everything it needs to run — built once, run identically on any host. The Dockerfile is the recipe; the build cache is what makes it fast.</p>
+</section>
+
+<section class="section reveal" id="container-vs-vm">
+  <h2><span class="section-num">01</span> Container vs VM</h2>
+  <p class="takeaway">A VM virtualizes <b>hardware</b> and ships a whole guest OS; a container shares the <b>host kernel</b> and isolates only your process — so it's smaller, starts in milliseconds, and packs more densely.</p>
+  <p>Containers get their isolation from two Linux kernel features: <b>namespaces</b> (each container sees its own PIDs, network, mounts) and <b>cgroups</b> (limit its CPU/memory). No second OS to boot.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A VM is a whole house — its own foundation, plumbing, and walls. A container is an apartment in a shared building: it has its own locked door and rooms, but plumbing and structure (the kernel) are shared. Far cheaper to add one more apartment than to build one more house.</p></div></div>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th></th><th>Container</th><th>Virtual machine</th></tr></thead>
+    <tbody>
+      <tr><td>Isolation</td><td>Shares host kernel; namespaces + cgroups</td><td>Full guest OS on a hypervisor</td></tr>
+      <tr><td>Size</td><td>MBs (just your app + libs)</td><td>GBs (whole OS image)</td></tr>
+      <tr><td>Start time</td><td>Milliseconds</td><td>Seconds to minutes (boot)</td></tr>
+      <tr><td>AWS</td><td>ECS / Fargate, EKS</td><td>EC2 instance</td></tr>
+    </tbody>
+  </table></div>
+
+  <dl class="kv">
+    <dt>Namespaces</dt><dd>Per-container view of PIDs, network, filesystem, users — the "what it can see."</dd>
+    <dt>cgroups</dt><dd>Caps on CPU, memory, I/O — the "how much it can use."</dd>
+    <dt>Trade-off</dt><dd>Containers are lighter but share a kernel; a VM gives stronger isolation when you need a different OS or a hard security boundary.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="layers">
+  <h2><span class="section-num">02</span> An image is a stack of layers</h2>
+  <p class="takeaway">Each Dockerfile instruction (<code>FROM</code>, <code>COPY</code>, <code>RUN</code>) produces one <b>read-only layer</b>. The final image is those layers stacked; a running container adds a thin writable layer on top.</p>
+  <p>Layers are content-addressed and <b>cached</b>. Rebuild and only the layers whose inputs changed (and everything after them) are redone — the rest are reused instantly.</p>
+
+  <div class="diagram"><div class="dg-title">How an image stacks up</div>
+    <div class="flow">
+      <div class="flow-node"><div class="fn-k">FROM</div><div class="fn-t">Base OS</div><div class="fn-d">python:3.12-slim</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">RUN / COPY</div><div class="fn-t">Dependencies</div><div class="fn-d">pip install</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">COPY</div><div class="fn-t">App code</div><div class="fn-d">your source</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">runtime</div><div class="fn-t">Writable layer</div><div class="fn-d">added per container</div></div>
+    </div>
+    <div class="cap">Bottom layers change rarely (cache-friendly); the top app layer changes every commit.</div>
+  </div>
+
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">Heads up <span class="tag">note</span></div><p>Picture layers as transparent sheets stacked on a projector — base at the bottom, your code on top. Swap only the top sheet and the rest stay exactly as they were. That reuse is why a small code change rebuilds in seconds.</p></div></div>
+</section>
+
+<section class="section reveal" id="dockerfile">
+  <h2><span class="section-num">03</span> Dockerfile basics</h2>
+  <p>A Dockerfile is an ordered list of instructions. Four carry most of the meaning:</p>
+
+  <dl class="kv">
+    <dt><code>FROM</code></dt><dd>The base image you build on. Sets the starting layers (OS + runtime).</dd>
+    <dt><code>COPY</code></dt><dd>Copy files from your build context into the image (e.g. source, deps manifest).</dd>
+    <dt><code>RUN</code></dt><dd>Execute a command at <b>build time</b> and bake the result into a layer (e.g. install packages).</dd>
+    <dt><code>CMD</code> vs <code>ENTRYPOINT</code></dt><dd><code>ENTRYPOINT</code> = the fixed executable the container runs; <code>CMD</code> = its default arguments (and is what gets overridden on <code>docker run … args</code>).</dd>
+  </dl>
+
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">CMD alone</div>
+      <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">Dockerfile</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div><pre><code data-lang="dockerfile">CMD ["python", "app.py"]
+# docker run img -- bash
+# replaces the WHOLE command</code></pre></div>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">ENTRYPOINT + CMD</div>
+      <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">Dockerfile</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div><pre><code data-lang="dockerfile">ENTRYPOINT ["python", "app.py"]
+CMD ["--port=8080"]
+# run img --port=9090
+# overrides only the ARGS</code></pre></div>
+    </div>
+  </div>
+  <p>Use <b>exec form</b> (<code>["python","app.py"]</code>, JSON array) not shell form, so signals like <code>SIGTERM</code> reach your process directly for a clean shutdown.</p>
+</section>
+
+<section class="section reveal" id="multistage">
+  <h2><span class="section-num">04</span> Multi-stage builds &amp; small, secure bases</h2>
+  <p class="takeaway">A <b>multi-stage build</b> uses a fat stage to compile/install, then copies <b>only the artifacts</b> into a slim runtime stage — so compilers, build deps, and caches never ship to production.</p>
+
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">Dockerfile</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div><pre><code data-lang="dockerfile"># build stage (fat: has compilers)
+FROM python:3.12 AS build
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --prefix=/install -r requirements.txt
+
+# runtime stage (slim, non-root)
+FROM python:3.12-slim
+COPY --from=build /install /usr/local
+COPY . /app
+WORKDIR /app
+USER 1001                       # never root
+ENTRYPOINT ["python", "app.py"]</code></pre></div>
+
+  <p>Shrink and harden the image with a smaller base and a non-root user:</p>
+  <dl class="kv">
+    <dt><code>-slim</code></dt><dd>Same distro, stripped of docs/extras. Easy first win, broad compatibility.</dd>
+    <dt><b>Alpine</b></dt><dd>Tiny (musl libc). Watch for glibc-compatibility surprises with some wheels/binaries.</dd>
+    <dt><b>distroless</b></dt><dd>Just your app + runtime, <em>no shell or package manager</em> — smallest attack surface.</dd>
+    <dt><b>non-root <code>USER</code></b></dt><dd>Drop from root so a container escape can't act as root on the host.</dd>
+  </dl>
+
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">Heads up <span class="tag">note</span></div><p>Images are an <b>OCI</b> (Open Container Initiative) standard — a build from Docker/BuildKit runs on containerd, Podman, or any OCI runtime, on any registry. "Docker image" really means "OCI image."</p></div></div>
+</section>
+
+<section class="section reveal" id="cache-tags-secrets">
+  <h2><span class="section-num">05</span> Cache order, tags vs digests, secrets</h2>
+  <p class="takeaway">Order instructions so <b>dependencies cache before app code</b>: copy the deps manifest and install <em>first</em>, then copy your fast-changing source last.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Cache buster</div>
+      <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">Dockerfile</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div><pre><code data-lang="dockerfile">COPY . .
+RUN pip install -r requirements.txt
+# any code edit busts the
+# install cache → slow rebuilds</code></pre></div>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Deps cached first</div>
+      <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">Dockerfile</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div><pre><code data-lang="dockerfile">COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+# code edits reuse the
+# cached install layer</code></pre></div>
+    </div>
+  </div>
+
+  <p>Reference images two ways. A <b>tag</b> is a movable label; a <b>digest</b> is an immutable content hash.</p>
+  <dl class="kv">
+    <dt>Tag</dt><dd><code>myapp:1.4</code> — readable, but can be re-pushed to point at different bytes (<code>:latest</code> is the worst offender).</dd>
+    <dt>Digest</dt><dd><code>myapp@sha256:9f2…</code> — the exact bytes, forever. Pin digests in production for reproducible, tamper-evident deploys.</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Never bake a secret into a layer — <code>ENV API_KEY=…</code> or <code>COPY .env</code> persists in image history forever, even if a later step deletes it. Anyone who pulls the image can recover it. Inject secrets at <b>run time</b> (env/Secrets Manager) or use BuildKit build secrets. And don't run as root: it's the most common image-security finding.</p></div></div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">You edit one line of source and rebuild — but <code>pip install</code> runs from scratch every time. Why?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>COPY . .</code> runs before the install, so any code change invalidates that layer and every layer after it.</button>
+      <button class="quiz-opt"><span class="mark"></span>Docker never caches <code>RUN</code> instructions.</button>
+      <button class="quiz-opt"><span class="mark"></span>The base image changed between builds.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Cache invalidation cascades downward. Copy <code>requirements.txt</code> and install <em>before</em> copying the full source, so the dependency layer stays cached when only app code changes.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">06</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Container vs VM — what's the real difference?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>A VM virtualizes hardware and runs a full guest OS on a hypervisor — heavy, slow to boot, strongly isolated. A container shares the <b>host kernel</b> and isolates the process with namespaces and cgroups — MBs not GBs, starts in milliseconds, denser. You trade some isolation for speed and density; on AWS that's EC2 (VM) vs ECS/Fargate or EKS (containers).</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"A VM ships a whole OS; a container shares the host kernel and just fences off your process. So containers are smaller, start instantly, and pack denser — at the cost of weaker isolation."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why use a multi-stage build, and how else do you shrink/secure an image?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Multi-stage keeps build-time junk — compilers, dev deps, caches — out of the shipped image: a fat stage builds, then I <code>COPY --from</code> only the artifacts into a slim runtime stage. On top of that: a small base (<code>-slim</code>, Alpine, or distroless), a non-root <code>USER</code>, ordering layers so deps cache before code, and no secrets baked into any layer.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Build fat, ship slim — copy just the artifacts into a distroless, non-root runtime stage. Smaller image, smaller attack surface, faster pulls."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>Distroless vs Alpine? (Distroless has no shell/pkg manager → safer but harder to debug; Alpine is tiny but musl can break some binaries.)</li><li>Why run as non-root? (A container escape inherits your UID — root in the container risks root on the host.)</li></ul></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Tag vs digest — which do you deploy in production?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Deploy by <b>digest</b> (<code>@sha256:…</code>). A tag like <code>:1.4</code> or <code>:latest</code> is a movable pointer — someone can re-push different bytes under the same tag, so the same tag can deploy two different images. A digest is the immutable content hash: same hash, same bytes, every time — reproducible and tamper-evident. Tags for humans, digests for machines.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Tags move, digests don't. I tag for readability but pin the deploy to the sha256 digest so prod runs the exact bytes I tested — never a surprise re-push."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

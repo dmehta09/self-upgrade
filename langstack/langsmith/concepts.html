@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LangSmith — Core concepts | The Lang Stack</title>
+  <meta name="description" content="Deep dive into LangSmith: traces & the run tree, enabling tracing, the Playground, Prompt Hub, datasets, evaluation, experiments, monitoring, human feedback, and hosting. With diagrams and Python." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.4' fill='%2334d399'/><circle cx='19' cy='6' r='2.4' fill='%23818cf8'/><circle cx='12' cy='18' r='2.4' fill='%23fbbf24'/></svg>" />
+  <style>
+    .runtree { display: grid; gap: 10px; }
+    .rt-node { border: 1.5px solid var(--border-strong); border-radius: 12px; padding: 12px 14px; background: var(--surface); }
+    .rt-node.trace { border-color: var(--accent); background: rgba(var(--accent-rgb), .08); }
+    .rt-node .rt-k { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+    .rt-node .rt-t { font-family: var(--font-mono); font-weight: 600; font-size: 13.5px; color: var(--text); }
+    .rt-node .rt-d { font-size: 12.5px; color: var(--text-faint); margin-top: 4px; line-height: 1.4; }
+    .rt-children { margin-left: 26px; display: grid; gap: 10px; border-left: 2px dashed var(--border-strong); padding-left: 18px; }
+  </style>
+</head>
+<body data-tool="langsmith" data-page="ls-concepts">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Lang Stack home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06140f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M6.8 7.4 10.4 16M17.2 7.4 13.6 16M7 6h10"/></svg></span>
+        <span class="brand-text"><b>The Lang Stack</b><span>Visual field guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../ecosystem/index.html">The big picture</a>
+        <a class="nav-link" href="../ecosystem/glossary.html">Glossary</a>
+      </nav>
+      <nav class="nav-group is-lc" aria-label="LangChain">
+        <h4><span class="dot"></span>LangChain</h4>
+        <a class="nav-link" href="../langchain/index.html">Overview</a>
+        <a class="nav-link" href="../langchain/concepts.html">Core concepts</a>
+      </nav>
+      <nav class="nav-group is-lg" aria-label="LangGraph">
+        <h4><span class="dot"></span>LangGraph</h4>
+        <a class="nav-link" href="../langgraph/index.html">Overview</a>
+        <a class="nav-link" href="../langgraph/concepts.html">Core concepts</a>
+      </nav>
+      <nav class="nav-group is-ls" aria-label="LangSmith">
+        <h4><span class="dot"></span>LangSmith</h4>
+        <a class="nav-link" href="../langsmith/index.html">Overview</a>
+        <a class="nav-link" href="../langsmith/concepts.html">Core concepts</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#tracing">Run tree</a>
+          <a class="nav-link" href="#enable">Enabling tracing</a>
+          <a class="nav-link" href="#playground">Playground</a>
+          <a class="nav-link" href="#prompthub">Prompt Hub</a>
+          <a class="nav-link" href="#datasets">Datasets</a>
+          <a class="nav-link" href="#evaluation">Evaluation</a>
+          <a class="nav-link" href="#experiments">Experiments</a>
+          <a class="nav-link" href="#monitoring">Monitoring</a>
+          <a class="nav-link" href="#feedback">Human feedback</a>
+          <a class="nav-link" href="#hosting">Hosting &amp; pricing</a>
+          <a class="nav-link" href="#gotchas">Tips &amp; gotchas</a>
+        </div>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../langsmith/index.html" style="color:var(--accent)">LangSmith</a><span class="sep">/</span><span class="current">Core concepts</span></nav>
+        <div class="topbar-spacer"></div>
+        <span class="pill"><span class="dot"></span>SDK · 0.7</span>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">LangSmith · core concepts</span>
+            <h1>From a single trace to a tested, monitored app.</h1>
+            <p class="lead">Eleven ideas take you from "what's a trace?" to grading your app on a dataset and watching it in production. Each comes with a picture, runnable Python, and the gotcha that trips up beginners. Remember: LangSmith works with LangChain, LangGraph, or any plain code.</p>
+          </section>
+
+          <!-- 1. TRACING -->
+          <section class="section reveal" id="tracing">
+            <h2><span class="section-num">01</span> &nbsp;Traces, runs &amp; the run tree <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p>Three words form the backbone of LangSmith:</p>
+            <div class="kv">
+              <dt>trace</dt><dd>One complete execution of your app — everything that happened to handle a single user request.</dd>
+              <dt>run</dt><dd>One step inside a trace: an LLM call, a tool call, or a function. Runs nest into a tree.</dd>
+              <dt>project</dt><dd>A named bucket that groups related traces together (e.g. all traces from <code>my-first-app</code>).</dd>
+            </div>
+            <p>Every run records the same useful details: its <strong>inputs</strong> and <strong>outputs</strong>, how long it took (<strong>latency</strong>), how many <strong>tokens</strong> it used (which is how you see <strong>cost</strong>), any <strong>error</strong> it threw, and free-form <strong>metadata</strong> you attach (user ID, version tag, and so on).</p>
+
+            <div class="diagram" style="background-image:none;">
+              <div class="dg-title">A run tree — and what each run captures</div>
+              <div class="runtree">
+                <div class="rt-node trace">
+                  <div class="rt-k">trace · the whole request</div>
+                  <div class="rt-t">rag_pipeline("What's our refund policy?")</div>
+                  <div class="rt-d">captures: total latency 1.8s · 2,140 tokens · status OK · metadata {user: "u_42"}</div>
+                  <div class="rt-children">
+                    <div class="rt-node">
+                      <div class="rt-k">run · retrieval</div>
+                      <div class="rt-t">retrieve_docs(query)</div>
+                      <div class="rt-d">inputs: the query · outputs: 3 chunks · 90ms · no tokens (not an LLM)</div>
+                    </div>
+                    <div class="rt-node">
+                      <div class="rt-k">run · llm</div>
+                      <div class="rt-t">call_llm(prompt + docs)</div>
+                      <div class="rt-d">inputs: full message list · outputs: AI reply · 1.6s · 2,140 tokens · ~$0.01</div>
+                      <div class="rt-children">
+                        <div class="rt-node">
+                          <div class="rt-k">run · child</div>
+                          <div class="rt-t">format_prompt(...)</div>
+                          <div class="rt-d">inputs: docs + question · outputs: messages · 3ms</div>
+                        </div>
+                        <div class="rt-node">
+                          <div class="rt-k">run · child</div>
+                          <div class="rt-t">parse_output(...)</div>
+                          <div class="rt-d">inputs: AI message · outputs: clean string · 1ms</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="cap">Click any run in the LangSmith UI to expand exactly these fields. The trace's cost is just the sum of its runs.</div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">What's the difference between a trace and a run?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>They're two words for the same thing</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A trace is the whole execution; a run is a single step within it</button>
+                <button class="quiz-opt"><span class="mark"></span>A run groups many traces under one project</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> A <b>trace</b> is the full record of one user request; the individual steps inside it (LLM calls, tool calls, functions) are <b>runs</b>. Runs nest to form the run tree, and a <em>project</em> is the bucket that groups many traces.</div>
+            </div>
+          </section>
+
+          <!-- 2. ENABLE -->
+          <section class="section reveal" id="enable">
+            <h2><span class="section-num">02</span> &nbsp;Enabling tracing</h2>
+            <p>There are three ways to get traces into LangSmith — pick whichever matches your code.</p>
+            <h3>1) Environment variables (automatic for LangChain &amp; LangGraph)</h3>
+            <p>Set these and you're done — every LangChain/LangGraph call is traced with no code change.</p>
+            <div class="codeblock shell">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="bash">$ pip install langsmith
+$ export LANGSMITH_TRACING=true
+$ export LANGSMITH_API_KEY="lsv2_..."
+$ export LANGSMITH_PROJECT="my-first-app"</code></pre></div>
+            </div>
+            <h3>2) The <code>@traceable</code> decorator (any function)</h3>
+            <p>For plain Python, decorate the functions you want to record. Use <code>run_type</code> to tell LangSmith what kind of step it is, so the UI renders it nicely.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">traceable.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langsmith import traceable
+
+@traceable
+def retrieve(query: str):
+    return ["doc A", "doc B"]
+
+@traceable(run_type="llm")          # mark this run as an LLM call
+def call_model(prompt: str):
+    return "...the model's reply..."
+
+@traceable
+def answer(query: str):
+    docs = retrieve(query)          # nested as a child run
+    return call_model(f"{docs}\n{query}")
+
+answer("What is LangSmith?")        # the whole call tree becomes one trace</code></pre></div>
+            </div>
+            <h3>3) A context manager (fine control)</h3>
+            <p>When you want to trace just a <em>block</em> of code — not a whole function — wrap it in <code>trace()</code>.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">context.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langsmith import trace
+
+with trace(name="retrieve-step", run_type="retriever") as run:
+    docs = my_search("refund policy")
+    run.end(outputs={"docs": docs})   # record what this block produced</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Mix and match</div><p>These three combine freely. A LangChain app traced via env vars can also have your own helper functions decorated with <code>@traceable</code> — they all land in the same run tree.</p></div></div>
+          </section>
+
+          <!-- 3. PLAYGROUND -->
+          <section class="section reveal" id="playground">
+            <h2><span class="section-num">03</span> &nbsp;The Playground</h2>
+            <p>The <strong>Playground</strong> is an in-browser scratchpad. From any traced LLM call you can hit "Open in Playground," and LangSmith loads that exact call — same prompt, same inputs — into an editor.</p>
+            <p>There you can change the prompt wording, switch the model, nudge the temperature, and <strong>re-run instantly</strong> to compare the new answer with the original. Because it's all in the browser, a product manager or writer can iterate on a prompt without touching code, a terminal, or a deploy.</p>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Debug → tweak → re-run, in one place</div><p>The Playground closes the loop: you spot a bad answer in a trace, open it, fix the prompt, and confirm the fix — all without leaving the browser.</p></div></div>
+          </section>
+
+          <!-- 4. PROMPT HUB -->
+          <section class="section reveal" id="prompthub">
+            <h2><span class="section-num">04</span> &nbsp;Prompt Hub &amp; versioning</h2>
+            <p>The <strong>Prompt Hub</strong> is like GitHub, but for prompts. You <code>push</code> a prompt to save a version, <code>pull</code> to fetch the latest (or a specific version), and roll back if a new version turns out worse. Each push is recorded, so your prompts have a history just like code.</p>
+            <p>The payoff: a prompt lives <em>outside</em> your codebase. The product team can edit and ship a better prompt without waiting on an engineering deploy — your app just pulls the latest version at runtime.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">prompt_hub.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langsmith import Client
+client = Client()
+
+client.push_prompt("support-reply", object=my_prompt)   # save a version
+prompt = client.pull_prompt("support-reply")             # fetch latest
+prompt = client.pull_prompt("support-reply:abc123")      # fetch a specific version</code></pre></div>
+            </div>
+          </section>
+
+          <!-- 5. DATASETS -->
+          <section class="section reveal" id="datasets">
+            <h2><span class="section-num">05</span> &nbsp;Datasets &amp; examples</h2>
+            <p>A <strong>dataset</strong> is a test set for your LLM app: a collection of <strong>examples</strong>, where each example pairs an <em>input</em> with the <em>expected output</em>. It's your regression suite — the fixed set of questions you re-grade every time you change a prompt or model.</p>
+            <p>You can build a dataset by hand, import a CSV, or (very common) save real traces you liked straight from production into a dataset.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">datasets.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langsmith import Client
+client = Client()
+
+dataset = client.create_dataset(
+    dataset_name="qa-examples",
+    description="Question -> expected answer pairs for our support bot.",
+)
+
+client.create_examples(
+    dataset_id=dataset.id,
+    examples=[
+        {"inputs": {"question": "What's the refund window?"},
+         "outputs": {"answer": "30 days with a receipt."}},
+        {"inputs": {"question": "Is shipping free?"},
+         "outputs": {"answer": "Yes, on orders over $50."}},
+    ],
+)</code></pre></div>
+            </div>
+          </section>
+
+          <!-- 6. EVALUATION -->
+          <section class="section reveal" id="evaluation">
+            <h2><span class="section-num">06</span> &nbsp;Evaluation: grading your app <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p>This is the half of LangSmith that turns "I think it got better" into a number. You run your app over a <strong>dataset</strong> and score each output with one or more <strong>evaluators</strong>. There are three flavors:</p>
+            <div class="grid grid-3">
+              <div class="card feature"><span class="f-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span><h4>Heuristic</h4><p>Plain code or simple rules — exact match, regex, "is it valid JSON?", length checks. Fast, free, deterministic.</p></div>
+              <div class="card feature"><span class="f-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="12" rx="2"/><path d="M12 16v4M8 20h8M9 9h.01M15 9h.01"/></svg></span><h4>LLM-as-judge</h4><p>A strong model reads the answer (and a reference) and grades it — perfect for open-ended text no rule can score.</p></div>
+              <div class="card feature"><span class="f-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7"/></svg></span><h4>Pairwise</h4><p>Compare two versions of your app head-to-head and pick the better answer — great for "did v2 beat v1?"</p></div>
+            </div>
+            <p>The <code>evaluate()</code> function ties it together: give it your app, the dataset name, and a list of evaluators.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">evaluate.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langsmith import evaluate
+
+def my_app(inputs: dict) -> dict:
+    return {"answer": run_my_chain(inputs["question"])}
+
+# a heuristic evaluator
+def is_correct(outputs: dict, reference_outputs: dict) -> bool:
+    return outputs["answer"].strip() == reference_outputs["answer"].strip()
+
+results = evaluate(
+    my_app,
+    data="qa-examples",            # the dataset name
+    evaluators=[is_correct],
+    experiment_prefix="baseline-gpt-4o",
+)</code></pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">What "LLM-as-judge" means</div><p>When answers are free-form sentences with no single right string, you hand the answer to a strong model and ask it to grade — e.g. "Is this answer correct and helpful given the reference? Score 0–1." It judges what a simple rule can't.</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">Your answers are free-form sentences with no single "right" string. Which evaluator fits best?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>A heuristic evaluator that checks for an exact string match</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>An LLM-as-judge evaluator</button>
+                <button class="quiz-opt"><span class="mark"></span>No evaluator — free-form answers can't be graded</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Exact-match rules break the moment two correct answers are worded differently. An <b>LLM-as-judge</b> reads the meaning and grades against a reference, so it handles open-ended text that no simple rule could score.</div>
+            </div>
+          </section>
+
+          <!-- 7. EXPERIMENTS -->
+          <section class="section reveal" id="experiments">
+            <h2><span class="section-num">07</span> &nbsp;Experiments &amp; comparison</h2>
+            <p>Each time you call <code>evaluate()</code>, LangSmith records the whole run as an <strong>experiment</strong> — a snapshot of how one version of your app scored on a dataset. The <code>experiment_prefix</code> you passed becomes its name.</p>
+            <p>The real value is <strong>comparison</strong>. Run <code>evaluate()</code> again with a different model or a new prompt, then open both experiments side-by-side in the UI. LangSmith lines up every example and shows you, per row and in aggregate, how <strong>accuracy</strong>, <strong>latency</strong>, and <strong>cost</strong> changed — so "v2 is better" becomes a table you can point at.</p>
+            <div class="diagram">
+              <div class="dg-title">Comparing two experiments on the same dataset</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">dataset</div><div class="fn-t">qa-examples</div><div class="fn-d">50 fixed examples</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">experiment A</div><div class="fn-t">baseline-gpt-4o</div><div class="fn-d">82% · 1.6s · $0.40</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">experiment B</div><div class="fn-t">new-prompt-v2</div><div class="fn-d">91% · 1.5s · $0.38</div></div>
+              </div>
+              <div class="cap">Same dataset, two runs → a clear, numeric winner.</div>
+            </div>
+          </section>
+
+          <!-- 8. MONITORING -->
+          <section class="section reveal" id="monitoring">
+            <h2><span class="section-num">08</span> &nbsp;Monitoring in production</h2>
+            <p>Once your app is live, the same traces power <strong>dashboards</strong>. Out of the box you get charts for request <strong>volume</strong>, <strong>latency</strong> (median p50 and tail p99), <strong>token cost</strong>, <strong>error rate</strong>, and any <strong>feedback scores</strong> you collect.</p>
+            <p>Two production-only features build on that:</p>
+            <ul>
+              <li><strong>Online evaluation</strong> — automatically run an evaluator (often an LLM-as-judge) on a <em>sample</em> of live traffic, so you keep scoring quality on real users without a fixed dataset.</li>
+              <li><strong>Alerts</strong> — get notified when error rate spikes, latency climbs, or cost suddenly jumps, before users complain.</li>
+            </ul>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">p50 vs p99</div><p><strong>p50</strong> is the median — half of requests are faster. <strong>p99</strong> is the slow tail — only 1% are slower. Watching p99 catches the painful outliers that an average would hide.</p></div></div>
+          </section>
+
+          <!-- 9. FEEDBACK -->
+          <section class="section reveal" id="feedback">
+            <h2><span class="section-num">09</span> &nbsp;Annotation queues &amp; human feedback</h2>
+            <p>Some traces need a human eye. An <strong>annotation queue</strong> is a review inbox: you route uncertain or important traces to people, who label them good or bad and leave notes — right inside LangSmith, no spreadsheet needed.</p>
+            <p>You can also capture <strong>user feedback</strong> directly — the 👍 / 👎 a user clicks in your app attaches to that trace as a feedback score. Either way, those human labels are gold:</p>
+            <ul>
+              <li>Use them to <strong>improve your evaluators</strong> — check whether your LLM-as-judge agrees with humans.</li>
+              <li>Collect the good examples into a <strong>dataset</strong> for regression testing.</li>
+              <li>Gather labeled data to <strong>fine-tune</strong> a model later.</li>
+            </ul>
+          </section>
+
+          <!-- 10. HOSTING -->
+          <section class="section reveal" id="hosting">
+            <h2><span class="section-num">10</span> &nbsp;Cloud vs self-hosted &amp; pricing</h2>
+            <p>LangSmith comes in two deployment shapes. Most people start on the cloud; large organizations with strict data rules self-host.</p>
+            <div class="kv">
+              <dt>Cloud</dt><dd>Sign up and start in minutes. Usage-based pricing, with a free <strong>Developer tier</strong> (~5,000 traces/month, ~14-day trace retention, no credit card). The default for almost everyone.</dd>
+              <dt>Self-hosted</dt><dd>Runs inside your own infrastructure on Enterprise plans. For teams with strict data-residency or compliance needs — your trace data never leaves your network.</dd>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Numbers move</div><p>Exact free-tier limits, retention windows, and per-trace pricing change over time — treat the figures here as a ballpark and check the current pricing page before you plan around them.</p></div></div>
+          </section>
+
+          <!-- 11. GOTCHAS -->
+          <section class="section reveal" id="gotchas">
+            <h2><span class="section-num">11</span> &nbsp;Tips &amp; gotchas</h2>
+            <p>A few things that save beginners a lot of confusion:</p>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Tracing barely costs you anything</div><p>Traces are sent <strong>asynchronously and batched</strong> in the background, so adding LangSmith adds negligible latency to your app. Leave it on.</p></div></div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Never log secrets or PII into traces</div><p>Inputs and outputs are stored verbatim. Scrub API keys, passwords, and personal data <em>before</em> they hit a traced function — once it's in a trace, it's stored.</p></div></div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Mind the free-tier trace cap</div><p>The free Developer tier caps you at roughly 5,000 traces per month. A chatty app can burn through that quickly — sample or upgrade if you're tracing every request in production.</p></div></div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">"I see nothing!" — check two things</div><p>If no traces appear, confirm <code>LANGSMITH_TRACING</code> is set to <code>true</code> <em>and</em> a valid <code>LANGSMITH_API_KEY</code> is present. Miss either one and your app runs fine but records nothing.</p></div></div>
+          </section>
+
+          <nav class="page-nav reveal">
+            <a href="../langsmith/index.html"><span class="pn-k">‹ Back</span><span class="pn-t">LangSmith · Overview</span></a>
+            <a class="next" href="../ecosystem/glossary.html"><span class="pn-k">Next ›</span><span class="pn-t">Glossary</span></a>
+          </nav>
+        </div>
+
+        <!-- On this page -->
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#tracing">Run tree</a>
+          <a href="#enable">Enabling tracing</a>
+          <a href="#playground">Playground</a>
+          <a href="#prompthub">Prompt Hub</a>
+          <a href="#datasets">Datasets</a>
+          <a href="#evaluation">Evaluation</a>
+          <a href="#experiments">Experiments</a>
+          <a href="#monitoring">Monitoring</a>
+          <a href="#feedback">Human feedback</a>
+          <a href="#hosting">Hosting &amp; pricing</a>
+          <a href="#gotchas">Tips &amp; gotchas</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">LangSmith · Core concepts</span>
+        <span class="fmono">The Lang Stack · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

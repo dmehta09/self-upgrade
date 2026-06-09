@@ -1,0 +1,197 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Advanced · Uber / Lyft</span>
+  <h1>Design ride-hailing.</h1>
+  <p class="lead">Match a rider to a nearby driver in seconds while millions of drivers stream GPS continuously. The signature challenge is <strong>geospatial</strong> — "find the closest available drivers to this point" — which ordinary databases are bad at. The deeper asymmetry: the <em>write</em> side (location updates, ~1M+/s) is the scaling problem; the <em>read</em> side (matching) is tiny by comparison.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Drivers publish location every ~4 s. A rider requests a trip; the system finds nearby drivers, offers the ride, tracks it. Plus ETA + surge pricing.</p></div>
+    <div class="card feature"><span class="f-ic fx">📐</span><h4>Non-functional</h4><p>Enormous write volume; sub-second matching; real-time location to the rider; mostly <strong>regional</strong> — the world partitions naturally by geography (a Tokyo trip never touches São Paulo).</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="estimate">
+  <h2><span class="section-num">02</span> &nbsp;Capacity estimation</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Location writes</td><td>5M online drivers ÷ 4 s</td><td><strong>~1.25M updates/s</strong> — the write storm</td></tr>
+        <tr><td>Live location state</td><td>5M × ~64 B</td><td>≈ <strong>~320 MB</strong> RAM — tiny; the cost is write throughput, not size</td></tr>
+        <tr><td>Match requests</td><td>~25M rides/day, peak 5–10×</td><td>≈ <strong>~1.5–3k/s</strong> — 5+ orders below the write rate</td></tr>
+        <tr><td>Trip storage</td><td>~42M trips/day × ~1–2 KB</td><td>≈ <strong>~50–80 GB/day</strong> durable (sharded by region)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>This asymmetry is the whole point: at ~1.25M writes/s with single-digit-ms read latency, <strong>no durable store qualifies</strong> for live location — it's RAM-only and unreplicated, because the data is worthless within one 4 s tick (the next fix overwrites it, and a crashed node's drivers re-register for free).</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">03</span> &nbsp;API &amp; data model</h2>
+  <div class="endpoint"><span class="verb post">PUT</span><span class="path">updateLocation(driverId, lat, lng, ts)</span><span class="ep-note">high-frequency, best-effort (204), idempotent-by-overwrite</span></div>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">requestRide(riderId, pickup, productType)</span><span class="ep-note">→ { requestId, etaEstimate, fareEstimate }</span></div>
+  <div class="endpoint"><span class="verb post">POST</span><span class="path">acceptOffer(driverId, requestId)</span><span class="ep-note">→ { tripId } | 409 ALREADY_TAKEN (must be linearizable)</span></div>
+  <div class="kv">
+    <dt>Driver live location</dt><dd>in-memory geo-index (cell → {driverIds}), ephemeral, TTL a few seconds — <strong>not persisted</strong>.</dd>
+    <dt>Trip record</dt><dd>durable, sharded by city/region; a state machine (REQUESTED → MATCHED → EN_ROUTE → IN_PROGRESS → COMPLETED).</dd>
+    <dt>Surge per cell</dt><dd>in-memory supply/demand per geo-cell, recomputed every few seconds.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="geo">
+  <h2><span class="section-num">04</span> &nbsp;The hard part: "who's nearby?"</h2>
+  <p>Computing distance to <em>every</em> driver is O(N) per request — hopeless at thousands of requests/s. A spatial index turns it into <strong>O(1) cell lookup + O(k) neighbor scan</strong>: examine only the rider's cell and a ring of adjacent cells.</p>
+  <figure class="viz" data-viz aria-label="Geospatial grid search">
+    <figcaption class="viz-title">Search the rider's cell + neighbours</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "grid",
+      "meta": { "rows": 5, "cols": 5, "grid": [
+        ["D","·","·","·","·"],
+        ["·","·","D","·","·"],
+        ["·","·","R","D","·"],
+        ["·","·","·","·","·"],
+        ["·","·","·","·","D"]
+      ] },
+      "frames": [
+        { "caption": "The map is bucketed into cells. Drivers (D) live in cells; R is the rider." },
+        { "active": [[2,2]], "caption": "A rider requests a trip from this cell." },
+        { "active": [[1,1],[1,2],[1,3],[2,1],[2,2],[2,3],[3,1],[3,2],[3,3]], "caption": "Search only the rider's cell + its neighbours (k-ring) — a small, bounded area." },
+        { "active": [[2,2]], "done": [[1,2],[2,3]], "reject": [[0,0],[4,4]], "caption": "Two drivers fall inside the search ring; far-away drivers are never considered. Rank the candidates by ETA, not raw distance." }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Spatial index choice",
+      "axisLabel": "How do we bucket the map into searchable cells?",
+      "stops": [
+        { "label": "Geohash", "dims": { "Uniform neighbors": 50, "Write speed": 95, "Adapts to density": 30, "Simplicity": 90 }, "note": "Interleave lat/lng bits into a prefix string; O(1) insert, shared prefix = proximity. But cells are rectangular (distort with latitude) and Z-order has discontinuities — so query the cell + its 8 neighbors. Redis GEO works this way." },
+        { "label": "QuadTree", "dims": { "Uniform neighbors": 60, "Write speed": 55, "Adapts to density": 95, "Simplicity": 50 }, "note": "Recursive 4-way subdivision; cells adapt to density (fine downtown, coarse countryside). But it's a mutable tree — rebalancing, pointer-chasing, harder to shard and to do uniform neighbor math." },
+        { "label": "H3 (hexagons)", "dims": { "Uniform neighbors": 100, "Write speed": 90, "Adapts to density": 45, "Simplicity": 65 }, "note": "Uber's hex grid: a hexagon has ONE center-to-neighbor distance (squares have two — edge vs corner; triangles three). Uniform adjacency → clean k-ring search and smooth surge gradients. 16 resolutions; the marketplace/analytics standard." }
+      ]
+    }
+    </script>
+  </div>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">nearby.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+    <div class="code-pane active"><pre><code data-lang="python">import h3
+
+def update_location(driver_id, lat, lng, res=9):     # write path: O(1) move
+    cell = h3.latlng_to_cell(lat, lng, res)
+    old = driver_cell.get(driver_id)
+    if old != cell:
+        if old: cell_index[old].discard(driver_id)
+        cell_index[cell].add(driver_id)              # H3 cell -> {driverIds}
+        driver_cell[driver_id] = cell
+
+def nearby_drivers(lat, lng, res=9, want=10, max_k=4):   # read path: O(k) ring
+    origin = h3.latlng_to_cell(lat, lng, res)
+    found = []
+    for k in range(max_k + 1):
+        for c in h3.grid_disk(origin, k):            # 1 + 3k(k+1) cells
+            found.extend(cell_index.get(c, ()))
+        if len(set(found)) &gt;= want:
+            break                                    # widen the ring until enough
+    return list(set(found))                          # then rank by ETA, not distance</code></pre></div>
+  </div>
+</section>
+
+<section class="section reveal" id="architecture">
+  <h2><span class="section-num">05</span> &nbsp;Architecture, matching &amp; dispatch</h2>
+  <p>Two flows: a torrent of <strong>location updates</strong> into the in-memory geo-index (sharded across nodes by cell), and <strong>matching</strong> — read the index, rank candidates by ETA, offer the ride. Avoiding <strong>double-dispatch</strong> (one driver offered to two riders) needs a <em>linearizable</em> accept.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Request a ride → match a nearby driver</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Matching a ride",
+      "nodes": [
+        { "id": "rider", "label": "Rider", "type": "app", "col": 0, "row": 1 },
+        { "id": "match", "label": "Matching svc", "type": "dispatch", "col": 1, "row": 1 },
+        { "id": "geo", "label": "Geo index", "type": "in-memory", "col": 2, "row": 0 },
+        { "id": "driver", "label": "Driver app", "type": "offer", "col": 2, "row": 2 },
+        { "id": "trip", "label": "Trip DB", "type": "durable", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "rider", "to": "match", "label": "request" },
+        { "from": "match", "to": "geo", "label": "k-ring?" },
+        { "from": "match", "to": "driver", "label": "offer" },
+        { "from": "match", "to": "trip" }
+      ],
+      "steps": [
+        { "edge": ["rider","match"], "caption": "Rider requests a trip with their location." },
+        { "edge": ["match","geo"], "caption": "Query the geo-index (cell + k-ring) for available, in-product drivers.", "status": "hit" },
+        { "edge": ["match","driver"], "caption": "Rank candidates by road-network ETA; offer to the best and soft-lock them. If declined/timeout, try the next." },
+        { "edge": ["match","trip"], "caption": "acceptOffer is linearizable per driver (single-owner node) — exactly one accept wins; the loser gets 409. Create the trip + stream location to the rider." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="eta">
+  <h2><span class="section-num">06</span> &nbsp;ETA, routing &amp; surge</h2>
+  <div class="kv">
+    <dt>ETA &amp; ranking</dt><dd>Rank by <strong>road-network ETA, not Euclidean distance</strong> ("0.5 km across a river" can be a 10-min drive). ETA is the inner loop of every dispatch (tight p99 budget) — <strong>contraction hierarchies</strong> precompute shortcuts so a route is a few ms, and an ML model (Uber's DeepETA) predicts the <em>residual</em> between graph ETA and reality.</dd>
+    <dt>Surge pricing</dt><dd>Per H3 cell, compare supply (available drivers) vs demand; over threshold → multiplier &gt; 1, which rations demand and pulls in supply — a closed-loop market. <strong>Smoothing</strong> (geospatial + temporal) prevents price flapping at cell borders; hex uniform adjacency helps.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="failure">
+  <h2><span class="section-num">07</span> &nbsp;Failure modes &amp; geo-sharding</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">📍</span><h4>Lost location update</h4><p>Stale position for ≤4 s — self-healing: the next tick overwrites it; treat fixes older than N intervals as offline.</p></div>
+    <div class="card feature"><span class="f-ic fx">🤝</span><h4>Matching race</h4><p>Two riders, one driver → double-dispatch. Single-owner linearizable accept (consistent-hash the driver key to one node) + soft-lock; the loser gets <span class="mono">409 ALREADY_TAKEN</span>.</p></div>
+    <div class="card feature"><span class="f-ic fx">💥</span><h4>Index node crash</h4><p>That shard's driver set is lost — but no durability is needed: drivers re-register within ~4 s. Gossip (SWIM) detects the down node and reshards.</p></div>
+    <div class="card feature"><span class="f-ic fx">🌍</span><h4>Geo-sharding</h4><p>Shard by city/region — rides are local, so cross-shard traffic is near-zero, a region outage degrades only its cities, and capacity scales by adding city shards.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">08</span> &nbsp;Observability &amp; cost</h2>
+  <div class="kv">
+    <dt>Metrics &amp; SLOs</dt><dd>Match latency p99 (SLO &lt; ~1 s), match success/fulfillment rate per city, <strong>location-update freshness</strong> (alert if % of drivers with a stale fix rises), ETA error (MAE vs actual → retrain trigger), surge accuracy, cluster membership churn.</dd>
+    <dt>Cost</dt><dd>Dominated by the durable trip store + the matching/ETA compute and the in-memory geo-index fleet. Location state itself is cheap; the spend is on routing/ETA inference and keeping the index hot and sharded.</dd>
+    <dt>2026 reality</dt><dd>Uber open-sourced <strong>H3</strong> (now a geospatial standard well beyond Uber); the dispatch index historically leaned on Google <strong>S2</strong>; application sharding via gossip (Ringpop/SWIM). Routing = graph (contraction hierarchies) + ML-on-top (DeepETA).</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">09</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Why use a geohash/QuadTree/H3 index instead of computing the distance to every driver?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>It stores driver names more compactly</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>It limits the search to a few nearby cells instead of scanning every driver — turning an O(N) scan into a small bounded lookup</button>
+      <button class="quiz-opt"><span class="mark"></span>It makes GPS more accurate</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> spatial indexes bucket the map so "who's nearby?" reads only the rider's cell and its k-ring. Without one, every match would scan all drivers in the city — far too slow at Uber's volume.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this to nail it</div><p>"The scaling problem is the location write storm — ~1M+ updates/s — so I keep live positions in a sharded in-memory geo-index, not a DB; it's disposable and self-heals every 4 s. I'd index with H3 hexagons because uniform adjacency makes k-ring neighbor search and surge smoothing clean, and rank candidates by road-network ETA, not raw distance. The one thing that must be strongly consistent is acceptOffer — single-owner linearizable so a driver is never double-dispatched. Everything shards by city because rides are local."</p></div></div>
+</section>

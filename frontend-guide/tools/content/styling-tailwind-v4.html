@@ -1,0 +1,160 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Styling &middot; Tailwind</span>
+            <h1>Tailwind v4: CSS-first</h1>
+            <p class="lead">Tailwind v4 moves configuration out of JavaScript and into your CSS. One <code>@import</code> turns it on, an <code>@theme</code> block defines your design tokens as real CSS variables, and the Oxide engine makes it fast. No <code>tailwind.config.js</code> required.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">v4 is <b>CSS-first</b>: a single <code>@import "tailwindcss";</code> plus <code>@theme</code> tokens that are <b>live CSS variables</b> &mdash; the JS config is gone.</p>
+            <p>The three old <code>@tailwind</code> directives collapse into one import. Your design tokens live in CSS and compile to custom properties, so they&rsquo;re readable in DevTools and usable in plain CSS too. The Oxide engine handles the heavy lifting.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>v3 was a factory that needed a separate spec sheet (a JS config) handed over before it could run. v4 builds the product <em>and</em> writes its spec in the same place &mdash; your CSS. And the spec values aren&rsquo;t printed on paper; they&rsquo;re live wires (CSS variables) you can read and rewire at runtime.</p>
+              </div>
+            </div>
+
+            <figure class="viz twplay" data-twplay>
+              <figcaption class="viz-title">Utilities, live &mdash; toggle classes on a box</figcaption>
+              <script type="application/json" class="tw-config">
+              {
+                "title": "Compose a card with utilities",
+                "start": "flex items-center gap-4 p-4 rounded-xl bg-slate-800 text-white shadow",
+                "preview": "<div class=\"twp-box\">A</div><div class=\"twp-box\">B</div>",
+                "presets": [
+                  { "label": "row + gap", "classes": "flex items-center gap-4 p-4 rounded-xl bg-slate-800 text-white" },
+                  { "label": "stacked", "classes": "flex flex-col gap-2 p-4 rounded-xl bg-slate-800 text-white" },
+                  { "label": "brand + ring", "classes": "flex items-center justify-center gap-4 p-4 rounded-xl bg-brand text-black font-bold ring" },
+                  { "label": "accent card", "classes": "flex items-center gap-4 p-4 rounded-xl bg-violet-500 text-white shadow" }
+                ],
+                "note": "Each utility maps to one CSS rule; v4 generates only the classes you use."
+              }
+              </script>
+              <p class="viz-fallback">An interactive box whose Tailwind utility classes (flex, gap, padding, rounded, background, ring) can be swapped between presets to show how utilities compose into a layout.</p>
+            </figure>
+
+            <dl class="kv">
+              <dt>Turn it on</dt><dd>One line: <code>@import "tailwindcss";</code> &mdash; replaces the old <code>@tailwind base/components/utilities</code> trio.</dd>
+              <dt>Design tokens</dt><dd><code>@theme { --color-brand: &hellip; }</code> compiles to real CSS variables and to utilities like <code>bg-brand</code>.</dd>
+              <dt>Oxide engine</dt><dd>The Rust-powered core: faster builds, automatic content detection, smaller output.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="theme">
+            <h2><span class="section-num">01</span> Tokens live in CSS now</h2>
+            <p>Define your design system in an <code>@theme</code> block. Every token becomes both a CSS variable and a matching utility &mdash; one source of truth for colors, spacing, radius, and fonts.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">app.css</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="css">@import "tailwindcss";
+
+@theme {
+  --color-brand: oklch(0.7 0.18 195);
+  --radius-card: 1rem;
+}
+
+/* Usable as utilities (bg-brand, rounded-card)
+   AND as plain CSS: var(--color-brand) */</code></pre>
+            </div>
+            <p>v4 also adds first-class extension points: <code>@utility</code> for your own utilities, <code>@custom-variant</code> for new variants, and native <code>@container</code> queries &mdash; all in CSS, no plugin file.</p>
+          </section>
+
+          <section class="section reveal" id="cn">
+            <h2><span class="section-num">02</span> Composing classes with cn()</h2>
+            <p>When classes are conditional or come from props, string concatenation breaks down &mdash; conflicting utilities both end up in the list. The <code>cn()</code> helper = <code>clsx</code> (conditional join) + <code>tailwind-merge</code> (dedupe conflicts, last wins).</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">cn.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+cn("p-2", "p-4");                 // → "p-4"  (conflict resolved)
+cn("rounded", isActive &amp;&amp; "bg-brand"); // conditional join</code></pre>
+            </div>
+            <div class="versus">
+              <div class="vs-col vs-bad">
+                <div class="vs-h">Template string: conflict survives</div>
+                <div class="codeblock"><pre><code data-lang="tsx">// ❌ both paddings ship; CSS-order decides — fragile
+&lt;div className={`p-2 ${big ? "p-4" : ""}`} /&gt;</code></pre></div>
+              </div>
+              <div class="vs-col vs-good">
+                <div class="vs-h">cn(): conflict resolved</div>
+                <div class="codeblock"><pre><code data-lang="tsx">// ✅ tailwind-merge keeps the last p-* only
+&lt;div className={cn("p-2", big &amp;&amp; "p-4")} /&gt;</code></pre></div>
+              </div>
+            </div>
+            <p>Variants and states read the same way as always &mdash; e.g. <code>className="md:flex hover:bg-brand"</code> &mdash; v4 just generates them from your CSS-defined theme.</p>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p>Migrating from v3? The <code>@tailwind base/components/utilities</code> directives and <code>tailwind.config.js</code> are gone. There&rsquo;s one <code>@import "tailwindcss";</code> and an <code>@theme</code> block instead. A JS config still loads via <code>@config</code>, but it&rsquo;s a legacy bridge &mdash; not the v4 way.</p>
+              </div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">What does <code>cn("p-2", "p-4")</code> return, and why?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>"p-4"</code> &mdash; tailwind-merge detects the conflicting <code>p-*</code> utilities and keeps the last one.</button>
+                <button class="quiz-opt"><span class="mark"></span><code>"p-2 p-4"</code> &mdash; it just joins the strings.</button>
+                <button class="quiz-opt"><span class="mark"></span><code>"p-2"</code> &mdash; the first class always wins.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> <code>clsx</code> joins, then <code>tailwind-merge</code> dedupes conflicting utilities so the later value wins. That&rsquo;s exactly why <code>cn()</code> beats template strings for prop-driven classes.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What changed from Tailwind v3 to v4?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>v4 is CSS-first. The three <code>@tailwind</code> directives become one <code>@import "tailwindcss";</code>, and <code>tailwind.config.js</code> is replaced by an <code>@theme</code> block whose tokens are real CSS variables. The new Oxide engine is faster, and there are CSS-native extension points like <code>@utility</code>, <code>@custom-variant</code>, and <code>@container</code>.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;v4 went CSS-first: one import, no JS config, tokens defined in <code>@theme</code> as real CSS variables, with the faster Oxide engine.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why use cn() instead of a template string?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Because conditional classes often conflict, and a template string ships both &mdash; leaving the result up to CSS source order. <code>cn()</code> runs <code>clsx</code> to join conditionals, then <code>tailwind-merge</code> to dedupe conflicting utilities so the last one deterministically wins. It&rsquo;s essential once classes come from props.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;<code>cn()</code> is <code>clsx</code> plus <code>tailwind-merge</code> &mdash; it joins conditionals and resolves conflicting utilities, so prop-driven classes are predictable.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you theme an app in v4 without a JS config?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Define tokens in an <code>@theme</code> block in CSS &mdash; colors, spacing, radius, fonts. Each becomes a CSS custom property and a matching utility, so I get <code>bg-brand</code> and <code>var(--color-brand)</code> from one declaration. Because they&rsquo;re real variables, I can override them per scope (e.g. a <code>.dark</code> selector) for theming without rebuilding config.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Tokens go in <code>@theme</code> and compile to CSS variables plus utilities &mdash; so theming is just overriding those variables per scope, no JS config.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="index.html"><span class="pn-k">Previous</span><span class="pn-t">Styling &mdash; Tailwind + shadcn</span></a>
+            <a class="next" href="shadcn-ui-and-cva.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">shadcn/ui &amp; the cn()/cva pattern</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#theme">Tokens live in CSS</a>
+          <a href="#cn">Composing with cn()</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>
