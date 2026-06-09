@@ -1,0 +1,65 @@
+<section class="hero reveal">
+  <span class="eyebrow">Deep modules · the core move</span>
+  <h1>Pull complexity down · together or apart.</h1>
+  <p class="lead">Two closely-related judgment calls. First: when complexity is unavoidable, who absorbs it — the module or its users? Pull it <em>down</em>, into the module. Second: should two pieces of code live together or apart? A few clear tests decide.</p>
+</section>
+
+<section class="section reveal" id="pull-down">
+  <h2><span class="section-num">01</span> Pull complexity downward</h2>
+  <p class="takeaway">A <b>simple interface</b> matters more than a simple implementation. When in doubt, let the <b>module's author</b> suffer the complexity so its many users don't have to.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A great restaurant hides the chaos of the kitchen. You say “the salmon,” not “sear at 200°C for four minutes, rest two.” One author handles the hard part once; thousands of diners get a one-word interface. Pushing the recipe onto every diner would be absurd — yet config-heavy APIs do exactly that.</p></div></div>
+</section>
+
+<section class="section reveal" id="config-trap">
+  <h2><span class="section-num">02</span> The configuration-parameter trap</h2>
+  <p>Config parameters are often complexity pushed <em>upward</em>: instead of solving a problem, the module hands it to the caller — who usually has <em>less</em> context to choose well. Prefer to compute a sensible default inside, and let callers override only when they truly need to.</p>
+  <div class="refactor" data-refactor>
+    <div class="rf-grid">
+      <div class="rf-pane rf-before"><div class="rf-h">Before · pushed up</div>
+        <div class="codeblock"><pre><code data-lang="python">def make_client(host, port, timeout, retries,
+                backoff, pool_size, keepalive):
+    ...
+
+# every caller must choose seven values
+# they don't understand and can't get right
+client = make_client("api", 443, 30, 5,
+                     2.0, 20, True)</code></pre></div></div>
+      <div class="rf-pane rf-after"><div class="rf-h">After · pulled down</div>
+        <div class="codeblock"><pre><code data-lang="python">def make_client(host, port=443, **overrides):
+    cfg = dict(timeout=30, retries=5, backoff=2.0,
+               pool_size=20, keepalive=True)  # good defaults
+    cfg.update(overrides)                     # escape hatch
+    ...
+
+# the common case is trivial; expertise lives
+# in the module, where it belongs
+client = make_client("api")</code></pre></div></div>
+    </div>
+    <p class="rf-why"><b>Why it's better:</b> the author chooses defaults <em>once</em>, with the most context. Callers get a one-argument interface and can still override in the rare case they know better. Complexity moved down, where it's cheapest.</p>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Red flag <span class="tag">gotcha</span></div><p>A pile of required knobs each caller must tune is complexity dumped on the people with the least context. Don't pull complexity down so far it disappears into a single magic blob, though — pull it to the level that can handle it best.</p></div></div>
+</section>
+
+<section class="section reveal" id="together-or-apart">
+  <h2><span class="section-num">03</span> Better together or better apart?</h2>
+  <p>When deciding whether two chunks belong in one module or two, Ousterhout's tests are concrete:</p>
+  <div class="kv">
+    <dt>Bring together if…</dt><dd>they share information; they're (nearly) always used together; combining simplifies the interface; or it removes duplication.</dd>
+    <dt>Keep apart if…</dt><dd>doing so separates <b>general-purpose</b> code from <b>special-purpose</b> code — the general part can then be reused and stay clean.</dd>
+    <dt>Repetition → together</dt><dd>The same snippet copied in several places is a sign it wants to be one module. Duplication is leaked knowledge.</dd>
+    <dt>Conjoined methods → together</dt><dd>If you can't understand method A without also reading method B (and vice-versa), the split is fake — it added an interface without adding independence.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">04</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Your API requires callers to pass <code>timeout</code>, <code>retries</code>, and <code>backoff</code> on every call. What's the better design?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Compute sensible defaults inside the module; allow overrides for the rare expert.</button>
+      <button class="quiz-opt"><span class="mark"></span>Keep them required — callers know their situation best.</button>
+      <button class="quiz-opt"><span class="mark"></span>Add even more parameters so it's fully configurable.</button>
+    </div>
+    <div class="quiz-explain"><b>Defaults inside, override optional.</b> Most callers have <em>less</em> context than the module author, so required knobs push complexity to the worst place to handle it. Pull it down: sensible defaults, with an escape hatch.</div>
+  </div>
+</section>

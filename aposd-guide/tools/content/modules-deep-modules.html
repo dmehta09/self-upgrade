@@ -1,0 +1,82 @@
+<section class="hero reveal">
+  <span class="eyebrow">Deep modules · the core move</span>
+  <h1>Deep modules.</h1>
+  <p class="lead">This is the central idea of the whole book. A module is any unit with an <em>interface</em> and an <em>implementation</em> — a function, a class, a service. The best modules are <strong>deep</strong>: a simple interface hiding a lot of power. Get this one habit and most other rules follow.</p>
+</section>
+
+<section class="section reveal" id="interface-vs-implementation">
+  <h2><span class="section-num">01</span> Interface vs implementation</h2>
+  <p class="takeaway">A module's <b>interface</b> is everything a user must know to use it. Its <b>implementation</b> is how it actually works. A good <b>abstraction</b> hides the second behind a small first.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A deep module is a <b>microwave</b>: one button (“+30s”) commands a magnetron, timer, and turntable you never think about. A shallow module is a <b>light switch wired to another light switch</b> — an extra thing to flip that adds no power of its own.</p></div></div>
+</section>
+
+<section class="section reveal" id="deep-vs-shallow">
+  <h2><span class="section-num">02</span> Deep vs shallow</h2>
+  <p>Picture a module as a rectangle. The top edge is the interface (its cost — what you must learn); the area is the functionality (its benefit). You want <b>much more area than edge</b>.</p>
+  <div class="diagram">
+    <div class="dg-title">Cost = interface · Benefit = functionality</div>
+    <svg viewBox="0 0 460 210" role="img" aria-label="A deep module has a small interface over a large implementation; a shallow module has a wide interface over a thin implementation.">
+      <rect class="term-node" x="92" y="34" width="56" height="20" rx="4"/>
+      <rect class="node-box" x="60" y="54" width="120" height="120" rx="6"/>
+      <text class="node-label" x="120" y="48" text-anchor="middle" font-size="11">interface</text>
+      <text class="node-sub" x="120" y="120" text-anchor="middle" font-size="11">implementation</text>
+      <text class="node-label" x="120" y="196" text-anchor="middle" font-size="13">DEEP</text>
+
+      <rect class="term-node" x="280" y="34" width="140" height="20" rx="4"/>
+      <rect class="node-box" x="280" y="54" width="140" height="40" rx="6"/>
+      <text class="node-label" x="350" y="48" text-anchor="middle" font-size="11">interface</text>
+      <text class="node-sub" x="350" y="79" text-anchor="middle" font-size="11">implementation</text>
+      <text class="node-label" x="350" y="196" text-anchor="middle" font-size="13">SHALLOW</text>
+    </svg>
+    <div class="cap">Deep: a small interface over deep functionality — high benefit, low cost. Shallow: the interface is nearly as big as what's behind it — you pay to learn it and gain little.</div>
+  </div>
+  <p>The classic deep module is <b>Unix file I/O</b>: just <code>open</code>, <code>read</code>, <code>write</code>, <code>close</code>, <code>lseek</code> — five calls hiding disk layout, buffering, permissions, and scheduling. The classic shallow one is a class that makes you stack three objects just to read a file with a buffer.</p>
+</section>
+
+<section class="section reveal" id="refactor">
+  <h2><span class="section-num">03</span> Make a shallow class deep</h2>
+  <p>Getters and setters are the purest shallow interface: they expose the implementation one field at a time and push the <em>rules</em> onto every caller. A deep method swallows the rule.</p>
+  <div class="refactor" data-refactor>
+    <div class="rf-grid">
+      <div class="rf-pane rf-before"><div class="rf-h">Before · shallow</div>
+        <div class="codeblock"><pre><code data-lang="python">class Cursor:
+    def get_line(self): return self._line
+    def set_line(self, n): self._line = n
+    def get_col(self): return self._col
+    def set_col(self, n): self._col = n
+
+# every caller must know the rule
+# "a new line resets the column":
+cur.set_line(cur.get_line() + 1)
+cur.set_col(0)</code></pre></div></div>
+      <div class="rf-pane rf-after"><div class="rf-h">After · deep</div>
+        <div class="codeblock"><pre><code data-lang="python">class Cursor:
+    def move_to_next_line(self):
+        self._line += 1
+        self._col = 0      # the rule lives here, once
+
+# callers just say what they mean
+cur.move_to_next_line()</code></pre></div></div>
+    </div>
+    <p class="rf-why"><b>Why it's better:</b> the shallow class leaks the “new line resets column” rule to every caller — miss it once and you have a bug. The deep method hides the rule behind a name that says intent. Smaller interface, more power.</p>
+  </div>
+</section>
+
+<section class="section reveal" id="classitis">
+  <h2><span class="section-num">04</span> Beware classitis</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Red flag — classitis <span class="tag">gotcha</span></div><p>The belief that <em>classes/methods should be small</em>, taken to an extreme, breeds lots of tiny <b>shallow</b> classes. Each adds interface to learn and glue code to write, while hiding almost nothing. “More, smaller units” is not automatically simpler — <b>depth</b> is the goal, not size.</p></div></div>
+  <p>Splitting one deep class into five shallow ones moves complexity from inside the class (where it was hidden) out into the connections between classes (where everyone sees it). Only split when each piece is independently <em>deeper</em> than the whole.</p>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Which interface is deeper?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Five Unix calls (open/read/write/close/lseek) that hide all of disk I/O.</button>
+      <button class="quiz-opt"><span class="mark"></span>A class with a getter and setter for each of its eight fields.</button>
+      <button class="quiz-opt"><span class="mark"></span>Whichever has more methods — more API means more capability.</button>
+    </div>
+    <div class="quiz-explain"><b>The Unix calls.</b> Depth is benefit-over-cost: a tiny interface commanding enormous machinery. Sixteen getters/setters are almost pure interface with no hiding, and “more methods” usually means a <em>shallower</em>, not richer, module.</div>
+  </div>
+</section>

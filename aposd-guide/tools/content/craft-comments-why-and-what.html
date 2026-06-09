@@ -1,0 +1,73 @@
+<section class="hero reveal">
+  <span class="eyebrow">Everyday craft</span>
+  <h1>Comments: why &amp; what.</h1>
+  <p class="lead">Comments aren't a failure of code — they're how you record the things code <em>can't</em> express: the units, the contract, the reason. The goal of a comment is to put information that was in the designer's head into a form the next reader can recover. Good ones lower complexity by killing obscurity.</p>
+</section>
+
+<section class="section reveal" id="why">
+  <h2><span class="section-num">01</span> Why comments exist</h2>
+  <p class="takeaway">Comments capture knowledge that <b>cannot be expressed in the code itself</b> — intent, rationale, units, invariants, contracts.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Code is the <b>recipe steps</b>; a comment is the chef's margin note — “this resting step is what keeps it from going rubbery.” The steps tell you <em>what</em> to do; the note tells you <em>why</em>, so the next cook doesn't “optimise” it away.</p></div></div>
+  <p>The usual excuses don't survive scrutiny: <em>“good code is self-documenting”</em> (names can't carry units, contracts, or rationale), <em>“no time”</em> (the reader pays far more time than you save), and <em>“comments go stale”</em> (true only if you put them in the wrong place — keep them next to the code they describe).</p>
+</section>
+
+<section class="section reveal" id="what-not-to-write">
+  <h2><span class="section-num">02</span> Different level, not the same level</h2>
+  <p class="takeaway">A useful comment is at a <b>different level of detail</b> than the code — either <b>lower</b> (precision: units, edge cases, what <code>None</code> means) or <b>higher</b> (intuition: what this does and why). A comment that restates the code adds noise and rots.</p>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Restates the code</div><p><code>i += 1  # add one to i</code> — says nothing the code doesn't, and is one more thing to keep in sync.</p></div>
+    <div class="vs-col vs-good"><div class="vs-h">Adds what code can't</div><p><code># retries are capped at 5; beyond that the upstream rate-limits us</code> — rationale the code can't show.</p></div>
+  </div>
+</section>
+
+<section class="section reveal" id="refactor">
+  <h2><span class="section-num">03</span> From noise to value</h2>
+  <div class="refactor" data-refactor>
+    <div class="rf-grid">
+      <div class="rf-pane rf-before"><div class="rf-h">Before · noise</div>
+        <div class="codeblock"><pre><code data-lang="python">def poll(timeout):
+    # set the deadline
+    deadline = now() + timeout
+    # loop until deadline
+    while now() &lt; deadline:
+        # check readiness
+        if ready():
+            return True   # return true
+    # return false
+    return False</code></pre></div></div>
+      <div class="rf-pane rf-after"><div class="rf-h">After · value</div>
+        <div class="codeblock"><pre><code data-lang="python">def poll(timeout):
+    """Wait up to `timeout` SECONDS for readiness.
+
+    Returns True as soon as ready, else False at the
+    deadline. Busy-spins (no sleep) for sub-ms latency;
+    pass a small timeout if CPU matters.
+    """
+    deadline = now() + timeout   # now(): monotonic seconds
+    while now() &lt; deadline:
+        if ready():
+            return True
+    return False</code></pre></div></div>
+    </div>
+    <p class="rf-why"><b>Why it's better:</b> the “after” comments state units (seconds), the contract (return values), and a non-obvious design choice (busy-spin) — none of which the code can say. The line-by-line restatements are deleted, so nothing can drift out of sync.</p>
+  </div>
+</section>
+
+<section class="section reveal" id="comments-first">
+  <h2><span class="section-num">04</span> Write the comment first</h2>
+  <p>Writing the interface comment <em>before</em> the implementation turns commenting into a <b>design tool</b>. If the comment is long or awkward, the abstraction is too complex — fix the design, not the prose. As a bonus, comments written first stay in sync because they shaped the code.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Red flag <span class="tag">gotcha</span></div><p>Comments that echo the code (rot bait), and the “self-documenting code” myth used to skip comments entirely. A perfect name still can't tell you the units, the valid range, or <em>why</em> a surprising choice was made.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Which comment is worth writing?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span><code>count = 0  # set count to zero</code></button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span><code># offset is in bytes from the start of the frame, not the packet</code></button>
+      <button class="quiz-opt"><span class="mark"></span><code># this is a function</code></button>
+    </div>
+    <div class="quiz-explain"><b>The units/contract comment.</b> It records something the code genuinely cannot express (which origin, which unit) — exactly the obscurity a comment should remove. The other two restate what's already obvious and will only rot.</div>
+  </div>
+</section>

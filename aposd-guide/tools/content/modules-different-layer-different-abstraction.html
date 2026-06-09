@@ -1,0 +1,65 @@
+<section class="hero reveal">
+  <span class="eyebrow">Deep modules · the core move</span>
+  <h1>Different layer, different abstraction.</h1>
+  <p class="lead">Software is built in layers, and every layer should offer a <em>different</em> abstraction than the ones above and below it. When two adjacent layers look the same, one of them probably isn't earning its keep — the symptom is a <strong>pass-through</strong>.</p>
+</section>
+
+<section class="section reveal" id="the-idea">
+  <h2><span class="section-num">01</span> Each layer must add value</h2>
+  <p class="takeaway">If a layer's interface is <b>similar to the layer beneath it</b>, that's a red flag: the layer isn't providing a new abstraction.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A good chain of command has each rank <b>adding judgment</b>. A manager who just <em>forwards every email unchanged</em> to their boss adds a delay and a name in the thread — nothing else. Delete that layer, or give it a real job.</p></div></div>
+</section>
+
+<section class="section reveal" id="pass-through-methods">
+  <h2><span class="section-num">02</span> Pass-through methods</h2>
+  <p>A <b>pass-through method</b> does little but call another method with roughly the same signature. It inflates the interface (one more thing to learn and maintain) while adding zero abstraction. Either remove it, or make it earn its place by providing something the layer below doesn't.</p>
+  <div class="refactor" data-refactor>
+    <div class="rf-grid">
+      <div class="rf-pane rf-before"><div class="rf-h">Before · pass-through</div>
+        <div class="codeblock"><pre><code data-lang="python">class UserService:
+    def __init__(self, repo):
+        self.repo = repo
+
+    def get_user(self, uid):        # adds nothing
+        return self.repo.get_user(uid)
+
+    def save_user(self, user):      # adds nothing
+        return self.repo.save_user(user)
+# the service is a hollow layer: same
+# abstraction as the repo, one level up</code></pre></div></div>
+      <div class="rf-pane rf-after"><div class="rf-h">After · earns its layer</div>
+        <div class="codeblock"><pre><code data-lang="python">class UserService:
+    def __init__(self, repo, cache):
+        self.repo, self.cache = repo, cache
+
+    def get_user(self, uid):
+        # a NEW abstraction the repo lacks:
+        # transparent caching of reads
+        if uid not in self.cache:
+            self.cache[uid] = self.repo.get_user(uid)
+        return self.cache[uid]
+# (if you can't name what it adds — delete it
+#  and let callers use the repo directly)</code></pre></div></div>
+    </div>
+    <p class="rf-why"><b>Why it's better:</b> the “after” layer provides an abstraction the layer below doesn't (caching). A layer that can't articulate what it adds should be removed so callers talk straight to the layer beneath.</p>
+  </div>
+</section>
+
+<section class="section reveal" id="pass-through-variables">
+  <h2><span class="section-num">03</span> Pass-through variables</h2>
+  <p>The same smell appears with data. A <b>pass-through variable</b> is threaded through a long chain of methods just to reach a deep one — every method in between must declare and forward a parameter it never uses. That's broad, shallow coupling: add one variable and you edit the whole chain.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Red flag <span class="tag">gotcha</span></div><p>Pass-through methods, pass-through variables, and decorators/wrappers that forward without adding an abstraction. Fixes for variables: pass a small <b>context object</b>, or store shared state on an object both ends already see — so intermediates don't carry what they don't use.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">04</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You find a service method that just calls the repository method with identical arguments. What is it?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A pass-through method — remove it or make the layer add a new abstraction.</button>
+      <button class="quiz-opt"><span class="mark"></span>Good layering — every call should go through a service.</button>
+      <button class="quiz-opt"><span class="mark"></span>A performance optimization.</button>
+    </div>
+    <div class="quiz-explain"><b>A pass-through.</b> Routing calls through a service is only valuable when the service adds an abstraction the repo lacks (caching, authorization, mapping). Forwarding identical arguments is pure interface cost with no benefit.</div>
+  </div>
+</section>

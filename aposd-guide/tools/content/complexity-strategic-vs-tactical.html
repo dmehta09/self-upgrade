@@ -1,0 +1,75 @@
+<section class="hero reveal">
+  <span class="eyebrow">Complexity · the enemy</span>
+  <h1>Strategic vs tactical programming.</h1>
+  <p class="lead">Most complexity is self-inflicted, accumulated by a mindset that treats “it works” as the finish line. Ousterhout's antidote is a mindset shift: your real job isn't to produce working code — it's to produce a <em>great design</em> that also happens to work.</p>
+</section>
+
+<section class="section reveal" id="working-code-isnt-enough">
+  <h2><span class="section-num">01</span> Working code isn't enough</h2>
+  <p class="takeaway">If you only ever optimise for “make it work now,” you guarantee a complex system. <b>Working code is the floor, not the goal.</b></p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>It's the difference between <b>paying down debt</b> and <b>maxing out the card</b>. A tactical hack borrows speed today at interest — every future change pays the interest. Strategic work spends a little now to owe nothing later.</p></div></div>
+</section>
+
+<section class="section reveal" id="two-mindsets">
+  <h2><span class="section-num">02</span> Two mindsets</h2>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Tactical</div><p>Goal: get <em>this</em> feature/fix done as fast as possible. Each shortcut is tiny — a special case here, a duplicated block there. They feel harmless and ship quickly.</p></div>
+    <div class="vs-col vs-good"><div class="vs-h">Strategic</div><p>Goal: working code <em>and</em> a clean design. You invest continually in structure, so the system stays easy to extend. Slightly slower today, dramatically faster for months.</p></div>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Red flag — the tactical tornado <span class="tag">gotcha</span></div><p>The “productive” dev who churns out features by leaving complexity in their wake. They look fast on the leaderboard; everyone <em>else</em> slows down cleaning up after them. Speed that creates work for others isn't speed.</p></div></div>
+</section>
+
+<section class="section reveal" id="refactor">
+  <h2><span class="section-num">03</span> Same feature, two mindsets</h2>
+  <p>Watch tactical creep: each promo is “just one more <code>if</code>.” The strategic version pays a small design cost once, then absorbs new promos for free.</p>
+  <div class="refactor" data-refactor>
+    <div class="rf-grid">
+      <div class="rf-pane rf-before"><div class="rf-h">Before · tactical</div>
+        <div class="codeblock"><pre><code data-lang="python">def price(cart):
+    total = sum(i.price for i in cart.items)
+    # promos bolted on, one if at a time
+    if cart.code == "SAVE10":
+        total *= 0.90
+    if cart.code == "FREESHIP" and total &gt; 50:
+        total -= 5
+    if cart.is_member:
+        total *= 0.95
+    if cart.code == "BOGO":
+        cheapest = min(i.price for i in cart.items)
+        total -= cheapest
+    return total
+# every new promo edits this function and risks the others</code></pre></div></div>
+      <div class="rf-pane rf-after"><div class="rf-h">After · strategic</div>
+        <div class="codeblock"><pre><code data-lang="python">class Promo(Protocol):
+    def apply(self, total: float, cart) -&gt; float: ...
+
+def price(cart, promos: list[Promo]):
+    total = sum(i.price for i in cart.items)
+    for promo in promos:           # uniform, order-independent
+        total = promo.apply(total, cart)
+    return total
+# a new promo is a new small class — price() never changes</code></pre></div></div>
+    </div>
+    <p class="rf-why"><b>Why it's better:</b> the strategic version turns “edit a growing function and pray” into “add an isolated class.” The dependency between promos disappears, so change amplification and cognitive load both drop.</p>
+  </div>
+</section>
+
+<section class="section reveal" id="the-investment">
+  <h2><span class="section-num">04</span> The investment mindset</h2>
+  <p class="takeaway">Spend a little design effort <b>continually</b> — Ousterhout's rule of thumb is roughly <b>10–20% extra</b> — and treat it as an investment, not a tax.</p>
+  <p>The payoff isn't linear, because complexity compounds. Tactical teams feel faster for the first few weeks and are crawling within months; strategic teams pay a small steady premium and stay fast. There's no “we'll clean it up later” — later never has more slack than now, and the mess only grows.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">lld guide</span></div><p>The strategic refactor above is the <b>Open/Closed Principle</b> in action — open for extension, closed for modification. See <a href="../../lld-guide/solid/principles.html">SOLID principles</a> in the LLD guide.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A teammate ships features twice as fast as anyone, leaving small hacks everywhere. Is that good?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Yes — shipping velocity is what matters most.</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>No — that's a tactical tornado; their speed creates drag for everyone else.</button>
+      <button class="quiz-opt"><span class="mark"></span>Yes, as long as the tests pass.</button>
+    </div>
+    <div class="quiz-explain"><b>It's a tactical tornado.</b> Individual velocity that injects complexity is borrowed against the whole team's future. Passing tests prove it <em>works</em> — they say nothing about whether the design will survive the next ten changes.</div>
+  </div>
+</section>

@@ -1,0 +1,81 @@
+<section class="hero reveal">
+  <span class="eyebrow">Deep modules · the core move</span>
+  <h1>Information hiding &amp; leakage.</h1>
+  <p class="lead">Depth comes from <em>hiding</em>. Each module should bury a design decision — a piece of knowledge — behind its interface, so the rest of the system never has to know it. When the same knowledge shows up in two modules, you have a <strong>leak</strong>, and a dependency that will bite.</p>
+</section>
+
+<section class="section reveal" id="the-idea">
+  <h2><span class="section-num">01</span> Hide a design decision</h2>
+  <p class="takeaway">A well-designed module <b>encapsulates one piece of knowledge</b> — a format, an algorithm, a policy — so changing that decision touches only that module.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A <b>vending machine</b> hides its whole mechanism behind two buttons. You don't know — or care — how it routes coins or drops cans. The maker can swap the entire insides and your “interface” (press B4) never changes. That freedom <em>is</em> information hiding.</p></div></div>
+</section>
+
+<section class="section reveal" id="leakage">
+  <h2><span class="section-num">02</span> Information leakage</h2>
+  <p class="takeaway"><b>Leakage</b> is when one design decision is reflected in <b>multiple modules</b>, coupling them.</p>
+  <p>The tell: you change one module and a “separate” one must change in lockstep. If two classes both know the on-disk layout of a file, the format has leaked across both — they're secretly one decision wearing two hats. Leakage is the single most common source of unnecessary dependencies.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Red flag — temporal decomposition <span class="tag">gotcha</span></div><p>Designing modules around the <b>order things happen</b> (“first read, then process, then write”) instead of around <b>knowledge</b>. It feels natural but it scatters the same decision across the read step and the write step — guaranteed leakage. Organise by <em>what a module knows</em>, not <em>when it runs</em>.</p></div></div>
+</section>
+
+<section class="section reveal" id="refactor">
+  <h2><span class="section-num">03</span> Plug the leak</h2>
+  <p>Splitting by execution order gives a reader and a writer that <em>both</em> hard-code the format. Splitting by knowledge gives one module that owns it.</p>
+  <div class="refactor" data-refactor>
+    <div class="rf-grid">
+      <div class="rf-pane rf-before"><div class="rf-h">Before · leaky</div>
+        <div class="codeblock"><pre><code data-lang="python"># format knowledge duplicated in BOTH classes
+class ConfigReader:
+    def load(self, path):
+        cfg = {}
+        for line in open(path):
+            key, val = line.split("=", 1)   # format!
+            cfg[key.strip()] = val.strip()
+        return cfg
+
+class ConfigWriter:
+    def save(self, path, cfg):
+        with open(path, "w") as f:
+            for key, val in cfg.items():
+                f.write(f"{key}={val}\n")    # format again!
+# change "=" to ":" → must edit two classes in sync</code></pre></div></div>
+      <div class="rf-pane rf-after"><div class="rf-h">After · hidden</div>
+        <div class="codeblock"><pre><code data-lang="python"># one module OWNS the format; nobody else knows it
+class Config:
+    SEP = "="                       # the one decision
+
+    @classmethod
+    def load(cls, path):
+        cfg = {}
+        for line in open(path):
+            key, val = line.split(cls.SEP, 1)
+            cfg[key.strip()] = val.strip()
+        return cfg
+
+    @classmethod
+    def save(cls, path, cfg):
+        with open(path, "w") as f:
+            for key, val in cfg.items():
+                f.write(f"{key}{cls.SEP}{val}\n")</code></pre></div></div>
+    </div>
+    <p class="rf-why"><b>Why it's better:</b> the format now lives in exactly one place. Changing the separator is a one-line edit, and no other module even knows a separator exists. The leak — and its lockstep dependency — is gone.</p>
+  </div>
+</section>
+
+<section class="section reveal" id="how-much">
+  <h2><span class="section-num">04</span> What to hide</h2>
+  <p>Good things to bury behind an interface: file/wire formats, choice of data structure, an algorithm, units and encodings, the existence of a cache, retry/backoff policy. The test: <em>could I change this decision later without any other module noticing?</em> If not, the knowledge has leaked.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">lld guide</span></div><p>Information hiding is the soul of <b>encapsulation</b>. For the OOP framing, see <a href="../../lld-guide/oop/pillars.html">the four pillars</a> in the LLD guide.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You change a date format in one module and three others break. What happened?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Information leakage — the format decision was reflected in all four modules.</button>
+      <button class="quiz-opt"><span class="mark"></span>Good encapsulation — the change propagated automatically.</button>
+      <button class="quiz-opt"><span class="mark"></span>Nothing unusual; coupled changes are normal.</button>
+    </div>
+    <div class="quiz-explain"><b>Leakage.</b> One design decision (the date format) lives in four places, so they're coupled even though they look independent. The fix is to hide the format behind a single module the others call.</div>
+  </div>
+</section>
