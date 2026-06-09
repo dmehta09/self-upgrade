@@ -8,7 +8,7 @@
   <h2><span class="section-num">01</span> Where the guide is</h2>
   <div class="phase-note">
     <span>📍</span>
-    <span><b>Part I is complete, and Part II is underway.</b> Chapters 1–4 (reliability/scalability/maintainability, data models, storage, encoding) plus chapters 5–6 (replication, partitioning) are covered. Transactions, distributed-systems trouble, consistency/consensus, and the batch/stream chapters arrive next — their heuristics will land here.</span>
+    <span><b>Parts I and II are complete — chapters 1–9.</b> Foundations (reliability/scalability/maintainability, data models, storage, encoding) and the full distributed-data arc (replication, partitioning, transactions, distributed-systems trouble, consistency &amp; consensus) are all covered. Part III — batch, streams, and the future — arrives next, and its heuristics will land here.</span>
   </div>
 </section>
 
@@ -94,6 +94,26 @@
         <dt>Rebalancing</dt><dd>Never <code>hash % N</code> (remaps everything). Use <strong>consistent hashing</strong> or a <strong>fixed partition count</strong>.</dd>
         <dt>Secondary indexes</dt><dd><strong>Local</strong> (by document): cheap writes, scatter/gather reads. <strong>Global</strong> (by term): cheap reads, multi-partition writes.</dd>
         <dt>Pairs with replication</dt><dd>Each partition is also replicated — partitioning is for scale, replication for availability.</dd>
+      </dl>
+    </div>
+    <div class="sheet">
+      <h3>Transactions &amp; isolation</h3>
+      <dl class="kv">
+        <dt>Default isolation</dt><dd>Usually <strong>read committed</strong> — knows nothing of read skew, lost updates, or write skew.</dd>
+        <dt>Reading consistent data?</dt><dd><strong>Snapshot isolation</strong> (MVCC) — one consistent point in time; kills read skew.</dd>
+        <dt>Concurrent read-modify-write?</dt><dd>Guard <strong>lost updates</strong>: atomic ops, <code>SELECT … FOR UPDATE</code>, or detection.</dd>
+        <dt>Invariant across rows?</dt><dd>Only <strong>serializable</strong> stops <em>write skew</em>. Modern default impl: <strong>SSI</strong> (optimistic).</dd>
+        <dt>“Consistency” in ACID</dt><dd>Is <em>your</em> app's job — the DB supplies A, I, D.</dd>
+      </dl>
+    </div>
+    <div class="sheet">
+      <h3>Consistency &amp; consensus</h3>
+      <dl class="kv">
+        <dt>Need recency / one truth?</dt><dd><strong>Linearizable</strong> — for locks, uniqueness, leader election. It's slow; don't reach for it by default.</dd>
+        <dt>During a partition</dt><dd>CAP forces a choice: <strong>CP</strong> (refuse, stay correct) or <strong>AP</strong> (answer, maybe stale). No choice the rest of the time.</dd>
+        <dt>Cheapest safe ordering</dt><dd><strong>Causal order</strong> — survives partitions; use logical clocks, not wall clocks.</dd>
+        <dt>Need everyone to agree?</dt><dd><strong>Consensus</strong> = total order broadcast. Don't build it — rent <strong>ZooKeeper/etcd</strong>.</dd>
+        <dt>Cluster size</dt><dd>Odd (3, 5): any two majorities overlap, so split decisions can't both win.</dd>
       </dl>
     </div>
   </div>

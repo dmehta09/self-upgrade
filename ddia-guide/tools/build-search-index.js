@@ -18,6 +18,8 @@ const FILES = [
   "foundations/reliable-scalable-maintainable.html", "foundations/data-models.html",
   "foundations/storage-engines.html", "foundations/encoding-evolution.html",
   "distributed/replication.html", "distributed/partitioning.html",
+  "distributed/transactions.html", "distributed/distributed-trouble.html",
+  "distributed/consistency-consensus.html",
   "reference/decisions.html", "reference/flashcards.html",
 ];
 

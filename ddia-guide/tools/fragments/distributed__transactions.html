@@ -1,0 +1,108 @@
+<section class="hero reveal">
+  <span class="eyebrow">Part II · Distributed Data · Chapter 7</span>
+  <h1>Transactions.</h1>
+  <p class="lead">A transaction groups several reads and writes into one all-or-nothing unit. Its job is to be a <strong>safety blanket</strong>: it lets the application pretend there are no concurrent users and no partial failures. The whole chapter is about how strong that blanket really is — and what it costs to make it stronger.</p>
+</section>
+
+<section class="section reveal" id="acid">
+  <h2><span class="section-num">01</span> What ACID actually promises</h2>
+  <p class="takeaway">A transaction either happens completely or not at all, and runs as if it had the database to itself. That illusion is built from four guarantees — but the word <b>ACID</b> hides as much as it reveals.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 7h20M2 17h20"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>A bank transfer is two steps: debit one account, credit the other. If the power dies between them, money must not vanish — so the bank treats the pair as a single sealed envelope: either <em>both</em> entries land, or <em>neither</em> does. And while the teller works, no one else may see the half-finished state. That sealed-envelope, no-peeking promise is a transaction.</p>
+    </div>
+  </div>
+  <div class="sheet-grid">
+    <div class="sheet"><h3>Atomicity</h3><dl class="kv"><dt>All or nothing</dt><dd>If any write in the transaction fails, the whole thing aborts and rolls back. Nothing partial survives. (Not about concurrency — about <em>abortability</em>.)</dd></dl></div>
+    <div class="sheet"><h3>Consistency</h3><dl class="kv"><dt>The app's invariants hold</dt><dd>The odd one out: this is <strong>your</strong> job, not the database's. The DB only provides A, I, and D so your code can keep its invariants true.</dd></dl></div>
+    <div class="sheet"><h3>Isolation</h3><dl class="kv"><dt>As if alone</dt><dd>Concurrent transactions don't step on each other — each runs as though it were the only one. The hard part, and the rest of this chapter.</dd></dl></div>
+    <div class="sheet"><h3>Durability</h3><dl class="kv"><dt>Once committed, it stays</dt><dd>After commit, data survives a crash — written to disk, and usually replicated. (Even this is a spectrum, not an absolute.)</dd></dl></div>
+  </div>
+</section>
+
+<section class="section reveal" id="anomalies">
+  <h2><span class="section-num">02</span> The race conditions isolation must stop</h2>
+  <p>Weak isolation lets concurrent transactions interfere in specific, named ways. Knowing the anomalies is how you pick a level:</p>
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Dirty read / dirty write</div>
+      <p>Reading another transaction's <em>uncommitted</em> write (dirty read), or overwriting it (dirty write). The floor most databases prevent — that's <strong>read committed</strong>.</p>
+    </div>
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Read skew (non-repeatable read)</div>
+      <p>You read row A, someone commits, you read row B — and the two are now inconsistent (e.g. money in flight between accounts). Fixed by <strong>snapshot isolation</strong>: read from one consistent point in time.</p>
+    </div>
+  </div>
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Lost update</div>
+      <p>Two read-modify-write cycles race; one clobbers the other (counter increments, wiki edits). Fixed with atomic ops, explicit locks (<code>SELECT … FOR UPDATE</code>), or automatic detection.</p>
+    </div>
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Write skew &amp; phantoms</div>
+      <p>Each transaction reads, checks a condition, and writes — individually fine, but together they break an invariant (both on-call doctors sign off at once). The subtle one that only <strong>serializable</strong> truly prevents.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="levels">
+  <h2><span class="section-num">03</span> Isolation levels — the dial</h2>
+  <p>Isolation is a dial from “fast and loose” to “correct and costly.” Most databases default to a weak level for performance, so you must know which anomalies your data can't tolerate.</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Isolation levels",
+      "axisLabel": "Turn up isolation — fewer anomalies, more contention",
+      "stops": [
+        { "label": "Read committed", "dims": { "Anomalies prevented": 35, "Throughput": 90, "Concurrency": 88, "Reasoning ease": 40 },
+          "note": "No dirty reads or dirty writes — but read skew, lost updates, and write skew are all still possible. The common default (PostgreSQL, Oracle, SQL Server)." },
+        { "label": "Snapshot isolation", "dims": { "Anomalies prevented": 65, "Throughput": 78, "Concurrency": 80, "Reasoning ease": 65 },
+          "note": "Each transaction reads from a consistent snapshot taken at its start (MVCC) — kills read skew and most lost updates. But write skew and phantoms slip through. Often labelled 'repeatable read'." },
+        { "label": "Serializable", "dims": { "Anomalies prevented": 100, "Throughput": 45, "Concurrency": 40, "Reasoning ease": 95 },
+          "note": "The gold standard: the result is as if transactions ran one at a time, in some order. Prevents EVERY race condition — so you can stop reasoning about concurrency. Cost: less parallelism, more aborts or locking." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="serializability">
+  <h2><span class="section-num">04</span> Three ways to be serializable</h2>
+  <p>If serializable is so safe, why isn't it the default? Because every implementation pays for it differently:</p>
+  <div class="versus">
+    <div class="vs-col vs-a">
+      <div class="vs-h">Actual serial execution</div>
+      <p>Just run one transaction at a time on a single thread (VoltDB, Redis). Trivially correct — viable now that RAM is large and transactions are short. No parallelism, so it needs stored procedures and partitioning.</p>
+    </div>
+    <div class="vs-col vs-b">
+      <div class="vs-h">Two-phase locking (2PL)</div>
+      <p>The classic: readers and writers block each other with shared/exclusive locks. Correct but pessimistic — contention, latency, and deadlocks that must be detected and aborted.</p>
+    </div>
+  </div>
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Serializable Snapshot Isolation (SSI)</div>
+      <p>The modern winner (PostgreSQL's <code>SERIALIZABLE</code>): <strong>optimistic</strong>. Let transactions run on a snapshot without blocking, track their read/write sets, and at commit time check whether they actually conflicted — if so, abort and retry. Full serializability with far less contention, as long as conflicts are rare.</p>
+    </div>
+  </div>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">See also <span class="tag">sysdesign-guide</span></div>
+      <p>For the operational angle — ACID vs BASE, when to relax consistency, and idempotency keys for safe retries — see <a href="../../sysdesign-guide/fundamentals/consistency.html">Consistency</a> in the System Design Field Guide.</p>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">Two doctors are on call. Each runs a transaction that checks “at least one other doctor is on call” and then takes themselves off. Run concurrently under snapshot isolation, both checks pass and both go off call — now nobody is on call. What is this?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Write skew — concurrent transactions each read, decide, and write, jointly breaking an invariant that snapshot isolation doesn't protect</button>
+      <button class="quiz-opt"><span class="mark"></span>A dirty read — one read the other's uncommitted write</button>
+      <button class="quiz-opt"><span class="mark"></span>A lost update — one overwrote the other</button>
+      <button class="quiz-opt"><span class="mark"></span>Nothing wrong — snapshot isolation prevents this</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> this is the canonical <em>write skew</em>. Each transaction's read was still true when it read, but their writes together violate the invariant. Snapshot isolation can't see it — only serializable isolation (or an explicit lock on the rows they read) prevents it.</div>
+  </div>
+</section>

@@ -40,8 +40,11 @@ const PAGES = [
 
   { out: "distributed/replication.html",  mod: "distributed", lesson: "dist-replication",  title: "Replication",   desc: "Keeping the same data on several nodes: single-leader, multi-leader, and leaderless models; synchronous vs asynchronous replication; replication lag and the read-your-writes / monotonic / consistent-prefix guarantees that hide it; quorums (w + r > n).", scripts: ["reqflow.js", "tradeoff.js"] },
   { out: "distributed/partitioning.html", mod: "distributed", lesson: "dist-partitioning", title: "Partitioning", desc: "Splitting a dataset across nodes (sharding): partitioning by key range vs by hash, skew and hot spots, consistent hashing and rebalancing, request routing, and local vs global secondary indexes.", scripts: ["ddia-viz.js", "tradeoff.js"] },
+  { out: "distributed/transactions.html", mod: "distributed", lesson: "dist-transactions", title: "Transactions", desc: "The all-or-nothing safety blanket: what ACID really promises, the race conditions weak isolation allows (dirty reads, lost updates, write skew), the isolation-level dial (read committed → snapshot → serializable), and three ways to be serializable (serial, 2PL, SSI).", scripts: ["tradeoff.js"] },
+  { out: "distributed/distributed-trouble.html", mod: "distributed", lesson: "dist-trouble", title: "The trouble with distributed systems", desc: "How reality betrays distributed code: unreliable networks (you can't tell crashed from slow), lying clocks (time-of-day vs monotonic), and process pauses — plus fencing tokens, and why truth is defined by a majority.", scripts: ["reqflow.js", "tradeoff.js"] },
+  { out: "distributed/consistency-consensus.html", mod: "distributed", lesson: "dist-consensus", title: "Consistency & consensus", desc: "The strongest tools we have: linearizability (the single-copy illusion and its recency guarantee), the CAP trade-off during a partition, causal order and total order broadcast, and consensus (Paxos/Raft) built on overlapping majority quorums.", scripts: ["ddia-viz.js", "tradeoff.js"] },
 
-  { out: "reference/decisions.html",  mod: "reference", title: "Decisions & trade-offs", desc: "The recurring data-system decisions on one page — which data model, how to describe load and latency, fan-out on write vs read, replication and partitioning choices — each with a one-line heuristic. Grows as each part ships." },
+  { out: "reference/decisions.html",  mod: "reference", title: "Decisions & trade-offs", desc: "The recurring data-system decisions on one page — which data model, how to describe load and latency, fan-out on write vs read, replication and partitioning choices, isolation levels and CAP — each with a one-line heuristic. Grows as each part ships." },
   { out: "reference/flashcards.html", mod: "reference", title: "Flashcards",             desc: "The key terms and trade-offs as recall practice: faults vs failures, percentiles & tail-latency amplification, the impedance mismatch, schema-on-read, locality, and more.", scripts: ["flashcards.js"] }
 ];
 
@@ -52,7 +55,7 @@ const FAVICON = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' view
 const NAV = [
   { h: "Start here", links: [["index.html", "Home"], ["reference/decisions.html", "Decisions &amp; trade-offs"], ["reference/flashcards.html", "Flashcards"]] },
   { h: "Part I · Foundations", cls: "is-foundations", links: [["foundations/reliable-scalable-maintainable.html", "Reliable, scalable &amp; maintainable"], ["foundations/data-models.html", "Data models &amp; query languages"], ["foundations/storage-engines.html", "Storage &amp; retrieval"], ["foundations/encoding-evolution.html", "Encoding &amp; evolution"]] },
-  { h: "Part II · Distributed Data", cls: "is-distributed", links: [["distributed/replication.html", "Replication"], ["distributed/partitioning.html", "Partitioning"]] }
+  { h: "Part II · Distributed Data", cls: "is-distributed", links: [["distributed/replication.html", "Replication"], ["distributed/partitioning.html", "Partitioning"], ["distributed/transactions.html", "Transactions"], ["distributed/distributed-trouble.html", "Distributed trouble"], ["distributed/consistency-consensus.html", "Consistency &amp; consensus"]] }
 ];
 
 function sidebar(base) {

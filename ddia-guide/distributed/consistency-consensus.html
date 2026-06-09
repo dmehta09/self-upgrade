@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Consistency & consensus | Designing Data-Intensive Applications</title>
+  <meta name="description" content="The strongest tools we have: linearizability (the single-copy illusion and its recency guarantee), the CAP trade-off during a partition, causal order and total order broadcast, and consensus (Paxos/Raft) built on overlapping majority quorums." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='8' ry='3'/><path d='M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5'/><path d='M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/ddia.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="distributed" data-page="dist-consensus" data-lesson="dist-consensus">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Designing Data-Intensive Applications home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0b1020" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></span>
+        <span class="brand-text"><b>Data-Intensive Apps</b><span>DDIA · distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/decisions.html">Decisions &amp; trade-offs</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Part I · Foundations">
+        <h4><span class="dot"></span>Part I · Foundations</h4>
+        <a class="nav-link" href="../foundations/reliable-scalable-maintainable.html">Reliable, scalable &amp; maintainable</a>
+        <a class="nav-link" href="../foundations/data-models.html">Data models &amp; query languages</a>
+        <a class="nav-link" href="../foundations/storage-engines.html">Storage &amp; retrieval</a>
+        <a class="nav-link" href="../foundations/encoding-evolution.html">Encoding &amp; evolution</a>
+      </nav>
+      <nav class="nav-group is-distributed" aria-label="Part II · Distributed Data">
+        <h4><span class="dot"></span>Part II · Distributed Data</h4>
+        <a class="nav-link" href="../distributed/replication.html">Replication</a>
+        <a class="nav-link" href="../distributed/partitioning.html">Partitioning</a>
+        <a class="nav-link" href="../distributed/transactions.html">Transactions</a>
+        <a class="nav-link" href="../distributed/distributed-trouble.html">Distributed trouble</a>
+        <a class="nav-link" href="../distributed/consistency-consensus.html">Consistency &amp; consensus</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Part II · Distributed Data</span><span class="sep">/</span><span class="current">Consistency & consensus</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Part II · Distributed Data · Chapter 9</span>
+  <h1>Consistency &amp; consensus.</h1>
+  <p class="lead">Given unreliable networks, lying clocks, and pausing processes, how do a pile of machines agree on <em>anything</em>? This chapter builds the strongest tools we have: <strong>linearizability</strong> (behave like a single copy) and <strong>consensus</strong> (get everyone to agree on one value) — and is honest about what they cost.</p>
+</section>
+
+<section class="section reveal" id="linearizability">
+  <h2><span class="section-num">01</span> Linearizability — the single-copy illusion</h2>
+  <p class="takeaway">Linearizability is the strongest single-object guarantee: the system <b>behaves as if there is exactly one copy</b> of the data and every operation is atomic. Once one client reads the new value, every later read sees it too — a <b>recency</b> guarantee.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Two referees watch the same match on screens fed from different servers. <em>Eventual</em> consistency means one might still show 1–0 while the other shows 1–1 for a few seconds. <em>Linearizable</em> consistency means the instant the goal is official, every screen flips together — there is one truth, and nobody ever sees an older score after a newer one. That single-shared-reality feeling is worth real money, and you pay for it.</p>
+    </div>
+  </div>
+  <p>Linearizability isn't the same as serializability: serializability is about <em>transactions</em> (grouping operations); linearizability is about <em>recency</em> on a single object. You sometimes want both, and the combination (strict serializability) is the most expensive of all. It's required for things like uniqueness constraints, leader election, and locks.</p>
+</section>
+
+<section class="section reveal" id="cap">
+  <h2><span class="section-num">02</span> The price: you can't beat a network partition</h2>
+  <p>The famous <strong>CAP theorem</strong> is narrow but real: when the network <em>partitions</em> (nodes can't reach each other), a replicated system must choose — stay <strong>consistent</strong> (refuse requests it can't safely serve) or stay <strong>available</strong> (answer with possibly-stale data). You cannot have both <em>during a partition</em>. There's no choice the rest of the time.</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "During a partition: consistency or availability?",
+      "axisLabel": "Which do you sacrifice when nodes can't talk?",
+      "stops": [
+        { "label": "CP — keep consistency", "dims": { "Correctness under partition": 95, "Availability under partition": 30, "Best for": 80 },
+          "note": "Refuse to serve requests a minority side can't guarantee are current — the data is always correct, but part of the system goes unavailable until the partition heals. Right for locks, balances, inventory, leader election. (ZooKeeper, etcd, single-leader DBs.)" },
+        { "label": "AP — keep availability", "dims": { "Correctness under partition": 35, "Availability under partition": 92, "Best for": 80 },
+          "note": "Every node keeps answering with what it has, reconciling later → always up, but reads can be stale and writes may conflict. Right for shopping carts, social feeds, telemetry. (Cassandra, Dynamo-style stores.)" }
+      ]
+    }
+    </script>
+  </div>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">CAP is often mis-stated</div>
+      <p>It's not “pick 2 of 3.” With no partition you get both C and A; the choice only bites <em>during</em> a partition. And linearizability is also just slow even when the network is fine — many systems drop it not for CAP but for raw latency.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="ordering">
+  <h2><span class="section-num">03</span> Ordering, causality, and total order broadcast</h2>
+  <p>A lot of consistency reduces to <strong>ordering</strong> events. The minimum you usually want is <strong>causal order</strong>: if A caused B (you read a message, then reply), everyone must see A before B. Causal order is the strongest consistency that survives a partition — but it's only a <em>partial</em> order; concurrent events stay unordered.</p>
+  <p>To get a single agreed sequence, you need <strong>total order broadcast</strong>: deliver the same messages to every node, in the same order. That turns out to be equivalent to consensus — solve one and you've solved the other (and you can build a linearizable store from it).</p>
+</section>
+
+<section class="section reveal" id="consensus">
+  <h2><span class="section-num">04</span> Consensus — agreeing on one value</h2>
+  <p>Consensus means several nodes <strong>decide on one value</strong> and never change their minds, even as some crash. It sounds simple; the <em>FLP result</em> proves it's impossible to guarantee in a purely asynchronous system with even one faulty node — yet real algorithms (Paxos, Raft, ZAB) work in practice by using timeouts and randomness to make progress. At their heart sits one idea: <strong>overlapping majorities</strong>.</p>
+  <figure class="ddiaviz" data-ddiaviz>
+    <figcaption class="dv-title">Quorum overlap: why majorities can't disagree</figcaption>
+    <div class="dv-body"><p class="viz-fallback">Interactive — needs JavaScript. With n replicas, a write touching w and a read consulting r are guaranteed to share a replica when w + r &gt; n, so a read always sees the latest write.</p></div>
+    <script type="application/json" class="dv-config">
+    {
+      "scene": "quorum",
+      "title": "Quorum overlap: why majorities can't disagree",
+      "n": 5,
+      "w": 3,
+      "r": 3
+    }
+    </script>
+  </figure>
+  <p>The same rule powers leaderless replication (<code>w + r &gt; n</code>) and consensus: any two majorities of an odd-sized cluster <em>must</em> share at least one member, so two conflicting decisions can't both reach a majority. That's why consensus systems use an odd number of nodes (3, 5) and a majority quorum.</p>
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 8 8 8 8s8-3 8-8V6l-8-4z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">You rarely implement consensus — you rent it</div>
+      <p>Getting consensus right is brutally hard, so systems outsource it to a coordination service like <strong>ZooKeeper</strong> or <strong>etcd</strong>. They provide leader election, locks, and configuration on top of a consensus core — the fencing tokens from the last chapter come from exactly here. Lean on them; don't roll your own.</p>
+    </div>
+  </div>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">See also <span class="tag">sysdesign-guide</span></div>
+      <p>For where these guarantees land in a real architecture — quorums, leader election, and coordination services — see <a href="../../sysdesign-guide/data/consensus.html">Consensus</a> in the System Design Field Guide, and <a href="../../sysdesign-guide/fundamentals/consistency.html">Consistency</a> for CAP in practice.</p>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">A consensus cluster has 5 nodes. A network partition splits it into a group of 3 and a group of 2. Which side can keep making decisions, and why?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The group of 3 — it holds a majority, and any two majorities overlap, so the minority side can't also decide</button>
+      <button class="quiz-opt"><span class="mark"></span>Both sides, independently — each keeps its own copy</button>
+      <button class="quiz-opt"><span class="mark"></span>The group of 2 — smaller groups reach agreement faster</button>
+      <button class="quiz-opt"><span class="mark"></span>Neither — any partition halts the whole cluster permanently</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> only the majority side (3 of 5) can form a quorum. Because every majority overlaps every other majority, the minority side (2) physically cannot reach a conflicting decision — it must wait for the partition to heal. That's the CP choice, and the reason clusters are sized odd.</div>
+  </div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../distributed/distributed-trouble.html"><span class="pn-k">‹ Back</span><span class="pn-t">The trouble with distributed systems</span></a>
+            <a class="next" href="../reference/decisions.html"><span class="pn-k">Next ›</span><span class="pn-t">Decisions & trade-offs</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#linearizability">Linearizability — the single-copy illusion</a>
+          <a href="#cap">The price: you can't beat a network partition</a>
+          <a href="#ordering">Ordering, causality, and total order broadcast</a>
+          <a href="#consensus">Consensus — agreeing on one value</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Part II · Distributed Data · Consistency & consensus</span>
+        <span class="fmono">Designing Data-Intensive Applications · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/ddia-viz.js"></script>
+  <script src="../assets/js/tradeoff.js"></script>
+</body>
+</html>

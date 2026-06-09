@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Decisions & trade-offs | Designing Data-Intensive Applications</title>
-  <meta name="description" content="The recurring data-system decisions on one page — which data model, how to describe load and latency, fan-out on write vs read, replication and partitioning choices — each with a one-line heuristic. Grows as each part ships." />
+  <meta name="description" content="The recurring data-system decisions on one page — which data model, how to describe load and latency, fan-out on write vs read, replication and partitioning choices, isolation levels and CAP — each with a one-line heuristic. Grows as each part ships." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -41,6 +41,9 @@
         <h4><span class="dot"></span>Part II · Distributed Data</h4>
         <a class="nav-link" href="../distributed/replication.html">Replication</a>
         <a class="nav-link" href="../distributed/partitioning.html">Partitioning</a>
+        <a class="nav-link" href="../distributed/transactions.html">Transactions</a>
+        <a class="nav-link" href="../distributed/distributed-trouble.html">Distributed trouble</a>
+        <a class="nav-link" href="../distributed/consistency-consensus.html">Consistency &amp; consensus</a>
       </nav>
     </aside>
     <div class="sidebar-scrim"></div>
@@ -66,7 +69,7 @@
   <h2><span class="section-num">01</span> Where the guide is</h2>
   <div class="phase-note">
     <span>📍</span>
-    <span><b>Part I is complete, and Part II is underway.</b> Chapters 1–4 (reliability/scalability/maintainability, data models, storage, encoding) plus chapters 5–6 (replication, partitioning) are covered. Transactions, distributed-systems trouble, consistency/consensus, and the batch/stream chapters arrive next — their heuristics will land here.</span>
+    <span><b>Parts I and II are complete — chapters 1–9.</b> Foundations (reliability/scalability/maintainability, data models, storage, encoding) and the full distributed-data arc (replication, partitioning, transactions, distributed-systems trouble, consistency &amp; consensus) are all covered. Part III — batch, streams, and the future — arrives next, and its heuristics will land here.</span>
   </div>
 </section>
 
@@ -154,10 +157,30 @@
         <dt>Pairs with replication</dt><dd>Each partition is also replicated — partitioning is for scale, replication for availability.</dd>
       </dl>
     </div>
+    <div class="sheet">
+      <h3>Transactions &amp; isolation</h3>
+      <dl class="kv">
+        <dt>Default isolation</dt><dd>Usually <strong>read committed</strong> — knows nothing of read skew, lost updates, or write skew.</dd>
+        <dt>Reading consistent data?</dt><dd><strong>Snapshot isolation</strong> (MVCC) — one consistent point in time; kills read skew.</dd>
+        <dt>Concurrent read-modify-write?</dt><dd>Guard <strong>lost updates</strong>: atomic ops, <code>SELECT … FOR UPDATE</code>, or detection.</dd>
+        <dt>Invariant across rows?</dt><dd>Only <strong>serializable</strong> stops <em>write skew</em>. Modern default impl: <strong>SSI</strong> (optimistic).</dd>
+        <dt>“Consistency” in ACID</dt><dd>Is <em>your</em> app's job — the DB supplies A, I, D.</dd>
+      </dl>
+    </div>
+    <div class="sheet">
+      <h3>Consistency &amp; consensus</h3>
+      <dl class="kv">
+        <dt>Need recency / one truth?</dt><dd><strong>Linearizable</strong> — for locks, uniqueness, leader election. It's slow; don't reach for it by default.</dd>
+        <dt>During a partition</dt><dd>CAP forces a choice: <strong>CP</strong> (refuse, stay correct) or <strong>AP</strong> (answer, maybe stale). No choice the rest of the time.</dd>
+        <dt>Cheapest safe ordering</dt><dd><strong>Causal order</strong> — survives partitions; use logical clocks, not wall clocks.</dd>
+        <dt>Need everyone to agree?</dt><dd><strong>Consensus</strong> = total order broadcast. Don't build it — rent <strong>ZooKeeper/etcd</strong>.</dd>
+        <dt>Cluster size</dt><dd>Odd (3, 5): any two majorities overlap, so split decisions can't both win.</dd>
+      </dl>
+    </div>
   </div>
 </section>
           <nav class="page-nav reveal">
-            <a href="../distributed/partitioning.html"><span class="pn-k">‹ Back</span><span class="pn-t">Partitioning</span></a>
+            <a href="../distributed/consistency-consensus.html"><span class="pn-k">‹ Back</span><span class="pn-t">Consistency & consensus</span></a>
             <a class="next" href="../reference/flashcards.html"><span class="pn-k">Next ›</span><span class="pn-t">Flashcards</span></a>
           </nav>
         </div>

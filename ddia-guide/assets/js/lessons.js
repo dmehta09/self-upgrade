@@ -16,10 +16,13 @@ window.LESSONS = [
   { id: "found-data-models", title: "Data models & query languages",     url: "foundations/data-models.html",                    module: "foundations", tool: "foundations" },
   { id: "found-storage",     title: "Storage & retrieval",               url: "foundations/storage-engines.html",                module: "foundations", tool: "foundations" },
   { id: "found-encoding",    title: "Encoding & evolution",              url: "foundations/encoding-evolution.html",             module: "foundations", tool: "foundations" },
-  /* ---- Part II · Distributed Data (ch 5–6 so far) ---- */
+  /* ---- Part II · Distributed Data (ch 5–9) ---- */
   { id: "dist-replication",  title: "Replication",                       url: "distributed/replication.html",                    module: "distributed", tool: "distributed" },
-  { id: "dist-partitioning", title: "Partitioning",                      url: "distributed/partitioning.html",                   module: "distributed", tool: "distributed" }
-  /* Part II underway. Next: transactions, distributed-trouble, consistency — Phase 4 */
+  { id: "dist-partitioning", title: "Partitioning",                      url: "distributed/partitioning.html",                   module: "distributed", tool: "distributed" },
+  { id: "dist-transactions", title: "Transactions",                      url: "distributed/transactions.html",                   module: "distributed", tool: "distributed" },
+  { id: "dist-trouble",      title: "The trouble with distributed systems", url: "distributed/distributed-trouble.html",         module: "distributed", tool: "distributed" },
+  { id: "dist-consensus",    title: "Consistency & consensus",           url: "distributed/consistency-consensus.html",          module: "distributed", tool: "distributed" }
+  /* Part II complete. Next: Part III — batch / stream / future — Phase 5 */
 ];
 
 /* Ordered module groups for the home dashboard + sidebar.

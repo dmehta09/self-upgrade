@@ -1,0 +1,115 @@
+<section class="hero reveal">
+  <span class="eyebrow">Part II · Distributed Data · Chapter 8</span>
+  <h1>The trouble with distributed systems.</h1>
+  <p class="lead">On one machine, things are deterministic: an operation works, or the whole machine is down. Spread across a network and that comfort vanishes — messages vanish or arrive late, clocks disagree, and a node can freeze mid-step. This chapter is a catalogue of the ways reality betrays you, so your designs assume the worst.</p>
+</section>
+
+<section class="section reveal" id="networks">
+  <h2><span class="section-num">01</span> The network is unreliable</h2>
+  <p class="takeaway">When you send a request and hear nothing back, you <b>cannot tell</b> whether the node never got it, is still working on it, crashed, or replied and the reply was lost. A timeout is just a guess dressed up as a fact.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H5.2L4 17.2V4z"/><path d="M8 9h8M8 12h5"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>You mail a colleague a letter and hear nothing for a week. Did it get lost? Are they on holiday? Did they reply and <em>their</em> letter got lost? You genuinely can't know — all you can do is wait a while and then assume the worst. Distributed nodes live in exactly this fog, and the only tool is the timeout: wait <em>t</em> seconds, then act as if the other side is gone.</p>
+    </div>
+  </div>
+  <p>Worse, the timeout length is a no-win choice — which is itself a trade-off worth feeling:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "How long should a timeout be?",
+      "axisLabel": "Short vs long timeouts under an unreliable network",
+      "stops": [
+        { "label": "Short timeout", "dims": { "Fast failure detection": 90, "Avoids false positives": 30, "Stability under load": 35 },
+          "note": "Declare a node dead quickly → fast failover. But a node that was merely slow (GC pause, network blip) gets wrongly declared dead, its work is duplicated elsewhere, and the extra load can cascade into more 'deaths'." },
+        { "label": "Long timeout", "dims": { "Fast failure detection": 30, "Avoids false positives": 88, "Stability under load": 80 },
+          "note": "Wait longer before giving up → far fewer false alarms and gentler behaviour under load. But genuine failures take longer to notice, so users stare at a hung request while the system slowly realises a node is actually gone." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="clocks">
+  <h2><span class="section-num">02</span> Clocks lie</h2>
+  <p>Every machine has clocks, and they drift. Synchronisation (NTP) helps but can't make them trustworthy for ordering events across nodes. Crucially, there are <em>two</em> kinds, and confusing them causes bugs:</p>
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Time-of-day clock</div>
+      <p>“Wall clock” — seconds since 1970. Can jump backwards on an NTP correction, or leap. <strong>Never</strong> use it to measure durations or to order events. Yet “last write wins” often does exactly that — silently dropping writes whose clock happened to run fast.</p>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Monotonic clock</div>
+      <p>Only ever moves forward; meaningless as an absolute time, but perfect for measuring an <em>elapsed interval</em> on one machine (timeouts, latencies). Use this for durations — never the wall clock.</p>
+    </div>
+  </div>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 7v5l3 2"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">A timestamp is a confidence interval, not a point</div>
+      <p>Because of clock uncertainty, a timestamp really means “sometime in this range.” Google's Spanner embraces this: it waits out the uncertainty window before committing, so it can use real time for ordering. Most systems instead order events with <strong>logical clocks</strong> (counters), which capture causality without trusting wall-clock time.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="pauses">
+  <h2><span class="section-num">03</span> Processes pause — and the leader you trust may be a ghost</h2>
+  <p>A thread can freeze for seconds at any moment: a garbage-collection “stop the world” pause, a VM suspended by the hypervisor, the laptop lid closing. The process can't tell it was paused — it resumes mid-operation believing no time passed. So a node that “knows” it's still the leader may have lost that role minutes ago. Watch how a single lock lease goes wrong, and how a <strong>fencing token</strong> saves the data:</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">A stalled leader, and the fencing token that stops it</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "A stalled leader, and the fencing token that stops it",
+      "nodes": [
+        { "id": "a", "label": "Client A", "type": "leaseholder", "col": 0, "row": 0 },
+        { "id": "lock", "label": "Lock service", "type": "lease", "col": 1, "row": 1 },
+        { "id": "store", "label": "Storage", "type": "resource", "col": 2, "row": 1 },
+        { "id": "b", "label": "Client B", "type": "leaseholder", "col": 0, "row": 2 }
+      ],
+      "edges": [
+        { "from": "a", "to": "lock", "label": "acquire → token 33" },
+        { "from": "b", "to": "lock", "label": "acquire → token 34" },
+        { "from": "b", "to": "store", "label": "write (token 34)" },
+        { "from": "a", "to": "store", "label": "write (token 33)" }
+      ],
+      "steps": [
+        { "edge": ["a","lock"], "caption": "Client A acquires the lock. The lock service stamps its lease with a monotonically increasing fencing token: 33." },
+        { "node": "a", "status": "miss", "caption": "Then A freezes — a long GC pause. It has no idea time is passing, and its lease quietly expires." },
+        { "edge": ["b","lock"], "caption": "B sees the lease is free and acquires it — token 34. For a moment, two clients each believe they hold the lock." },
+        { "edge": ["b","store"], "status": "hit", "caption": "B writes to storage, presenting token 34. Storage records: highest token seen = 34." },
+        { "edge": ["a","store"], "status": "miss", "caption": "A wakes up, still thinking it's the leader, and writes — but its token is 33 < 34. Storage REJECTS it. The fencing token turned a silent corruption into a safe failure." }
+      ]
+    }
+    </script>
+  </figure>
+  <p>The lesson behind fencing: in a distributed system, <strong>truth is defined by a majority</strong>, not by any single node's belief about itself. A node must accept that the others may have voted it out while it was asleep.</p>
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">See also <span class="tag">sysdesign-guide</span></div>
+      <p>For health checks, heartbeats, and failure detection in practice — and the leader-election machinery that issues these leases — see <a href="../../sysdesign-guide/fundamentals/availability.html">Availability &amp; failure</a> in the System Design Field Guide.</p>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">Your distributed lock hands out a lease, but a client can GC-pause past its expiry and wake up still believing it holds the lock. What single mechanism makes a late write from that client safe?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A fencing token — a number that only increases, checked by the resource, so a stale holder's write is rejected</button>
+      <button class="quiz-opt"><span class="mark"></span>A longer lease, so the pause fits inside it</button>
+      <button class="quiz-opt"><span class="mark"></span>Synchronising all clocks with NTP</button>
+      <button class="quiz-opt"><span class="mark"></span>Retrying the write until it succeeds</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> you can't prevent the pause or trust the clock, so you defend at the resource. Each lock grant carries an ever-increasing fencing token; storage remembers the highest it has seen and rejects any write with a lower one — neutralising the zombie leader.</div>
+  </div>
+</section>

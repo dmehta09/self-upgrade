@@ -14,8 +14,9 @@
    + per-module accents work for free. Honors prefers-reduced-motion via CSS.
    Phase 2 adds "storage" (LSM↔B-tree); Phase 3 adds "ring" (consistent
    hashing — keys and nodes on a circle, owner = first node clockwise, with
-   a slider that shows only a fraction of keys move when the cluster grows).
-   (A future "quorum" w+r>n scene slots in the same way — new case in init().)
+   a slider that shows only a fraction of keys move when the cluster grows),
+   and "quorum" (w + r > n — n replicas, sliders for the write and read
+   quorums, highlighting the overlapping replica that guarantees recency).
    ============================================================ */
 (function () {
   "use strict";
@@ -378,6 +379,58 @@
     render();
   }
 
+  /* ---------- scene: quorum overlap (w + r > n) ---------- */
+  function renderQuorum(body, cfg) {
+    var n = cfg.n || 5;
+    var stage = el("div", "dv-quorum");
+    var row = el("div", "dv-qrow");
+    var verdict = el("div", "dv-qverdict");
+    stage.appendChild(row); stage.appendChild(verdict);
+
+    function mkSlider(label, val) {
+      var wrap = el("div", "dv-qslider");
+      var lab = el("label");
+      lab.appendChild(el("span", null, label + " = "));
+      var b = el("b", "dv-qval", String(val)); lab.appendChild(b);
+      wrap.appendChild(lab);
+      var s = el("input", "dv-fanrange"); s.type = "range"; s.min = "1"; s.max = String(n); s.value = String(val);
+      s.setAttribute("aria-label", label);
+      wrap.appendChild(s);
+      return { wrap: wrap, input: s, val: b };
+    }
+    var W = mkSlider("Write quorum w", Math.min(cfg.w || Math.ceil((n + 1) / 2), n));
+    var R = mkSlider("Read quorum r", Math.min(cfg.r || Math.ceil((n + 1) / 2), n));
+    var ctrl = el("div", "dv-qctrl");
+    ctrl.appendChild(W.wrap); ctrl.appendChild(R.wrap);
+
+    body.appendChild(stage);
+    body.appendChild(ctrl);
+
+    function render() {
+      var w = parseInt(W.input.value, 10) || 1, r = parseInt(R.input.value, 10) || 1;
+      W.val.textContent = w; R.val.textContent = r;
+      row.innerHTML = "";
+      for (var i = 0; i < n; i++) {
+        var inW = i < w;          // write set = leftmost w
+        var inR = i >= n - r;     // read set  = rightmost r
+        var cls = "dv-qnode" + (inW && inR ? " wr" : inW ? " w" : inR ? " r" : "");
+        var node = el("div", cls);
+        node.appendChild(el("span", "dv-qn-i", "R" + (i + 1)));
+        var tag = inW && inR ? "W·R" : inW ? "W" : inR ? "R" : "";
+        if (tag) node.appendChild(el("span", "dv-qn-tag", tag));
+        row.appendChild(node);
+      }
+      var ok = w + r > n;
+      verdict.className = "dv-qverdict " + (ok ? "ok" : "bad");
+      verdict.innerHTML = "<b>w + r = " + w + " + " + r + " = " + (w + r) + (ok ? " &gt; " : " ≤ ") + n + " (n).</b> " +
+        (ok ? "The write set and read set must overlap (the amber replica) — a read is guaranteed to see the latest write."
+            : "No guaranteed overlap — a read can hit only stale replicas and miss the latest write.");
+    }
+    W.input.addEventListener("input", render);
+    R.input.addEventListener("input", render);
+    render();
+  }
+
   /* ---------- boot ---------- */
   function init(host) {
     var sEl = host.querySelector(".dv-config") || host.querySelector("script[type='application/json']");
@@ -398,6 +451,7 @@
     else if (cfg.scene === "datamodel") renderDataModel(body, cfg);
     else if (cfg.scene === "storage") renderStorage(body, cfg);
     else if (cfg.scene === "ring") renderRing(body, cfg);
+    else if (cfg.scene === "quorum") renderQuorum(body, cfg);
     else body.appendChild(el("p", "viz-fallback", "Unknown scene: " + (cfg.scene || "(none)")));
   }
 
