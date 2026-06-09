@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data models & query languages | Designing Data-Intensive Applications</title>
+  <meta name="description" content="Relational vs document vs graph: the impedance mismatch, one-to-many vs many-to-many, schema-on-read vs schema-on-write, locality, and declarative vs imperative queries — the same data shown three ways." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='8' ry='3'/><path d='M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5'/><path d='M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/ddia.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="foundations" data-page="found-data-models" data-lesson="found-data-models">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Designing Data-Intensive Applications home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0b1020" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></span>
+        <span class="brand-text"><b>Data-Intensive Apps</b><span>DDIA · distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/decisions.html">Decisions &amp; trade-offs</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Part I · Foundations">
+        <h4><span class="dot"></span>Part I · Foundations</h4>
+        <a class="nav-link" href="../foundations/reliable-scalable-maintainable.html">Reliable, scalable &amp; maintainable</a>
+        <a class="nav-link" href="../foundations/data-models.html">Data models &amp; query languages</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Part I · Foundations</span><span class="sep">/</span><span class="current">Data models & query languages</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Part I · Foundations · Chapter 2</span>
+  <h1>Data models &amp; query languages.</h1>
+  <p class="lead">The data model is the most important choice you make — it shapes not just how you store data, but how you think about the problem. Three families dominate: <strong>relational</strong> (tables), <strong>document</strong> (self-contained trees), and <strong>graph</strong> (everything connected). None is “best”; each fits a shape of data.</p>
+</section>
+
+<section class="section reveal" id="three-models">
+  <h2><span class="section-num">01</span> One profile, three models</h2>
+  <p class="takeaway">Pick the model that matches the <b>shape of your relationships</b>: one-to-many → document, many-to-one / many-to-many → relational, densely connected → graph.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>It's how you organise a library. <b>Relational</b> = shelves by subject with a card catalogue that cross-references everything. <b>Document</b> = each book is a self-contained folder you grab in one go. <b>Graph</b> = a web of “see also” strings connecting every book to every related one. Same knowledge, three very different ways to find it.</p>
+    </div>
+  </div>
+  <p>Here is the same résumé — Bill Gates' LinkedIn-style profile — expressed all three ways. Flip between them:</p>
+  <figure class="ddiaviz" data-ddiaviz>
+    <figcaption class="dv-title">The same profile as relational ⇄ document ⇄ graph</figcaption>
+    <div class="dv-body"><p class="viz-fallback">Interactive — needs JavaScript. The same user profile is modelled as relational tables, one JSON document, and a graph of vertices and edges.</p></div>
+    <script type="application/json" class="dv-config">
+    {
+      "scene": "datamodel",
+      "title": "The same profile as relational ⇄ document ⇄ graph",
+      "views": {
+        "relational": {
+          "tables": [
+            { "name": "users", "cols": ["user_id", "first_name", "region_id", "industry_id"], "rows": [["251", "Bill", "us:wa:sea", "ind:phil"]] },
+            { "name": "positions", "cols": ["position_id", "user_id", "title", "org"], "rows": [["1", "251", "Co-chair", "Gates Foundation"], ["2", "251", "Co-founder", "Microsoft"]] },
+            { "name": "regions", "cols": ["region_id", "name"], "rows": [["us:wa:sea", "Greater Seattle"]] }
+          ]
+        },
+        "document": {
+          "user_id": 251,
+          "name": "Bill Gates",
+          "region": "Greater Seattle",
+          "industry": "Philanthropy",
+          "positions": [
+            { "title": "Co-chair", "org": "Gates Foundation" },
+            { "title": "Co-founder", "org": "Microsoft" }
+          ]
+        },
+        "graph": {
+          "nodes": [
+            { "id": "u", "label": "Bill Gates", "kind": "person" },
+            { "id": "o1", "label": "Gates Foundation", "kind": "org" },
+            { "id": "o2", "label": "Microsoft", "kind": "org" },
+            { "id": "r", "label": "Greater Seattle", "kind": "place" },
+            { "id": "i", "label": "Philanthropy", "kind": "industry" }
+          ],
+          "edges": [
+            { "from": "u", "to": "o1", "label": "co-chair" },
+            { "from": "u", "to": "o2", "label": "co-founder" },
+            { "from": "u", "to": "r", "label": "lives in" },
+            { "from": "u", "to": "i", "label": "works in" }
+          ]
+        }
+      },
+      "captions": {
+        "relational": "Normalised: the profile is split across tables, stitched back with joins. many-to-one (region, industry) is natural — store the id once, and renaming “Greater Seattle” is a one-row edit.",
+        "document": "One self-contained tree — a single read loads the whole profile (great locality), and the one-to-many positions nest naturally. The cost: no joins, so many-to-many (“who else worked at Microsoft?”) is awkward.",
+        "graph": "Everything is vertices + edges. many-to-many is the home turf — “people who worked at Microsoft and live near Seattle” is just a traversal, not a pile of join tables."
+      }
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="relational-vs-document">
+  <h2><span class="section-num">02</span> Relational vs document</h2>
+  <p>The old debate, settled pragmatically: it depends on your data's relationships. The friction that pushed people to document stores is the <strong>impedance mismatch</strong> — the awkward translation layer between relational tables and the nested objects in application code. A document (JSON) maps straight onto an object tree, so for self-contained, <em>one-to-many</em> data (a résumé, a product, an order), the document model wins on <strong>locality</strong>: it's all there in one read.</p>
+  <p>But data loves to connect. The moment you need <em>many-to-one</em> (many people in one city) or <em>many-to-many</em> (people ↔ companies), the relational model's joins — and the graph model — pull ahead. Documents force you to either duplicate data or emulate joins in application code.</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Which model fits the data?",
+      "axisLabel": "Pick a model and watch its strengths",
+      "stops": [
+        { "label": "Document", "dims": { "Read locality": 92, "Joins by the DB": 15, "Many-to-many fit": 20, "Schema flexibility": 88 },
+          "note": "The whole record in one read; nesting mirrors your objects. Best for self-contained, one-to-many data. You pay by doing joins in app code." },
+        { "label": "Relational", "dims": { "Read locality": 52, "Joins by the DB": 90, "Many-to-many fit": 86, "Schema flexibility": 45 },
+          "note": "The database does the joins; many-to-one and many-to-many are natural. Best when data is interconnected and queried many ways." },
+        { "label": "Graph", "dims": { "Read locality": 40, "Joins by the DB": 80, "Many-to-many fit": 96, "Schema flexibility": 82 },
+          "note": "Vertices + edges. Built for densely-connected, many-to-many data and variable relationship types — social graphs, recommendations, fraud rings." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="schema">
+  <h2><span class="section-num">03</span> Schema-on-read vs schema-on-write</h2>
+  <p>“Schemaless” is misleading — there's always a schema; the question is <em>when</em> it's enforced.</p>
+  <div class="versus">
+    <div class="vs-col vs-a">
+      <div class="vs-h">Schema-on-read · document</div>
+      <p>Structure is interpreted <b>when you read</b>. Like a dynamically-typed language — flexible, forgiving of heterogeneous or evolving data. Adding a field is free: new writes just include it.</p>
+    </div>
+    <div class="vs-col vs-b">
+      <div class="vs-h">Schema-on-write · relational</div>
+      <p>Structure is enforced <b>when you write</b>. Like static typing — the database guarantees shape, catching mistakes early. Changing it means a migration (<code>ALTER TABLE</code>).</p>
+    </div>
+  </div>
+  <p>Concretely, adding a “middle name” field:</p>
+  <div class="codeblock">
+    <pre><code data-lang="python"># Schema-on-read (document): no migration — old docs simply lack the field
+if "middle_name" in user:          # app handles both shapes
+    show(user["middle_name"])
+
+# Schema-on-write (relational): change the schema first, then backfill
+# ALTER TABLE users ADD COLUMN middle_name TEXT;
+# UPDATE users SET middle_name = split_name(full_name);</code></pre>
+  </div>
+  <p>Neither is “better.” Schema-on-read shines when records are heterogeneous or the structure is decided by an external system; schema-on-write shines when you want the database to guarantee a consistent shape.</p>
+</section>
+
+<section class="section reveal" id="query-languages">
+  <h2><span class="section-num">04</span> Declarative vs imperative queries</h2>
+  <p>How you <em>ask</em> for data matters as much as how you store it.</p>
+  <dl class="kv">
+    <dt>Declarative (SQL, Cypher, CSS)</dt><dd>You say <em>what</em> you want — “all active users in Seattle” — not how to get it. The engine chooses the execution plan, uses indexes, and can parallelise across cores and machines. You get out of the optimiser's way.</dd>
+    <dt>Imperative (a loop in code)</dt><dd>You spell out <em>how</em>: step through records, test each, accumulate. Readable in the small, but it pins down an order, so the engine can't reorder or parallelise it freely.</dd>
+  </dl>
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Why declarative scales</div>
+      <p>Because you didn't dictate the <em>how</em>, the same query can run faster next year on a smarter engine — or be spread across a cluster — with zero code change. (This is exactly why MapReduce and SQL beat hand-written loops at scale.) Graph data has its own declarative languages: <strong>Cypher</strong>, SPARQL, Datalog — “find friends-of-friends” is one short pattern, not a nested loop.</p>
+    </div>
+  </div>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">See also <span class="tag">sysdesign-guide</span></div>
+      <p>For the operational “which database do I actually pick?” angle — relational vs the NoSQL families by access pattern — see <a href="../../sysdesign-guide/data/index.html">SQL vs NoSQL</a> in the System Design Field Guide.</p>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">You're storing social connections and constantly ask “friends-of-friends-of-friends.” Which model fits best?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Document — store each person's whole network as one nested JSON blob</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Graph — many-to-many traversals are exactly what it's built for</button>
+      <button class="quiz-opt"><span class="mark"></span>Relational with one giant table and no foreign keys</button>
+      <button class="quiz-opt"><span class="mark"></span>It doesn't matter; all models handle this equally well</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> highly-connected, many-to-many data with variable-depth traversals is the graph model's home turf. A document would duplicate endlessly; multi-hop joins in SQL get painful fast.</div>
+  </div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../foundations/reliable-scalable-maintainable.html"><span class="pn-k">‹ Back</span><span class="pn-t">Reliable, scalable & maintainable</span></a>
+            <a class="next" href="../reference/decisions.html"><span class="pn-k">Next ›</span><span class="pn-t">Decisions & trade-offs</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#three-models">One profile, three models</a>
+          <a href="#relational-vs-document">Relational vs document</a>
+          <a href="#schema">Schema-on-read vs schema-on-write</a>
+          <a href="#query-languages">Declarative vs imperative queries</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Part I · Foundations · Data models & query languages</span>
+        <span class="fmono">Designing Data-Intensive Applications · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/ddia-viz.js"></script>
+  <script src="../assets/js/tradeoff.js"></script>
+</body>
+</html>
