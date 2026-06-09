@@ -7,8 +7,8 @@
 <section class="section reveal" id="phase">
   <h2><span class="section-num">01</span> Where the guide is</h2>
   <div class="phase-note">
-    <span>📍</span>
-    <span><b>Parts I and II are complete — chapters 1–9.</b> Foundations (reliability/scalability/maintainability, data models, storage, encoding) and the full distributed-data arc (replication, partitioning, transactions, distributed-systems trouble, consistency &amp; consensus) are all covered. Part III — batch, streams, and the future — arrives next, and its heuristics will land here.</span>
+    <span>🎉</span>
+    <span><b>The whole book is covered — chapters 1–12.</b> Foundations, the full distributed-data arc, and derived data (batch, streams, and the future of data systems). Every recurring decision in <em>Designing Data-Intensive Applications</em> now has a one-line heuristic below.</span>
   </div>
 </section>
 
@@ -114,6 +114,26 @@
         <dt>Cheapest safe ordering</dt><dd><strong>Causal order</strong> — survives partitions; use logical clocks, not wall clocks.</dd>
         <dt>Need everyone to agree?</dt><dd><strong>Consensus</strong> = total order broadcast. Don't build it — rent <strong>ZooKeeper/etcd</strong>.</dd>
         <dt>Cluster size</dt><dd>Odd (3, 5): any two majorities overlap, so split decisions can't both win.</dd>
+      </dl>
+    </div>
+    <div class="sheet">
+      <h3>Batch vs stream</h3>
+      <dl class="kv">
+        <dt>Fixed input, build a view?</dt><dd><strong>Batch</strong> (MapReduce/Spark) — optimise throughput; immutable input makes it retry-safe and reproducible.</dd>
+        <dt>Continuous, fresh output?</dt><dd><strong>Stream</strong> — same ideas on unbounded input; derived data stays seconds behind, not a cycle behind.</dd>
+        <dt>Many consumers / replay?</dt><dd><strong>Log-based broker</strong> (Kafka) — retained log, per-consumer offsets. A queue deletes on ack (no replay).</dd>
+        <dt>Reasoning about time</dt><dd>Prefer <strong>event time</strong> over processing time; a window must wait a bounded while for stragglers.</dd>
+        <dt>“Exactly-once”</dt><dd>= at-least-once delivery + <strong>idempotent</strong> writes. The effect happens once, even if processing repeats.</dd>
+      </dl>
+    </div>
+    <div class="sheet">
+      <h3>Derived data &amp; dataflow</h3>
+      <dl class="kv">
+        <dt>One store can't do it all</dt><dd>Keep one <strong>system of record</strong>; make indexes/caches/warehouses <strong>derived views</strong> from its changelog.</dd>
+        <dt>Integrating many stores</dt><dd>Prefer <strong>dataflow</strong> (a log + deterministic derivation) over distributed transactions across heterogeneous systems.</dd>
+        <dt>Schema change / new index</dt><dd><strong>Reprocess</strong> the log into a fresh view and swap it in — no risky in-place migration.</dd>
+        <dt>Lambda vs Kappa</dt><dd>Kappa (one stream pipeline, replay history) avoids Lambda's duplicated batch+stream logic — if the log retains enough history.</dd>
+        <dt>Correctness without 2PC</dt><dd>End-to-end <strong>idempotence</strong> + dedup (a request id) makes retries and reprocessing safe.</dd>
       </dl>
     </div>
   </div>

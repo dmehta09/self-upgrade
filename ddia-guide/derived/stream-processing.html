@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stream processing | Designing Data-Intensive Applications</title>
+  <meta name="description" content="Running batch's ideas continuously on unbounded input: events and streams, traditional vs log-based message brokers (Kafka offsets & replay), change data capture and the stream-table duality, windows and event vs processing time, and keeping materialized views fresh." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='8' ry='3'/><path d='M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5'/><path d='M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/ddia.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="derived" data-page="deriv-stream" data-lesson="deriv-stream">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Designing Data-Intensive Applications home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0b1020" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></span>
+        <span class="brand-text"><b>Data-Intensive Apps</b><span>DDIA · distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/decisions.html">Decisions &amp; trade-offs</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Part I · Foundations">
+        <h4><span class="dot"></span>Part I · Foundations</h4>
+        <a class="nav-link" href="../foundations/reliable-scalable-maintainable.html">Reliable, scalable &amp; maintainable</a>
+        <a class="nav-link" href="../foundations/data-models.html">Data models &amp; query languages</a>
+        <a class="nav-link" href="../foundations/storage-engines.html">Storage &amp; retrieval</a>
+        <a class="nav-link" href="../foundations/encoding-evolution.html">Encoding &amp; evolution</a>
+      </nav>
+      <nav class="nav-group is-distributed" aria-label="Part II · Distributed Data">
+        <h4><span class="dot"></span>Part II · Distributed Data</h4>
+        <a class="nav-link" href="../distributed/replication.html">Replication</a>
+        <a class="nav-link" href="../distributed/partitioning.html">Partitioning</a>
+        <a class="nav-link" href="../distributed/transactions.html">Transactions</a>
+        <a class="nav-link" href="../distributed/distributed-trouble.html">Distributed trouble</a>
+        <a class="nav-link" href="../distributed/consistency-consensus.html">Consistency &amp; consensus</a>
+      </nav>
+      <nav class="nav-group is-derived" aria-label="Part III · Derived Data">
+        <h4><span class="dot"></span>Part III · Derived Data</h4>
+        <a class="nav-link" href="../derived/batch-processing.html">Batch processing</a>
+        <a class="nav-link" href="../derived/stream-processing.html">Stream processing</a>
+        <a class="nav-link" href="../derived/future-data-systems.html">The future of data systems</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Part III · Derived Data</span><span class="sep">/</span><span class="current">Stream processing</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Part III · Derived Data · Chapter 11</span>
+  <h1>Stream processing.</h1>
+  <p class="lead">Batch processing assumes the input is complete. But data never stops arriving — so stream processing takes batch's ideas and runs them <em>continuously</em> on unbounded input: process each event soon after it happens, forever. It's how derived data stays fresh instead of being a day old.</p>
+</section>
+
+<section class="section reveal" id="events">
+  <h2><span class="section-num">01</span> Events and streams</h2>
+  <p class="takeaway">An <b>event</b> is a small, immutable record that <em>something happened</em> at a point in time. A <b>stream</b> is an unbounded sequence of them. Stream processing is batch processing without the assumption that the input ever ends.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Batch is the cannery processing a fixed pile once a day. Streaming is a conveyor belt that never stops — items keep arriving and you handle each as it passes. You can't wait for "all the input" because there is no all; you keep a little state, update it per item, and emit results continuously. Same recipes as batch, just run forever on a moving belt.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="brokers">
+  <h2><span class="section-num">02</span> Getting events around: two kinds of broker</h2>
+  <p>Producers and consumers are decoupled by a <strong>message broker</strong>, and there are two very different designs — the distinction matters more than any other in streaming:</p>
+  <div class="versus">
+    <div class="vs-col vs-a">
+      <div class="vs-h">Traditional queue (AMQP/JMS)</div>
+      <p>The broker hands each message to <em>one</em> consumer and <strong>deletes it after acknowledgement</strong>. Great for distributing tasks (a job queue), but the event is gone once processed — no replay, no second reader.</p>
+    </div>
+    <div class="vs-col vs-b">
+      <div class="vs-h">Log-based (Kafka)</div>
+      <p>An <strong>append-only, partitioned log</strong>. Messages are kept (not deleted on read); each consumer tracks its own <strong>offset</strong>. Many independent consumers, full replay of history, ordering per partition. The backbone of modern streaming.</p>
+    </div>
+  </div>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">A log-based broker: one log, many independent readers</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "A log-based broker: one log, many independent readers",
+      "nodes": [
+        { "id": "p", "label": "Producer", "type": "append", "col": 0, "row": 1 },
+        { "id": "log", "label": "Partitioned log", "type": "retained", "col": 1, "row": 1 },
+        { "id": "a", "label": "Consumer A", "type": "offset 1042", "col": 2, "row": 0 },
+        { "id": "b", "label": "Consumer B", "type": "offset 1039", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "p", "to": "log", "label": "append event" },
+        { "from": "log", "to": "a", "label": "read @ own offset" },
+        { "from": "log", "to": "b", "label": "read @ own offset" }
+      ],
+      "steps": [
+        { "node": "p", "caption": "A producer appends an event — the immutable fact that something happened." },
+        { "edge": ["p","log"], "caption": "It's appended to the end of a partitioned, durable log. Order is preserved within each partition." },
+        { "edge": ["log","a"], "status": "hit", "caption": "Consumer A reads sequentially, tracking its own offset (1042). The broker doesn't push or delete — A pulls at its own pace." },
+        { "edge": ["log","b"], "caption": "Consumer B reads the SAME log, fully independently, at a different offset (1039) — one slow consumer never blocks another." },
+        { "node": "b", "status": "hit", "caption": "Because the log is RETAINED, not deleted on read, a brand-new consumer can start from offset 0 and replay all history — impossible with a traditional queue." }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="cdc-windows">
+  <h2><span class="section-num">03</span> Where streams come from, and how you reason about time</h2>
+  <p>A powerful source of events is the database itself. <strong>Change Data Capture (CDC)</strong> turns every write to a system of record into a stream other systems can follow; <strong>event sourcing</strong> goes further and makes the log of events <em>the</em> source of truth, with current state derived by replaying it. Both reveal the <strong>stream–table duality</strong>: a table is a snapshot of a stream, a stream is the changelog of a table.</p>
+  <p>Unbounded input forces you to confront time. You compute over <strong>windows</strong> (tumbling, hopping, sliding), and you must choose between <strong>event time</strong> (when it happened) and <strong>processing time</strong> (when you saw it) — they diverge whenever events are delayed, so a window must decide how long to wait for stragglers before it declares itself complete.</p>
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 2M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Fault tolerance: exactly-once, honestly</div>
+      <p>Streams achieve "exactly-once" results not by magic but by <strong>microbatching / checkpoints</strong> plus <strong>idempotent</strong> writes: replay after a crash is safe because applying the same event twice has no extra effect. The processing may happen more than once; the observable effect happens once.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="joins">
+  <h2><span class="section-num">04</span> Keeping derived data fresh</h2>
+  <p>The pay-off: a stream processor maintains <strong>materialized views</strong> that are always up to date. A search index, a cache, a running aggregate, a join of two streams — each is kept current by consuming the event log, so derived data is seconds behind the source instead of a full batch cycle behind.</p>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">See also <span class="tag">sysdesign-guide</span></div>
+      <p>For the operational side of brokers — queues vs pub/sub, delivery guarantees, back-pressure, and dead-letter queues — see <a href="../../sysdesign-guide/blocks/messaging.html">Messaging &amp; queues</a> in the System Design Field Guide.</p>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">You need several independent systems (a search indexer, an analytics job, an audit trail) to all consume the same event stream, and you want a new consumer to be able to replay history from the beginning. Which broker style fits?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A log-based broker (e.g. Kafka) — the log is retained and each consumer tracks its own offset, so many readers and full replay are natural</button>
+      <button class="quiz-opt"><span class="mark"></span>A traditional queue — it deletes each message after one consumer acknowledges it</button>
+      <button class="quiz-opt"><span class="mark"></span>Either works identically</button>
+      <button class="quiz-opt"><span class="mark"></span>Neither — you need distributed transactions across the consumers</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> a traditional queue deletes a message once it's acknowledged, so it can't feed multiple independent consumers or replay the past. A log-based broker retains messages and lets each consumer read at its own offset — exactly what fan-out plus replay needs.</div>
+  </div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../derived/batch-processing.html"><span class="pn-k">‹ Back</span><span class="pn-t">Batch processing</span></a>
+            <a class="next" href="../derived/future-data-systems.html"><span class="pn-k">Next ›</span><span class="pn-t">The future of data systems</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#events">Events and streams</a>
+          <a href="#brokers">Getting events around: two kinds of broker</a>
+          <a href="#cdc-windows">Where streams come from, and how you reason about time</a>
+          <a href="#joins">Keeping derived data fresh</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Part III · Derived Data · Stream processing</span>
+        <span class="fmono">Designing Data-Intensive Applications · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+</body>
+</html>

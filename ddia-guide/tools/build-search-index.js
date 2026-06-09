@@ -20,6 +20,8 @@ const FILES = [
   "distributed/replication.html", "distributed/partitioning.html",
   "distributed/transactions.html", "distributed/distributed-trouble.html",
   "distributed/consistency-consensus.html",
+  "derived/batch-processing.html", "derived/stream-processing.html",
+  "derived/future-data-systems.html",
   "reference/decisions.html", "reference/flashcards.html",
 ];
 

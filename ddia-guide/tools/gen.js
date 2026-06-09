@@ -26,6 +26,7 @@ const FRAG = path.join(__dirname, "fragments");
 const MOD = {
   foundations: { crumb: "Part I · Foundations",    index: null },   /* no index page yet; label only */
   distributed: { crumb: "Part II · Distributed Data", index: null },
+  derived:     { crumb: "Part III · Derived Data",  index: null },
   reference:   { crumb: "Reference",               index: "reference/decisions.html" }
 };
 
@@ -44,7 +45,11 @@ const PAGES = [
   { out: "distributed/distributed-trouble.html", mod: "distributed", lesson: "dist-trouble", title: "The trouble with distributed systems", desc: "How reality betrays distributed code: unreliable networks (you can't tell crashed from slow), lying clocks (time-of-day vs monotonic), and process pauses — plus fencing tokens, and why truth is defined by a majority.", scripts: ["reqflow.js", "tradeoff.js"] },
   { out: "distributed/consistency-consensus.html", mod: "distributed", lesson: "dist-consensus", title: "Consistency & consensus", desc: "The strongest tools we have: linearizability (the single-copy illusion and its recency guarantee), the CAP trade-off during a partition, causal order and total order broadcast, and consensus (Paxos/Raft) built on overlapping majority quorums.", scripts: ["ddia-viz.js", "tradeoff.js"] },
 
-  { out: "reference/decisions.html",  mod: "reference", title: "Decisions & trade-offs", desc: "The recurring data-system decisions on one page — which data model, how to describe load and latency, fan-out on write vs read, replication and partitioning choices, isolation levels and CAP — each with a one-line heuristic. Grows as each part ships." },
+  { out: "derived/batch-processing.html", mod: "derived", lesson: "deriv-batch", title: "Batch processing", desc: "Processing a large, fixed, immutable input to build derived data: the Unix philosophy, MapReduce (map, shuffle, reduce) and reduce-side joins, dataflow engines (Spark/Flink), and why immutability makes batch jobs retry-safe and reproducible.", scripts: ["reqflow.js", "tradeoff.js"] },
+  { out: "derived/stream-processing.html", mod: "derived", lesson: "deriv-stream", title: "Stream processing", desc: "Running batch's ideas continuously on unbounded input: events and streams, traditional vs log-based message brokers (Kafka offsets & replay), change data capture and the stream-table duality, windows and event vs processing time, and keeping materialized views fresh.", scripts: ["reqflow.js"] },
+  { out: "derived/future-data-systems.html", mod: "derived", lesson: "deriv-future", title: "The future of data systems", desc: "Composing specialised stores via dataflow: one source of truth with derived views, unbundling the database, lambda vs kappa architecture, end-to-end correctness through deterministic derivation and idempotence — and doing right by data.", scripts: ["reqflow.js", "tradeoff.js"] },
+
+  { out: "reference/decisions.html",  mod: "reference", title: "Decisions & trade-offs", desc: "The recurring data-system decisions on one page — which data model, how to describe load and latency, fan-out on write vs read, replication and partitioning choices, isolation levels and CAP, batch vs stream — each with a one-line heuristic. Covers the whole book." },
   { out: "reference/flashcards.html", mod: "reference", title: "Flashcards",             desc: "The key terms and trade-offs as recall practice: faults vs failures, percentiles & tail-latency amplification, the impedance mismatch, schema-on-read, locality, and more.", scripts: ["flashcards.js"] }
 ];
 
@@ -55,7 +60,8 @@ const FAVICON = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' view
 const NAV = [
   { h: "Start here", links: [["index.html", "Home"], ["reference/decisions.html", "Decisions &amp; trade-offs"], ["reference/flashcards.html", "Flashcards"]] },
   { h: "Part I · Foundations", cls: "is-foundations", links: [["foundations/reliable-scalable-maintainable.html", "Reliable, scalable &amp; maintainable"], ["foundations/data-models.html", "Data models &amp; query languages"], ["foundations/storage-engines.html", "Storage &amp; retrieval"], ["foundations/encoding-evolution.html", "Encoding &amp; evolution"]] },
-  { h: "Part II · Distributed Data", cls: "is-distributed", links: [["distributed/replication.html", "Replication"], ["distributed/partitioning.html", "Partitioning"], ["distributed/transactions.html", "Transactions"], ["distributed/distributed-trouble.html", "Distributed trouble"], ["distributed/consistency-consensus.html", "Consistency &amp; consensus"]] }
+  { h: "Part II · Distributed Data", cls: "is-distributed", links: [["distributed/replication.html", "Replication"], ["distributed/partitioning.html", "Partitioning"], ["distributed/transactions.html", "Transactions"], ["distributed/distributed-trouble.html", "Distributed trouble"], ["distributed/consistency-consensus.html", "Consistency &amp; consensus"]] },
+  { h: "Part III · Derived Data", cls: "is-derived", links: [["derived/batch-processing.html", "Batch processing"], ["derived/stream-processing.html", "Stream processing"], ["derived/future-data-systems.html", "The future of data systems"]] }
 ];
 
 function sidebar(base) {

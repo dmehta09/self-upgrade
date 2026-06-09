@@ -1,0 +1,110 @@
+<section class="hero reveal">
+  <span class="eyebrow">Part III · Derived Data · Chapter 12</span>
+  <h1>The future of data systems.</h1>
+  <p class="lead">No single database does everything well, so real systems are stitched together from many specialised stores. This closing chapter argues that the way to keep them all correct and in sync is <strong>dataflow</strong>: pick one source of truth, and derive everything else from its stream of changes.</p>
+</section>
+
+<section class="section reveal" id="no-one-tool">
+  <h2><span class="section-num">01</span> One source of truth, many views</h2>
+  <p class="takeaway">Stop asking one database to be transactional store, search index, cache, and warehouse at once. Instead: keep a single <b>system of record</b>, and treat every other store as a <b>derived view</b> kept up to date from its changelog. Truth lives in one place; everything else is rebuildable.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v4H3zM6 7v14M18 7v14M6 14h12"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>A serious kitchen doesn't own one machine that boils, bakes, and blends badly. It has specialised appliances — but they all start from the <em>same</em> prepped ingredients. Data systems are heading the same way: one pantry (the source of truth) feeds many appliances (index, cache, warehouse, ML features), each fed by the same stream so nothing drifts out of step.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="unbundling">
+  <h2><span class="section-num">02</span> Unbundling the database</h2>
+  <p>A database already does several jobs internally — a write triggers index updates, replication, and materialized-view maintenance. Kleppmann's idea is to <strong>unbundle</strong> those into separate tools, composed by a stream that carries every change. Dataflow becomes the integration glue — replacing fragile distributed transactions across heterogeneous systems:</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Unbundling: derive every store from one changelog</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Unbundling: derive every store from one changelog",
+      "nodes": [
+        { "id": "sor", "label": "System of record", "type": "source of truth", "col": 0, "row": 1 },
+        { "id": "log", "label": "Event log", "type": "changelog", "col": 1, "row": 1 },
+        { "id": "idx", "label": "Search index", "type": "derived", "col": 2, "row": 0 },
+        { "id": "cache", "label": "Cache", "type": "derived", "col": 2, "row": 1 },
+        { "id": "wh", "label": "Warehouse", "type": "derived", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "sor", "to": "log", "label": "CDC / events" },
+        { "from": "log", "to": "idx" },
+        { "from": "log", "to": "cache" },
+        { "from": "log", "to": "wh" }
+      ],
+      "steps": [
+        { "node": "sor", "caption": "One system of record holds the authoritative writes — the single source of truth." },
+        { "edge": ["sor","log"], "caption": "Every change is published to a log, via change data capture or event sourcing." },
+        { "edge": ["log","idx"], "status": "hit", "caption": "A search index is derived by consuming the log…" },
+        { "edge": ["log","cache"], "status": "hit", "caption": "…a cache is derived from the same log…" },
+        { "edge": ["log","wh"], "status": "hit", "caption": "…and the warehouse too. Each is a deterministic, rebuildable VIEW — not a competing truth, so they can't disagree." }
+      ]
+    }
+    </script>
+  </figure>
+  <p>Because each view is a pure function of the log, you can add a new index, fix a bug, or change a schema by <strong>reprocessing</strong> the stream into a fresh view and swapping it in — no risky in-place migration.</p>
+</section>
+
+<section class="section reveal" id="lambda-kappa">
+  <h2><span class="section-num">03</span> Lambda or Kappa?</h2>
+  <p>If derived views come from a stream, what about reprocessing all of history? Two architectures answer differently:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Lambda vs Kappa architecture",
+      "axisLabel": "How do you combine historical reprocessing with live updates?",
+      "stops": [
+        { "label": "Lambda", "dims": { "Latency": 75, "Operational simplicity": 35, "Reprocessing power": 85, "Code duplication": 30 },
+          "note": "Run a batch layer (accurate, complete history) AND a speed layer (fast, approximate recent data), then merge at query time. Powerful, but you maintain the SAME logic twice — once in batch, once in streaming — and keep them in agreement. That double-implementation is its main pain." },
+        { "label": "Kappa", "dims": { "Latency": 88, "Operational simplicity": 80, "Reprocessing power": 80, "Code duplication": 90 },
+          "note": "Drop the batch layer: use ONE stream-processing pipeline for both live and historical data. Reprocess by replaying the retained log from the start through the same code. One codebase, simpler ops — relies on a log that retains enough history to replay." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="correctness">
+  <h2><span class="section-num">04</span> Correctness, and doing right by data</h2>
+  <p>Spreading data across many derived stores raises the obvious worry: how do you stay correct without distributed transactions? The answer is the <strong>end-to-end argument</strong> — build correctness from <strong>deterministic derivation</strong> plus <strong>idempotence</strong> and dedup (e.g. a unique request ID carried through), so retries and reprocessing are safe. Exactly-once <em>effects</em> emerge without locking everything together.</p>
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 8 8 8 8s8-3 8-8V6l-8-4z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">The book's last word: data has consequences</div>
+      <p>Kleppmann closes not on technology but on responsibility — privacy, consent, bias, and surveillance. The power to collect and derive data is also the power to harm with it. Build systems that treat data as something held <em>in trust</em>, not merely owned. A fitting end to a book about getting data systems right.</p>
+    </div>
+  </div>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">See also <span class="tag">sysdesign-guide</span></div>
+      <p>For a real system built exactly this way — one source of truth fanning out into many derived views — see <a href="../../sysdesign-guide/core/news-feed.html">News feed</a> in the System Design Field Guide.</p>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">In the dataflow / unbundling approach, why can a search index, a cache, and a warehouse never permanently disagree with each other?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Each is a deterministic view derived from the same source-of-truth changelog — none is an independent truth, so all converge on the log's contents</button>
+      <button class="quiz-opt"><span class="mark"></span>A distributed transaction commits to all three atomically on every write</button>
+      <button class="quiz-opt"><span class="mark"></span>They constantly compare themselves and vote on the correct value</button>
+      <button class="quiz-opt"><span class="mark"></span>They share the same physical storage</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> there is exactly one source of truth (the log). Every other store is a pure, rebuildable function of that log, so any temporary lag resolves as each catches up — no view is authoritative, and there's no second truth to conflict with. That's the whole appeal of dataflow over distributed transactions.</div>
+  </div>
+</section>

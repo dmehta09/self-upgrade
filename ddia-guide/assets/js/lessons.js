@@ -21,8 +21,12 @@ window.LESSONS = [
   { id: "dist-partitioning", title: "Partitioning",                      url: "distributed/partitioning.html",                   module: "distributed", tool: "distributed" },
   { id: "dist-transactions", title: "Transactions",                      url: "distributed/transactions.html",                   module: "distributed", tool: "distributed" },
   { id: "dist-trouble",      title: "The trouble with distributed systems", url: "distributed/distributed-trouble.html",         module: "distributed", tool: "distributed" },
-  { id: "dist-consensus",    title: "Consistency & consensus",           url: "distributed/consistency-consensus.html",          module: "distributed", tool: "distributed" }
-  /* Part II complete. Next: Part III — batch / stream / future — Phase 5 */
+  { id: "dist-consensus",    title: "Consistency & consensus",           url: "distributed/consistency-consensus.html",          module: "distributed", tool: "distributed" },
+  /* ---- Part III · Derived Data (ch 10–12) ---- */
+  { id: "deriv-batch",       title: "Batch processing",                  url: "derived/batch-processing.html",                   module: "derived",     tool: "derived" },
+  { id: "deriv-stream",      title: "Stream processing",                 url: "derived/stream-processing.html",                  module: "derived",     tool: "derived" },
+  { id: "deriv-future",      title: "The future of data systems",        url: "derived/future-data-systems.html",                module: "derived",     tool: "derived" }
+  /* The whole book — all 12 chapters — is now covered. */
 ];
 
 /* Ordered module groups for the home dashboard + sidebar.

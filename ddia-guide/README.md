@@ -2,9 +2,9 @@
 
 A sharp, **visual**, crisp guide to Martin Kleppmann's *Designing Data-Intensive Applications* (DDIA) — **not** a comprehensive re-telling, just the ideas that move the needle. Every concept is given **twice**: a plain-English analogy first, then the precise technical version, backed by **diagrams and trade-off tables** (the book's level), with short **Python** only where an algorithm makes it click.
 
-> **Built in parts.** DDIA is a big book (3 parts, 12 chapters), so this guide ships **phase by phase**. The scaffold holds the whole roadmap from day one; each phase fills in more chapters.
+> **Built in parts.** DDIA is a big book (3 parts, 12 chapters), so this guide was shipped **phase by phase**. The scaffold held the whole roadmap from day one; each phase filled in more chapters.
 >
-> **Parts I & II are complete (chapters 1–9).** Part I · Foundations — *Reliable, scalable & maintainable*, *Data models*, *Storage & retrieval*, *Encoding & evolution*. Part II · Distributed Data — *Replication*, *Partitioning*, *Transactions*, *The trouble with distributed systems*, and *Consistency & consensus*. The home page shows the full 3-part roadmap; **Part III · Derived Data is next**, with its chapters marked **“soon.”**
+> **The whole book is now covered — all 12 chapters.** Part I · Foundations — *Reliable, scalable & maintainable*, *Data models*, *Storage & retrieval*, *Encoding & evolution*. Part II · Distributed Data — *Replication*, *Partitioning*, *Transactions*, *The trouble with distributed systems*, *Consistency & consensus*. Part III · Derived Data — *Batch processing*, *Stream processing*, *The future of data systems*.
 
 Where topics overlap high-level system design (replication, partitioning, consistency, CAP), lessons carry a light **“see also”** link into the sibling **`sysdesign-guide`**.
 
@@ -28,10 +28,15 @@ Works fully offline (Google Fonts degrade gracefully to system fonts). Dark/ligh
 - **The trouble with distributed systems** — unreliable networks (crashed vs slow), lying clocks (time-of-day vs monotonic), process pauses; fencing tokens; truth by majority
 - **Consistency & consensus** — linearizability; the CAP trade-off during a partition; causal & total order; consensus on overlapping majority quorums
 
+**Part III — Derived Data (complete)**
+- **Batch processing** — the batch mindset & immutability; the Unix philosophy; MapReduce (map/shuffle/reduce) and reduce-side joins; dataflow engines (Spark/Flink); building derived data
+- **Stream processing** — events & unbounded streams; traditional vs log-based brokers (Kafka offsets & replay); change data capture and the stream–table duality; windows, event vs processing time; keeping materialized views fresh
+- **The future of data systems** — one source of truth with derived views; unbundling the database via dataflow; lambda vs kappa; end-to-end correctness through idempotence; doing right by data
+
 **Reference** — a Decisions & trade-offs cheatsheet (each recurring choice + a one-line heuristic) and flashcards.
 
 ## Interactive
-`ddia-viz` (the guide's own engine — a **data-model explorer** (relational ⇄ document ⇄ graph), a **percentiles** scene for p50/p95/p99 & tail-latency amplification, a **storage** scene for LSM-tree vs B-tree, a **consistent-hashing ring** that shows only a fraction of keys move when the cluster grows, and a **quorum** widget for `w + r > n` overlap) · reused `reqflow` (single-leader write propagation; the fencing-token race) and `tradeoff` sliders · `flashcards` · in-site search · per-lesson progress. All dependency-free, theme-aware, and offline.
+`ddia-viz` (the guide's own engine — a **data-model explorer** (relational ⇄ document ⇄ graph), a **percentiles** scene for p50/p95/p99 & tail-latency amplification, a **storage** scene for LSM-tree vs B-tree, a **consistent-hashing ring** that shows only a fraction of keys move when the cluster grows, and a **quorum** widget for `w + r > n` overlap) · reused `reqflow` (single-leader replication, the fencing-token race, MapReduce, a log-based broker, and database unbundling) and `tradeoff` sliders · `flashcards` · in-site search · per-lesson progress. All dependency-free, theme-aware, and offline.
 
 ## Editing / regenerating
 Content lives as **section-only fragments** in `tools/fragments/<dir>__<slug>.html` (double-underscore = path separator). The site map is inline in `tools/gen.js` (`PAGES`/`MOD`/`NAV`); the lesson registry is `assets/js/lessons.js`; the search file list is in `tools/build-search-index.js`. After editing:
@@ -43,7 +48,9 @@ node tools/verify.js             # validate links, anchors, escaping, lesson wir
 node tools/reverify.js           # deep cross-checks: gen ↔ lessons ↔ fragments ↔ search, JSON configs, drift
 ```
 
-### Adding the next phase
+### Adding more (the book is complete, but the recipe remains)
+All 12 chapters of DDIA are now covered, so there's no "next phase" pending. If you ever want to add a deeper-dive page or a new section, the same recipe applies:
+
 1. Add fragment(s) under `tools/fragments/` (e.g. `foundations__storage-engines.html`).
 2. Append the page(s) to `PAGES` and the sidebar group to `NAV` in `tools/gen.js`.
 3. Append the lesson(s) to `window.LESSONS` in `assets/js/lessons.js`.

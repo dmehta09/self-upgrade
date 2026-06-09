@@ -1,0 +1,107 @@
+<section class="hero reveal">
+  <span class="eyebrow">Part III · Derived Data · Chapter 10</span>
+  <h1>Batch processing.</h1>
+  <p class="lead">Everything so far served live requests. Batch processing is the opposite shape: take a large, <em>fixed</em> input, grind through all of it, and produce a derived output — no user waiting on the other end. It's how search indexes, recommendation models, and reports get built, and its ideas quietly underpin the whole derived-data world.</p>
+</section>
+
+<section class="section reveal" id="mindset">
+  <h2><span class="section-num">01</span> The batch mindset</h2>
+  <p class="takeaway">Batch jobs read <b>immutable</b> input and write fresh output, touching nothing in place. That single property is a superpower: a job that fails can just be re-run, the same input always gives the same output, and you can experiment fearlessly because the source data is never harmed.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v6H4zM4 14h16v6H4z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Online services are like a restaurant kitchen — orders arrive nonstop and you cook each to order, fast. Batch processing is like a cannery: once a day a giant fixed pile of tomatoes comes in, the line runs end to end, and out comes a pallet of cans. Nobody's waiting at the counter, so you optimise for <em>throughput</em>, not latency — and if a machine jams, you just run the batch again.</p>
+    </div>
+  </div>
+  <p>The intellectual ancestor is the <strong>Unix philosophy</strong>: small tools that each do one thing, share a uniform interface (a stream of bytes / lines), and compose with pipes — <code>cat log | grep ERROR | sort | uniq -c</code>. MapReduce is essentially that idea, scaled across thousands of machines.</p>
+</section>
+
+<section class="section reveal" id="mapreduce">
+  <h2><span class="section-num">02</span> MapReduce — map, shuffle, reduce</h2>
+  <p>MapReduce runs a job over a distributed filesystem (HDFS) in three movements. <strong>Map</strong> transforms each input record into key-value pairs. The framework's <strong>shuffle</strong> sorts and groups every pair by key. <strong>Reduce</strong> then sees all values for one key together and aggregates them. Watch one record flow through:</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">A MapReduce job, end to end</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "A MapReduce job, end to end",
+      "nodes": [
+        { "id": "in", "label": "Input (HDFS)", "type": "immutable", "col": 0, "row": 1 },
+        { "id": "m1", "label": "Mapper", "type": "map", "col": 1, "row": 0 },
+        { "id": "m2", "label": "Mapper", "type": "map", "col": 1, "row": 2 },
+        { "id": "sh", "label": "Shuffle", "type": "sort by key", "col": 2, "row": 1 },
+        { "id": "r1", "label": "Reducer", "type": "reduce", "col": 3, "row": 0 },
+        { "id": "r2", "label": "Reducer", "type": "reduce", "col": 3, "row": 2 },
+        { "id": "out", "label": "Output (HDFS)", "type": "derived", "col": 4, "row": 1 }
+      ],
+      "edges": [
+        { "from": "in", "to": "m1" }, { "from": "in", "to": "m2" },
+        { "from": "m1", "to": "sh", "label": "(key, value)" }, { "from": "m2", "to": "sh" },
+        { "from": "sh", "to": "r1" }, { "from": "sh", "to": "r2", "label": "group by key" },
+        { "from": "r1", "to": "out" }, { "from": "r2", "to": "out" }
+      ],
+      "steps": [
+        { "node": "in", "caption": "The job starts from a fixed, immutable input on the distributed filesystem — split into chunks." },
+        { "edge": ["in","m1"], "caption": "A mapper runs on each chunk, ideally on the machine that already holds it (move code to data, not data to code)." },
+        { "edge": ["m1","sh"], "caption": "Map emits key-value pairs — e.g. (url, 1) for each page view." },
+        { "node": "sh", "status": "hit", "caption": "The framework's shuffle sorts and groups every pair by key, so all values for one key land at the same reducer." },
+        { "edge": ["sh","r1"], "caption": "A reducer receives one key and ALL its values together — and aggregates (e.g. sums the 1s into a view count)." },
+        { "edge": ["r1","out"], "caption": "It writes a brand-new output file. Intermediate state was materialised to disk, so any failed task just re-runs — that's MapReduce's fault tolerance." }
+      ]
+    }
+    </script>
+  </figure>
+  <p>The shuffle is where joins happen: emit both sides of the join with the same join key, and the reducer sees them side by side (a <strong>reduce-side join</strong>). Skew — one hot key with far more values than the rest — is the classic batch performance problem.</p>
+</section>
+
+<section class="section reveal" id="dataflow">
+  <h2><span class="section-num">03</span> Beyond MapReduce — dataflow engines</h2>
+  <p>MapReduce writes every intermediate result to disk, and a multi-stage job becomes a chain of separate MapReduce jobs — slow. Modern <strong>dataflow engines</strong> (Spark, Flink, Tez) model the whole job as one graph of operators and keep intermediate data in memory, recomputing lost pieces from lineage instead of always materialising.</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Classic MapReduce vs a dataflow engine",
+      "axisLabel": "Two ways to run a big batch job",
+      "stops": [
+        { "label": "MapReduce", "dims": { "Speed (multi-stage)": 35, "Robustness": 88, "Simplicity": 80, "Memory pressure": 85 },
+          "note": "Each stage materialises to HDFS, so failures recover trivially (re-read the file) and huge jobs fit in modest RAM. But every handoff is a disk round-trip, and a pipeline of N steps is N chained jobs — slow for iterative work like ML." },
+        { "label": "Dataflow engine", "dims": { "Speed (multi-stage)": 90, "Robustness": 70, "Simplicity": 60, "Memory pressure": 45 },
+          "note": "One DAG of operators, intermediate data kept in memory and passed directly between stages → far faster, especially iterative algorithms. Recovers lost partitions by recomputing from lineage. Cost: more memory, more moving parts." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="derived">
+  <h2><span class="section-num">04</span> The real point: building derived data</h2>
+  <p>A batch job's output is <strong>derived data</strong> — a search index, a recommendation model, a daily report. Because the input is immutable and the transformation is deterministic, the output is a pure function of the input: lose it and you rebuild it; change the code and you reprocess from scratch. This is the seed of Part III's big idea — keep one source of truth, and treat everything else as a view you can always regenerate.</p>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">See also <span class="tag">sysdesign-guide</span></div>
+      <p>For how the search indexes batch jobs build actually get queried — B-trees, inverted indexes, composite &amp; covering indexes — see <a href="../../sysdesign-guide/data/indexing.html">Indexing</a> in the System Design Field Guide.</p>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">Why can a MapReduce task that crashes halfway simply be re-run, with no risk of corrupting results?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Input is immutable and output is written fresh — a task is a deterministic function of its input, so re-running produces the same result</button>
+      <button class="quiz-opt"><span class="mark"></span>MapReduce uses distributed transactions to roll back partial work</button>
+      <button class="quiz-opt"><span class="mark"></span>The framework locks the input files so nothing else can change them</button>
+      <button class="quiz-opt"><span class="mark"></span>Reducers undo the mappers' changes on failure</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> batch processing never mutates its input. A task reads immutable data and writes new output, so a failed task is just retried on the same input — no locks, no transactions, no partial-update hazards. That retry-safety is exactly why immutability is so powerful.</div>
+  </div>
+</section>
