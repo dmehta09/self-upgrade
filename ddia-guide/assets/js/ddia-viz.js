@@ -12,8 +12,10 @@
                        amplification as a request fans out to N backends
    Both faces/views stay reachable; everything reads CSS vars, so light/dark
    + per-module accents work for free. Honors prefers-reduced-motion via CSS.
-   (Future phases add scenes: "storage" LSM↔B-tree, "ring" consistent hashing,
-   "quorum" w+r>n — same engine, new case in render().)
+   Phase 2 adds "storage" (LSM↔B-tree); Phase 3 adds "ring" (consistent
+   hashing — keys and nodes on a circle, owner = first node clockwise, with
+   a slider that shows only a fraction of keys move when the cluster grows).
+   (A future "quorum" w+r>n scene slots in the same way — new case in init().)
    ============================================================ */
 (function () {
   "use strict";
@@ -284,6 +286,98 @@
     show("lsm");
   }
 
+  /* ---------- scene: consistent-hashing ring (partitioning) ---------- */
+  var RING_COLORS = ["#6366f1", "#34d399", "#f59e0b", "#fb7185", "#38bdf8", "#a78bfa"];
+  function renderRing(body, cfg) {
+    var norm = function (a) { return ((a % 360) + 360) % 360; };
+    var allNodes = (cfg.nodes || []).map(function (n, i) {
+      return { label: n.label, angle: norm(n.angle), color: n.color || RING_COLORS[i % RING_COLORS.length], idx: i };
+    });
+    var keys = (cfg.keys || []).map(function (k) { return { label: k.label, angle: norm(k.angle) }; });
+    if (!allNodes.length || !keys.length) { body.appendChild(el("p", "viz-fallback", "No ring data.")); return; }
+
+    var cx = 60, cy = 60, R = 42;
+    function xy(angle, r) { var a = angle * Math.PI / 180; return { x: cx + r * Math.sin(a), y: cy - r * Math.cos(a) }; }
+    function ownerOf(keyAngle, active) {
+      var sorted = active.slice().sort(function (a, b) { return a.angle - b.angle; });
+      for (var i = 0; i < sorted.length; i++) if (sorted[i].angle >= keyAngle) return sorted[i];
+      return sorted[0];   // wrap past 360° back to the first node
+    }
+
+    var stage = el("div", "dv-ringwrap");
+    var s = svg("svg", { viewBox: "0 0 120 120", class: "dv-ring", role: "img" });
+    var legend = el("div", "dv-rlegend");
+    stage.appendChild(s); stage.appendChild(legend);
+    body.appendChild(stage);
+
+    var ctrl = el("div", "dv-ringctrl");
+    var lab = el("label", "dv-fanlabel");
+    lab.appendChild(el("span", null, "Nodes on the ring: "));
+    var nOut = el("b", "dv-fanN", ""); lab.appendChild(nOut);
+    ctrl.appendChild(lab);
+    var slider = el("input", "dv-fanrange");
+    slider.type = "range"; slider.min = "1"; slider.max = String(allNodes.length);
+    slider.value = String(Math.min(cfg.start || allNodes.length, allNodes.length));
+    slider.setAttribute("aria-label", "Number of active nodes on the hash ring");
+    ctrl.appendChild(slider);
+    var msg = el("div", "dv-fanout"); ctrl.appendChild(msg);
+    body.appendChild(ctrl);
+
+    var prevOwners = null, prevCount = null;
+
+    function render() {
+      var count = parseInt(slider.value, 10) || 1;
+      nOut.textContent = count;
+      var active = allNodes.slice(0, count);
+      s.innerHTML = ""; legend.innerHTML = "";
+      s.appendChild(svg("circle", { cx: cx, cy: cy, r: R, class: "dv-rring" }));
+
+      var owners = {}, counts = {};
+      keys.forEach(function (k) { var o = ownerOf(k.angle, active); owners[k.label] = o.idx; counts[o.idx] = (counts[o.idx] || 0) + 1; });
+
+      active.forEach(function (n) {
+        var p = xy(n.angle, R), pin = xy(n.angle, R - 4), pout = xy(n.angle, R + 4), plab = xy(n.angle, R + 11);
+        var g = svg("g", { class: "dv-rnode" });
+        g.appendChild(svg("line", { x1: pin.x, y1: pin.y, x2: pout.x, y2: pout.y, stroke: n.color, "stroke-width": 1.6 }));
+        g.appendChild(svg("circle", { cx: p.x, cy: p.y, r: 3, fill: n.color, class: "dv-rnodedot" }));
+        var t = svg("text", { x: plab.x, y: plab.y + 1.4, class: "dv-rnlabel", fill: n.color,
+          "text-anchor": plab.x < cx - 3 ? "end" : (plab.x > cx + 3 ? "start" : "middle") });
+        t.textContent = n.label; g.appendChild(t);
+        s.appendChild(g);
+      });
+
+      keys.forEach(function (k) {
+        var p = xy(k.angle, R);
+        var moved = prevOwners && prevOwners[k.label] !== owners[k.label];
+        var c = svg("circle", { cx: p.x, cy: p.y, r: 2.1, fill: allNodes[owners[k.label]].color, class: "dv-rkey" + (moved ? " moved" : "") });
+        s.appendChild(c);
+      });
+
+      active.forEach(function (n) {
+        var row = el("div", "dv-rlrow");
+        var sw = el("span", "dv-rsw"); sw.style.background = n.color; row.appendChild(sw);
+        row.appendChild(el("span", "dv-rlname", n.label));
+        row.appendChild(el("span", "dv-rlcount", (counts[n.idx] || 0) + " keys"));
+        legend.appendChild(row);
+      });
+
+      var movedCount = prevOwners ? keys.filter(function (k) { return prevOwners[k.label] !== owners[k.label]; }).length : 0;
+      if (prevCount == null)
+        msg.innerHTML = "Each key sits at a hash position and belongs to the <b>first node clockwise</b>. Drag to add or drop a node.";
+      else if (count > prevCount)
+        msg.innerHTML = "Added a node (" + prevCount + " → " + count + "): only <b class=\"dv-amp\">" + movedCount + " of " + keys.length + "</b> keys moved — the rest stayed put. With naïve <code>hash % N</code>, nearly all would move.";
+      else if (count < prevCount)
+        msg.innerHTML = "Dropped a node (" + prevCount + " → " + count + "): its <b class=\"dv-amp\">" + movedCount + "</b> keys spilled to the next node clockwise; everyone else is untouched.";
+      else
+        msg.innerHTML = "Each key belongs to the first node clockwise of its hash position.";
+
+      prevOwners = owners; prevCount = count;
+    }
+
+    slider.addEventListener("input", render);
+    render();
+  }
+
   /* ---------- boot ---------- */
   function init(host) {
     var sEl = host.querySelector(".dv-config") || host.querySelector("script[type='application/json']");
@@ -303,6 +397,7 @@
     if (cfg.scene === "percentiles") renderPercentiles(body, cfg);
     else if (cfg.scene === "datamodel") renderDataModel(body, cfg);
     else if (cfg.scene === "storage") renderStorage(body, cfg);
+    else if (cfg.scene === "ring") renderRing(body, cfg);
     else body.appendChild(el("p", "viz-fallback", "Unknown scene: " + (cfg.scene || "(none)")));
   }
 

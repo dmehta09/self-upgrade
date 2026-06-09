@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Partitioning | Designing Data-Intensive Applications</title>
+  <meta name="description" content="Splitting a dataset across nodes (sharding): partitioning by key range vs by hash, skew and hot spots, consistent hashing and rebalancing, request routing, and local vs global secondary indexes." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='8' ry='3'/><path d='M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5'/><path d='M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/ddia.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="distributed" data-page="dist-partitioning" data-lesson="dist-partitioning">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Designing Data-Intensive Applications home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0b1020" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></span>
+        <span class="brand-text"><b>Data-Intensive Apps</b><span>DDIA · distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/decisions.html">Decisions &amp; trade-offs</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Part I · Foundations">
+        <h4><span class="dot"></span>Part I · Foundations</h4>
+        <a class="nav-link" href="../foundations/reliable-scalable-maintainable.html">Reliable, scalable &amp; maintainable</a>
+        <a class="nav-link" href="../foundations/data-models.html">Data models &amp; query languages</a>
+        <a class="nav-link" href="../foundations/storage-engines.html">Storage &amp; retrieval</a>
+        <a class="nav-link" href="../foundations/encoding-evolution.html">Encoding &amp; evolution</a>
+      </nav>
+      <nav class="nav-group is-distributed" aria-label="Part II · Distributed Data">
+        <h4><span class="dot"></span>Part II · Distributed Data</h4>
+        <a class="nav-link" href="../distributed/replication.html">Replication</a>
+        <a class="nav-link" href="../distributed/partitioning.html">Partitioning</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Part II · Distributed Data</span><span class="sep">/</span><span class="current">Partitioning</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Part II · Distributed Data · Chapter 6</span>
+  <h1>Partitioning.</h1>
+  <p class="lead">Replication copies the <em>whole</em> dataset to every node. But when the data is too big — or too busy — for any single machine, you must <strong>split</strong> it: each partition (shard) lives on a different node. The art is deciding which record goes where, so that load spreads evenly and growing the cluster doesn't reshuffle everything.</p>
+</section>
+
+<section class="section reveal" id="why-partition">
+  <h2><span class="section-num">01</span> Why split the data</h2>
+  <p class="takeaway">Replication is for <b>availability</b>; partitioning is for <b>scale</b>. Each partition is a little database of its own — spread them across nodes and both storage and throughput scale with the cluster. Partitioning and replication almost always travel together: each partition is also replicated for safety.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>One library can't hold every book in the country, so you open branches and decide how to divide the collection. By title's first letter (A–F here, G–M there)? Then everyone researching “Smith” floods one branch — a <em>hot spot</em>. By a shuffled call-number instead? Load spreads evenly, but “give me every author from A–C” now means visiting every branch. That single choice — <strong>by range</strong> or <strong>by hash</strong> — is the whole chapter.</p>
+    </div>
+  </div>
+  <p>The goal is to avoid <strong>skew</strong>: a partition with disproportionate data or traffic. A maximally skewed partition is a <strong>hot spot</strong>, and it caps your whole system at the speed of one node — defeating the point of partitioning.</p>
+</section>
+
+<section class="section reveal" id="range-vs-hash">
+  <h2><span class="section-num">02</span> Two ways to assign keys</h2>
+  <div class="versus">
+    <div class="vs-col vs-a">
+      <div class="vs-h">By key range</div>
+      <p>Contiguous ranges of the key, kept sorted (like an encyclopedia's volumes). <strong>Range scans are efficient</strong> — “all events in March” reads one partition. Risk: an uneven or sequential key (a timestamp) sends all new writes to one partition — a hot spot.</p>
+    </div>
+    <div class="vs-col vs-b">
+      <div class="vs-h">By hash of key</div>
+      <p>Hash the key, partition by the hash. <strong>Spreads load evenly</strong> and tames hot spots. Cost: you destroy ordering, so a range scan must hit <em>every</em> partition. The pragmatic middle ground is a compound key — hash one part, range the rest.</p>
+    </div>
+  </div>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Range partitioning vs hash partitioning",
+      "axisLabel": "How do you map a key to a partition?",
+      "stops": [
+        { "label": "By range", "dims": { "Even load": 45, "Range-scan speed": 92, "Hot-spot resistance": 38, "Simplicity": 80 },
+          "note": "Keys stay sorted, so range queries touch one (or few) partitions. But naturally-ordered keys (timestamps, auto-increment IDs) concentrate writes on the newest range — a classic hot spot. Used by HBase, and key-range index structures." },
+        { "label": "By hash", "dims": { "Even load": 90, "Range-scan speed": 25, "Hot-spot resistance": 85, "Simplicity": 70 },
+          "note": "Hashing scatters adjacent keys across partitions → uniform load, no write hot spot. But ordering is gone, so a range query becomes a scatter/gather over all partitions. Used by Cassandra, MongoDB (hashed shard key), DynamoDB." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="ring">
+  <h2><span class="section-num">03</span> The ring — and why rebalancing is the real problem</h2>
+  <p>Hashing fixes skew, but raises a new question: <em>how many partitions, and on which node?</em> The naïve answer <code>node = hash(key) % N</code> is a trap — change <code>N</code> (add or remove a node) and <em>almost every</em> key remaps, moving the entire dataset over the network. <strong>Consistent hashing</strong> places both keys and nodes on a ring; a key belongs to the first node clockwise. Add a node and only the keys in <em>one arc</em> move.</p>
+  <figure class="ddiaviz" data-ddiaviz>
+    <figcaption class="dv-title">Consistent hashing: what moves when the cluster grows</figcaption>
+    <div class="dv-body"><p class="viz-fallback">Interactive — needs JavaScript. Keys and nodes sit on a hash ring; each key is owned by the first node clockwise. Adding a node reassigns only the keys in one arc, not the whole dataset.</p></div>
+    <script type="application/json" class="dv-config">
+    {
+      "scene": "ring",
+      "title": "Consistent hashing: what moves when the cluster grows",
+      "start": 3,
+      "nodes": [
+        { "label": "Node A", "angle": 30 },
+        { "label": "Node B", "angle": 150 },
+        { "label": "Node C", "angle": 255 },
+        { "label": "Node D", "angle": 330 }
+      ],
+      "keys": [
+        { "label": "k1", "angle": 10 }, { "label": "k2", "angle": 55 }, { "label": "k3", "angle": 80 },
+        { "label": "k4", "angle": 120 }, { "label": "k5", "angle": 175 }, { "label": "k6", "angle": 210 },
+        { "label": "k7", "angle": 240 }, { "label": "k8", "angle": 285 }, { "label": "k9", "angle": 310 },
+        { "label": "k10", "angle": 350 }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In practice: a fixed number of partitions</div>
+      <p>Many systems skip the literal ring and instead create a <strong>large fixed number of partitions</strong> up front (say 1,000), then hand whole partitions to nodes. Adding a node just steals a few partitions from each existing node — entire partitions move, never individual keys, and the partition count never changes. Same property (move a fraction, not everything), simpler bookkeeping.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="routing">
+  <h2><span class="section-num">04</span> Finding the data again</h2>
+  <p>Once data is scattered, a client asking for key <code>k</code> needs to reach the right partition — this is <strong>request routing</strong>, an instance of service discovery. Three designs: let any node forward the request, put a routing tier in front, or make clients partition-aware. A coordination service (ZooKeeper) or a gossip protocol keeps the partition-to-node map current.</p>
+  <p>Secondary indexes don't partition as cleanly as primary keys, and you pick your poison:</p>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Local index (by document)</div>
+      <p>Each partition indexes only its own data. <strong>Writes are cheap</strong> (one partition), but a query on the index must <strong>scatter/gather</strong> across all partitions. The common default.</p>
+    </div>
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Global index (by term)</div>
+      <p>The index itself is partitioned by term, independent of the data. <strong>Reads are cheap</strong> (one partition), but a single write may have to update index entries on <strong>several</strong> partitions, so it's often asynchronous.</p>
+    </div>
+  </div>
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">See also <span class="tag">sysdesign-guide</span></div>
+      <p>For the practitioner's playbook — picking a shard key, the celebrity/hot-key problem, and resharding live traffic — see <a href="../../sysdesign-guide/data/sharding.html">Sharding &amp; partitioning</a> in the System Design Field Guide.</p>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">You shard a time-series table by an auto-incrementing timestamp, using key-range partitioning. What goes wrong?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A write hot spot — all new rows have the latest timestamp, so they all land on the same partition</button>
+      <button class="quiz-opt"><span class="mark"></span>Range scans by time become impossible</button>
+      <button class="quiz-opt"><span class="mark"></span>Adding a node would remap every key</button>
+      <button class="quiz-opt"><span class="mark"></span>Nothing — timestamps are an ideal range key</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> a monotonically increasing key sends every new write to the single newest range, so one partition absorbs the entire write load. Fix it by prefixing the key with something that scatters writes (e.g. a hashed or per-source prefix), trading some range-scan locality for even load.</div>
+  </div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../distributed/replication.html"><span class="pn-k">‹ Back</span><span class="pn-t">Replication</span></a>
+            <a class="next" href="../reference/decisions.html"><span class="pn-k">Next ›</span><span class="pn-t">Decisions & trade-offs</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#why-partition">Why split the data</a>
+          <a href="#range-vs-hash">Two ways to assign keys</a>
+          <a href="#ring">The ring — and why rebalancing is the real problem</a>
+          <a href="#routing">Finding the data again</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Part II · Distributed Data · Partitioning</span>
+        <span class="fmono">Designing Data-Intensive Applications · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/ddia-viz.js"></script>
+  <script src="../assets/js/tradeoff.js"></script>
+</body>
+</html>

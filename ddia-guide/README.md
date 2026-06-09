@@ -4,7 +4,7 @@ A sharp, **visual**, crisp guide to Martin Kleppmann's *Designing Data-Intensive
 
 > **Built in parts.** DDIA is a big book (3 parts, 12 chapters), so this guide ships **phase by phase**. The scaffold holds the whole roadmap from day one; each phase fills in more chapters.
 >
-> **Part I · Foundations is complete (chapters 1–4)** — *Reliable, scalable & maintainable*, *Data models & query languages*, *Storage & retrieval* (LSM-trees vs B-trees), and *Encoding & evolution*. The home page shows the full 3-part roadmap; **Part II · Distributed Data is next**, with its chapters marked **“soon.”**
+> **Part I · Foundations is complete (chapters 1–4)** — *Reliable, scalable & maintainable*, *Data models & query languages*, *Storage & retrieval* (LSM-trees vs B-trees), and *Encoding & evolution*. **Part II · Distributed Data is underway** — *Replication* (single/multi-leader & leaderless, lag, quorums) and *Partitioning* (range vs hash, consistent hashing, rebalancing) are live (chapters 5–6). The home page shows the full 3-part roadmap; the remaining chapters are marked **“soon.”**
 
 Where topics overlap high-level system design (replication, partitioning, consistency, CAP), lessons carry a light **“see also”** link into the sibling **`sysdesign-guide`**.
 
@@ -14,15 +14,21 @@ Where topics overlap high-level system design (replication, partitioning, consis
 
 Works fully offline (Google Fonts degrade gracefully to system fonts). Dark/light theme toggle and per-lesson progress persist in your browser.
 
-## What's inside (Part I — complete)
+## What's inside
+**Part I — Foundations (complete)**
 - **Reliable, scalable & maintainable** — faults vs failures; percentiles & tail-latency amplification; operability/simplicity/evolvability
 - **Data models & query languages** — relational vs document vs graph; the impedance mismatch; schema-on-read vs schema-on-write; declarative vs imperative
 - **Storage & retrieval** — the append-only log; LSM-trees (memtable/SSTables/compaction) vs B-trees (pages/in-place); OLTP row stores vs OLAP column stores
 - **Encoding & evolution** — textual vs binary-schema formats (Protobuf/Avro/Thrift); field tags; backward & forward compatibility for rolling deploys
-- **Reference** — a Decisions & trade-offs cheatsheet (each recurring choice + a one-line heuristic) and flashcards
+
+**Part II — Distributed Data (underway)**
+- **Replication** — single-leader / multi-leader / leaderless; synchronous vs asynchronous; replication lag and the read-your-writes / monotonic / consistent-prefix guarantees; failover & split brain; quorums (`w + r > n`)
+- **Partitioning** — by key range vs by hash; skew & hot spots; consistent hashing & rebalancing; request routing; local vs global secondary indexes
+
+**Reference** — a Decisions & trade-offs cheatsheet (each recurring choice + a one-line heuristic) and flashcards.
 
 ## Interactive
-`ddia-viz` (the guide's own engine — a **data-model explorer** that shows the same entity as relational ⇄ document ⇄ graph, and a **percentiles** scene that makes p50/p95/p99 and tail-latency amplification tangible) · reused `tradeoff` slider · `flashcards` · in-site search · per-lesson progress. All dependency-free, theme-aware, and offline.
+`ddia-viz` (the guide's own engine — a **data-model explorer** (relational ⇄ document ⇄ graph), a **percentiles** scene for p50/p95/p99 & tail-latency amplification, a **storage** scene for LSM-tree vs B-tree, and a **consistent-hashing ring** that shows only a fraction of keys move when the cluster grows) · reused `reqflow` (single-leader write propagation) and `tradeoff` sliders · `flashcards` · in-site search · per-lesson progress. All dependency-free, theme-aware, and offline.
 
 ## Editing / regenerating
 Content lives as **section-only fragments** in `tools/fragments/<dir>__<slug>.html` (double-underscore = path separator). The site map is inline in `tools/gen.js` (`PAGES`/`MOD`/`NAV`); the lesson registry is `assets/js/lessons.js`; the search file list is in `tools/build-search-index.js`. After editing:

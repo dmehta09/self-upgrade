@@ -24,8 +24,9 @@ const FRAG = path.join(__dirname, "fragments");
 
 /* ---- modules (sidebar label + breadcrumb + index path) ---- */
 const MOD = {
-  foundations: { crumb: "Part I · Foundations", index: null },   /* no index page yet; label only */
-  reference:   { crumb: "Reference",            index: "reference/decisions.html" }
+  foundations: { crumb: "Part I · Foundations",    index: null },   /* no index page yet; label only */
+  distributed: { crumb: "Part II · Distributed Data", index: null },
+  reference:   { crumb: "Reference",               index: "reference/decisions.html" }
 };
 
 /* ---- the reading order (drives prev/next). PHASE 1 = Part I, ch 1–2 ---- */
@@ -37,7 +38,10 @@ const PAGES = [
   { out: "foundations/storage-engines.html",                mod: "foundations", lesson: "found-storage",     title: "Storage & retrieval",                desc: "How a database stores data and finds it again: the append-only log, LSM-trees (memtable, SSTables, compaction) vs B-trees (pages, in-place updates), and OLTP row stores vs OLAP column stores.", scripts: ["ddia-viz.js", "tradeoff.js"] },
   { out: "foundations/encoding-evolution.html",             mod: "foundations", lesson: "found-encoding",    title: "Encoding & evolution",               desc: "Turning in-memory objects into bytes and back: textual (JSON) vs binary schema formats (Protobuf/Thrift/Avro), field tags, and schema evolution — backward and forward compatibility for zero-downtime rolling deploys." },
 
-  { out: "reference/decisions.html",  mod: "reference", title: "Decisions & trade-offs", desc: "The recurring data-system decisions on one page — which data model, how to describe load and latency, fan-out on write vs read — each with a one-line heuristic. Grows as each part ships." },
+  { out: "distributed/replication.html",  mod: "distributed", lesson: "dist-replication",  title: "Replication",   desc: "Keeping the same data on several nodes: single-leader, multi-leader, and leaderless models; synchronous vs asynchronous replication; replication lag and the read-your-writes / monotonic / consistent-prefix guarantees that hide it; quorums (w + r > n).", scripts: ["reqflow.js", "tradeoff.js"] },
+  { out: "distributed/partitioning.html", mod: "distributed", lesson: "dist-partitioning", title: "Partitioning", desc: "Splitting a dataset across nodes (sharding): partitioning by key range vs by hash, skew and hot spots, consistent hashing and rebalancing, request routing, and local vs global secondary indexes.", scripts: ["ddia-viz.js", "tradeoff.js"] },
+
+  { out: "reference/decisions.html",  mod: "reference", title: "Decisions & trade-offs", desc: "The recurring data-system decisions on one page — which data model, how to describe load and latency, fan-out on write vs read, replication and partitioning choices — each with a one-line heuristic. Grows as each part ships." },
   { out: "reference/flashcards.html", mod: "reference", title: "Flashcards",             desc: "The key terms and trade-offs as recall practice: faults vs failures, percentiles & tail-latency amplification, the impedance mismatch, schema-on-read, locality, and more.", scripts: ["flashcards.js"] }
 ];
 
@@ -47,7 +51,8 @@ const FAVICON = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' view
 
 const NAV = [
   { h: "Start here", links: [["index.html", "Home"], ["reference/decisions.html", "Decisions &amp; trade-offs"], ["reference/flashcards.html", "Flashcards"]] },
-  { h: "Part I · Foundations", cls: "is-foundations", links: [["foundations/reliable-scalable-maintainable.html", "Reliable, scalable &amp; maintainable"], ["foundations/data-models.html", "Data models &amp; query languages"], ["foundations/storage-engines.html", "Storage &amp; retrieval"], ["foundations/encoding-evolution.html", "Encoding &amp; evolution"]] }
+  { h: "Part I · Foundations", cls: "is-foundations", links: [["foundations/reliable-scalable-maintainable.html", "Reliable, scalable &amp; maintainable"], ["foundations/data-models.html", "Data models &amp; query languages"], ["foundations/storage-engines.html", "Storage &amp; retrieval"], ["foundations/encoding-evolution.html", "Encoding &amp; evolution"]] },
+  { h: "Part II · Distributed Data", cls: "is-distributed", links: [["distributed/replication.html", "Replication"], ["distributed/partitioning.html", "Partitioning"]] }
 ];
 
 function sidebar(base) {

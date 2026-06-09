@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Decisions & trade-offs | Designing Data-Intensive Applications</title>
-  <meta name="description" content="The recurring data-system decisions on one page — which data model, how to describe load and latency, fan-out on write vs read — each with a one-line heuristic. Grows as each part ships." />
+  <meta name="description" content="The recurring data-system decisions on one page — which data model, how to describe load and latency, fan-out on write vs read, replication and partitioning choices — each with a one-line heuristic. Grows as each part ships." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -37,6 +37,11 @@
         <a class="nav-link" href="../foundations/storage-engines.html">Storage &amp; retrieval</a>
         <a class="nav-link" href="../foundations/encoding-evolution.html">Encoding &amp; evolution</a>
       </nav>
+      <nav class="nav-group is-distributed" aria-label="Part II · Distributed Data">
+        <h4><span class="dot"></span>Part II · Distributed Data</h4>
+        <a class="nav-link" href="../distributed/replication.html">Replication</a>
+        <a class="nav-link" href="../distributed/partitioning.html">Partitioning</a>
+      </nav>
     </aside>
     <div class="sidebar-scrim"></div>
 
@@ -61,7 +66,7 @@
   <h2><span class="section-num">01</span> Where the guide is</h2>
   <div class="phase-note">
     <span>📍</span>
-    <span><b>Part I is complete — chapters 1–4.</b> That's reliability/scalability/maintainability, the three data models, storage engines, and encoding. Replication, partitioning, transactions, consistency, and the batch/stream chapters arrive with Parts II and III — and their heuristics will land here.</span>
+    <span><b>Part I is complete, and Part II is underway.</b> Chapters 1–4 (reliability/scalability/maintainability, data models, storage, encoding) plus chapters 5–6 (replication, partitioning) are covered. Transactions, distributed-systems trouble, consistency/consensus, and the batch/stream chapters arrive next — their heuristics will land here.</span>
   </div>
 </section>
 
@@ -129,10 +134,30 @@
         <dt>Rolling deploys</dt><dd>Old + new code coexist → stay both backward (new reads old) and forward (old ignores unknown) compatible.</dd>
       </dl>
     </div>
+    <div class="sheet">
+      <h3>Replication</h3>
+      <dl class="kv">
+        <dt>Default topology</dt><dd><strong>Single-leader</strong> — simplest; all writes to the leader, reads from any replica.</dd>
+        <dt>Multi-region or offline writes?</dt><dd><strong>Multi-leader</strong> — but you must resolve write conflicts.</dd>
+        <dt>Sync vs async</dt><dd>Async is fast + available but can lose recent writes on failover; make <em>one</em> follower synchronous for durability.</dd>
+        <dt>Lag anomalies</dt><dd>Provide the guarantee you need: <strong>read-your-writes</strong>, <strong>monotonic reads</strong>, <strong>consistent prefix</strong>.</dd>
+        <dt>Leaderless quorum</dt><dd>Pick <code>w + r &gt; n</code> so read and write sets overlap (Dynamo-style).</dd>
+      </dl>
+    </div>
+    <div class="sheet">
+      <h3>Partitioning</h3>
+      <dl class="kv">
+        <dt>Need efficient range scans?</dt><dd><strong>By key range</strong> — keys stay sorted. Watch for hot spots on sequential keys.</dd>
+        <dt>Need even load?</dt><dd><strong>By hash of key</strong> — scatters writes, kills hot spots; range scans then hit every partition.</dd>
+        <dt>Rebalancing</dt><dd>Never <code>hash % N</code> (remaps everything). Use <strong>consistent hashing</strong> or a <strong>fixed partition count</strong>.</dd>
+        <dt>Secondary indexes</dt><dd><strong>Local</strong> (by document): cheap writes, scatter/gather reads. <strong>Global</strong> (by term): cheap reads, multi-partition writes.</dd>
+        <dt>Pairs with replication</dt><dd>Each partition is also replicated — partitioning is for scale, replication for availability.</dd>
+      </dl>
+    </div>
   </div>
 </section>
           <nav class="page-nav reveal">
-            <a href="../foundations/encoding-evolution.html"><span class="pn-k">‹ Back</span><span class="pn-t">Encoding & evolution</span></a>
+            <a href="../distributed/partitioning.html"><span class="pn-k">‹ Back</span><span class="pn-t">Partitioning</span></a>
             <a class="next" href="../reference/flashcards.html"><span class="pn-k">Next ›</span><span class="pn-t">Flashcards</span></a>
           </nav>
         </div>

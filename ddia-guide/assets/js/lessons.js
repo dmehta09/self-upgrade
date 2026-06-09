@@ -15,8 +15,11 @@ window.LESSONS = [
   { id: "found-rsm",         title: "Reliable, scalable & maintainable", url: "foundations/reliable-scalable-maintainable.html", module: "foundations", tool: "foundations" },
   { id: "found-data-models", title: "Data models & query languages",     url: "foundations/data-models.html",                    module: "foundations", tool: "foundations" },
   { id: "found-storage",     title: "Storage & retrieval",               url: "foundations/storage-engines.html",                module: "foundations", tool: "foundations" },
-  { id: "found-encoding",    title: "Encoding & evolution",              url: "foundations/encoding-evolution.html",             module: "foundations", tool: "foundations" }
-  /* Part I complete. Part II (replication, partitioning, …) — Phase 3 */
+  { id: "found-encoding",    title: "Encoding & evolution",              url: "foundations/encoding-evolution.html",             module: "foundations", tool: "foundations" },
+  /* ---- Part II · Distributed Data (ch 5–6 so far) ---- */
+  { id: "dist-replication",  title: "Replication",                       url: "distributed/replication.html",                    module: "distributed", tool: "distributed" },
+  { id: "dist-partitioning", title: "Partitioning",                      url: "distributed/partitioning.html",                   module: "distributed", tool: "distributed" }
+  /* Part II underway. Next: transactions, distributed-trouble, consistency — Phase 4 */
 ];
 
 /* Ordered module groups for the home dashboard + sidebar.

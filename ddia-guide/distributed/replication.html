@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Replication | Designing Data-Intensive Applications</title>
+  <meta name="description" content="Keeping the same data on several nodes: single-leader, multi-leader, and leaderless models; synchronous vs asynchronous replication; replication lag and the read-your-writes / monotonic / consistent-prefix guarantees that hide it; quorums (w + r > n)." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='8' ry='3'/><path d='M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5'/><path d='M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/ddia.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="distributed" data-page="dist-replication" data-lesson="dist-replication">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Designing Data-Intensive Applications home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0b1020" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></span>
+        <span class="brand-text"><b>Data-Intensive Apps</b><span>DDIA · distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/decisions.html">Decisions &amp; trade-offs</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Part I · Foundations">
+        <h4><span class="dot"></span>Part I · Foundations</h4>
+        <a class="nav-link" href="../foundations/reliable-scalable-maintainable.html">Reliable, scalable &amp; maintainable</a>
+        <a class="nav-link" href="../foundations/data-models.html">Data models &amp; query languages</a>
+        <a class="nav-link" href="../foundations/storage-engines.html">Storage &amp; retrieval</a>
+        <a class="nav-link" href="../foundations/encoding-evolution.html">Encoding &amp; evolution</a>
+      </nav>
+      <nav class="nav-group is-distributed" aria-label="Part II · Distributed Data">
+        <h4><span class="dot"></span>Part II · Distributed Data</h4>
+        <a class="nav-link" href="../distributed/replication.html">Replication</a>
+        <a class="nav-link" href="../distributed/partitioning.html">Partitioning</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Part II · Distributed Data</span><span class="sep">/</span><span class="current">Replication</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Part II · Distributed Data · Chapter 5</span>
+  <h1>Replication.</h1>
+  <p class="lead">Keep a copy of the same data on more than one machine. Do it well and you get lower latency, higher availability, and more read throughput — almost for free. The whole difficulty is one word: <strong>change</strong>. When the data is updated, how do all the copies stay in step?</p>
+</section>
+
+<section class="section reveal" id="why-replicate">
+  <h2><span class="section-num">01</span> Why keep copies at all</h2>
+  <p class="takeaway">Replication buys you three things: <b>availability</b> (a node dies, others carry on), <b>latency</b> (a copy near each user), and <b>read throughput</b> (spread reads over many machines). The price you pay is keeping the copies consistent.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="13" height="16" rx="2"/><path d="M8 4V2h9a2 2 0 0 1 2 2v14"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>One master ledger in head office is risky — lose the building, lose the books, and everyone queues at one desk. So you photocopy it to every branch: reads happen locally and instantly, and if one branch burns down the others still have the numbers. The hard part isn't the copies — it's that the moment head office writes a new line, every photocopy is briefly <em>out of date</em>.</p>
+    </div>
+  </div>
+  <p>If the data never changed, replication would be trivial: copy once, done. It changes constantly, so every strategy below is really an answer to <em>“how do writes propagate to the copies, and what does a reader see in the meantime?”</em></p>
+</section>
+
+<section class="section reveal" id="leader-model">
+  <h2><span class="section-num">02</span> The leader-based model</h2>
+  <p>The most common scheme by far. One replica is the <strong>leader</strong> (primary/master); the rest are <strong>followers</strong> (replicas/secondaries). <em>All writes go to the leader.</em> The leader applies the change, then streams it — as a <strong>replication log</strong> — to every follower, which replays it in the same order. Reads can be served by <em>any</em> replica.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">A write under single-leader replication</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "A write under single-leader replication",
+      "nodes": [
+        { "id": "client", "label": "Client", "type": "user", "col": 0, "row": 1 },
+        { "id": "leader", "label": "Leader", "type": "primary db", "col": 1, "row": 1 },
+        { "id": "f1", "label": "Follower A", "type": "replica db", "col": 2, "row": 0 },
+        { "id": "f2", "label": "Follower B", "type": "replica db", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "client", "to": "leader", "label": "write" },
+        { "from": "leader", "to": "f1", "label": "replication log" },
+        { "from": "leader", "to": "f2", "label": "replication log" }
+      ],
+      "steps": [
+        { "node": "client", "caption": "A client wants to change data — say, edit a profile." },
+        { "edge": ["client","leader"], "caption": "Every write goes to one replica: the leader. Followers refuse writes." },
+        { "node": "leader", "status": "hit", "caption": "The leader applies the change locally and appends it to its replication log." },
+        { "edge": ["leader","f1"], "caption": "It streams that log to a follower, which replays the change in the same order…" },
+        { "edge": ["leader","f2"], "caption": "…and to the next follower. Reads may now be served by any replica." },
+        { "node": "f2", "status": "hit", "caption": "With ASYNC replication the leader didn't wait for these — so for a moment the followers lag behind. That lag is the source of every anomaly below." }
+      ]
+    }
+    </script>
+  </figure>
+  <p>The single decision that defines the system's character: does the leader <strong>wait</strong> for followers before telling the client “done”?</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Synchronous vs asynchronous replication",
+      "axisLabel": "How long does the leader wait for followers?",
+      "stops": [
+        { "label": "Synchronous", "dims": { "Durability": 90, "Write latency": 35, "Availability": 45, "Freshness of reads": 92 },
+          "note": "The leader waits for the follower to confirm before acking the client. The follower is guaranteed up to date — but if it's slow or down, writes block. Fully-sync to every follower is impractical; real systems make ONE follower synchronous (semi-synchronous)." },
+        { "label": "Asynchronous", "dims": { "Durability": 55, "Write latency": 90, "Availability": 88, "Freshness of reads": 50 },
+          "note": "The leader acks immediately and ships the log in the background. Fast and resilient to slow followers — but a leader crash can lose writes that hadn't replicated yet, and followers serve slightly stale reads. The common default at scale." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="lag">
+  <h2><span class="section-num">03</span> Replication lag and the guarantees that hide it</h2>
+  <p>Asynchronous followers are <em>eventually</em> consistent — given no new writes, they catch up. But “eventually” can be milliseconds or minutes, and in that window users hit confusing anomalies. Three guarantees paper over the three classic ones:</p>
+  <div class="versus">
+    <div class="vs-col vs-a">
+      <div class="vs-h">Read-your-writes</div>
+      <p>You post a comment, reload, and it's <em>gone</em> — your read hit a lagging follower. Fix: read your own recent writes from the leader (or a fresh-enough replica), so you always see your own edits.</p>
+    </div>
+    <div class="vs-col vs-b">
+      <div class="vs-h">Monotonic reads</div>
+      <p>You refresh and see a comment, refresh again and it <em>vanishes</em> — two reads hit followers at different lag. Fix: pin each user to one replica, so time never appears to move backwards.</p>
+    </div>
+  </div>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Consistent prefix</div>
+      <p>You see the answer before the question — writes arrive out of order across partitions. Fix: guarantee that anyone reading a sequence of writes sees them in the order they happened.</p>
+    </div>
+    <div class="vs-col vs-bad">
+      <div class="vs-h">The trap</div>
+      <p>“Eventual consistency” sounds harmless until lag spikes. Don't assume it's small — name the guarantee your app actually needs, and provide it explicitly.</p>
+    </div>
+  </div>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Failover isn't free</div>
+      <p>If the leader dies, a follower is promoted. But an async-promoted leader may be missing the dead leader's last writes — and if the old leader returns, you have two leaders (<strong>split brain</strong>). Automatic failover trades a hard availability problem for a subtle correctness one; many teams keep a human in the loop.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="topologies">
+  <h2><span class="section-num">04</span> One leader, many leaders, or none</h2>
+  <p>Single-leader is simple but funnels every write through one node — bad across datacenters or offline clients. Two alternatives relax that:</p>
+  <div class="versus">
+    <div class="vs-col vs-a">
+      <div class="vs-h">Multi-leader</div>
+      <p>A leader per datacenter (or per device). Each accepts writes locally and replicates to the others. Great for multi-region and offline editing — but two leaders can edit the same record at once, so you must <strong>resolve write conflicts</strong> (last-write-wins, merge, or app logic).</p>
+    </div>
+    <div class="vs-col vs-b">
+      <div class="vs-h">Leaderless (Dynamo-style)</div>
+      <p>No leader: clients write to <em>several</em> replicas directly and read from several too. Used by Cassandra, Riak, DynamoDB. Consistency comes from <strong>quorums</strong> plus read-repair and anti-entropy, not from a single ordering point.</p>
+    </div>
+  </div>
+  <p>The leaderless trick is a counting rule. With <code>n</code> replicas, if every write lands on <code>w</code> of them and every read consults <code>r</code> of them, then as long as <code>w + r &gt; n</code> the read and write sets must <em>overlap</em> — so a read is guaranteed to see at least one copy of the latest write:</p>
+  <div class="codeblock">
+    <pre><code data-lang="python">n = 3            # replicas per key
+w = 2            # replicas that must ack a write
+r = 2            # replicas consulted on a read
+
+def is_quorum(n, w, r):
+    # overlap guaranteed when the write set and read set must intersect
+    return w + r &gt; n
+
+assert is_quorum(n, w, r)        # 2 + 2 = 4 &gt; 3  -&gt; a read sees the latest write
+assert not is_quorum(3, 1, 1)   # 1 + 1 = 2  !&gt; 3 -&gt; reads may miss recent writes</code></pre>
+  </div>
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">See also <span class="tag">sysdesign-guide</span></div>
+      <p>For the operational view — read replicas, primary failover, and when to reach for multi-region — see <a href="../../sysdesign-guide/data/replication.html">Replication</a> in the System Design Field Guide.</p>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">A user updates their profile, the page reloads, and the change has vanished — but it reappears a few seconds later. Which guarantee was missing?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Read-your-writes — the reload hit a follower that hadn't received the write yet</button>
+      <button class="quiz-opt"><span class="mark"></span>Consistent prefix — writes were applied out of order</button>
+      <button class="quiz-opt"><span class="mark"></span>Durability — the write was lost on the leader</button>
+      <button class="quiz-opt"><span class="mark"></span>A quorum violation — w + r was not greater than n</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> the user couldn't see their <em>own</em> recent write because the read went to a lagging follower. Read-your-writes consistency routes a user's reads to a replica fresh enough to include their own edits.</div>
+  </div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../foundations/encoding-evolution.html"><span class="pn-k">‹ Back</span><span class="pn-t">Encoding & evolution</span></a>
+            <a class="next" href="../distributed/partitioning.html"><span class="pn-k">Next ›</span><span class="pn-t">Partitioning</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#why-replicate">Why keep copies at all</a>
+          <a href="#leader-model">The leader-based model</a>
+          <a href="#lag">Replication lag and the guarantees that hide it</a>
+          <a href="#topologies">One leader, many leaders, or none</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Part II · Distributed Data · Replication</span>
+        <span class="fmono">Designing Data-Intensive Applications · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+  <script src="../assets/js/tradeoff.js"></script>
+</body>
+</html>

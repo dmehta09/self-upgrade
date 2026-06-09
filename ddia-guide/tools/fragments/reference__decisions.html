@@ -8,7 +8,7 @@
   <h2><span class="section-num">01</span> Where the guide is</h2>
   <div class="phase-note">
     <span>📍</span>
-    <span><b>Part I is complete — chapters 1–4.</b> That's reliability/scalability/maintainability, the three data models, storage engines, and encoding. Replication, partitioning, transactions, consistency, and the batch/stream chapters arrive with Parts II and III — and their heuristics will land here.</span>
+    <span><b>Part I is complete, and Part II is underway.</b> Chapters 1–4 (reliability/scalability/maintainability, data models, storage, encoding) plus chapters 5–6 (replication, partitioning) are covered. Transactions, distributed-systems trouble, consistency/consensus, and the batch/stream chapters arrive next — their heuristics will land here.</span>
   </div>
 </section>
 
@@ -74,6 +74,26 @@
         <dt>Adding a field</dt><dd>Make it <strong>optional / defaulted</strong> with a <strong>new tag</strong> — never required.</dd>
         <dt>Never</dt><dd>Reuse or renumber a field tag — old data would decode as garbage.</dd>
         <dt>Rolling deploys</dt><dd>Old + new code coexist → stay both backward (new reads old) and forward (old ignores unknown) compatible.</dd>
+      </dl>
+    </div>
+    <div class="sheet">
+      <h3>Replication</h3>
+      <dl class="kv">
+        <dt>Default topology</dt><dd><strong>Single-leader</strong> — simplest; all writes to the leader, reads from any replica.</dd>
+        <dt>Multi-region or offline writes?</dt><dd><strong>Multi-leader</strong> — but you must resolve write conflicts.</dd>
+        <dt>Sync vs async</dt><dd>Async is fast + available but can lose recent writes on failover; make <em>one</em> follower synchronous for durability.</dd>
+        <dt>Lag anomalies</dt><dd>Provide the guarantee you need: <strong>read-your-writes</strong>, <strong>monotonic reads</strong>, <strong>consistent prefix</strong>.</dd>
+        <dt>Leaderless quorum</dt><dd>Pick <code>w + r &gt; n</code> so read and write sets overlap (Dynamo-style).</dd>
+      </dl>
+    </div>
+    <div class="sheet">
+      <h3>Partitioning</h3>
+      <dl class="kv">
+        <dt>Need efficient range scans?</dt><dd><strong>By key range</strong> — keys stay sorted. Watch for hot spots on sequential keys.</dd>
+        <dt>Need even load?</dt><dd><strong>By hash of key</strong> — scatters writes, kills hot spots; range scans then hit every partition.</dd>
+        <dt>Rebalancing</dt><dd>Never <code>hash % N</code> (remaps everything). Use <strong>consistent hashing</strong> or a <strong>fixed partition count</strong>.</dd>
+        <dt>Secondary indexes</dt><dd><strong>Local</strong> (by document): cheap writes, scatter/gather reads. <strong>Global</strong> (by term): cheap reads, multi-partition writes.</dd>
+        <dt>Pairs with replication</dt><dd>Each partition is also replicated — partitioning is for scale, replication for availability.</dd>
       </dl>
     </div>
   </div>
