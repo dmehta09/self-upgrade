@@ -1,0 +1,89 @@
+<section class="hero reveal">
+  <span class="eyebrow">Part I · Foundations · Chapter 4</span>
+  <h1>Encoding &amp; evolution.</h1>
+  <p class="lead">Data in memory is pointers and objects; data on disk or a wire is just bytes. Turning one into the other is <strong>encoding</strong>. Get it right and old and new versions of your code can keep talking to each other through a deploy — get it wrong and a rollout becomes an outage.</p>
+</section>
+
+<section class="section reveal" id="why-encoding">
+  <h2><span class="section-num">01</span> Why encoding exists</h2>
+  <p class="takeaway">In-memory objects can't leave the process. To store or send them you <b>encode</b> (serialize) to bytes; to use them again you <b>decode</b>. The format you choose decides size, speed, and — crucially — how gracefully your schema can change.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H5.2L4 17.5V4Z"/><path d="M8 9h8M8 12h5"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>You can't mail a thought — you write it as letters, post it, and the reader reconstructs the thought. Encoding is the same: collapse a rich in-memory object into a flat stream of bytes for travel, then rebuild it on the other side. Both sides must agree on the alphabet.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="formats">
+  <h2><span class="section-num">02</span> Textual vs binary-with-schema</h2>
+  <div class="versus">
+    <div class="vs-col vs-a">
+      <div class="vs-h">Textual · JSON / XML / CSV</div>
+      <p>Human-readable and universal. But verbose, ambiguous about numbers (is it an int? how big?), and the field names ship in <em>every</em> record. Great for APIs and config; wasteful at scale.</p>
+    </div>
+    <div class="vs-col vs-b">
+      <div class="vs-h">Binary with a schema · Protobuf / Thrift / Avro</div>
+      <p>A schema declares the fields once; records carry compact <strong>field tags</strong>, not names. Far smaller and faster, and the schema doubles as documentation and a compatibility contract.</p>
+    </div>
+  </div>
+  <p>The trick that makes binary formats compact <em>and</em> evolvable is the numeric tag on each field:</p>
+  <div class="codeblock">
+    <pre><code data-lang="text">message Person {              // a Protobuf-style schema
+  string name      = 1;       // field tag 1 — its identity forever
+  int32  birth_year = 2;
+  string city      = 3;       // NEW field added later (see below)
+}</code></pre>
+  </div>
+  <p>On the wire a record says “tag&nbsp;1 = Bill, tag&nbsp;2 = 1955” — never the word <code>name</code>. The tag is the contract; the human name can change freely.</p>
+</section>
+
+<section class="section reveal" id="evolution">
+  <h2><span class="section-num">03</span> Schema evolution — the whole point</h2>
+  <p>During a rolling deploy, <strong>old and new code run at the same time</strong>, reading each other's data. So a schema change must keep working in <em>both</em> directions:</p>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Backward compatible</div>
+      <p><b>New code reads old data.</b> Easy — new code knows the old fields. (A new reader just handles a missing new field.)</p>
+    </div>
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Forward compatible</div>
+      <p><b>Old code reads new data.</b> Harder — old code must <em>ignore</em> fields it doesn't recognise rather than choke on them.</p>
+    </div>
+  </div>
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">The two unbreakable rules</div>
+      <p><b>1. Only add fields as optional</b> (or with a default) — a required new field breaks old writers. <b>2. Never reuse or renumber a tag</b> — the tag is the identity; reusing tag&nbsp;3 for something new makes old data decode as garbage. Follow both and you can evolve a schema for years without coordinated downtime.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="dataflow">
+  <h2><span class="section-num">04</span> Where encoded data flows</h2>
+  <p>Compatibility matters because encoded data crosses boundaries between code versions in three ways:</p>
+  <dl class="kv">
+    <dt>Through databases</dt><dd>The writer may be newer than the reader (or vice-versa). Data outlives code — a row written years ago must still decode. Beware: old code that reads + rewrites a row can silently drop new fields it didn't understand.</dd>
+    <dt>Through services (REST / RPC)</dt><dd>Clients and servers deploy independently, so a server must accept old requests and clients must accept old responses. API versioning is schema evolution by another name.</dd>
+    <dt>Through async messages (queues)</dt><dd>A producer encodes; a consumer — possibly an older or newer build — decodes later. The broker just moves bytes, so the schema is the only contract.</dd>
+  </dl>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">See also <span class="tag">sysdesign-guide</span></div>
+      <p>How these bytes actually move between services — queues, pub/sub, Kafka logs, and delivery guarantees — is covered in <a href="../../sysdesign-guide/blocks/messaging.html">Queues, pub/sub &amp; streams</a>.</p>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">You add a new field to a message schema and deploy gradually. What keeps the rollout from breaking?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Make the new field required so everyone sends it</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Add it as optional with a new tag, and have old code ignore unknown fields</button>
+      <button class="quiz-opt"><span class="mark"></span>Reuse an old field's tag number to save space</button>
+      <button class="quiz-opt"><span class="mark"></span>Deploy all services at the exact same instant</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> optional + a fresh tag keeps it backward-compatible (new readers cope with old data) and forward-compatible (old readers ignore the unknown field). Required fields and reused tags are exactly what break rolling deploys.</div>
+  </div>
+</section>

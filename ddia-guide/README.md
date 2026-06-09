@@ -4,7 +4,7 @@ A sharp, **visual**, crisp guide to Martin Kleppmann's *Designing Data-Intensive
 
 > **Built in parts.** DDIA is a big book (3 parts, 12 chapters), so this guide ships **phase by phase**. The scaffold holds the whole roadmap from day one; each phase fills in more chapters.
 >
-> **Phase 1 (now): Part I · Foundations, chapters 1–2** — *Reliable, scalable & maintainable* and *Data models & query languages*. The home page shows the full 3-part roadmap with the rest marked **“soon.”**
+> **Part I · Foundations is complete (chapters 1–4)** — *Reliable, scalable & maintainable*, *Data models & query languages*, *Storage & retrieval* (LSM-trees vs B-trees), and *Encoding & evolution*. The home page shows the full 3-part roadmap; **Part II · Distributed Data is next**, with its chapters marked **“soon.”**
 
 Where topics overlap high-level system design (replication, partitioning, consistency, CAP), lessons carry a light **“see also”** link into the sibling **`sysdesign-guide`**.
 
@@ -14,8 +14,11 @@ Where topics overlap high-level system design (replication, partitioning, consis
 
 Works fully offline (Google Fonts degrade gracefully to system fonts). Dark/light theme toggle and per-lesson progress persist in your browser.
 
-## What's inside (Phase 1)
-- **Part I — Foundations** — Reliable, scalable & maintainable (faults vs failures; percentiles & tail-latency amplification; operability/simplicity/evolvability); Data models & query languages (relational vs document vs graph; the impedance mismatch; schema-on-read vs schema-on-write; declarative vs imperative)
+## What's inside (Part I — complete)
+- **Reliable, scalable & maintainable** — faults vs failures; percentiles & tail-latency amplification; operability/simplicity/evolvability
+- **Data models & query languages** — relational vs document vs graph; the impedance mismatch; schema-on-read vs schema-on-write; declarative vs imperative
+- **Storage & retrieval** — the append-only log; LSM-trees (memtable/SSTables/compaction) vs B-trees (pages/in-place); OLTP row stores vs OLAP column stores
+- **Encoding & evolution** — textual vs binary-schema formats (Protobuf/Avro/Thrift); field tags; backward & forward compatibility for rolling deploys
 - **Reference** — a Decisions & trade-offs cheatsheet (each recurring choice + a one-line heuristic) and flashcards
 
 ## Interactive
@@ -36,7 +39,7 @@ node tools/reverify.js           # deep cross-checks: gen ↔ lessons ↔ fragme
 2. Append the page(s) to `PAGES` and the sidebar group to `NAV` in `tools/gen.js`.
 3. Append the lesson(s) to `window.LESSONS` in `assets/js/lessons.js`.
 4. Add the file(s) to `FILES` in `tools/build-search-index.js`.
-5. On the home page, flip the matching **“soon”** items into real links.
+5. On the **hand-authored `index.html`**: flip the matching **“soon”** roadmap items into real links, bump the "live now" stat + the "of N lessons" dashboard count, AND add the new lesson(s) to the home's sidebar nav-group (the home sidebar is NOT generated, so it must be edited to match gen.js's NAV).
 6. Re-run the four commands above. `reverify.js` counts are derived, so it stays green.
 
 Authoring rules and component/engine markup: **`tools/AUTHORING.md`**.

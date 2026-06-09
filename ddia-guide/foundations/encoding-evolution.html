@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Encoding & evolution | Designing Data-Intensive Applications</title>
+  <meta name="description" content="Turning in-memory objects into bytes and back: textual (JSON) vs binary schema formats (Protobuf/Thrift/Avro), field tags, and schema evolution — backward and forward compatibility for zero-downtime rolling deploys." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='8' ry='3'/><path d='M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5'/><path d='M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/ddia.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="foundations" data-page="found-encoding" data-lesson="found-encoding">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Designing Data-Intensive Applications home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0b1020" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></span>
+        <span class="brand-text"><b>Data-Intensive Apps</b><span>DDIA · distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/decisions.html">Decisions &amp; trade-offs</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Part I · Foundations">
+        <h4><span class="dot"></span>Part I · Foundations</h4>
+        <a class="nav-link" href="../foundations/reliable-scalable-maintainable.html">Reliable, scalable &amp; maintainable</a>
+        <a class="nav-link" href="../foundations/data-models.html">Data models &amp; query languages</a>
+        <a class="nav-link" href="../foundations/storage-engines.html">Storage &amp; retrieval</a>
+        <a class="nav-link" href="../foundations/encoding-evolution.html">Encoding &amp; evolution</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Part I · Foundations</span><span class="sep">/</span><span class="current">Encoding & evolution</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Part I · Foundations · Chapter 4</span>
+  <h1>Encoding &amp; evolution.</h1>
+  <p class="lead">Data in memory is pointers and objects; data on disk or a wire is just bytes. Turning one into the other is <strong>encoding</strong>. Get it right and old and new versions of your code can keep talking to each other through a deploy — get it wrong and a rollout becomes an outage.</p>
+</section>
+
+<section class="section reveal" id="why-encoding">
+  <h2><span class="section-num">01</span> Why encoding exists</h2>
+  <p class="takeaway">In-memory objects can't leave the process. To store or send them you <b>encode</b> (serialize) to bytes; to use them again you <b>decode</b>. The format you choose decides size, speed, and — crucially — how gracefully your schema can change.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H5.2L4 17.5V4Z"/><path d="M8 9h8M8 12h5"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>You can't mail a thought — you write it as letters, post it, and the reader reconstructs the thought. Encoding is the same: collapse a rich in-memory object into a flat stream of bytes for travel, then rebuild it on the other side. Both sides must agree on the alphabet.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="formats">
+  <h2><span class="section-num">02</span> Textual vs binary-with-schema</h2>
+  <div class="versus">
+    <div class="vs-col vs-a">
+      <div class="vs-h">Textual · JSON / XML / CSV</div>
+      <p>Human-readable and universal. But verbose, ambiguous about numbers (is it an int? how big?), and the field names ship in <em>every</em> record. Great for APIs and config; wasteful at scale.</p>
+    </div>
+    <div class="vs-col vs-b">
+      <div class="vs-h">Binary with a schema · Protobuf / Thrift / Avro</div>
+      <p>A schema declares the fields once; records carry compact <strong>field tags</strong>, not names. Far smaller and faster, and the schema doubles as documentation and a compatibility contract.</p>
+    </div>
+  </div>
+  <p>The trick that makes binary formats compact <em>and</em> evolvable is the numeric tag on each field:</p>
+  <div class="codeblock">
+    <pre><code data-lang="text">message Person {              // a Protobuf-style schema
+  string name      = 1;       // field tag 1 — its identity forever
+  int32  birth_year = 2;
+  string city      = 3;       // NEW field added later (see below)
+}</code></pre>
+  </div>
+  <p>On the wire a record says “tag&nbsp;1 = Bill, tag&nbsp;2 = 1955” — never the word <code>name</code>. The tag is the contract; the human name can change freely.</p>
+</section>
+
+<section class="section reveal" id="evolution">
+  <h2><span class="section-num">03</span> Schema evolution — the whole point</h2>
+  <p>During a rolling deploy, <strong>old and new code run at the same time</strong>, reading each other's data. So a schema change must keep working in <em>both</em> directions:</p>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Backward compatible</div>
+      <p><b>New code reads old data.</b> Easy — new code knows the old fields. (A new reader just handles a missing new field.)</p>
+    </div>
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Forward compatible</div>
+      <p><b>Old code reads new data.</b> Harder — old code must <em>ignore</em> fields it doesn't recognise rather than choke on them.</p>
+    </div>
+  </div>
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">The two unbreakable rules</div>
+      <p><b>1. Only add fields as optional</b> (or with a default) — a required new field breaks old writers. <b>2. Never reuse or renumber a tag</b> — the tag is the identity; reusing tag&nbsp;3 for something new makes old data decode as garbage. Follow both and you can evolve a schema for years without coordinated downtime.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="dataflow">
+  <h2><span class="section-num">04</span> Where encoded data flows</h2>
+  <p>Compatibility matters because encoded data crosses boundaries between code versions in three ways:</p>
+  <dl class="kv">
+    <dt>Through databases</dt><dd>The writer may be newer than the reader (or vice-versa). Data outlives code — a row written years ago must still decode. Beware: old code that reads + rewrites a row can silently drop new fields it didn't understand.</dd>
+    <dt>Through services (REST / RPC)</dt><dd>Clients and servers deploy independently, so a server must accept old requests and clients must accept old responses. API versioning is schema evolution by another name.</dd>
+    <dt>Through async messages (queues)</dt><dd>A producer encodes; a consumer — possibly an older or newer build — decodes later. The broker just moves bytes, so the schema is the only contract.</dd>
+  </dl>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">See also <span class="tag">sysdesign-guide</span></div>
+      <p>How these bytes actually move between services — queues, pub/sub, Kafka logs, and delivery guarantees — is covered in <a href="../../sysdesign-guide/blocks/messaging.html">Queues, pub/sub &amp; streams</a>.</p>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">You add a new field to a message schema and deploy gradually. What keeps the rollout from breaking?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Make the new field required so everyone sends it</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Add it as optional with a new tag, and have old code ignore unknown fields</button>
+      <button class="quiz-opt"><span class="mark"></span>Reuse an old field's tag number to save space</button>
+      <button class="quiz-opt"><span class="mark"></span>Deploy all services at the exact same instant</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> optional + a fresh tag keeps it backward-compatible (new readers cope with old data) and forward-compatible (old readers ignore the unknown field). Required fields and reused tags are exactly what break rolling deploys.</div>
+  </div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../foundations/storage-engines.html"><span class="pn-k">‹ Back</span><span class="pn-t">Storage & retrieval</span></a>
+            <a class="next" href="../reference/decisions.html"><span class="pn-k">Next ›</span><span class="pn-t">Decisions & trade-offs</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#why-encoding">Why encoding exists</a>
+          <a href="#formats">Textual vs binary-with-schema</a>
+          <a href="#evolution">Schema evolution — the whole point</a>
+          <a href="#dataflow">Where encoded data flows</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Part I · Foundations · Encoding & evolution</span>
+        <span class="fmono">Designing Data-Intensive Applications · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

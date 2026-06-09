@@ -13,8 +13,10 @@
 window.LESSONS = [
   /* ---- Part I · Foundations (ch 1–4) ---- */
   { id: "found-rsm",         title: "Reliable, scalable & maintainable", url: "foundations/reliable-scalable-maintainable.html", module: "foundations", tool: "foundations" },
-  { id: "found-data-models", title: "Data models & query languages",     url: "foundations/data-models.html",                    module: "foundations", tool: "foundations" }
-  /* ch 3 storage-engines, ch 4 encoding-evolution — Phase 2 */
+  { id: "found-data-models", title: "Data models & query languages",     url: "foundations/data-models.html",                    module: "foundations", tool: "foundations" },
+  { id: "found-storage",     title: "Storage & retrieval",               url: "foundations/storage-engines.html",                module: "foundations", tool: "foundations" },
+  { id: "found-encoding",    title: "Encoding & evolution",              url: "foundations/encoding-evolution.html",             module: "foundations", tool: "foundations" }
+  /* Part I complete. Part II (replication, partitioning, …) — Phase 3 */
 ];
 
 /* Ordered module groups for the home dashboard + sidebar.

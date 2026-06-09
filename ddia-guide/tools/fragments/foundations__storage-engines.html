@@ -1,0 +1,90 @@
+<section class="hero reveal">
+  <span class="eyebrow">Part I · Foundations · Chapter 3</span>
+  <h1>Storage &amp; retrieval.</h1>
+  <p class="lead">A database does two things: when you give it data, store it; when you ask, give it back. <em>How</em> it does that under the hood splits storage engines into two great families — <strong>log-structured</strong> (LSM-trees) and <strong>page-oriented</strong> (B-trees) — and the choice quietly decides whether your workload flies or crawls.</p>
+</section>
+
+<section class="section reveal" id="the-log">
+  <h2><span class="section-num">01</span> The simplest database is a log</h2>
+  <p class="takeaway">Appending to a file is the fastest possible write. Every fast storage engine is built on that idea — and then adds an <b>index</b> so reads don't have to scan the whole file.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Two ways to run a stockroom. (1) Scribble every change at the bottom of an ever-growing logbook — instant to write, but to find an item you read the whole book. (2) Keep a tidy card catalogue you reorganise on every change — slower to update, instant to look up. That's exactly LSM-trees vs B-trees.</p>
+    </div>
+  </div>
+  <p>An append-only log is O(1) to write but O(n) to read. So we add an <strong>index</strong>: a separate structure that points to where data lives. An index always <em>speeds reads and slows writes</em> — that's the fundamental trade-off of all storage engines.</p>
+</section>
+
+<section class="section reveal" id="two-families">
+  <h2><span class="section-num">02</span> The two families</h2>
+  <p>Flip between them. Both keep keys sorted; they differ in <em>where the work happens</em>.</p>
+  <figure class="ddiaviz" data-ddiaviz>
+    <figcaption class="dv-title">How the engine stores &amp; finds data</figcaption>
+    <div class="dv-body"><p class="viz-fallback">Interactive — needs JavaScript. LSM-trees append to an in-memory memtable then flush sorted SSTables; B-trees update fixed-size pages in place.</p></div>
+    <script type="application/json" class="dv-config">
+    {
+      "scene": "storage",
+      "title": "How the engine stores & finds data",
+      "captions": {
+        "lsm": "LSM-tree (LevelDB, RocksDB, Cassandra, Lucene): writes go to an in-memory sorted memtable, flushed to immutable SSTables on disk; background compaction merges them and drops overwritten keys. Sequential writes → very fast writes; a read checks the memtable then SSTables newest-first (bloom filters skip files that can't contain the key).",
+        "btree": "B-tree (PostgreSQL, MySQL/InnoDB — the relational default): data lives in fixed-size pages forming a balanced tree. A write traverses root→leaf and updates the page in place, writing to a write-ahead log first for crash safety. Reads are predictable O(log n)."
+      }
+    }
+    </script>
+  </figure>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "LSM-tree vs B-tree",
+      "axisLabel": "Pick an engine and weigh its strengths",
+      "stops": [
+        { "label": "LSM-tree", "dims": { "Write throughput": 90, "Read latency": 62, "Space efficiency": 82, "Predictability": 55 },
+          "note": "Sequential appends → high write throughput and tight compression (no half-empty pages). Cost: a read may touch several SSTables, and background compaction can fight your queries for I/O — latency spikes." },
+        { "label": "B-tree", "dims": { "Write throughput": 55, "Read latency": 86, "Space efficiency": 60, "Predictability": 85 },
+          "note": "In-place page updates → strong, predictable reads, and each key lives in exactly one place (nice for transactions/locks). Cost: a write may rewrite a whole page and the WAL (write amplification); pages fragment." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="oltp-olap">
+  <h2><span class="section-num">03</span> Two worlds: OLTP vs OLAP</h2>
+  <p>Storage layout also depends on <em>access pattern</em>. Most apps are <strong>OLTP</strong> (transaction processing): tiny reads/writes by key, latency-critical. Analytics is <strong>OLAP</strong>: scan billions of rows over a few columns. They want opposite layouts.</p>
+  <div class="versus">
+    <div class="vs-col vs-a">
+      <div class="vs-h">Row-oriented · OLTP</div>
+      <p>Store all of a row's columns together. One read grabs the whole record — perfect for “fetch user 251.” The default for operational databases.</p>
+    </div>
+    <div class="vs-col vs-b">
+      <div class="vs-h">Column-oriented · OLAP</div>
+      <p>Store each column's values together. Scanning “average price over a billion sales” touches one column, not whole rows — and similar values compress beautifully. The data-warehouse layout (Parquet, Redshift, BigQuery).</p>
+    </div>
+  </div>
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Why analytics gets its own database</div>
+      <p>Running heavy column-scans on your OLTP database would crush the live app. So data is copied (ETL) into a separate <strong>data warehouse</strong> with a column-oriented engine — same data, opposite storage layout, tuned for the opposite job.</p>
+    </div>
+  </div>
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">See also <span class="tag">sysdesign-guide</span></div>
+      <p>For the practical “how an index turns a scan into a lookup” — B-trees, composite and covering indexes, and their write cost — see <a href="../../sysdesign-guide/data/indexing.html">Indexing</a> in the System Design Field Guide.</p>
+    </div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">Your workload is write-heavy (ingesting a firehose of events) and you want tight on-disk compression. Which storage engine leans your way?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>LSM-tree — sequential appends and compaction favour write throughput and compression</button>
+      <button class="quiz-opt"><span class="mark"></span>B-tree — in-place page updates are best for heavy writes</button>
+      <button class="quiz-opt"><span class="mark"></span>A column store — it's the fastest for writing individual events</button>
+      <button class="quiz-opt"><span class="mark"></span>It makes no difference for writes</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> LSM-trees turn random writes into sequential appends and pack data densely during compaction — ideal for write-heavy ingestion. B-trees shine when reads must be fast and predictable.</div>
+  </div>
+</section>

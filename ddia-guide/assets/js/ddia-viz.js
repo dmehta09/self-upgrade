@@ -231,6 +231,59 @@
     update();
   }
 
+  /* ---------- scene: storage engines (LSM-tree vs B-tree) ---------- */
+  function renderStorage(body, cfg) {
+    var caps = cfg.captions || {};
+    var labels = { lsm: "LSM-tree", btree: "B-tree" };
+    var order = ["lsm", "btree"];
+    var tabs = el("div", "dv-tabs"), stage = el("div", "dv-stage"), cap = el("div", "dv-caption"), btns = {};
+
+    function box(title, sub, cls) {
+      var b = el("div", "dv-box" + (cls ? " " + cls : ""));
+      b.appendChild(el("span", "dv-bx-t", title));
+      if (sub) b.appendChild(el("small", null, sub));
+      return b;
+    }
+    function drawLSM() {
+      var f = el("div", "dv-flow");
+      f.appendChild(box("Memtable", "RAM · sorted", "dv-hot"));
+      f.appendChild(el("div", "dv-arrow", "flush when full ↓"));
+      var row = el("div", "dv-row");
+      row.appendChild(box("SSTable", "newest"));
+      row.appendChild(box("SSTable", null));
+      row.appendChild(box("SSTable", "oldest"));
+      f.appendChild(row);
+      f.appendChild(el("div", "dv-arrow", "compaction merges runs, drops overwritten keys ↓"));
+      f.appendChild(box("Merged SSTable", "disk · immutable", "dv-cool"));
+      return f;
+    }
+    function drawBtree() {
+      var f = el("div", "dv-flow");
+      f.appendChild(box("Root page", "keys partition the space", "dv-root"));
+      f.appendChild(el("div", "dv-arrow", "traverse root → leaf ↓"));
+      var row = el("div", "dv-row");
+      row.appendChild(box("Leaf page", "keys 1–50"));
+      row.appendChild(box("Leaf page", "keys 51–100", "dv-hit"));
+      row.appendChild(box("Leaf page", "keys over 100"));
+      f.appendChild(row);
+      f.appendChild(el("div", "dv-note-row", "＋ write-ahead log · update the page in place"));
+      return f;
+    }
+    function show(which) {
+      order.forEach(function (k) { if (btns[k]) btns[k].classList.toggle("active", k === which); });
+      stage.innerHTML = "";
+      stage.appendChild(which === "lsm" ? drawLSM() : drawBtree());
+      cap.innerHTML = "<b>" + esc(labels[which]) + ".</b> " + (caps[which] || "");
+    }
+    order.forEach(function (k) {
+      var b = el("button", "dv-tab", labels[k]); b.type = "button";
+      b.addEventListener("click", function () { show(k); });
+      tabs.appendChild(b); btns[k] = b;
+    });
+    body.appendChild(tabs); body.appendChild(stage); body.appendChild(cap);
+    show("lsm");
+  }
+
   /* ---------- boot ---------- */
   function init(host) {
     var sEl = host.querySelector(".dv-config") || host.querySelector("script[type='application/json']");
@@ -249,6 +302,7 @@
 
     if (cfg.scene === "percentiles") renderPercentiles(body, cfg);
     else if (cfg.scene === "datamodel") renderDataModel(body, cfg);
+    else if (cfg.scene === "storage") renderStorage(body, cfg);
     else body.appendChild(el("p", "viz-fallback", "Unknown scene: " + (cfg.scene || "(none)")));
   }
 

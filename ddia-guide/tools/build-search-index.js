@@ -16,6 +16,7 @@ const ROOT = path.resolve(__dirname, "..");
 const FILES = [
   "index.html",
   "foundations/reliable-scalable-maintainable.html", "foundations/data-models.html",
+  "foundations/storage-engines.html", "foundations/encoding-evolution.html",
   "reference/decisions.html", "reference/flashcards.html",
 ];
 
