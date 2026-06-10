@@ -77,6 +77,17 @@ for (const f of files) {
     }
   }
 
+  // ---- engine wiring: a page that embeds an engine must load its script ----
+  const ENGINES = [
+    ["reqflow", "reqflow.js"], ["viz", "visualizer.js"], ["calc", "capacity.js"],
+    ["tradeoff", "tradeoff.js"], ["failsim", "failsim.js"], ["quorum", "quorum.js"],
+    ["journey", "journey.js"], ["drill", "drill.js"], ["drill", "drill-bank.js"],
+  ];
+  for (const [cls, js] of ENGINES) {
+    if (new RegExp(`class="${cls}[" ]`).test(html) && !html.includes("assets/js/" + js))
+      problems.push(`${rel(f)}: embeds .${cls} but does not load ${js}`);
+  }
+
   // ---- lesson wiring ----
   const isLesson = /data-lesson="/.test(html);
   if (isLesson) {

@@ -49,7 +49,99 @@
     <div class="card feature"><span class="f-ic fx">🚩</span><h4>Red flags</h4><p>Silent whiteboarding, name-dropping tech with no reason, designing for a scale nobody asked for, ignoring the interviewer's hints, never mentioning failure or bottlenecks.</p></div>
   </div>
   <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Start simple, then scale</div><p>Resist building the final 50-box diagram immediately. Draw the naïve version (one app server, one database), then ask "what breaks at 10× traffic?" and fix it live. This narrative — evolving a simple design under pressure — is exactly what interviewers want to watch. Now let's run it for real on a <a href="url-shortener.html">URL shortener</a>.</p></div></div>
-  <div class="quiz" data-quiz>
+  <p>This is that narrative, animated. Step through the journey — at every stage, find the component about to buckle, then apply the fix:</p>
+  <figure class="journey" data-journey aria-label="Scale journey: one server to 100 million users">
+    <figcaption class="jy-title">One server → 100M users, one bottleneck at a time</figcaption>
+    <div class="jy-stops"></div>
+    <div class="jy-stage"></div>
+    <div class="jy-caption" aria-live="polite"></div>
+    <div class="jy-stats"></div>
+    <div class="jy-controls">
+      <button class="jy-btn jy-prev" type="button" aria-label="Previous stage">‹</button>
+      <button class="jy-btn jy-next" type="button" aria-label="Next stage">›</button>
+    </div>
+    <script type="application/json" class="jy-config">
+    {
+      "stages": [
+        {
+          "label": "1–1K users",
+          "nodes": [
+            { "id":"u",   "label":"Users",      "type":"user",   "col":0, "row":1 },
+            { "id":"app", "label":"One server",  "type":"app+db", "col":1, "row":1 }
+          ],
+          "edges": [ { "from":"u", "to":"app" } ],
+          "bottleneck": { "node":"app", "text":"App and DB fight for the same CPU, RAM and disk — and one crash takes everything down." },
+          "fix": "Split the web tier from the database so each can grow on its own.",
+          "caption": "Everything on one box. Genuinely fine at this scale — say so in the interview.",
+          "stats": [ { "k":"QPS", "v":"~10" }, { "k":"servers", "v":"1" } ]
+        },
+        {
+          "label": "10K",
+          "nodes": [
+            { "id":"u",   "label":"Users",     "type":"user",  "col":0, "row":1 },
+            { "id":"app", "label":"App server", "type":"app",   "col":1, "row":1 },
+            { "id":"db",  "label":"Database",   "type":"store", "col":2, "row":1 }
+          ],
+          "edges": [ { "from":"u", "to":"app" }, { "from":"app", "to":"db" } ],
+          "bottleneck": { "node":"app", "text":"One app server saturates first — and it's still a single point of failure." },
+          "fix": "Run several stateless app servers behind a load balancer.",
+          "caption": "Web and data split apart. The database gets its own machine and its own headroom.",
+          "stats": [ { "k":"QPS", "v":"~100" }, { "k":"servers", "v":"2" } ]
+        },
+        {
+          "label": "100K",
+          "nodes": [
+            { "id":"u",    "label":"Users",        "type":"user",  "col":0, "row":1 },
+            { "id":"lb",   "label":"Load balancer", "type":"edge",  "col":1, "row":1 },
+            { "id":"app",  "label":"App server",    "type":"app",   "col":2, "row":0 },
+            { "id":"app2", "label":"App server",    "type":"app",   "col":2, "row":2 },
+            { "id":"db",   "label":"Database",      "type":"store", "col":3, "row":1 }
+          ],
+          "edges": [ { "from":"u","to":"lb" }, { "from":"lb","to":"app" }, { "from":"lb","to":"app2" }, { "from":"app","to":"db" }, { "from":"app2","to":"db" } ],
+          "bottleneck": { "node":"db", "text":"Every read from every app server lands on one database." },
+          "fix": "Cache the hot reads; add read replicas behind the cache.",
+          "caption": "Horizontal scaling begins: stateless app servers behind a load balancer — add boxes, not bigger boxes.",
+          "stats": [ { "k":"QPS", "v":"~1K" }, { "k":"servers", "v":"4–6" } ]
+        },
+        {
+          "label": "10M",
+          "nodes": [
+            { "id":"u",     "label":"Users",        "type":"user",  "col":0, "row":1 },
+            { "id":"lb",    "label":"Load balancer", "type":"edge",  "col":1, "row":1 },
+            { "id":"app",   "label":"App server",    "type":"app",   "col":2, "row":0 },
+            { "id":"app2",  "label":"App server",    "type":"app",   "col":2, "row":2 },
+            { "id":"cache", "label":"Cache",          "type":"redis", "col":3, "row":0 },
+            { "id":"db",    "label":"DB · primary",   "type":"store", "col":3, "row":1 },
+            { "id":"db2",   "label":"DB · replica",   "type":"store", "col":3, "row":2 }
+          ],
+          "edges": [ { "from":"u","to":"lb" }, { "from":"lb","to":"app" }, { "from":"lb","to":"app2" }, { "from":"app","to":"cache" }, { "from":"app2","to":"cache" }, { "from":"app","to":"db" }, { "from":"db","to":"db2", "label":"replicate" } ],
+          "bottleneck": { "node":"db", "text":"The cache absorbs reads, but every write still funnels into one primary." },
+          "fix": "Shard the database by key; push slow work onto async queues.",
+          "caption": "The cache takes ~90% of reads off the database; replicas add read capacity and a failover target.",
+          "stats": [ { "k":"QPS", "v":"~50K" }, { "k":"servers", "v":"tens" } ]
+        },
+        {
+          "label": "100M",
+          "nodes": [
+            { "id":"u",      "label":"Users",         "type":"user",   "col":0, "row":1 },
+            { "id":"cdn",    "label":"CDN / edge",     "type":"edge",   "col":1, "row":0 },
+            { "id":"lb",     "label":"Load balancer",  "type":"edge",   "col":1, "row":1 },
+            { "id":"app",    "label":"App fleet",      "type":"app ×N", "col":2, "row":0 },
+            { "id":"app2",   "label":"App fleet",      "type":"app ×N", "col":2, "row":2 },
+            { "id":"cache",  "label":"Cache cluster",  "type":"redis",  "col":3, "row":0 },
+            { "id":"db",     "label":"DB shard 1",     "type":"store",  "col":3, "row":1 },
+            { "id":"db2",    "label":"DB shard 2",     "type":"store",  "col":3, "row":2 },
+            { "id":"q",      "label":"Queue + workers", "type":"async", "col":4, "row":1 }
+          ],
+          "edges": [ { "from":"u","to":"cdn" }, { "from":"u","to":"lb" }, { "from":"lb","to":"app" }, { "from":"lb","to":"app2" }, { "from":"app","to":"cache" }, { "from":"app2","to":"cache" }, { "from":"app","to":"db" }, { "from":"app2","to":"db2" }, { "from":"app","to":"q", "label":"async" } ],
+          "caption": "The full stack — and every box was forced in by a bottleneck you can name. At this scale the hard problems become operational: deploys, observability, cost, and multi-region.",
+          "stats": [ { "k":"QPS", "v":"~500K" }, { "k":"servers", "v":"hundreds" }, { "k":"regions", "v":"2+" } ]
+        }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="quiz" data-quiz
     <p class="q">You have 40 minutes for "design Instagram" and you've spent 22 of them perfecting requirements and the data model. What's the problem?</p>
     <div class="quiz-opts">
       <button class="quiz-opt"><span class="mark"></span>No problem — thorough requirements always win</button>

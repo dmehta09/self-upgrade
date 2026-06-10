@@ -91,6 +91,10 @@
         <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
         <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
       </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Mock-interview drills</a>
+      </nav>
     </aside>
     <div class="sidebar-scrim"></div>
 
@@ -241,6 +245,88 @@ COMMIT;
   <h2><span class="section-num">06</span> &nbsp;Reconciliation &amp; the unknown-state problem</h2>
   <p>Two independent systems (you and the bank) drift, so <strong>reconciliation</strong> compares your ledger against external truth. The 2026 best practice is <strong>three-way</strong>: internal ledger ↔ PSP settlement file ↔ bank statement — two-way recon gives false confidence (it never confirms funds actually landed).</p>
   <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">"Did the charge succeed?"</div><p>The PSP processed the charge but the response was lost — the worst failure. <strong>Never blindly retry.</strong> Resolve with (a) the same idempotency key on retry (the PSP returns the original result, no duplicate), and (b) a background worker that scans payments stuck in transitional states and <strong>queries the PSP status API as the source of truth</strong> to drive the transition. Pull-based recovery → eventual consistency even after crashes, without the user re-attempting.</p></div></div>
+  <p>The follow-up every senior loop asks is "what happens when X fails?". Inject each failure below and step through how the system absorbs it:</p>
+  <figure class="failsim" data-failsim aria-label="Failure simulator: payments under failure">
+    <figcaption class="fs-title">Break the payment system — then say the right thing</figcaption>
+    <div class="fs-scenarios"></div>
+    <div class="fs-stage"></div>
+    <div class="fs-caption" aria-live="polite"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reset" type="button" aria-label="Reset to healthy">⏮</button>
+      <button class="fs-btn fs-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="fs-btn fs-play" type="button" aria-label="Play">▶</button>
+      <button class="fs-btn fs-next" type="button" aria-label="Next step">›</button>
+      <div class="fs-progress"><div class="fs-progress-fill"></div></div>
+      <span class="fs-step">– / –</span>
+    </div>
+    <div class="fs-note" hidden></div>
+    <script type="application/json" class="fs-config">
+    {
+      "nodes": [
+        { "id":"client", "label":"Client",            "type":"user",    "col":0, "row":1 },
+        { "id":"api",    "label":"API gateway",        "type":"edge",    "col":1, "row":1 },
+        { "id":"pay",    "label":"Payment service",    "type":"service", "col":2, "row":1 },
+        { "id":"psp",    "label":"PSP / card network", "type":"external","col":3, "row":1 },
+        { "id":"queue",  "label":"Event queue",        "type":"kafka",   "col":2, "row":0 },
+        { "id":"ledger", "label":"Ledger writer",      "type":"worker",  "col":3, "row":0 },
+        { "id":"db1",    "label":"Payments DB · primary", "type":"store", "col":2, "row":2 },
+        { "id":"db2",    "label":"Payments DB · replica", "type":"store", "col":3, "row":2 }
+      ],
+      "edges": [
+        { "from":"client", "to":"api" },
+        { "from":"api",    "to":"pay" },
+        { "from":"pay",    "to":"psp",   "label":"charge" },
+        { "from":"pay",    "to":"db1",   "label":"state" },
+        { "from":"db1",    "to":"db2",   "label":"replicate" },
+        { "from":"pay",    "to":"queue", "label":"events" },
+        { "from":"queue",  "to":"ledger" }
+      ],
+      "scenarios": [
+        {
+          "id": "psp-timeout",
+          "label": "PSP times out mid-charge",
+          "target": { "node": "psp" },
+          "steps": [
+            { "caption": "The charge request times out. Did the PSP process it? You genuinely don't know — this is the unknown-state problem.",
+              "degrade": ["psp","pay"], "edgesDown": [["pay","psp"]] },
+            { "caption": "Never blind-retry — that risks a double charge. The payment row parks in a transitional state (pending_psp).",
+              "degrade": ["psp"], "badges": [{ "node":"db1", "text":"pending ↑" }] },
+            { "caption": "A recovery worker polls the PSP status API using the SAME idempotency key — the PSP returns the original outcome, never a second charge.",
+              "reroute": [["pay","psp"]] },
+            { "caption": "The state machine reaches a terminal state. Reconciliation against the settlement file is the backstop for anything still in doubt.", "recover": true }
+          ],
+          "interviewer": "A timeout is not a failure — it's an unknown. Park the payment in a transitional state, recover by polling the PSP with the same idempotency key, and name reconciliation as the backstop."
+        },
+        {
+          "id": "db-primary-down",
+          "label": "Kill the payments DB primary",
+          "target": { "node": "db1" },
+          "steps": [
+            { "caption": "The primary dies mid-traffic. State writes fail, new payments can't be accepted, health checks trip after seconds.",
+              "fail": ["db1"], "degrade": ["pay"], "edgesDown": [["pay","db1"],["db1","db2"]] },
+            { "caption": "The replica is promoted and the service reroutes. But if replication was async, the last writes may be gone — payments in unknown state.",
+              "fail": ["db1"], "promote": ["db2"], "reroute": [["pay","db2"]] },
+            { "caption": "Money state cannot rely on one copy: payments use synchronous (or semi-sync) replication, and reconciliation repairs whatever slipped through.", "recover": true }
+          ],
+          "interviewer": "Name the RPO question out loud: async replication can lose acknowledged writes on failover, which is unacceptable for money — so payment state uses sync/semi-sync replication and reconciliation catches the rest."
+        },
+        {
+          "id": "ledger-lag",
+          "label": "Ledger consumer crashes",
+          "target": { "node": "ledger" },
+          "steps": [
+            { "caption": "The ledger consumer dies. Events pile up in the queue — but checkout keeps working, because the ledger is consumed asynchronously.",
+              "fail": ["ledger"], "edgesDown": [["queue","ledger"]], "badges": [{ "node":"queue", "text":"lag ↑" }] },
+            { "caption": "The consumer restarts and drains the backlog. Replays are safe because ledger appends are idempotent (event id = dedupe key).",
+              "promote": ["ledger"], "reroute": [["queue","ledger"]], "badges": [{ "node":"queue", "text":"draining" }] },
+            { "caption": "Healthy again. The metric that matters: consumer lag — alert on it long before the reconciliation window blows.", "recover": true }
+          ],
+          "interviewer": "Async decoupling keeps the checkout path up while the ledger is down; idempotent consumers make replay safe; consumer lag is the alerting signal."
+        }
+      ]
+    }
+    </script>
+  </figure>
 </section>
 
 <section class="section reveal" id="ops">
@@ -300,5 +386,6 @@ COMMIT;
   <script src="../assets/js/progress.js"></script>
   <script src="../assets/js/reqflow.js"></script>
   <script src="../assets/js/tradeoff.js"></script>
+  <script src="../assets/js/failsim.js"></script>
 </body>
 </html>

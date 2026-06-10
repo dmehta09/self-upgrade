@@ -22,6 +22,7 @@ const FILES = [
   "advanced/uber.html", "advanced/youtube.html", "advanced/payments.html", "advanced/llm-serving.html", "advanced/vector-recommender.html",
   "expert/multi-tenancy.html", "expert/user-management.html", "expert/org-management.html", "expert/authentication.html", "expert/authorization.html",
   "expert/ecommerce-catalog.html", "expert/ecommerce-checkout.html", "expert/billing.html", "expert/audit-log.html",
+  "drill/index.html",
   "reference/glossary.html", "reference/cheatsheet.html",
 ];
 

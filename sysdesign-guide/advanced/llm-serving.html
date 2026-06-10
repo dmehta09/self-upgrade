@@ -91,6 +91,10 @@
         <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
         <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
       </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Mock-interview drills</a>
+      </nav>
     </aside>
     <div class="sidebar-scrim"></div>
 
@@ -142,6 +146,36 @@ Llama-3-70B (80 layers, 8 KV heads via GQA, head_dim 128, BF16):
     </table>
   </div>
   <p>GQA's 8 KV heads (vs 64 query heads) is an 8× KV reduction — which is why grouped-query attention is universal in 2026, and why FP8/FP4 (shrinking weights <em>and</em> KV) is standard.</p>
+  <p>Then size the fleet. LLM capacity math is tokens-per-second, not requests-per-second — do it live:</p>
+  <div class="calc" data-calc>
+    <script type="application/json" class="calc-config">
+    {
+      "title": "GPU fleet sizing — tokens, not requests",
+      "model": {
+        "inputs": [
+          { "key": "rps",       "label": "Peak requests / s",          "min": 1,    "max": 5000,  "step": 1,    "def": 200,  "fmt": "num" },
+          { "key": "tokOut",    "label": "Avg output tokens / request", "min": 50,   "max": 4000,  "step": 50,   "def": 500,  "fmt": "num" },
+          { "key": "tokPerGpu", "label": "Tokens / s per GPU",          "min": 500,  "max": 20000, "step": 250,  "def": 3000, "fmt": "num" },
+          { "key": "util",      "label": "Target utilization",          "min": 0.3,  "max": 0.9,   "step": 0.05, "def": 0.6,  "fmt": "pct" },
+          { "key": "gpuHr",     "label": "GPU cost $ / hour",           "min": 1,    "max": 12,    "step": 0.5,  "def": 3,    "fmt": "dec" }
+        ],
+        "outputs": [
+          { "key": "tokSec", "label": "Tokens/s to generate", "formula": "rps * tokOut",                       "fmt": "num/s", "note": "requests × output tokens" },
+          { "key": "gpus",   "label": "GPUs needed",          "formula": "ceil(tokSec / (tokPerGpu * util))",  "fmt": "num",   "note": "⌈ tok/s ÷ (per-GPU × util) ⌉" },
+          { "key": "nodes",  "label": "8-GPU nodes",          "formula": "ceil(gpus / 8)",                     "fmt": "num",   "note": "tensor-parallel groups" },
+          { "key": "costMo", "label": "Fleet cost $ / month", "formula": "gpus * gpuHr * 730",                 "fmt": "num",   "note": "GPUs × $/hr × 730 h" }
+        ],
+        "presets": [
+          { "label": "Chat assistant",  "values": { "rps": 200,  "tokOut": 500 } },
+          { "label": "Code completion", "values": { "rps": 1000, "tokOut": 150, "tokPerGpu": 5000 } },
+          { "label": "Batch summaries", "values": { "rps": 50,   "tokOut": 2000, "util": 0.85 } }
+        ],
+        "summary": "Generating {tokSec} tokens needs about {gpus} GPUs ({nodes} nodes) ≈ ${costMo}/month — note how utilization moves the bill more than any other slider. That's why continuous batching exists."
+      }
+    }
+    </script>
+    <noscript><p>The calculator needs JavaScript.</p></noscript>
+  </div>
 </section>
 
 <section class="section reveal" id="api">
@@ -304,5 +338,6 @@ def step():
   <script src="../assets/js/progress.js"></script>
   <script src="../assets/js/reqflow.js"></script>
   <script src="../assets/js/tradeoff.js"></script>
+  <script src="../assets/js/capacity.js"></script>
 </body>
 </html>

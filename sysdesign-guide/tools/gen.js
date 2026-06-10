@@ -26,6 +26,7 @@ const MOD = {
   core:         { crumb: "Core designs",     index: null },     /* no index page; label only */
   advanced:     { crumb: "Advanced designs", index: null },     /* no index page; label only */
   expert:       { crumb: "Expert designs",   index: null },     /* no index page; label only */
+  drill:        { crumb: "Practice",         index: "drill/index.html" },
   reference:    { crumb: "Reference",        index: "reference/glossary.html" }
 };
 
@@ -49,11 +50,11 @@ const PAGES = [
   { out: "data/index.html",                    mod: "data", lesson: "data-overview",    title: "SQL vs NoSQL", desc: "Choosing a data store: relational ACID vs the NoSQL families, and how to pick by access pattern.", scripts: ["tradeoff.js"] },
   { out: "data/indexing.html",                 mod: "data", lesson: "data-indexing",   title: "Indexing", desc: "Why an index turns a full scan into a lookup: B-trees, composite and covering indexes, and their write cost.", scripts: ["visualizer.js"] },
   { out: "data/sharding.html",                 mod: "data", lesson: "data-sharding",   title: "Sharding & partitioning", desc: "Splitting data across machines: shard keys, hot shards, range vs hash partitioning, and resharding.", scripts: ["visualizer.js","tradeoff.js"] },
-  { out: "data/replication.html",              mod: "data", lesson: "data-replication", title: "Replication & quorums", desc: "Copies for durability and reads: leader-follower, sync vs async, and quorum reads/writes.", scripts: ["tradeoff.js","visualizer.js"] },
+  { out: "data/replication.html",              mod: "data", lesson: "data-replication", title: "Replication & quorums", desc: "Copies for durability and reads: leader-follower, sync vs async, and quorum reads/writes.", scripts: ["tradeoff.js","visualizer.js","quorum.js"] },
   { out: "data/consensus.html",                mod: "data", lesson: "data-consensus", title: "Consensus & leader election", desc: "How a cluster agrees under failure: leader election (the Raft intuition), majority quorums, split-brain, and distributed locks.", scripts: ["visualizer.js"] },
   { out: "data/consistent-hashing.html",       mod: "data", lesson: "data-hashing",    title: "Consistent hashing", desc: "Distributing keys so adding or removing a node moves as few as possible — the ring, virtual nodes, and replication.", scripts: ["visualizer.js"] },
 
-  { out: "warmup/index.html",                  mod: "warmup", lesson: "warmup-playbook",     title: "The design playbook", desc: "The repeatable 7-step method for driving any system-design interview, with a one-page checklist." },
+  { out: "warmup/index.html",                  mod: "warmup", lesson: "warmup-playbook",     title: "The design playbook", desc: "The repeatable 7-step method for driving any system-design interview, with a one-page checklist.", scripts: ["journey.js"] },
   { out: "warmup/url-shortener.html",          mod: "warmup", lesson: "warmup-url",          title: "Design a URL shortener", desc: "The classic warm-up: base62 keys, a key-generation service, read-heavy caching, and the redirect path.", scripts: ["reqflow.js","capacity.js"] },
   { out: "warmup/rate-limiter.html",           mod: "warmup", lesson: "warmup-rate-limiter", title: "Design a rate limiter", desc: "Token bucket, sliding window and GCRA, where to put the limiter, and atomic distributed counters in Redis.", scripts: ["reqflow.js","visualizer.js","tradeoff.js"] },
   { out: "warmup/unique-id.html",              mod: "warmup", lesson: "warmup-unique-id",    title: "Design a unique-ID generator", desc: "Snowflake and UUIDv7: time-ordered IDs generated without coordination — plus the clock-skew gotcha.", scripts: ["reqflow.js","tradeoff.js"] },
@@ -67,8 +68,8 @@ const PAGES = [
 
   { out: "advanced/uber.html",                 mod: "advanced", lesson: "adv-uber",     title: "Design Uber / ride-hailing", desc: "Match riders to nearby drivers in real time: geospatial indexing (geohash/QuadTree/H3), dispatch, and ETA.", scripts: ["reqflow.js","visualizer.js","tradeoff.js"] },
   { out: "advanced/youtube.html",              mod: "advanced", lesson: "adv-youtube",  title: "Design YouTube / video streaming", desc: "Upload, transcode, and stream video globally: the CDN, adaptive bitrate, blob storage, and the view path.", scripts: ["reqflow.js","capacity.js"] },
-  { out: "advanced/payments.html",             mod: "advanced", lesson: "adv-payments", title: "Design a payment system", desc: "Move money correctly: idempotency keys, the double-entry ledger, exactly-once, saga vs 2PC, and reconciliation.", scripts: ["reqflow.js","tradeoff.js"] },
-  { out: "advanced/llm-serving.html",          mod: "advanced", lesson: "adv-llm",      title: "Design an LLM serving system", desc: "Serve a large language model at scale (2026): continuous batching, the KV cache, PagedAttention, token streaming, and autoscaling.", scripts: ["reqflow.js","tradeoff.js"] },
+  { out: "advanced/payments.html",             mod: "advanced", lesson: "adv-payments", title: "Design a payment system", desc: "Move money correctly: idempotency keys, the double-entry ledger, exactly-once, saga vs 2PC, and reconciliation.", scripts: ["reqflow.js","tradeoff.js","failsim.js"] },
+  { out: "advanced/llm-serving.html",          mod: "advanced", lesson: "adv-llm",      title: "Design an LLM serving system", desc: "Serve a large language model at scale (2026): continuous batching, the KV cache, PagedAttention, token streaming, and autoscaling.", scripts: ["reqflow.js","tradeoff.js","capacity.js"] },
   { out: "advanced/vector-recommender.html",   mod: "advanced", lesson: "adv-vector",   title: "Design vector search & a recommender", desc: "Semantic search and recommendations (2026): embeddings, ANN indexes (HNSW/IVF-PQ/DiskANN), and candidate-generation + ranking.", scripts: ["reqflow.js","visualizer.js","tradeoff.js"] },
 
   { out: "expert/multi-tenancy.html",          mod: "expert", lesson: "expert-multi-tenancy",  title: "Design a multi-tenant SaaS architecture", desc: "Tenant isolation at scale: silo vs pool vs bridge, shared-DB with tenant_id + Postgres RLS, the noisy-neighbour problem, cells, and per-tenant residency.", scripts: ["reqflow.js","tradeoff.js"] },
@@ -80,6 +81,8 @@ const PAGES = [
   { out: "expert/ecommerce-checkout.html",      mod: "expert", lesson: "expert-ecommerce-checkout", title: "Design e-commerce: checkout, inventory & orders", desc: "The write side: the checkout saga with compensations, inventory reservation / oversell prevention, idempotent orders, and the order state machine + outbox.", scripts: ["reqflow.js","tradeoff.js"] },
   { out: "expert/billing.html",                 mod: "expert", lesson: "expert-billing",          title: "Design billing, subscriptions & metering", desc: "SaaS billing: plans/subscriptions, the usage-metering pipeline (ingest → aggregate → rate), invoicing, proration, dunning, and the billing ledger.", scripts: ["reqflow.js","tradeoff.js"] },
   { out: "expert/audit-log.html",               mod: "expert", lesson: "expert-audit-log",        title: "Design an audit log / activity feed", desc: "Immutable, tamper-evident event trail: hash chaining + WORM, outbox ingestion, hot/cold retention, compliance query, and the activity-feed read model.", scripts: ["reqflow.js","visualizer.js"] },
+
+  { out: "drill/index.html",                    mod: "drill", title: "Mock-interview drills", desc: "Timed 35-minute mock system-design interviews: phased timer, interviewer-style nudges, a senior grading rubric, and model answers — practice the loop, not just the knowledge.", scripts: ["drill-bank.js","drill.js"] },
 
   { out: "reference/glossary.html",            mod: "reference", title: "Glossary", desc: "Every system-design term in this guide, defined in one line — from ACID to write-ahead log." },
   { out: "reference/cheatsheet.html",          mod: "reference", title: "The cheat sheet", desc: "One page to skim before an interview: latency numbers, capacity formulas, the design checklist, and the best references." }
@@ -97,7 +100,8 @@ const NAV = [
   { h: "Warm-up designs", cls: "is-warmup", links: [["warmup/index.html","The design playbook"],["warmup/url-shortener.html","URL shortener"],["warmup/rate-limiter.html","Rate limiter"],["warmup/unique-id.html","Unique ID generator"]] },
   { h: "Core designs", cls: "is-core", links: [["core/distributed-cache.html","Distributed cache"],["core/web-crawler.html","Web crawler"],["core/notification-system.html","Notification system"],["core/news-feed.html","News feed (Twitter)"],["core/file-sync.html","Dropbox / file sync"],["core/chat.html","Chat (WhatsApp)"]] },
   { h: "Advanced designs", cls: "is-advanced", links: [["advanced/uber.html","Uber / ride-hailing"],["advanced/youtube.html","YouTube / streaming"],["advanced/payments.html","Payment system"],["advanced/llm-serving.html","LLM serving"],["advanced/vector-recommender.html","Vector search &amp; recsys"]] },
-  { h: "Expert designs", cls: "is-expert", links: [["expert/multi-tenancy.html","Multi-tenant SaaS"],["expert/user-management.html","User management"],["expert/org-management.html","Organizations &amp; teams"],["expert/authentication.html","Authentication"],["expert/authorization.html","Authorization"],["expert/ecommerce-catalog.html","E-commerce: catalog &amp; cart"],["expert/ecommerce-checkout.html","E-commerce: checkout"],["expert/billing.html","Billing &amp; subscriptions"],["expert/audit-log.html","Audit log"]] }
+  { h: "Expert designs", cls: "is-expert", links: [["expert/multi-tenancy.html","Multi-tenant SaaS"],["expert/user-management.html","User management"],["expert/org-management.html","Organizations &amp; teams"],["expert/authentication.html","Authentication"],["expert/authorization.html","Authorization"],["expert/ecommerce-catalog.html","E-commerce: catalog &amp; cart"],["expert/ecommerce-checkout.html","E-commerce: checkout"],["expert/billing.html","Billing &amp; subscriptions"],["expert/audit-log.html","Audit log"]] },
+  { h: "Practice", cls: "is-drill", links: [["drill/index.html","Mock-interview drills"]] }
 ];
 
 function sidebar(base) {
