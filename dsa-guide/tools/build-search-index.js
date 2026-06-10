@@ -21,6 +21,7 @@ const FILES = [
   "patterns/linked-list.html", "patterns/trees-traversal.html", "patterns/heap-topk.html",
   "patterns/backtracking.html", "patterns/graphs.html", "patterns/dynamic-programming.html",
   "patterns/intervals.html",
+  "drill/index.html",
   "reference/cheatsheet.html",
 ];
 

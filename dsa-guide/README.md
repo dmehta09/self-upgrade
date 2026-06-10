@@ -33,6 +33,14 @@ Tip: to browse over HTTP instead, run `python3 -m http.server` in this folder an
 ## Features
 - **Animated algorithm visualizations** — step / play / speed controls; keyboard arrows; pauses under
   "reduce motion". Renderers for arrays & pointers, grids, binary trees, and graphs.
+- **Timed coding drills** (`drill/`) — fourteen 40-minute mock rounds (restate 5 / brute force 5 /
+  find the pattern 10 / code 15 / test 5) with interviewer nudges, reveal-on-demand hints, a senior
+  rubric, and a model answer. Best scores persist to `localStorage["dsa-drill"]`.
+- **Pattern-recognition trainer** — read a problem blurb, name the pattern under time (on the pattern
+  map), plus a **Big-O speed quiz** mode (on the Big-O page) with the classic amortized/memoized traps.
+  Scores in `localStorage["dsa-ptrainer"]`.
+- **Recursion-tree explorer** — step through real call trees: calls appear, returns pop, memo hits
+  glow (backtracking & DP pages).
 - **Runnable Python** — edit and run real solutions in-browser (Pyodide).
 - **Full-text search** — press `/` or ⌘/Ctrl-K.
 - **Quizzes & progress** — mark lessons learned; a home dashboard tracks it (saved in `localStorage`).
@@ -44,9 +52,11 @@ dsa-guide/
 ├── index.html              home: hero + progress dashboard
 ├── foundations/            Big-O + core data structures
 ├── patterns/               the pattern map + 12 pattern pages (~30 problems)
+├── drill/                  timed coding drills (40-min mock rounds)
 ├── reference/cheatsheet.html
 ├── assets/css/             styles.css (shared design system) + theme.css (this site)
-├── assets/js/              main, search, runpad (Pyodide), visualizer, progress, lessons, search-index
+├── assets/js/              main, search, runpad (Pyodide), visualizer, progress, lessons, search-index,
+│                           drill + drill-bank, patternpicker, recursion-tree
 └── tools/                  build-search-index.js, verify.js
 ```
 

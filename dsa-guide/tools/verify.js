@@ -101,6 +101,18 @@ for (const f of files) {
     for (const js of ["lessons.js", "search-index.js", "main.js", "search.js", "runpad.js", "visualizer.js", "progress.js"])
       if (!html.includes("assets/js/" + js)) problems.push(`${rel(f)}: missing <script> ${js}`);
   }
+
+  // ---- engine wiring (an embed without its script renders as a dead box) ----
+  const ENGINES = [
+    ["data-drill", ["drill-bank.js", "drill.js"]],
+    ["data-ptrainer", ["patternpicker.js"]],
+    ["data-rtree", ["recursion-tree.js"]],
+  ];
+  for (const [attr, scripts] of ENGINES) {
+    if (!html.includes(attr)) continue;
+    for (const js of scripts)
+      if (!html.includes("assets/js/" + js)) problems.push(`${rel(f)}: has ${attr} embed but missing <script> ${js}`);
+  }
 }
 
 console.log(`Checked ${files.length} HTML files; ${lessonIds.size} lessons registered.`);
