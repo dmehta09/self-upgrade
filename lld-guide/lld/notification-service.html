@@ -266,6 +266,45 @@ class PushChannel:
               </table>
             </div>
             <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">How the Open/Closed Principle is satisfied</div><p>Adding a Slack channel means: write a <code>SlackChannel</code> with a <code>send()</code>, then <code>ChannelFactory.register("slack", SlackChannel)</code>. You <em>extend</em> the system (new class) without <em>modifying</em> <code>NotificationService</code>, the existing channels, or the factory's source. Because the service depends on the <code>Channel</code> abstraction (Strategy) and never on a concrete type, it simply doesn't care that a new one appeared — that's OCP, made possible by abstraction.</p></div></div>
+            <p>Here are all three patterns firing in one <code>publish()</code> call — Observer fans out to subscribers, and each delivery dispatches through a Strategy channel:</p>
+            <figure class="pflow" data-pflow aria-label="Notification publish call flow, animated">
+              <figcaption class="pf-title">One publish() · Observer fan-out × Strategy dispatch</figcaption>
+              <script type="application/json" class="pf-config">
+              {
+                "lanes": [
+                  { "id": "pub",   "label": "publisher" },
+                  { "id": "svc",   "label": "NotificationService" },
+                  { "id": "email", "label": "EmailChannel" },
+                  { "id": "sms",   "label": "SmsChannel" }
+                ],
+                "code": [
+                  "svc.subscribe(\"orders\", alice, \"email\")",
+                  "svc.subscribe(\"orders\", bob, \"sms\")",
+                  "svc.publish(\"orders\", \"Shipped!\")",
+                  "  for sub in topic_subs[\"orders\"]:",
+                  "      sub.channel.send(sub.user, msg)"
+                ],
+                "steps": [
+                  { "from": "pub", "to": "svc", "label": "subscribe(alice, email)", "line": 0,
+                    "caption": "Alice registers on the 'orders' topic with her preferred channel — built by the Factory." },
+                  { "from": "pub", "to": "svc", "label": "subscribe(bob, sms)", "line": 1,
+                    "caption": "Bob picks SMS. The service stores both behind the same Channel Protocol." },
+                  { "from": "pub", "to": "svc", "label": "publish(\"Shipped!\")", "line": 2,
+                    "caption": "The publisher fires one event. It has no idea who subscribed or how they'll be reached." },
+                  { "from": "svc", "to": "svc", "kind": "self", "label": "walk subscribers", "line": 3,
+                    "caption": "Observer at work: the service owns the fan-out loop." },
+                  { "from": "svc", "to": "email", "label": "send(alice, msg)", "line": 4,
+                    "caption": "Strategy at work: the same send() call, dispatched to whatever channel Alice chose." },
+                  { "from": "email", "to": "svc", "kind": "return", "line": 4,
+                    "caption": "Email done…" },
+                  { "from": "svc", "to": "sms", "label": "send(bob, msg)", "line": 4,
+                    "caption": "…same line of code, different strategy object for Bob. Adding Slack = one new lane, zero edits here." },
+                  { "from": "sms", "to": "svc", "kind": "return", "line": 4,
+                    "caption": "One publish became two deliveries through two interchangeable channels — Observer × Strategy." }
+                ]
+              }
+              </script>
+            </figure>
             <div class="quiz" data-quiz>
               <p class="q">Which pattern is responsible for the service notifying many subscribers when one event is published?</p>
               <div class="quiz-opts">
@@ -422,5 +461,6 @@ service.publish("orders", "Shipped!")</code></pre></div>
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/patternflow.js"></script>
 </body>
 </html>

@@ -174,6 +174,45 @@ src = Encrypted(Compressed(FileSource()))   # stack in any order
 print(src.read())                           # enc(zip(payload))</code></pre></div>
             </div>
             <div class="io-out"><b>Output</b>enc(zip(payload))</div>
+            <p>The whole pattern is one loop in a class diagram: the decorator <em>inherits from</em> the interface <strong>and</strong> <em>holds</em> one. Click <code>SourceDecorator</code> below and look at its two relationships — that pair is the Decorator:</p>
+            <figure class="umlx" data-umlx aria-label="Interactive Decorator class model">
+              <figcaption class="ux-title">The Decorator loop — is-a AND has-a, at once</figcaption>
+              <script type="application/json" class="ux-config">
+              {
+                "idle": "Click a class. The interesting one is SourceDecorator — it points at DataSource twice, in two different ways.",
+                "classes": [
+                  { "id": "ds", "name": "DataSource", "kind": "abstract", "col": 1, "row": 0,
+                    "methods": [{ "sig": "read() → str", "role": "the one surface every wrapper preserves" }],
+                    "role": "Component",
+                    "duty": "The shared interface. Clients hold 'a DataSource' and never know how deep the wrapping goes." },
+                  { "id": "file", "name": "FileSource", "col": 0, "row": 1,
+                    "methods": [{ "sig": "read() → str", "role": "returns the raw payload" }],
+                    "role": "ConcreteComponent",
+                    "duty": "The innermost real object — the thing actually being decorated." },
+                  { "id": "dec", "name": "SourceDecorator", "kind": "abstract", "col": 2, "row": 1,
+                    "attrs": ["_wrapped: DataSource"],
+                    "methods": [],
+                    "role": "Decorator",
+                    "duty": "The hinge of the pattern: it IS a DataSource (inherits) and HAS a DataSource (wraps). Same surface in, same surface out — so decorators stack." },
+                  { "id": "zip", "name": "Compressed", "col": 1, "row": 2,
+                    "methods": [{ "sig": "read() → str", "role": "zip(wrapped.read())" }],
+                    "role": "ConcreteDecorator",
+                    "duty": "Adds compression around whatever it wraps — file, or another decorator." },
+                  { "id": "enc", "name": "Encrypted", "col": 3, "row": 2,
+                    "methods": [{ "sig": "read() → str", "role": "enc(wrapped.read())" }],
+                    "role": "ConcreteDecorator",
+                    "duty": "Adds encryption the same way. Encrypted(Compressed(FileSource())) stacks in any order." }
+                ],
+                "relations": [
+                  { "from": "file", "to": "ds",  "type": "inherit" },
+                  { "from": "dec",  "to": "ds",  "type": "inherit" },
+                  { "from": "ds",   "to": "dec", "type": "aggregate", "label": "wraps 1" },
+                  { "from": "zip",  "to": "dec", "type": "inherit" },
+                  { "from": "enc",  "to": "dec", "type": "inherit" }
+                ]
+              }
+              </script>
+            </figure>
             <div class="kv">
               <dt>Use when</dt><dd>you need to mix-and-match optional behaviors at runtime, or avoid a subclass for every combination.</dd>
               <dt>Avoid when</dt><dd>there's only ever one fixed extra behavior — just put it in the class.</dd>
@@ -331,6 +370,39 @@ root = Folder("root").add(File("a.txt", 100)).add(
 print(root.size())                        # 300 — files and folders alike</code></pre></div>
             </div>
             <div class="io-out"><b>Output</b>300</div>
+            <p>Composite has the same self-referential loop as Decorator, one twist different: the wrapper holds <em>many</em> children instead of one. Click <code>Folder</code> and compare:</p>
+            <figure class="umlx" data-umlx aria-label="Interactive Composite class model">
+              <figcaption class="ux-title">The Composite loop — a Folder of Nodes is a Node</figcaption>
+              <script type="application/json" class="ux-config">
+              {
+                "idle": "Click a class. Folder is the composite: it inherits Node and owns a list of Nodes — which may themselves be Folders.",
+                "classes": [
+                  { "id": "node", "name": "Node", "kind": "abstract", "col": 1, "row": 0,
+                    "methods": [{ "sig": "size() → int", "role": "the uniform question, leaf or branch" }],
+                    "role": "Component",
+                    "duty": "The shared surface. Clients ask size() without caring what's underneath." },
+                  { "id": "file", "name": "File", "col": 0, "row": 1,
+                    "attrs": ["_size: int"],
+                    "methods": [{ "sig": "size() → int", "role": "returns its own bytes — recursion's base case" }],
+                    "role": "Leaf",
+                    "duty": "A terminal node. It has no children and answers directly." },
+                  { "id": "folder", "name": "Folder", "col": 2, "row": 1,
+                    "attrs": ["_children: list[Node]"],
+                    "methods": [
+                      { "sig": "add(node) → Folder", "role": "accepts Files AND Folders — same type" },
+                      { "sig": "size() → int", "role": "sum(child.size() …) — the recursive step" }
+                    ],
+                    "role": "Composite",
+                    "duty": "IS a Node, HOLDS Nodes. That loop is what makes arbitrary-depth trees cost zero extra code." }
+                ],
+                "relations": [
+                  { "from": "file",   "to": "node", "type": "inherit" },
+                  { "from": "folder", "to": "node", "type": "inherit" },
+                  { "from": "node",   "to": "folder", "type": "compose", "label": "children *" }
+                ]
+              }
+              </script>
+            </figure>
             <div class="kv">
               <dt>Use when</dt><dd>your data is naturally a tree (files, UI widgets, org charts) and clients shouldn't special-case leaf vs branch.</dd>
               <dt>Avoid when</dt><dd>the structure is flat — a plain list is simpler than a tree.</dd>
@@ -492,5 +564,6 @@ False</div>
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/umlx.js"></script>
 </body>
 </html>

@@ -143,6 +143,46 @@ print(sorted(words, key=len))            # ['fig', 'pear', 'apple']</code></pre>
             <div class="io-out"><b>Output (function version)</b>$30 via card
 $12 via PayPal
 ['fig', 'pear', 'apple']</div>
+            <p>Watch the dispatch happen. The processor's <code>checkout()</code> never changes — only the object behind the interface does:</p>
+            <figure class="pflow" data-pflow aria-label="Strategy pattern call flow, animated">
+              <figcaption class="pf-title">Strategy · same call site, swapped algorithm</figcaption>
+              <script type="application/json" class="pf-config">
+              {
+                "lanes": [
+                  { "id": "client", "label": "client code" },
+                  { "id": "proc",   "label": "PaymentProcessor" },
+                  { "id": "card",   "label": "CardStrategy" },
+                  { "id": "paypal", "label": "PayPalStrategy" }
+                ],
+                "code": [
+                  "p = PaymentProcessor(CardStrategy())",
+                  "p.checkout(30)",
+                  "    self._strategy.pay(30)",
+                  "p = PaymentProcessor(PayPalStrategy())",
+                  "p.checkout(12)",
+                  "    self._strategy.pay(12)"
+                ],
+                "steps": [
+                  { "from": "client", "to": "proc", "label": "inject CardStrategy", "line": 0,
+                    "caption": "Injection: the algorithm arrives from outside. The processor stores it as 'some PayStrategy'." },
+                  { "from": "client", "to": "proc", "label": "checkout(30)", "line": 1,
+                    "caption": "The caller talks to the processor only — it has no idea which strategy is inside." },
+                  { "from": "proc", "to": "card", "label": "pay(30)", "line": 2,
+                    "caption": "The dispatch: one polymorphic call through the interface. No if/elif anywhere." },
+                  { "from": "card", "to": "proc", "kind": "return", "label": "\"$30 via card\"", "line": 2,
+                    "caption": "The strategy returns its result; the processor prints it, none the wiser." },
+                  { "from": "client", "to": "proc", "label": "inject PayPalStrategy", "line": 3,
+                    "caption": "Now the swap — a different strategy object, and not one line of processor code changes." },
+                  { "from": "client", "to": "proc", "label": "checkout(12)", "line": 4,
+                    "caption": "Identical call site as before." },
+                  { "from": "proc", "to": "paypal", "label": "pay(12)", "line": 5,
+                    "caption": "Same dispatch line, different receiver — that line IS the Strategy pattern." },
+                  { "from": "paypal", "to": "proc", "kind": "return", "label": "\"$12 via PayPal\"", "line": 5,
+                    "caption": "Adding CryptoStrategy tomorrow touches zero existing code: write a class, inject it." }
+                ]
+              }
+              </script>
+            </figure>
             <div class="kv">
               <dt>Use when</dt><dd>one step has several interchangeable implementations chosen at runtime.</dd>
               <dt>Avoid when</dt><dd>there's only one algorithm, or the choice never changes — a plain function call is enough.</dd>
@@ -491,6 +531,45 @@ bot.handle(9)                             # level 9: unhandled</code></pre></div
             <div class="io-out"><b>Output</b>Bot handled it
 Human handled it
 level 9: unhandled</div>
+            <p>Step through two tickets walking the chain — one that a handler claims, one that falls off the end:</p>
+            <figure class="pflow" data-pflow aria-label="Chain of Responsibility call flow, animated">
+              <figcaption class="pf-title">Chain of Responsibility · handle it or pass it on</figcaption>
+              <script type="application/json" class="pf-config">
+              {
+                "lanes": [
+                  { "id": "client", "label": "client code" },
+                  { "id": "bot",    "label": "Bot (≤ 1)" },
+                  { "id": "human",  "label": "Human (≤ 2)" }
+                ],
+                "code": [
+                  "bot.set_next(human)",
+                  "bot.handle(2)",
+                  "    # Bot: 2 ≤ 1? no → pass_on",
+                  "    # Human: 2 ≤ 2? yes → handled",
+                  "bot.handle(9)",
+                  "    # Human: no next → unhandled"
+                ],
+                "steps": [
+                  { "from": "client", "to": "bot", "label": "handle(level=2)", "line": 1,
+                    "caption": "The client addresses the FRONT of the chain — it never picks a handler itself." },
+                  { "from": "bot", "to": "bot", "kind": "self", "label": "2 ≤ 1? no", "line": 2,
+                    "caption": "Bot checks 'is this mine?'. A level-2 ticket is above its pay grade." },
+                  { "from": "bot", "to": "human", "label": "pass_on → handle(2)", "line": 2,
+                    "caption": "So it forwards to whoever is next. Bot doesn't know or care who that is." },
+                  { "from": "human", "to": "human", "kind": "self", "label": "2 ≤ 2? handled ✓", "line": 3,
+                    "caption": "Human claims it. The walk stops here — no one further is bothered." },
+                  { "from": "human", "to": "client", "kind": "return", "line": 3,
+                    "caption": "Done. Reordering tiers or inserting a 'Specialist' is pure wiring, no handler edits." },
+                  { "from": "client", "to": "bot", "label": "handle(level=9)", "line": 4,
+                    "caption": "Now a severity-9 ticket down the same chain." },
+                  { "from": "bot", "to": "human", "label": "pass_on → handle(9)", "line": 4,
+                    "caption": "Bot passes immediately…" },
+                  { "from": "human", "to": "human", "kind": "self", "label": "no next → unhandled", "line": 5,
+                    "caption": "…and Human has no next handler. The chain's END POLICY (raise? log? default?) is a real design decision — say it in interviews." }
+                ]
+              }
+              </script>
+            </figure>
             <div class="kv">
               <dt>Use when</dt><dd>more than one object might handle a request and the handler isn't known in advance (logging levels, event pipelines, middleware).</dd>
               <dt>Avoid when</dt><dd>exactly one object always handles it — the chain is needless indirection.</dd>

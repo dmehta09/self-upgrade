@@ -147,6 +147,40 @@
               <dt>SelectionStrategy <code>«interface»</code></dt><dd>One job: <code>pick(elevators, floor)</code> → the chosen <code>Elevator</code>. The varying part of the design lives here.</dd>
               <dt>NearestStrategy</dt><dd>The default rule — pick the car with the smallest <code>abs(car.floor - call_floor)</code>. Swap it for same-direction or least-busy without touching the controller.</dd>
             </div>
+            <p>Drive one car's sweep yourself. Send it hall calls and exhaust the sweep — note how calls <em>against</em> the current direction queue instead of flipping it (that's the whole SCAN idea):</p>
+            <figure class="fsm" data-fsm aria-label="Interactive elevator direction state machine">
+              <figcaption class="fsm-title">One car's sweep — fire hall calls at it</figcaption>
+              <script type="application/json" class="fsm-config">
+              {
+                "initial": "idle",
+                "states": [
+                  { "id": "idle", "label": "IDLE",        "note": "no targets",      "col": 0, "row": 0 },
+                  { "id": "up",   "label": "MOVING UP",   "note": "serving above",   "col": 2, "row": 0 },
+                  { "id": "down", "label": "MOVING DOWN", "note": "serving below",   "col": 1, "row": 1 }
+                ],
+                "events": [
+                  { "id": "callup",   "label": "hall call · above" },
+                  { "id": "calldown", "label": "hall call · below" },
+                  { "id": "sweepend", "label": "sweep exhausted" }
+                ],
+                "transitions": [
+                  { "from": "idle", "on": "callup",   "to": "up",   "log": "target above → start the up sweep" },
+                  { "from": "idle", "on": "calldown", "to": "down", "log": "target below → start the down sweep" },
+                  { "from": "up",   "on": "callup",   "to": "up",   "log": "merged into the current up sweep" },
+                  { "from": "up",   "on": "calldown", "to": "up",   "log": "queued — served on the next down pass (no flip!)" },
+                  { "from": "down", "on": "calldown", "to": "down", "log": "merged into the current down sweep" },
+                  { "from": "down", "on": "callup",   "to": "down", "log": "queued — served on the next up pass (no flip!)" },
+                  { "from": "up",   "on": "sweepend", "to": "down", "guard": "targets below exist", "log": "nothing left above → flip and serve below" },
+                  { "from": "down", "on": "sweepend", "to": "idle", "log": "target set empty → settle to IDLE" },
+                  { "from": "idle", "on": "sweepend", "reject": "no sweep in progress" }
+                ],
+                "scenarios": [
+                  { "label": "Morning rush", "fire": ["callup", "calldown", "sweepend", "sweepend"] }
+                ]
+              }
+              </script>
+            </figure>
+            <p>The "no flip!" self-loops are the interview point: a naive elevator chases every new call (starving riders mid-route); SCAN finishes the current direction first. The flip decisions live <em>inside</em> the car's step logic — the controller never micromanages direction.</p>
           </section>
 
           <!-- 4. CODE -->
@@ -349,5 +383,6 @@ class CapacityAwareStrategy:
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/fsm.js"></script>
 </body>
 </html>

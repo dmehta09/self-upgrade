@@ -130,12 +130,25 @@
       return { x: g.cx + dx * sc, y: g.cy + dy * sc };
     }
 
-    /* ---- edges ---- */
+    /* ---- edges (parallel edges between the same pair get offset) ---- */
+    var pairTotal = {}, pairSeen = {};
+    relations.forEach(function (rel) {
+      var k = [rel.from, rel.to].sort().join("|");
+      pairTotal[k] = (pairTotal[k] || 0) + 1;
+    });
     var edgeEls = [];
     relations.forEach(function (rel) {
       var a = geom[rel.from], b = geom[rel.to];
       if (!a || !b) return;
       var p1 = boundary(a, b.cx, b.cy), p2 = boundary(b, a.cx, a.cy);
+      var pk = [rel.from, rel.to].sort().join("|");
+      if (pairTotal[pk] > 1) {
+        var idx = pairSeen[pk] = (pairSeen[pk] || 0) + 1;
+        var off = (idx - (pairTotal[pk] + 1) / 2) * 16;
+        var odx = p2.x - p1.x, ody = p2.y - p1.y, oL = Math.sqrt(odx * odx + ody * ody) || 1;
+        var oxx = -ody / oL * off, oyy = odx / oL * off;
+        p1 = { x: p1.x + oxx, y: p1.y + oyy }; p2 = { x: p2.x + oxx, y: p2.y + oyy };
+      }
       var dx = p2.x - p1.x, dy = p2.y - p1.y, L = Math.sqrt(dx * dx + dy * dy) || 1, ux = dx / L, uy = dy / L;
       var px = -uy, py = ux;
       var g = svg("g", { class: "ux-edge t-" + rel.type, "data-type": rel.type });

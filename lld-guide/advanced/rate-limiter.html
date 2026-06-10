@@ -177,6 +177,37 @@ class SlidingWindow:
             <p>Picture two threads when exactly <strong>one</strong> token remains. Thread A reads <code>tokens == 1</code>, sees <code>1 &gt;= 1</code>, and is about to decrement. Before it does, Thread B also reads <code>tokens == 1</code>, also sees the check pass. Now both decrement: <code>tokens</code> goes to <code>-1</code>, and <em>both</em> requests were admitted. You just <strong>over-admitted</strong> — handed out a token that didn't exist.</p>
             <p>The fix is <code>with self._lock:</code> wrapping the whole check-and-decrement. The lock makes that sequence <strong>atomic</strong>: while one thread holds it, no other thread can read <code>tokens</code>, so the second thread arrives only after the first has already decremented to <code>0</code> — and is correctly rejected. The sliding window has the same shape (read the deque length, then append) and is guarded the same way. For the underlying mechanics — race conditions, why the GIL doesn't save you, keeping critical sections small — see the <a href="../advanced/index.html#concurrency">concurrency primer</a>.</p>
             <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">"Check then act" is never one step</div><p>Anytime you <em>test a condition and then mutate based on it</em> — "is there a token? then take one", "is there a free seat? then book it" — that's two operations, and another thread can sneak between them. The whole test-and-act must sit inside one lock. The decision (the <code>if</code>) and the change (the <code>-=</code>) have to be indivisible, or the decision can be stale by the time you act on it.</p></div></div>
+            <p>There's a second, sneakier race in a token bucket: the <strong>consumer and the refill</strong> both touch <code>tokens</code>. Watch them collide — one taken plus one refilled should net out to the starting count, but the unlucky interleaving <em>mints a free token</em>:</p>
+            <figure class="conviz" data-conviz aria-label="Interactive race: token bucket consumer vs refill">
+              <figcaption class="cv-title">Consumer vs refill · the same bucket counter</figcaption>
+              <script type="application/json" class="cv-config">
+              {
+                "shared": [ { "id": "tok", "label": "bucket.tokens", "init": 5 } ],
+                "threads": [
+                  { "id": "c", "label": "Consumer", "ops": [
+                    { "op": "lock" },
+                    { "op": "read",  "var": "tok", "into": "t", "text": "t = tokens        # read" },
+                    { "op": "calc",  "reg": "t", "add": -1,     "text": "t = t - 1         # take one" },
+                    { "op": "write", "var": "tok", "from": "t", "text": "tokens = t        # write" },
+                    { "op": "unlock" } ] },
+                  { "id": "r", "label": "Refill timer", "ops": [
+                    { "op": "lock" },
+                    { "op": "read",  "var": "tok", "into": "t", "text": "t = tokens        # read" },
+                    { "op": "calc",  "reg": "t", "add": 1,      "text": "t = t + 1         # add one" },
+                    { "op": "write", "var": "tok", "from": "t", "text": "tokens = t        # write" },
+                    { "op": "unlock" } ] }
+                ],
+                "schedules": [
+                  { "id": "racy",   "label": "⚡ Consumer + refill collide · no lock", "lock": false,
+                    "order": ["c", "r", "c", "r", "c", "r"], "expect": 5 },
+                  { "id": "locked", "label": "🔒 Same timing · with the Lock",        "lock": true,
+                    "order": ["c", "r", "c", "r", "c", "r"], "expect": 5 }
+                ],
+                "verdictVar": "tok"
+              }
+              </script>
+            </figure>
+            <p>One take (−1) plus one refill (+1) must leave <code>5</code>. In the racy run both read <code>5</code> before either writes, so the refill's <code>6</code> lands on top of the consumer's <code>4</code> — the take simply vanishes and the bucket over-admits from then on. This is why the refill code path takes <strong>the same lock</strong> as <code>allow()</code>, not a lock of its own.</p>
           </section>
 
           <!-- 5. WALKTHROUGH -->
@@ -308,5 +339,6 @@ class FixedWindow:
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/concurrency.js"></script>
 </body>
 </html>

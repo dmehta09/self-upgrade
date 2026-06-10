@@ -156,6 +156,32 @@ print(c.value)                     # 500000 — always</code></pre></div>
             </div>
             <div class="io-out"><b>Output</b>Racy:  482137   (a different wrong number each run)
 Fixed:  500000</div>
+            <p>500,000 increments are too fast to see — so here is <strong>one</strong> lost update in slow motion. Scrub through the exact interleaving where Thread B's write lands on top of Thread A's, then replay the same schedule with the lock:</p>
+            <figure class="conviz" data-conviz aria-label="Interactive race condition visualizer: the lost update in slow motion">
+              <figcaption class="cv-title">One lost update, frame by frame</figcaption>
+              <script type="application/json" class="cv-config">
+              {
+                "shared": [ { "id": "v", "label": "counter.value", "init": 0 } ],
+                "threads": [
+                  { "id": "a", "label": "Thread A", "ops": [
+                    { "op": "lock" },
+                    { "op": "read",  "var": "v", "into": "tmp", "text": "tmp = value      # read" },
+                    { "op": "calc",  "reg": "tmp", "add": 1,    "text": "tmp = tmp + 1    # add" },
+                    { "op": "write", "var": "v", "from": "tmp", "text": "value = tmp      # write" },
+                    { "op": "unlock" } ] },
+                  { "id": "b", "label": "Thread B", "ops": "same" }
+                ],
+                "schedules": [
+                  { "id": "racy",   "label": "⚡ Unlucky switch · no lock", "lock": false,
+                    "order": ["a", "b", "a", "b", "a", "b"], "expect": 2 },
+                  { "id": "locked", "label": "🔒 Same switch points · with Lock", "lock": true,
+                    "order": ["a", "b", "a", "b", "a", "b"], "expect": 2 }
+                ],
+                "verdictVar": "v"
+              }
+              </script>
+            </figure>
+            <p>That red verdict is the notebook analogy made literal: B read the same <code>0</code> A did, so B's <code>1</code> erased A's <code>1</code>. Multiply by 100,000 iterations and you get the "different wrong number each run" above. Notice in the locked replay how B's first move is <em>blocked</em> — that brief wait is the entire price of correctness.</p>
             <p>The fix is a <code>threading.Lock</code> guarding the <strong>critical section</strong> — the few lines that read-then-write shared state. <code>with self._lock:</code> acquires the lock on entry and releases it on exit (even if an exception fires). Keep critical sections <em>small</em>: lock, touch the shared data, unlock.</p>
             <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">"Doesn't the GIL make Python thread-safe?" — no</div><p>CPython's Global Interpreter Lock means one thread runs bytecode at a time, but a thread can still be <em>switched out between bytecodes</em> — right in the middle of <code>read → add → write</code>. So compound operations like <code>x += 1</code>, "check then act", and "find a free seat then book it" are <strong>not</strong> atomic. You still need your own lock. (A single <code>list.append</code> happens to be atomic in CPython, but never rely on that for your own multi-step logic.)</p></div></div>
             <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">The toolbox you'll reuse</div><p><strong><code>Lock</code></strong> — one holder at a time (mutual exclusion). <strong><code>RLock</code></strong> — re-entrant; the same thread can acquire it twice (handy when a locked method calls another locked method). <strong><code>Queue</code></strong> (from <code>queue</code>) — a thread-safe FIFO, so producers and consumers hand off work without their own locks. <strong>Optimistic locking</strong> — don't lock; attach a version number and retry if it changed. We use each of these in the cases below.</p></div></div>
@@ -228,5 +254,6 @@ Fixed:  500000</div>
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/concurrency.js"></script>
 </body>
 </html>
