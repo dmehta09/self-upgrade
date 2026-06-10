@@ -56,9 +56,9 @@ let m;
 while ((m = lre.exec(lessonsSrc))) lessons.push({ id: m[1], url: m[2] });
 
 // Registry alignment
-if (genContent.length !== 43) fail(`gen.js content pages: ${genContent.length}, expected 43`);
-if (lessons.length !== 41) fail(`lessons.js: ${lessons.length} entries, expected 41`);
-if (genWithLesson.length !== 41) fail(`gen.js lesson pages: ${genWithLesson.length}, expected 41`);
+if (genContent.length !== 46) fail(`gen.js content pages: ${genContent.length}, expected 46`);
+if (lessons.length !== 43) fail(`lessons.js: ${lessons.length} entries, expected 43`);
+if (genWithLesson.length !== 43) fail(`gen.js lesson pages: ${genWithLesson.length}, expected 43`);
 
 for (const l of lessons) {
   const g = genWithLesson.find((p) => p.out === l.url);
@@ -156,8 +156,8 @@ else {
 
 // Home
 const home = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
-if ((home.match(/class="dz /g) || []).length !== 23) fail("home: expected 23 case-study cards");
-if (!home.includes("of 41 lessons")) fail("home: progress dashboard should reference 41 lessons");
+if ((home.match(/class="dz /g) || []).length !== 25) fail("home: expected 25 case-study cards");
+if (!home.includes("of 43 lessons")) fail("home: progress dashboard should reference 43 lessons");
 
 // Content signals
 let noAnalogy = 0, noQuiz = 0, thin = 0;

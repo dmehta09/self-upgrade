@@ -9,18 +9,21 @@ house "ink + blueprint" design system with its siblings (`dsa-guide`, `lld-guide
 
 ## What's inside
 
-Two tracks, 41 lessons:
+Two tracks, 43 lessons, plus a mock-interview drill mode:
 
 - **Foundations** (17) — *Fundamentals* (estimation, latency numbers, availability/SLAs,
   CAP/PACELC), *Building blocks* (load balancing, API gateway, CDN, caching, queues),
   and *Data at scale* (SQL vs NoSQL, indexing, sharding, replication, consensus &
   leader election, consistent hashing).
-- **Case studies** (23, +1 playbook) — warm-up (URL shortener, rate limiter, unique-ID),
+- **Case studies** (25, +1 playbook) — warm-up (URL shortener, rate limiter, unique-ID),
   core (distributed cache, web crawler, notifications, news feed, file sync, chat),
-  advanced (Uber, YouTube, payments, LLM serving, vector search), and **expert** —
-  SaaS/platform & product systems (multi-tenancy, user management, organizations & teams,
-  authentication, authorization, e-commerce catalog + checkout, billing & metering, audit
-  log). Together they cover the full core-concept set with little overlap.
+  advanced (Uber, YouTube, payments, LLM serving, vector search, ML feature store), and
+  **expert** — SaaS/platform & product systems (multi-tenancy, cell-based architecture,
+  user management, organizations & teams, authentication, authorization, e-commerce
+  catalog + checkout, billing & metering, audit log). Together they cover the full
+  core-concept set with little overlap.
+- **Practice** — timed 35-minute mock-interview drills (15 questions, phased timer,
+  interviewer-style nudges, senior grading rubric, model answers).
 - **Reference** — a glossary and a one-page cheat sheet (numbers, formulas, the 7-step
   method, and the best external resources).
 
@@ -29,15 +32,19 @@ version — and grounded in current (June 2026) interview canon.
 
 ## The interactive engines
 
-Four data-driven visual tools (vanilla JS, no deps, work at `file://`, honor
+Eight data-driven visual tools (vanilla JS, no deps, work at `file://`, honor
 `prefers-reduced-motion`):
 
 | Engine | File | What it does |
 |---|---|---|
 | Request-flow player | `assets/js/reqflow.js` | Animates a request hop-by-hop through an architecture (`.reqflow` + JSON config). |
-| Capacity calculator | `assets/js/capacity.js` | Live back-of-the-envelope QPS / storage / servers (`.calc` + presets). |
+| Capacity calculator | `assets/js/capacity.js` | Live back-of-the-envelope math (`.calc`): fixed DAU→QPS model + per-page custom formula models (no eval). |
 | Trade-off explorer | `assets/js/tradeoff.js` | Segmented slider → animated dimension bars (`.tradeoff`). |
 | Frames visualizer | `assets/js/visualizer.js` | Step-through array/grid/tree/graph animations (`.viz`), reused from `dsa-guide`. |
+| Failure simulator | `assets/js/failsim.js` | Inject failures (kill a node, partition a link) and step through reroutes, promotions, and the "say this" note (`.failsim`). |
+| Quorum explorer | `assets/js/quorum.js` | Interactive W/R consistency lab: lag/partition replicas, catch stale reads and split-brain (`.quorum`). |
+| Scale journey | `assets/js/journey.js` | Morphing 1-user→100M architecture stepper with the bottleneck highlighted per stage (`.journey`). |
+| Drill engine | `assets/js/drill.js` | Timed 35-min phased mock interviews with self-grading rubrics (`.drill` + `drill-bank.js`). |
 
 ## Project layout
 
