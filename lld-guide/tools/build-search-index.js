@@ -17,10 +17,11 @@ const FILES = [
   "oop/index.html", "oop/pillars.html", "oop/relationships.html", "oop/inheritance-composition.html",
   "solid/index.html", "solid/principles.html",
   "patterns/index.html", "patterns/creational.html", "patterns/structural.html", "patterns/behavioral.html",
-  "lld/index.html", "lld/parking-lot.html", "lld/vending-machine.html", "lld/notification-service.html",
-  "advanced/index.html", "advanced/lru-cache.html", "advanced/logging-framework.html", "advanced/file-system.html",
+  "lld/index.html", "lld/parking-lot.html", "lld/vending-machine.html", "lld/traffic-light.html", "lld/atm.html", "lld/notification-service.html",
+  "advanced/index.html", "advanced/async-python.html", "advanced/lru-cache.html", "advanced/logging-framework.html", "advanced/file-system.html",
   "advanced/elevator-system.html", "advanced/splitwise.html", "advanced/rate-limiter.html",
   "advanced/movie-booking.html", "advanced/pubsub-queue.html", "advanced/ride-hailing.html",
+  "advanced/chess.html", "advanced/kv-store.html", "advanced/task-scheduler.html",
   "drill/index.html",
   "reference/glossary.html",
 ];

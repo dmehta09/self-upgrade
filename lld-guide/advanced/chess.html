@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced case — Chess | The Design Field Guide</title>
+  <meta name="description" content="Designing chess in Python — the classic hard LLD question: Board/Square/Piece composition with inheritance only at the piece leaves, polymorphic legal_moves() vs Strategy, Command with an undo stack, sliding-piece ray generation, and check detection." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="adv" data-page="adv-chess" data-lesson="adv-chess">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/traffic-light.html">Traffic light</a>
+        <a class="nav-link" href="../lld/atm.html">ATM</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/async-python.html">Async Python</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+        <a class="nav-link" href="../advanced/chess.html">Chess</a>
+        <a class="nav-link" href="../advanced/kv-store.html">KV store</a>
+        <a class="nav-link" href="../advanced/task-scheduler.html">Task scheduler</a>
+      </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Machine-coding drills</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../advanced/index.html" style="color:var(--accent)">Advanced</a><span class="sep">/</span><span class="current">Chess</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Advanced case · the polymorphism showcase</span>
+            <h1>Case study: chess.</h1>
+            <p class="lead">Chess is the question interviewers reach for when they want to watch you balance <strong>inheritance against composition</strong> in real time. Six piece types that move differently (textbook polymorphism), a board that owns everything (composition spine), and an undo requirement that smuggles in the Command pattern. Big surface, but the skeleton is small — if you cut scope correctly.</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Clarify the requirements — and cut, hard</h2>
+            <p>Scope is the first test. Say in: <strong>two human players, legal-move validation, check / checkmate / stalemate, undo</strong>. Say out, explicitly: <em>AI, clocks, network play, draw-by-repetition</em> — and park castling/en-passant/promotion as "rule objects in extensions" (interviewers respect the parking more than a doomed attempt). Invariants:</p>
+            <ul>
+              <li>Every square holds <strong>at most one piece</strong>; every piece is on exactly one square (or captured).</li>
+              <li>A move is applied only if fully legal — including "doesn't leave your own king in check."</li>
+              <li>Undo restores the position <em>exactly</em>, captures included.</li>
+            </ul>
+          </section>
+
+          <!-- 2. ENTITIES -->
+          <section class="section reveal" id="entities">
+            <h2><span class="section-num">02</span> &nbsp;Entities — composition spine, inheritance at the leaves</h2>
+            <p>The skeleton: <code>Game</code> owns a <code>Board</code> and two <code>Player</code>s plus the move history; <code>Board</code> owns 64 <code>Square</code>s; a square <em>references</em> a <code>Piece</code>. The <strong>only inheritance in the whole design</strong> is the Piece hierarchy — six leaves under one abstract class, each differing in exactly one behaviour: how it moves. Everything else is has-a.</p>
+            <p>That's the sentence to say out loud: <em>"composition for structure, inheritance only where behaviour genuinely varies per type."</em> It's <a href="../oop/inheritance-composition.html">the composition-vs-inheritance lesson</a> in one design.</p>
+            <p>Explore the model — click <code>Piece</code> first, then <code>Game</code>, and try hiding the inheritance family to see the pure ownership spine:</p>
+            <figure class="umlx" data-umlx aria-label="Interactive chess class model">
+              <figcaption class="ux-title">The chess class model — one inheritance tree, one composition spine</figcaption>
+              <script type="application/json" class="ux-config">
+              {
+                "idle": "Click a class to isolate it. Toggle off 'inheritance' to see how little of the design is is-a.",
+                "classes": [
+                  { "id": "game", "name": "Game", "col": 0, "row": 0,
+                    "attrs": ["board: Board", "history: list[Move]", "turn: Color"],
+                    "methods": [
+                      { "sig": "make_move(frm, to) → bool", "role": "validate → apply → record (Command)" },
+                      { "sig": "undo() → None", "role": "pop history, reverse the move" },
+                      { "sig": "status() → GameStatus", "role": "check / checkmate / stalemate / ongoing" }
+                    ],
+                    "role": "Facade",
+                    "duty": "The public API and the referee. Owns turn order, history, and end-of-game detection — but no movement rules." },
+                  { "id": "board", "name": "Board", "col": 1, "row": 0,
+                    "attrs": ["grid: 8×8 squares"],
+                    "methods": [
+                      { "sig": "piece_at(pos) → Piece | None", "role": "lookup" },
+                      { "sig": "is_check(color) → bool", "role": "can any enemy piece reach the king?" },
+                      { "sig": "apply(move) / revert(move)", "role": "the only mutators of position" }
+                    ],
+                    "duty": "Owns the position. All reads and writes of where-things-are flow through it." },
+                  { "id": "move", "name": "Move", "col": 2, "row": 0,
+                    "attrs": ["frm: Pos", "to: Pos", "captured: Piece | None"],
+                    "methods": [],
+                    "role": "Command",
+                    "duty": "An immutable record carrying everything needed to apply OR reverse it — storing `captured` is what makes undo exact." },
+                  { "id": "square", "name": "Square", "col": 0, "row": 1,
+                    "attrs": ["pos: Pos", "piece: Piece | None"],
+                    "methods": [],
+                    "duty": "One cell. Holds at most one piece — the invariant lives in Board.apply, the data lives here." },
+                  { "id": "piece", "name": "Piece", "kind": "abstract", "col": 1, "row": 1,
+                    "attrs": ["color: Color"],
+                    "methods": [
+                      { "sig": "legal_moves(board, pos)", "role": "THE polymorphic method — each piece answers differently" }
+                    ],
+                    "duty": "The one abstraction that earns inheritance: six subtypes, one varying behaviour." },
+                  { "id": "knight", "name": "Knight", "col": 2, "row": 1,
+                    "methods": [{ "sig": "legal_moves(…)", "role": "8 fixed offsets, can jump" }],
+                    "duty": "Offset-based mover: enumerate 8 candidate squares, keep the on-board, non-friendly ones." },
+                  { "id": "rook", "name": "Rook", "col": 3, "row": 1,
+                    "methods": [{ "sig": "legal_moves(…)", "role": "4 sliding rays" }],
+                    "duty": "Sliding mover: walk each ray until the edge, a capture, or a friendly piece. Bishop/Queen reuse the same ray walk." }
+                ],
+                "relations": [
+                  { "from": "board",  "to": "game",  "type": "compose", "label": "1" },
+                  { "from": "square", "to": "board", "type": "compose", "label": "64" },
+                  { "from": "game",   "to": "move",  "type": "depend",  "label": "records" },
+                  { "from": "square", "to": "piece", "type": "assoc",   "label": "holds 0..1" },
+                  { "from": "knight", "to": "piece", "type": "inherit" },
+                  { "from": "rook",   "to": "piece", "type": "inherit" }
+                ]
+              }
+              </script>
+            </figure>
+            <p>(King, Queen, Bishop, Pawn hang off <code>Piece</code> exactly like the two shown — the diagram keeps two to stay readable. The Pawn is the awkward one: direction-dependent, captures differently than it moves, promotes. Mention it as the test of your abstraction.)</p>
+          </section>
+
+          <!-- 3. POLYMORPHISM VS STRATEGY -->
+          <section class="section reveal" id="moves">
+            <h2><span class="section-num">03</span> &nbsp;legal_moves(): subclass polymorphism or Strategy?</h2>
+            <p>Two defensible designs, and interviewers love asking you to argue both:</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th></th><th>Subclass per piece (chosen)</th><th>MovementStrategy injected</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Fit</strong></td><td>Piece types are <em>fixed by the rules</em> of chess — the hierarchy will never grow at runtime</td><td>Shines when behaviours mix &amp; match or change at runtime</td></tr>
+                  <tr><td><strong>Cost</strong></td><td>Six small classes</td><td>Six strategy classes <em>plus</em> the wiring; indirection with no payoff here</td></tr>
+                  <tr><td><strong>When it wins</strong></td><td>Standard chess</td><td>Fairy-chess variants, a piece-design sandbox — movement becomes data</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>The deeper cut: Knight-like pieces and Rook-like pieces differ in <em>shape</em> of movement (fixed offsets vs sliding rays). Factor the <strong>ray walk</strong> into a shared helper and Bishop/Rook/Queen become one-liners that pass different direction sets — reuse via composition <em>inside</em> the inheritance leaves.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">Where should "a move may not leave your own king in check" live?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Inside every piece's legal_moves() — each piece filters itself</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>One level up (Game/Board): generate pseudo-legal moves per piece, then filter by simulating each and asking is_check()</button>
+                <button class="quiz-opt"><span class="mark"></span>In the UI — grey out the bad squares</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> pieces answer the LOCAL question ("how do I move?"); check is a GLOBAL property of the whole position. Putting it in every piece duplicates board-wide logic six times and tangles the layers. The standard structure: <em>pseudo-legal</em> from the piece, <em>legal</em> after the king-safety filter above.</div>
+            </div>
+          </section>
+
+          <!-- 4. CODE -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">04</span> &nbsp;The core code — rays, check, undo</h2>
+            <p>The three methods worth writing for real in the 15-minute code phase:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-tabs"><button class="code-tab active">pieces.py</button><button class="code-tab">game.py</button></span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">def slide(board, pos, color, directions) -&gt; list["Pos"]:
+    """The shared ray walk — Rook, Bishop, Queen differ only in input."""
+    out = []
+    for dr, dc in directions:
+        r, c = pos.r + dr, pos.c + dc
+        while 0 &lt;= r &lt; 8 and 0 &lt;= c &lt; 8:
+            target = board.piece_at(Pos(r, c))
+            if target is None:
+                out.append(Pos(r, c))            # empty: keep sliding
+            else:
+                if target.color != color:
+                    out.append(Pos(r, c))        # capture: include, then stop
+                break                            # any piece blocks the ray
+            r, c = r + dr, c + dc
+    return out
+
+class Rook(Piece):
+    DIRS = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+    def legal_moves(self, board, pos):
+        return slide(board, pos, self.color, self.DIRS)
+
+class Queen(Piece):
+    DIRS = Rook.DIRS + [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+    def legal_moves(self, board, pos):
+        return slide(board, pos, self.color, self.DIRS)
+
+class Knight(Piece):
+    OFFSETS = [(2, 1), (2, -1), (-2, 1), (-2, -1),
+               (1, 2), (1, -2), (-1, 2), (-1, -2)]
+    def legal_moves(self, board, pos):
+        out = []
+        for dr, dc in self.OFFSETS:              # jumps: no ray, no blocking
+            r, c = pos.r + dr, pos.c + dc
+            if 0 &lt;= r &lt; 8 and 0 &lt;= c &lt; 8:
+                t = board.piece_at(Pos(r, c))
+                if t is None or t.color != self.color:
+                    out.append(Pos(r, c))
+        return out</code></pre></div>
+              <div class="code-pane"><pre><code data-lang="python">class Game:
+    def make_move(self, frm: Pos, to: Pos) -&gt; bool:
+        piece = self.board.piece_at(frm)
+        if piece is None or piece.color is not self.turn:
+            return False
+        if to not in piece.legal_moves(self.board, frm):
+            return False                          # not even pseudo-legal
+
+        move = Move(frm, to, captured=self.board.piece_at(to))
+        self.board.apply(move)                    # try it...
+        if self.board.is_check(self.turn):        # ...king exposed?
+            self.board.revert(move)               # take it straight back
+            return False
+
+        self.history.append(move)                 # Command, recorded
+        self.turn = self.turn.opponent
+        return True
+
+    def undo(self) -&gt; None:
+        if not self.history:
+            return
+        move = self.history.pop()
+        self.board.revert(move)                   # uses move.captured
+        self.turn = self.turn.opponent
+
+# is_check: find the king, ask every enemy piece if it can reach him.
+# checkmate = in check AND no legal move escapes (try-all with the same
+# apply/revert trick). stalemate = NOT in check AND no legal move.</code></pre></div>
+            </div>
+            <p>Notice <code>make_move</code> validates king-safety by <strong>doing and undoing</strong> — the same <code>apply</code>/<code>revert</code> pair that powers the user-facing undo. One mechanism, three features (validation, undo, and later: AI search). That economy is what a great chess answer looks like.</p>
+          </section>
+
+          <!-- 5. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">05</span> &nbsp;Extensions — the parked rules return</h2>
+            <div class="kv">
+              <dt>Castling / en passant / promotion</dt><dd>Each is a <em>special move generator + special apply/revert</em>. Model them as subclasses of <code>Move</code> (<code>CastleMove</code> carries the rook's hop too; <code>PromotionMove</code> stores the pawn it replaced) — undo keeps working because each Move knows how to reverse <em>itself</em>. Command pattern paying rent again.</dd>
+              <dt>Serialization (PGN/FEN)</dt><dd>The history of Moves <em>is</em> the game — replaying commands from the start reconstructs any position. Event-sourcing in miniature; say that phrase.</dd>
+              <dt>A move clock / AI</dt><dd>Clock = Observer on turn changes. AI = the apply/revert pair again, now driving minimax — which is why engines obsess over making apply/revert fast.</dd>
+            </div>
+            <div class="exercise">
+              <div class="ex-tag">Exercise · the Pawn</div>
+              <p class="ex-q">Write <code>Pawn.legal_moves()</code>: forward 1 (2 from the start rank) only onto <em>empty</em> squares, diagonal captures only onto <em>enemy</em> squares, direction depends on color. Which of the lesson's helpers can you reuse, and which assumption breaks?</p>
+              <p>Hint: none of them cleanly — the pawn moves and captures on <em>different</em> squares, which is exactly why it's the standard probe of whether your Piece abstraction was honest or wishful.</p>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../advanced/ride-hailing.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: Ride-hailing</span></a>
+            <a class="next" href="../advanced/kv-store.html"><span class="pn-k">Next ›</span><span class="pn-t">Case: KV store</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements &amp; scope</a>
+          <a href="#entities">Entities</a>
+          <a href="#moves">Polymorphism vs Strategy</a>
+          <a href="#code">Core code</a>
+          <a href="#extensions">Extensions</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Advanced · Chess</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/umlx.js"></script>
+</body>
+</html>

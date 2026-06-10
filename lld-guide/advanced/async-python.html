@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced — Async Python deep-dive | The Design Field Guide</title>
+  <meta name="description" content="Async Python for design interviews: when to pick threads vs asyncio vs processes, the event-loop mental model (coroutines, await points, cooperative scheduling), gather/run_in_executor/cancellation, a producer-consumer with asyncio.Queue, and the classic pitfalls." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="adv" data-page="adv-async-python" data-lesson="adv-async-python">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/traffic-light.html">Traffic light</a>
+        <a class="nav-link" href="../lld/atm.html">ATM</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/async-python.html">Async Python</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+        <a class="nav-link" href="../advanced/chess.html">Chess</a>
+        <a class="nav-link" href="../advanced/kv-store.html">KV store</a>
+        <a class="nav-link" href="../advanced/task-scheduler.html">Task scheduler</a>
+      </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Machine-coding drills</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../advanced/index.html" style="color:var(--accent)">Advanced</a><span class="sep">/</span><span class="current">Async Python</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Advanced · concurrency, the other half</span>
+            <h1>Async Python, properly.</h1>
+            <p class="lead">The <a href="../advanced/index.html#concurrency">primer</a> covered threads and locks. Modern interviews increasingly probe the other model: <strong>asyncio</strong> — one thread, thousands of concurrent I/O waits, no locks for most of it. This lesson is the decision table, the mental model, and the one worked example (producer–consumer) that machine-coding rounds keep asking for.</p>
+          </section>
+
+          <!-- 1. WHEN -->
+          <section class="section reveal" id="when">
+            <h2><span class="section-num">01</span> &nbsp;Threads, asyncio, processes — the decision table</h2>
+            <p>The first interview question is never "write a coroutine"; it's <em>"why would you choose async here?"</em> The answer hangs entirely on what your code spends its time doing:</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Workload</th><th>Reach for</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>I/O-bound, few</strong> concurrent ops (a handful of requests, a DB call)</td><td><code>threading</code> / a thread pool</td><td>Simplest mental model; blocking libraries just work; the GIL releases during I/O anyway.</td></tr>
+                  <tr><td><strong>I/O-bound, many</strong> concurrent ops (10K sockets, scrapers, chat servers, LLM-API fan-out)</td><td><code>asyncio</code></td><td>Threads cost ~MBs of stack each and context-switch via the OS; coroutines cost ~KBs and switch in user space — and only at <code>await</code>.</td></tr>
+                  <tr><td><strong>CPU-bound</strong> (hashing, parsing, ML preprocessing)</td><td><code>multiprocessing</code> / <code>ProcessPoolExecutor</code></td><td>The GIL serialises Python bytecode in one process — threads <em>and</em> asyncio both stall. Separate processes get separate GILs.</td></tr>
+                  <tr><td><strong>Sequential anyway</strong></td><td>nothing</td><td>Concurrency you don't need is bugs you don't need.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">asyncio does not make code faster</div><p>It makes <em>waiting cheaper</em>. A single CPU-bound loop runs at identical speed under asyncio — worse, it freezes every other coroutine while it runs (see pitfalls). If the profiler says CPU, the answer is processes, never <code>async def</code>.</p></div></div>
+          </section>
+
+          <!-- 2. MENTAL MODEL -->
+          <section class="section reveal" id="model">
+            <h2><span class="section-num">02</span> &nbsp;The event-loop mental model</h2>
+            <p>A coroutine (<code>async def</code>) is a function that can <strong>pause itself</strong>. Every <code>await</code> is a marked pause point: "I'm waiting on something — loop, run somebody else." The event loop keeps a ready-list and a watch-list (timers, sockets); it runs one coroutine until <em>it</em> awaits, then picks the next ready one. That's <strong>cooperative scheduling</strong> — nothing is ever interrupted mid-statement, which is why most async code needs no locks.</p>
+            <p>Watch the loop juggle two tasks that each "fetch" twice — every switch happens exactly at an <code>await</code>, never in between:</p>
+            <figure class="pflow" data-pflow aria-label="Event loop switching between two coroutines at await points">
+              <figcaption class="pf-title">Two coroutines, one thread — switching only at await</figcaption>
+              <script type="application/json" class="pf-config">
+              {
+                "lanes": [
+                  { "id": "loop",  "label": "event loop" },
+                  { "id": "ta",    "label": "task A · fetch_user" },
+                  { "id": "tb",    "label": "task B · fetch_orders" }
+                ],
+                "code": [
+                  "async def fetch_user():",
+                  "    r = await http.get(\"/user\")     # pause point",
+                  "    return parse(r)",
+                  "async def fetch_orders():",
+                  "    r = await http.get(\"/orders\")   # pause point",
+                  "    return parse(r)",
+                  "await asyncio.gather(fetch_user(), fetch_orders())"
+                ],
+                "steps": [
+                  { "from": "loop", "to": "ta", "label": "run", "line": 0,
+                    "caption": "gather() scheduled both tasks. The loop picks A and runs it — one coroutine at a time, always." },
+                  { "from": "ta", "to": "loop", "kind": "return", "label": "await http.get → suspended", "line": 1,
+                    "caption": "A hits await: it hands control BACK voluntarily, parking until its socket has data. Nothing preempted it." },
+                  { "from": "loop", "to": "tb", "label": "run", "line": 3,
+                    "caption": "The loop doesn't wait with A — it runs B immediately. This is where the throughput comes from." },
+                  { "from": "tb", "to": "loop", "kind": "return", "label": "await http.get → suspended", "line": 4,
+                    "caption": "B parks too. Both network calls are now in flight SIMULTANEOUSLY, on one thread." },
+                  { "from": "loop", "to": "loop", "kind": "self", "label": "poll I/O… A's response lands", "line": 6,
+                    "caption": "The loop polls the OS (epoll/kqueue). A's socket is ready first." },
+                  { "from": "loop", "to": "ta", "label": "resume after await", "line": 2,
+                    "caption": "A continues from EXACTLY where it paused, with its locals intact. parse(r) runs to completion." },
+                  { "from": "loop", "to": "tb", "label": "resume after await", "line": 5,
+                    "caption": "Then B resumes. Total wall time ≈ the slower request — not the sum of both." }
+                ]
+              }
+              </script>
+            </figure>
+            <p>Two consequences worth saying in an interview: between awaits your code is effectively <strong>atomic</strong> (no other coroutine can run), so the lost-update races of the threads world mostly vanish; and a coroutine that never awaits <strong>starves everyone</strong> — cooperative means the cooperation is mandatory.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">Under asyncio, when can the "current task" change?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>At any bytecode boundary, like threads</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Only at an <code>await</code> (or when a task finishes) — switching is voluntary and visible in the code</button>
+                <button class="quiz-opt"><span class="mark"></span>Whenever the OS scheduler decides</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> that visibility is the superpower. <code>check_then_act</code> with no await in between needs no lock under asyncio — but add one <code>await</code> inside the critical section and the race comes straight back (then you reach for <code>asyncio.Lock</code>).</div>
+            </div>
+          </section>
+
+          <!-- 3. TOOLBOX -->
+          <section class="section reveal" id="toolbox">
+            <h2><span class="section-num">03</span> &nbsp;The toolbox: gather, executor, timeout, cancel</h2>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">toolbox.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import asyncio
+
+async def main():
+    # 1 · fan out and wait for all (order of results = order of args)
+    user, orders = await asyncio.gather(fetch_user(), fetch_orders())
+
+    # 2 · a blocking/CPU call inside async code: push it OFF the loop
+    loop = asyncio.get_running_loop()
+    report = await loop.run_in_executor(None, build_report_cpu, orders)
+
+    # 3 · deadline: cancel anything slower than 2s
+    try:
+        async with asyncio.timeout(2.0):          # Python 3.11+
+            fresh = await fetch_prices()
+    except TimeoutError:
+        fresh = cached_prices()                   # graceful fallback
+
+    # 4 · explicit cancellation
+    task = asyncio.create_task(poll_forever())
+    ...
+    task.cancel()                                 # raises CancelledError
+    try:                                          #   INSIDE the task at
+        await task                                #   its next await
+    except asyncio.CancelledError:
+        pass                                      # cleanup ran in finally
+
+asyncio.run(main())</code></pre></div>
+            </div>
+            <p>The interview-grade details: <code>gather</code> with <code>return_exceptions=True</code> keeps one failure from cancelling its siblings; <code>run_in_executor</code> is the official bridge to blocking libraries (and with a <code>ProcessPoolExecutor</code>, to CPU work); and cancellation is <em>cooperative too</em> — <code>CancelledError</code> is raised at the task's next <code>await</code>, so <code>finally:</code> blocks are how async code releases resources on the way out.</p>
+          </section>
+
+          <!-- 4. PRODUCER-CONSUMER -->
+          <section class="section reveal" id="prodcon">
+            <h2><span class="section-num">04</span> &nbsp;The worked staple: producer–consumer with backpressure</h2>
+            <p>The single most-asked async machine-coding exercise: N producers feed work, M workers drain it, and the queue must apply <strong>backpressure</strong> — producers slow down when consumers can't keep up. <code>asyncio.Queue(maxsize=…)</code> gives you all of it:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">pipeline.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import asyncio
+
+async def producer(q: asyncio.Queue, urls: list[str]) -&gt; None:
+    for url in urls:
+        await q.put(url)        # BLOCKS (yields) when the queue is full
+    # signal completion: one sentinel per worker
+    for _ in range(NUM_WORKERS):
+        await q.put(None)
+
+async def worker(name: str, q: asyncio.Queue, results: list) -&gt; None:
+    while True:
+        url = await q.get()     # yields until an item is available
+        if url is None:         # sentinel -&gt; this worker is done
+            q.task_done()
+            return
+        try:
+            results.append(await fetch(url))
+        finally:
+            q.task_done()       # ALWAYS — even if fetch raised
+
+NUM_WORKERS = 5
+
+async def main(urls: list[str]) -&gt; list:
+    q: asyncio.Queue = asyncio.Queue(maxsize=20)   # the backpressure knob
+    results: list = []
+    workers = [asyncio.create_task(worker(f"w{i}", q, results))
+               for i in range(NUM_WORKERS)]
+    await producer(q, urls)
+    await q.join()              # every put() matched by a task_done()
+    await asyncio.gather(*workers)
+    return results</code></pre></div>
+            </div>
+            <p>The three lines that score points: <code>maxsize=20</code> (without it the producer happily queues a million items and you discover memory limits in production), the <strong>sentinel-per-worker</strong> shutdown (cleaner than cancelling mid-item), and <code>task_done()</code> in a <code>finally</code> (or <code>q.join()</code> deadlocks on the first exception). Note what's absent: no locks — <code>asyncio.Queue</code> is the coordination.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">What does <code>Queue(maxsize=20)</code> actually buy the design?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Faster throughput — smaller queues are quicker</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Backpressure: a full queue makes <code>put()</code> yield, so fast producers automatically slow to the consumers' pace instead of buffering unboundedly</button>
+                <button class="quiz-opt"><span class="mark"></span>Nothing — it's just a memory hint</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> unbounded queues turn "consumers are slow" into "the process OOMs an hour later." Bounding the queue moves the slowdown to the source, where it's visible and survivable. Say the word <em>backpressure</em> — interviewers listen for it.</div>
+            </div>
+          </section>
+
+          <!-- 5. PITFALLS -->
+          <section class="section reveal" id="pitfalls">
+            <h2><span class="section-num">05</span> &nbsp;The pitfalls that fail interviews</h2>
+            <div class="kv">
+              <dt>Blocking the loop</dt><dd><code>time.sleep()</code>, <code>requests.get()</code>, heavy CPU inside a coroutine freezes <em>every</em> task. Fixes: <code>await asyncio.sleep()</code>, an async client (<code>aiohttp</code>/<code>httpx</code>), or <code>run_in_executor</code>.</dd>
+              <dt>Fire-and-forget tasks</dt><dd><code>asyncio.create_task(f())</code> without keeping the reference: the task can be garbage-collected mid-flight and its exceptions vanish silently. Hold references (or use 3.11+ <code>asyncio.TaskGroup</code>, which also cancels siblings on failure — say it, it's current).</dd>
+              <dt>The wrong Lock</dt><dd><code>threading.Lock</code> in async code blocks the whole loop; <code>asyncio.Lock</code> in threaded code isn't thread-safe. The two worlds have parallel toolkits — never mix them.</dd>
+              <dt>Async where nothing awaits</dt><dd>An <code>async def</code> with zero awaits is a plain function with extra ceremony and a misleading signature. Concurrency is a requirement, not a default.</dd>
+            </div>
+          </section>
+
+          <!-- 6. IN LLD ROUNDS -->
+          <section class="section reveal" id="lld">
+            <h2><span class="section-num">06</span> &nbsp;Where this shows up in design rounds</h2>
+            <p>Async is rarely the question; it's the <em>sharp answer</em> to a follow-up inside another design:</p>
+            <ul>
+              <li><a href="../lld/notification-service.html">Notification service</a> — "10K subscribers, email takes 800ms each?" → fan out with a bounded worker pool exactly like §4; channels become <code>async def send()</code>.</li>
+              <li><a href="../advanced/rate-limiter.html">Rate limiter</a> — the refill "thread" becomes a single looping task; with switches only at <code>await</code>, the bucket needs <em>no lock at all</em> in the async version.</li>
+              <li><a href="../advanced/task-scheduler.html">Task scheduler</a> — the worker pool + Condition machinery maps to coroutines + <code>asyncio.Queue</code>; compare the two in that lesson.</li>
+              <li><a href="../advanced/ride-hailing.html">Ride-hailing</a> — pinging N nearby drivers concurrently with a 2s <code>asyncio.timeout</code> is the textbook gather-with-deadline.</li>
+            </ul>
+            <p>The senior framing to close with: <em>threads when a blocking library forces your hand, asyncio when concurrency is wide and I/O-shaped, processes when the CPU is the bottleneck — and the decision said out loud before any code.</em></p>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../advanced/index.html"><span class="pn-k">‹ Back</span><span class="pn-t">Advanced: overview</span></a>
+            <a class="next" href="../advanced/lru-cache.html"><span class="pn-k">Next ›</span><span class="pn-t">Case: LRU / LFU cache</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#when">The decision table</a>
+          <a href="#model">Event-loop model</a>
+          <a href="#toolbox">The toolbox</a>
+          <a href="#prodcon">Producer–consumer</a>
+          <a href="#pitfalls">Pitfalls</a>
+          <a href="#lld">In design rounds</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Advanced · Async Python</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/patternflow.js"></script>
+</body>
+</html>

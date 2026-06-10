@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLD case study — Traffic light | The Design Field Guide</title>
+  <meta name="description" content="A low-level design warm-up: a traffic light controller as a table-driven finite state machine in Python — enum states, a transition dict, timed cycles, a pedestrian-request guard, an emergency override, and Observer subscribers. When a table beats full State classes." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="lld" data-page="lld-traffic-light" data-lesson="lld-traffic-light">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/traffic-light.html">Traffic light</a>
+        <a class="nav-link" href="../lld/atm.html">ATM</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/async-python.html">Async Python</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+        <a class="nav-link" href="../advanced/chess.html">Chess</a>
+        <a class="nav-link" href="../advanced/kv-store.html">KV store</a>
+        <a class="nav-link" href="../advanced/task-scheduler.html">Task scheduler</a>
+      </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Machine-coding drills</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../lld/index.html" style="color:var(--accent)">LLD</a><span class="sep">/</span><span class="current">Traffic light</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">LLD case study · table-driven FSM</span>
+            <h1>Designing a traffic light.</h1>
+            <p class="lead">The <a href="../lld/vending-machine.html">vending machine</a> used a traffic light as its <em>analogy</em> — now we design the real thing. It's the gentlest state machine in the catalog, and it teaches a lesson the vending case can't: sometimes a <strong>transition table</strong> beats a class per state.</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Clarify the requirements</h2>
+            <p>One intersection, one light, and a few rules to confirm out loud:</p>
+            <ul>
+              <li>The light cycles <strong>RED → GREEN → YELLOW → RED</strong> on timers (say 30s / 25s / 5s).</li>
+              <li>A <strong>pedestrian button</strong> requests a crossing — served at the <em>next</em> red, never instantly.</li>
+              <li>An <strong>emergency override</strong> (ambulance transponder) forces RED from any state.</li>
+              <li>Displays and logs need to know when the light changes — without the light knowing them.</li>
+            </ul>
+            <p>And the one invariant that matters more than all the features: <strong>the light is always in exactly one state</strong>, and every change goes through one validated path. In the 4-way extension this becomes "never two crossing greens" — the kind of safety property you should name in the first five minutes of an interview.</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Scope we'll defer</div><p>Multi-intersection coordination, sensors, and real-time guarantees stay out. One controller, software timers, single thread. The extensions section brings the 4-way intersection back.</p></div></div>
+          </section>
+
+          <!-- 2. TABLE VS CLASSES -->
+          <section class="section reveal" id="table">
+            <h2><span class="section-num">02</span> &nbsp;A table, not a class per state</h2>
+            <p>The vending machine earned full State <em>classes</em> because each state carried real behaviour — balance math, stock checks, dispensing. A traffic light's states carry almost none: each one just knows <em>what comes next and after how long</em>. When the per-state behaviour is that thin, a class per state is ceremony. The senior move is a <strong>transition table</strong>:</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Current</th><th>Event</th><th>Next</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>RED</strong></td><td>timer (30s)</td><td>GREEN</td><td>serve any queued pedestrian first</td></tr>
+                  <tr><td><strong>GREEN</strong></td><td>timer (25s)</td><td>YELLOW</td><td>—</td></tr>
+                  <tr><td><strong>YELLOW</strong></td><td>timer (5s)</td><td>RED</td><td>—</td></tr>
+                  <tr><td>any</td><td>emergency</td><td>RED</td><td>via YELLOW if currently GREEN</td></tr>
+                  <tr><td>any</td><td>ped_request</td><td><em>no change</em></td><td>sets a flag; served at next RED</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>The whole machine becomes <em>data</em>: a dict from <code>(state, event)</code> to the next state. Adding a state edits the table, not a method in five classes. The trade-off to say out loud: tables shine while transitions are <em>uniform</em>; the moment states need rich, divergent behaviour (guards with side effects, per-state data), graduate to State classes — that's exactly the <a href="../lld/atm.html">ATM case</a> next door.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">Why does the traffic light get a table while the vending machine got State classes?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Tables are always better — classes were overkill there too</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Its states have almost no behaviour of their own — transitions are uniform "next + duration" data, so data beats code</button>
+                <button class="quiz-opt"><span class="mark"></span>Traffic lights have fewer states, and tables only work below four states</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> the deciding question is "how much <em>behaviour</em> does each state carry?" Thin, uniform states → table-driven FSM. Rich, divergent states → State pattern. Both are finite state machines; only the encoding differs.</div>
+            </div>
+          </section>
+
+          <!-- 3. PLAYER -->
+          <section class="section reveal" id="diagram">
+            <h2><span class="section-num">03</span> &nbsp;Drive the machine</h2>
+            <p>Here's the controller live. Let the timers cycle it, queue a pedestrian request mid-green (watch it wait for RED), and hit the emergency override from anywhere:</p>
+            <figure class="fsm" data-fsm aria-label="Interactive traffic light state machine">
+              <figcaption class="fsm-title">The intersection controller — timers, pedestrian flag, override</figcaption>
+              <script type="application/json" class="fsm-config">
+              {
+                "initial": "red",
+                "states": [
+                  { "id": "red",    "label": "RED",    "note": "stop · serve peds", "col": 0, "row": 0 },
+                  { "id": "green",  "label": "GREEN",  "note": "traffic flows",     "col": 2, "row": 0 },
+                  { "id": "yellow", "label": "YELLOW", "note": "clear the box",     "col": 1, "row": 1 }
+                ],
+                "events": [
+                  { "id": "tick",      "label": "timer expires" },
+                  { "id": "ped",       "label": "pedestrian button" },
+                  { "id": "emergency", "label": "emergency override" }
+                ],
+                "transitions": [
+                  { "from": "red",    "on": "tick", "to": "green",  "guard": "ped queue drained", "log": "30s up → GREEN" },
+                  { "from": "green",  "on": "tick", "to": "yellow", "log": "25s up → YELLOW" },
+                  { "from": "yellow", "on": "tick", "to": "red",    "log": "5s up → RED (peds cross now)" },
+                  { "from": "green",  "on": "ped",  "to": "green",  "log": "request flagged — served at next RED, not now" },
+                  { "from": "yellow", "on": "ped",  "to": "yellow", "log": "request flagged — RED is moments away" },
+                  { "from": "red",    "on": "ped",  "to": "red",    "log": "already RED — cross now" },
+                  { "from": "green",  "on": "emergency", "to": "yellow", "log": "override: clear via YELLOW first (never GREEN→RED hard cut)" },
+                  { "from": "yellow", "on": "emergency", "to": "red",    "log": "override: drop to RED" },
+                  { "from": "red",    "on": "emergency", "reject": "already RED — corridor is clear" }
+                ],
+                "scenarios": [
+                  { "label": "Full cycle",          "fire": ["tick", "tick", "tick"] },
+                  { "label": "Ped during green",    "fire": ["tick", "ped", "tick", "tick"] },
+                  { "label": "Ambulance at green",  "fire": ["tick", "emergency", "tick"] }
+                ]
+              }
+              </script>
+            </figure>
+            <p>Two details interviewers probe: the pedestrian press <strong>doesn't transition</strong> (it sets a flag the RED state consumes), and the emergency path from GREEN still routes <strong>through YELLOW</strong> — a hard GREEN→RED cut is how you cause the crash you were avoiding.</p>
+          </section>
+
+          <!-- 4. CODE -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">04</span> &nbsp;The implementation</h2>
+            <p>Enums for states and events, a dict for the table, and one <code>handle()</code> choke point every change flows through:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">traffic_light.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from enum import Enum, auto
+
+class Light(Enum):
+    RED = auto(); GREEN = auto(); YELLOW = auto()
+
+class Event(Enum):
+    TICK = auto(); PED_REQUEST = auto(); EMERGENCY = auto()
+
+DURATIONS = {Light.RED: 30, Light.GREEN: 25, Light.YELLOW: 5}
+
+# The whole machine, as data: (state, event) -&gt; next state
+TRANSITIONS: dict[tuple[Light, Event], Light] = {
+    (Light.RED,    Event.TICK):      Light.GREEN,
+    (Light.GREEN,  Event.TICK):      Light.YELLOW,
+    (Light.YELLOW, Event.TICK):      Light.RED,
+    (Light.GREEN,  Event.EMERGENCY): Light.YELLOW,   # clear safely
+    (Light.YELLOW, Event.EMERGENCY): Light.RED,
+}
+
+class TrafficLight:
+    def __init__(self):
+        self.state = Light.RED
+        self.ped_waiting = False
+        self._subscribers: list = []          # Observer: callables
+
+    def subscribe(self, fn) -&gt; None:
+        self._subscribers.append(fn)
+
+    def handle(self, event: Event) -&gt; None:
+        """The single choke point — every change validates here."""
+        if event is Event.PED_REQUEST:
+            self.ped_waiting = True           # a flag, not a transition
+            return
+        nxt = TRANSITIONS.get((self.state, event))
+        if nxt is None:
+            return                            # illegal -&gt; ignore (or log)
+        if self.state is Light.RED and nxt is Light.GREEN and self.ped_waiting:
+            self.ped_waiting = False          # RED consumed the request:
+            # hold RED one extra cycle for the crossing, then proceed
+        self._set(nxt)
+
+    def _set(self, nxt: Light) -&gt; None:
+        old, self.state = self.state, nxt
+        for fn in self._subscribers:          # notify displays / logs
+            fn(old, nxt)</code></pre></div>
+            </div>
+            <p>Three things to narrate while writing it: the table makes illegal moves <em>unrepresentable</em> (a missing key is a no-op, not a bug); <code>PED_REQUEST</code> is deliberately a flag because a mid-green crossing would violate the safety invariant; and the Observer list means a countdown display is one <code>subscribe()</code> away — the light never imports a display.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">A new requirement: flashing-yellow night mode between 1am and 5am. What changes?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Add <code>if hour &gt;= 1 and hour &lt; 5</code> checks inside every transition</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Add a <code>FLASHING</code> state plus its table rows, and a timing <em>plan</em> that schedules entry/exit — the handle() path doesn't change</button>
+                <button class="quiz-opt"><span class="mark"></span>Subclass TrafficLight as NightTrafficLight and override everything</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> new behaviour = new state + new rows. The choke point and existing rows stay untouched — the table gives you the Open/Closed Principle for free. The schedule itself is a Strategy (see extensions).</div>
+            </div>
+          </section>
+
+          <!-- 5. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">05</span> &nbsp;Extensions interviewers reach for</h2>
+            <div class="kv">
+              <dt>Timing plans (Strategy)</dt><dd>Rush-hour vs night vs event-day durations: extract <code>DURATIONS</code> behind a <code>TimingPlan</code> with <code>duration(state) → int</code>, swap plans on a schedule. The FSM never learns which plan is active.</dd>
+              <dt>4-way intersection</dt><dd>Four lights + one <code>IntersectionController</code> that owns THE invariant: north–south green ⇒ east–west red. Model the <em>pairs</em> as the controller's states (NS_GREEN, EW_GREEN, ALL_RED interludes) — composing four independent FSMs and hoping is how you get two greens.</dd>
+              <dt>Countdown display (Observer)</dt><dd>Already wired: <code>subscribe()</code> a renderer. Worth saying: the subscriber list is exactly the <a href="../patterns/behavioral.html#observer">Observer pattern</a> with plain callables.</dd>
+            </div>
+            <div class="exercise">
+              <div class="ex-tag">Exercise · prove the invariant</div>
+              <p class="ex-q">Write the <code>IntersectionController</code> transition table for a 4-way crossing (states NS_GREEN, NS_YELLOW, ALL_RED_1, EW_GREEN, EW_YELLOW, ALL_RED_2). Then explain in one sentence why "never two crossing greens" holds <em>by construction</em>.</p>
+              <p>Hint: if no table row ever maps to a state where both directions are green — and every change goes through the table — the bad state is unreachable. That's the argument, and it only works because of the single choke point.</p>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../lld/vending-machine.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: Vending machine</span></a>
+            <a class="next" href="../lld/atm.html"><span class="pn-k">Next ›</span><span class="pn-t">Case: ATM</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements</a>
+          <a href="#table">Table vs classes</a>
+          <a href="#diagram">Drive the machine</a>
+          <a href="#code">Implementation</a>
+          <a href="#extensions">Extensions</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">LLD · Traffic light</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/fsm.js"></script>
+</body>
+</html>

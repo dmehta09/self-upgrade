@@ -20,8 +20,11 @@ window.LESSONS = [
   { id: "lld-method",          title: "The LLD method",        url: "lld/index.html",                 module: "lld",      tool: "lld" },
   { id: "lld-parking-lot",     title: "Case: Parking lot",     url: "lld/parking-lot.html",           module: "lld",      tool: "lld" },
   { id: "lld-vending-machine", title: "Case: Vending machine", url: "lld/vending-machine.html",       module: "lld",      tool: "lld" },
+  { id: "lld-traffic-light",   title: "Case: Traffic light",   url: "lld/traffic-light.html",         module: "lld",      tool: "lld" },
+  { id: "lld-atm",             title: "Case: ATM",             url: "lld/atm.html",                   module: "lld",      tool: "lld" },
   { id: "lld-notification",    title: "Case: Notifications",   url: "lld/notification-service.html",  module: "lld",      tool: "lld" },
   { id: "adv-overview",            title: "Advanced: overview",       url: "advanced/index.html",                 module: "adv", tool: "adv" },
+  { id: "adv-async-python",        title: "Async Python deep-dive",   url: "advanced/async-python.html",          module: "adv", tool: "adv" },
   { id: "adv-lru-cache",           title: "Case: LRU / LFU cache",    url: "advanced/lru-cache.html",             module: "adv", tool: "adv" },
   { id: "adv-logging-framework",   title: "Case: Logging framework",  url: "advanced/logging-framework.html",     module: "adv", tool: "adv" },
   { id: "adv-file-system",         title: "Case: File system",        url: "advanced/file-system.html",           module: "adv", tool: "adv" },
@@ -30,7 +33,10 @@ window.LESSONS = [
   { id: "adv-rate-limiter",        title: "Case: Rate limiter",       url: "advanced/rate-limiter.html",          module: "adv", tool: "adv" },
   { id: "adv-movie-booking",       title: "Case: Movie booking",      url: "advanced/movie-booking.html",         module: "adv", tool: "adv" },
   { id: "adv-pubsub-queue",        title: "Case: Pub/Sub queue",      url: "advanced/pubsub-queue.html",          module: "adv", tool: "adv" },
-  { id: "adv-ride-hailing",        title: "Case: Ride-hailing",       url: "advanced/ride-hailing.html",          module: "adv", tool: "adv" }
+  { id: "adv-ride-hailing",        title: "Case: Ride-hailing",       url: "advanced/ride-hailing.html",          module: "adv", tool: "adv" },
+  { id: "adv-chess",               title: "Case: Chess",              url: "advanced/chess.html",                 module: "adv", tool: "adv" },
+  { id: "adv-kv-store",            title: "Case: In-memory KV store", url: "advanced/kv-store.html",              module: "adv", tool: "adv" },
+  { id: "adv-task-scheduler",      title: "Case: Task scheduler",     url: "advanced/task-scheduler.html",        module: "adv", tool: "adv" }
 ];
 
 /* Ordered module groups for the home dashboard. */

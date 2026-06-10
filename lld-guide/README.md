@@ -40,8 +40,19 @@ shown with their expected output inline). Only one thing reaches the network:
 - **Design patterns** — the GoF catalog grouped into creational, structural, and behavioral —
   each with intent, analogy, UML, Python, and the **Pythonic shortcut**.
 - **LLD case studies** — a repeatable interview method, then worked solutions: a parking lot,
-  a vending machine (State pattern), and a notification service (Observer + Strategy + Factory).
-- **Reference** — a glossary, a "which pattern?" picker, a SOLID cheatsheet, and the UML legend.
+  a vending machine (State pattern), a traffic light (table-driven FSM), an ATM (guards), and a
+  notification service (Observer + Strategy + Factory).
+- **Advanced cases** — an async-Python deep-dive plus thirteen senior case studies with real
+  concurrency: LRU cache, logging, file system, elevator, Splitwise, rate limiter, movie
+  booking, pub/sub, ride-hailing, chess, an in-memory KV store (TTL + transactions), and a
+  task scheduler.
+- **Interactive engines** — a state-machine player (`fsm.js`), a pattern-flow sequence stepper
+  (`patternflow.js`), a thread-interleaving race visualizer (`concurrency.js`), and a clickable
+  UML explorer (`umlx.js`) embedded across the lessons.
+- **Machine-coding drills** — 14 timed 45-minute mock interviews (`drill/`) with phased clocks,
+  senior rubrics, and model answers; scores persist locally under `lld-drill`.
+- **Reference** — a glossary (now incl. FSM + concurrency terms), a "which pattern?" picker,
+  a SOLID cheatsheet, and the UML legend.
 
 ## Project structure
 
@@ -60,7 +71,9 @@ lld-guide/
 ├── oop/                        # Overview · The four pillars · Relationships & UML
 ├── solid/                      # Why principles · The SOLID five
 ├── patterns/                   # Overview · Creational · Structural · Behavioral
-├── lld/                        # The method · Parking lot · Vending machine · Notification service
+├── lld/                        # The method · Parking lot · Vending machine · Traffic light · ATM · Notifications
+├── advanced/                   # Concurrency primer · Async Python · 13 senior case studies
+├── drill/                      # Practice hub: timed machine-coding drills
 ├── reference/                  # Glossary & cheatsheet
 └── tools/
     ├── build-search-index.js   # Regenerates assets/js/search-index.js
@@ -90,7 +103,7 @@ node tools/verify.js
   current **as of June 2026**; the design ideas are language-agnostic and we note where Python
   differs from classic Java/C++ OOP.
 - No package manager, no bundler, no framework. Edit a file, refresh the browser.
-- Dark/light theme is remembered in `localStorage` (`dg-theme`); progress under `lld-progress`.
+- Dark/light theme is remembered in `localStorage` (`dg-theme`); progress under `lld-progress`; drill scores under `lld-drill`.
 - Built to read top-to-bottom (Home → OOP → SOLID → Patterns → LLD → Reference), but every
   page stands alone and is reachable via search (press <kbd>/</kbd> or <kbd>Cmd/Ctrl-K</kbd>).
 ```

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced case — Task scheduler | The Design Field Guide</title>
+  <meta name="description" content="Designing a task scheduler in Python — the concurrency capstone: a min-heap keyed by next-run time, a worker pool, the threading.Condition wait-with-timeout loop, Command tasks, Strategy retry/schedule policies, recurring jobs, and cancellation semantics." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="adv" data-page="adv-task-scheduler" data-lesson="adv-task-scheduler">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/traffic-light.html">Traffic light</a>
+        <a class="nav-link" href="../lld/atm.html">ATM</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/async-python.html">Async Python</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+        <a class="nav-link" href="../advanced/chess.html">Chess</a>
+        <a class="nav-link" href="../advanced/kv-store.html">KV store</a>
+        <a class="nav-link" href="../advanced/task-scheduler.html">Task scheduler</a>
+      </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Machine-coding drills</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../advanced/index.html" style="color:var(--accent)">Advanced</a><span class="sep">/</span><span class="current">Task scheduler</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Advanced case · expert tier · the concurrency capstone</span>
+            <h1>Case study: a task scheduler.</h1>
+            <p class="lead">Build cron in a process: one-shot and recurring jobs, priorities, cancel, retry. It composes half the guide — a heap (data structure), Command/Strategy/Observer (patterns), and the hardest concurrency primitive so far: the <strong><code>Condition</code> wait-with-timeout loop</strong> that lets workers sleep <em>exactly</em> until there's something to do.</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Clarify the requirements</h2>
+            <ul>
+              <li><code>submit(fn, run_at)</code> — one-shot; <code>submit_recurring(fn, every=60)</code> — repeats.</li>
+              <li>N worker threads execute due tasks; a task that raises is retried per a <strong>retry policy</strong> (e.g. 3 tries, exponential backoff).</li>
+              <li><code>cancel(task_id)</code> — a cancelled task never runs (again).</li>
+              <li>Ties at the same due time break by <strong>priority</strong>.</li>
+            </ul>
+            <p>Invariants: a task runs <strong>at most once per due-time</strong> (two workers must never both grab it); no worker burns CPU while idle (no <code>sleep(0.1)</code> polling loops — say this unprompted); shutdown drains or abandons cleanly, never hangs.</p>
+          </section>
+
+          <!-- 2. SHAPE -->
+          <section class="section reveal" id="shape">
+            <h2><span class="section-num">02</span> &nbsp;The shape: heap + pool + one Condition</h2>
+            <div class="kv">
+              <dt><code>ScheduledTask</code> (Command)</dt><dd>Wraps the callable with <code>id</code>, <code>run_at</code>, <code>priority</code>, <code>cancelled</code> flag, its <code>SchedulePolicy</code> and <code>RetryPolicy</code>. Orders by <code>(run_at, priority)</code> for the heap.</dd>
+              <dt>Min-heap (<code>heapq</code>)</dt><dd>The earliest-due task is always the root. Push O(log n), peek O(1) — exactly the access pattern a scheduler needs.</dd>
+              <dt>Worker pool</dt><dd>N identical threads running the same loop: <em>wait until the root is due → pop → execute → maybe reschedule</em>.</dd>
+              <dt><code>threading.Condition</code></dt><dd>One lock + a waiting room. Workers <code>wait(timeout=until_next_due)</code>; <code>submit()</code> calls <code>notify()</code> — which is how a newly-submitted <em>earlier</em> task wakes a worker that was sleeping toward a later one. That wake-up is the whole question.</dd>
+              <dt>Policies (Strategy) &amp; hooks (Observer)</dt><dd><code>SchedulePolicy.next_run(now)</code> (once / interval / cron later) and <code>RetryPolicy.next_delay(attempt)</code> are injected; <code>on_success</code>/<code>on_failure</code> listeners hang off the lifecycle.</dd>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why is <code>queue.Queue</code> — so perfect for producer–consumer — the wrong container here?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>It isn't thread-safe enough</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>It's FIFO by arrival: a worker would grab the OLDEST task, not the one due SOONEST — and tasks submitted for the future would run immediately</button>
+                <button class="quiz-opt"><span class="mark"></span>Queues can't hold callables</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> a scheduler is ordered by <em>time</em>, not arrival — that's the min-heap's job. (Even <code>PriorityQueue</code> falls short: you can't <em>peek</em> at the root and sleep until it's due; you can only block-pop.)</div>
+            </div>
+          </section>
+
+          <!-- 3. CODE -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">03</span> &nbsp;The core: the worker loop</h2>
+            <p>This loop is the interview. Every line answers a follow-up question:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">scheduler.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import heapq, threading, time
+
+class Scheduler:
+    def __init__(self, workers: int = 4):
+        self._heap: list[ScheduledTask] = []
+        self._cond = threading.Condition()        # one lock + waiting room
+        self._shutdown = False
+        self._threads = [threading.Thread(target=self._worker, daemon=True)
+                         for _ in range(workers)]
+        for t in self._threads: t.start()
+
+    def submit(self, task: ScheduledTask) -&gt; None:
+        with self._cond:                           # Condition IS the lock
+            heapq.heappush(self._heap, task)
+            self._cond.notify()                    # maybe an EARLIER task:
+                                                   # wake a sleeper to re-look
+    def cancel(self, task: ScheduledTask) -&gt; None:
+        with self._cond:
+            task.cancelled = True                  # lazy: skip it on pop
+                                                   # (no O(n) heap surgery)
+    def _worker(self) -&gt; None:
+        while True:
+            with self._cond:
+                while True:                        # the wait loop
+                    if self._shutdown:
+                        return
+                    if not self._heap:
+                        self._cond.wait()          # sleep: nothing scheduled
+                        continue
+                    delay = self._heap[0].run_at - time.monotonic()
+                    if delay &gt; 0:
+                        self._cond.wait(timeout=delay)   # sleep until root
+                        continue                   # is due OR notify() — then
+                                                   # RE-CHECK (root may differ!)
+                    task = heapq.heappop(self._heap)
+                    break                          # we own it; leave the lock
+            if task.cancelled:
+                continue
+            self._run(task)                        # execute OUTSIDE the lock
+
+    def _run(self, task: ScheduledTask) -&gt; None:
+        try:
+            task.fn()
+        except Exception:
+            delay = task.retry.next_delay(task.attempt)
+            if delay is not None:                  # retry with backoff
+                task.attempt += 1
+                task.run_at = time.monotonic() + delay
+                self.submit(task)
+            return
+        nxt = task.schedule.next_run(time.monotonic())
+        if nxt is not None:                        # recurring: go again
+            task.run_at, task.attempt = nxt, 0
+            self.submit(task)</code></pre></div>
+            </div>
+            <p>The three follow-ups it answers: <strong>"why re-check after wait?"</strong> — because wait() returning means <em>maybe</em> (a new root, a spurious wake-up, shutdown), so the condition is always re-evaluated in a loop; <strong>"why execute outside the lock?"</strong> — a 5-second task inside it would serialize the whole pool; <strong>"why lazy cancel?"</strong> — removing from a heap's middle is O(n) and re-heapifies; a flag checked after pop is O(1) and good enough.</p>
+          </section>
+
+          <!-- 4. RACE -->
+          <section class="section reveal" id="race">
+            <h2><span class="section-num">04</span> &nbsp;The race the Condition kills: peek-then-pop</h2>
+            <p>Suppose workers used a bare heap with no lock: both peek the root, both see it's due, both pop — one gets the real task, the other gets <em>the wrong task</em> (or an empty-heap crash), and a payment job runs twice. The model below shows the shape with a shared "claimed" counter — same schedule, with and without the Condition's lock:</p>
+            <figure class="conviz" data-conviz aria-label="Interactive race: two workers claiming the same due task">
+              <figcaption class="cv-title">Two workers, one due task — claim is read-modify-write</figcaption>
+              <script type="application/json" class="cv-config">
+              {
+                "shared": [ { "id": "claims", "label": "times_claimed (task #7)", "init": 0 } ],
+                "threads": [
+                  { "id": "w1", "label": "Worker 1", "ops": [
+                    { "op": "lock" },
+                    { "op": "read",  "var": "claims", "into": "c", "text": "c = times_claimed   # peek root" },
+                    { "op": "calc",  "reg": "c", "add": 1,         "text": "c = c + 1           # 'it's mine'" },
+                    { "op": "write", "var": "claims", "from": "c", "text": "times_claimed = c   # pop" },
+                    { "op": "unlock" } ] },
+                  { "id": "w2", "label": "Worker 2", "ops": "same" }
+                ],
+                "schedules": [
+                  { "id": "racy",   "label": "⚡ Bare heap · no lock", "lock": false,
+                    "order": ["w1", "w2", "w1", "w2", "w1", "w2"], "expect": 2 },
+                  { "id": "locked", "label": "🔒 Same timing · Condition's lock", "lock": true,
+                    "order": ["w1", "w2", "w1", "w2", "w1", "w2"], "expect": 2 }
+                ],
+                "verdictVar": "claims"
+              }
+              </script>
+            </figure>
+            <p>In the racy run the two claims collapse into one recorded claim — both workers believed they owned task #7. Under the lock, Worker 2 blocks at acquire and the claims serialize. In the real scheduler the entire <em>peek → check due → pop</em> sits inside <code>with self._cond:</code>, which is this fix generalized — and it's why the at-most-once invariant survives any interleaving.</p>
+          </section>
+
+          <!-- 5. WALKTHROUGH + ASYNC -->
+          <section class="section reveal" id="walkthrough">
+            <h2><span class="section-num">05</span> &nbsp;Trace one submit, and the asyncio comparison</h2>
+            <p>Trace to say out loud: <code>submit(backup, run_at=now+300)</code> → heap push, notify → an idle worker wakes, sees root due in 300s, sleeps <code>wait(300)</code> → at +120 someone submits an alert due <em>now</em> → push + notify → the sleeper wakes <em>early</em>, re-checks, sees the alert at the root, pops and runs it → loops back, resumes sleeping ~180s toward the backup. No polling, no missed work, no thundering herd (one <code>notify()</code>, not <code>notify_all()</code>).</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">The asyncio version, in one breath</div><p>Replace workers with coroutines, the Condition with <code>asyncio.Condition</code> (or just <code>loop.call_at</code> for the timing), and blocking task bodies with awaits — see the <a href="../advanced/async-python.html">async deep-dive</a>. Same design, cheaper waiting; the heap and the policies don't change at all. Saying "the structure survives the concurrency-model swap" is a senior closer.</p></div></div>
+          </section>
+
+          <!-- 6. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">06</span> &nbsp;Extensions</h2>
+            <div class="kv">
+              <dt>Cron expressions</dt><dd>Just another <code>SchedulePolicy</code> — parse once, <code>next_run()</code> computes the next matching instant. The Strategy seam absorbs it with zero scheduler edits.</dd>
+              <dt>Persistence</dt><dd>Journal submits/completions (Command log, like the <a href="../advanced/kv-store.html">KV store's AOF</a>); on boot, reload pending tasks. Now a crash doesn't lose the backup job.</dd>
+              <dt>Distributed scheduling</dt><dd>Many machines, one logical scheduler → leader election or per-task leases — the boundary where this LLD question becomes a system-design question; name it and stop.</dd>
+            </div>
+            <div class="exercise">
+              <div class="ex-tag">Exercise · graceful shutdown</div>
+              <p class="ex-q">Implement <code>shutdown(drain: bool)</code>: <code>drain=True</code> runs everything already due, then stops; <code>drain=False</code> stops as soon as running tasks finish. Which line of the worker loop changes, and why must shutdown use <code>notify_all()</code> when submit only needed <code>notify()</code>?</p>
+              <p>Hint: submit creates one unit of work — one waker is enough. Shutdown changes the world for <em>every</em> sleeper; any worker left in <code>wait()</code> would sleep forever.</p>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../advanced/kv-store.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: KV store</span></a>
+            <a class="next" href="../drill/index.html"><span class="pn-k">Next ›</span><span class="pn-t">Practice: machine-coding drills</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements</a>
+          <a href="#shape">The shape</a>
+          <a href="#code">The worker loop</a>
+          <a href="#race">Peek-then-pop race</a>
+          <a href="#walkthrough">Trace + asyncio</a>
+          <a href="#extensions">Extensions</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Advanced · Task scheduler</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/concurrency.js"></script>
+</body>
+</html>

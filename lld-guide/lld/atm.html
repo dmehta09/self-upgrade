@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLD case study — ATM | The Design Field Guide</title>
+  <meta name="description" content="A low-level design case study of an ATM: a guard-heavy State pattern in Python (card, PIN attempts, withdrawal limits, capture-card path), Chain of Responsibility for note dispensing, and when guards are the reason FSMs earn their keep." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='2' fill='none' stroke='%23818cf8' stroke-width='2'/><path d='M4 9h16M4 15h16' stroke='%23818cf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="lld" data-page="lld-atm" data-lesson="lld-atm">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary &amp; cheatsheet</a>
+      </nav>
+      <nav class="nav-group is-oop" aria-label="OOP fundamentals">
+        <h4><span class="dot"></span>OOP fundamentals</h4>
+        <a class="nav-link" href="../oop/index.html">Overview</a>
+        <a class="nav-link" href="../oop/pillars.html">The four pillars</a>
+        <a class="nav-link" href="../oop/relationships.html">Relationships &amp; UML</a>
+        <a class="nav-link" href="../oop/inheritance-composition.html">Inheritance &amp; composition</a>
+      </nav>
+      <nav class="nav-group is-solid" aria-label="SOLID principles">
+        <h4><span class="dot"></span>SOLID principles</h4>
+        <a class="nav-link" href="../solid/index.html">Why principles</a>
+        <a class="nav-link" href="../solid/principles.html">The SOLID five</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Design patterns">
+        <h4><span class="dot"></span>Design patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">Overview</a>
+        <a class="nav-link" href="../patterns/creational.html">Creational</a>
+        <a class="nav-link" href="../patterns/structural.html">Structural</a>
+        <a class="nav-link" href="../patterns/behavioral.html">Behavioral</a>
+      </nav>
+      <nav class="nav-group is-lld" aria-label="LLD case studies">
+        <h4><span class="dot"></span>LLD case studies</h4>
+        <a class="nav-link" href="../lld/index.html">The method</a>
+        <a class="nav-link" href="../lld/parking-lot.html">Parking lot</a>
+        <a class="nav-link" href="../lld/vending-machine.html">Vending machine</a>
+        <a class="nav-link" href="../lld/traffic-light.html">Traffic light</a>
+        <a class="nav-link" href="../lld/atm.html">ATM</a>
+        <a class="nav-link" href="../lld/notification-service.html">Notification service</a>
+      </nav>
+      <nav class="nav-group is-adv" aria-label="Advanced cases">
+        <h4><span class="dot"></span>Advanced cases</h4>
+        <a class="nav-link" href="../advanced/index.html">Overview &amp; concurrency</a>
+        <a class="nav-link" href="../advanced/async-python.html">Async Python</a>
+        <a class="nav-link" href="../advanced/lru-cache.html">LRU / LFU cache</a>
+        <a class="nav-link" href="../advanced/logging-framework.html">Logging framework</a>
+        <a class="nav-link" href="../advanced/file-system.html">File system</a>
+        <a class="nav-link" href="../advanced/elevator-system.html">Elevator system</a>
+        <a class="nav-link" href="../advanced/splitwise.html">Splitwise</a>
+        <a class="nav-link" href="../advanced/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../advanced/movie-booking.html">Movie booking</a>
+        <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
+        <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
+        <a class="nav-link" href="../advanced/chess.html">Chess</a>
+        <a class="nav-link" href="../advanced/kv-store.html">KV store</a>
+        <a class="nav-link" href="../advanced/task-scheduler.html">Task scheduler</a>
+      </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Machine-coding drills</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../lld/index.html" style="color:var(--accent)">LLD</a><span class="sep">/</span><span class="current">ATM</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">LLD case study · guards on a State machine</span>
+            <h1>Designing an ATM.</h1>
+            <p class="lead">Structurally an ATM is the vending machine's sibling — insert something, pick an action, get a thing out. What's new is that nearly every transition carries a <strong>guard</strong>: <em>three</em> PIN attempts, <em>enough</em> balance, <em>enough</em> cash in the tray. Guards are where state machines earn their keep, and where interviewers separate "knows the pattern" from "can design with it."</p>
+          </section>
+
+          <!-- 1. REQUIREMENTS -->
+          <section class="section reveal" id="requirements">
+            <h2><span class="section-num">01</span> &nbsp;Clarify the requirements</h2>
+            <ul>
+              <li>Insert card → enter PIN (max <strong>3 attempts</strong>, then the card is <strong>captured</strong>).</li>
+              <li>Authenticated users can check <strong>balance</strong>, <strong>withdraw</strong>, or <strong>deposit</strong>.</li>
+              <li>A withdrawal must pass <em>two</em> checks: account balance <strong>and</strong> physical cash inventory.</li>
+              <li>Eject the card at the end of the session — or whenever the user cancels.</li>
+            </ul>
+            <p>Invariants to say out loud: money leaves the tray <strong>only</strong> in an authenticated session; failed-attempt counting never resets mid-session; and the hardware (card reader, cash dispenser, screen) sits behind interfaces so the brain of the machine is testable without metal.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A guard is a bouncer on a door <span class="tag">analogy</span></div><p>The door (transition) exists either way — Authenticating → Transacting is on the map. But the bouncer checks your wristband before letting you through: right PIN, you pass; wrong PIN, you stay; third wrong PIN, you're walked out a <em>different</em> door entirely (card captured). Same event, three outcomes — <em>that's</em> a guard.</p></div></div>
+          </section>
+
+          <!-- 2. STATES & GUARDS -->
+          <section class="section reveal" id="states">
+            <h2><span class="section-num">02</span> &nbsp;The states, and the guards on every door</h2>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>State</th><th>Event</th><th>Guard</th><th>Outcome</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Idle</strong></td><td>insert_card</td><td>card readable</td><td>→ Authenticating</td></tr>
+                  <tr><td rowspan="2"><strong>Authenticating</strong></td><td rowspan="2">enter_pin</td><td>PIN correct</td><td>→ SelectingTxn</td></tr>
+                  <tr><td>wrong, attempts &lt; 3</td><td>stay (count++) · 3rd → <strong>CardCaptured</strong></td></tr>
+                  <tr><td rowspan="2"><strong>SelectingTxn</strong></td><td>withdraw(amt)</td><td>balance ≥ amt <em>and</em> tray ≥ amt</td><td>→ Dispensing</td></tr>
+                  <tr><td>cancel</td><td>—</td><td>→ Ejecting</td></tr>
+                  <tr><td><strong>Dispensing</strong></td><td>(auto)</td><td>—</td><td>notes out → Ejecting</td></tr>
+                  <tr><td><strong>Ejecting</strong></td><td>(auto)</td><td>—</td><td>card out → Idle</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>Compare this with the <a href="../lld/traffic-light.html">traffic light</a>: there, transitions were pure data, so a table won. Here, almost every row needs a <em>decision with state behind it</em> (an attempt counter, a balance lookup, a hardware query) — that's the signal to give each state a class again, vending-machine style, with the guards living inside the state's methods.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">Where should the "3 attempts" counter live?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>A global variable, so any state can read it</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>On the session/context (reset when a card is inserted) — the Authenticating state reads and bumps it through the context</button>
+                <button class="quiz-opt"><span class="mark"></span>Inside the AuthenticatingState instance itself</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> shared session data belongs on the context (like the vending machine's balance). Storing it on the state object is the classic trap — state objects are routinely recreated on re-entry, which would quietly reset the count and hand an attacker infinite guesses.</div>
+            </div>
+          </section>
+
+          <!-- 3. PLAYER -->
+          <section class="section reveal" id="diagram">
+            <h2><span class="section-num">03</span> &nbsp;Drive the machine</h2>
+            <p>Try the happy withdrawal — then try getting the PIN wrong three times and watch the third failure take a <em>different door</em>:</p>
+            <figure class="fsm" data-fsm aria-label="Interactive ATM state machine">
+              <figcaption class="fsm-title">The ATM session — guards decide which door opens</figcaption>
+              <script type="application/json" class="fsm-config">
+              {
+                "initial": "idle",
+                "states": [
+                  { "id": "idle",     "label": "Idle",           "note": "insert a card",    "col": 0, "row": 0 },
+                  { "id": "auth",     "label": "Authenticating", "note": "attempts < 3",     "col": 1, "row": 0 },
+                  { "id": "select",   "label": "SelectingTxn",   "note": "authenticated",    "col": 2, "row": 0 },
+                  { "id": "captured", "label": "CardCaptured",   "note": "session over",     "col": 1, "row": 1 },
+                  { "id": "dispense", "label": "Dispensing",     "note": "notes out",        "col": 3, "row": 1, "transient": true }
+                ],
+                "events": [
+                  { "id": "card",    "label": "insert_card()" },
+                  { "id": "pin_ok",  "label": "enter_pin · correct" },
+                  { "id": "pin_bad", "label": "enter_pin · wrong" },
+                  { "id": "wd",      "label": "withdraw(100)" },
+                  { "id": "cancel",  "label": "cancel()" }
+                ],
+                "transitions": [
+                  { "from": "idle",   "on": "card",    "to": "auth",     "log": "card read — session opens, attempts = 0" },
+                  { "from": "auth",   "on": "pin_ok",  "to": "select",   "guard": "PIN matches", "log": "authenticated" },
+                  { "from": "auth",   "on": "pin_bad", "to": "auth",     "upTo": 2, "log": "wrong PIN — attempt counted" },
+                  { "from": "auth",   "on": "pin_bad", "to": "captured", "guard": "attempts = 3", "log": "third failure → card CAPTURED" },
+                  { "from": "select", "on": "wd",      "to": "dispense", "guard": "balance ≥ 100 and tray ≥ 100", "log": "both checks pass — dispensing" },
+                  { "from": "dispense", "auto": true,  "to": "idle",     "delayMs": 1000, "log": "notes + card out → Idle" },
+                  { "from": "select", "on": "cancel",  "to": "idle",     "log": "card ejected" },
+                  { "from": "auth",   "on": "cancel",  "to": "idle",     "log": "card ejected — attempts abandoned" },
+                  { "from": "captured", "on": "card",  "reject": "machine holds your card — contact the bank" },
+                  { "from": "idle",   "on": "wd",      "reject": "no session — insert a card" },
+                  { "from": "idle",   "on": "pin_ok",  "reject": "no card inserted" },
+                  { "from": "idle",   "on": "pin_bad", "reject": "no card inserted" },
+                  { "from": "auth",   "on": "wd",      "reject": "authenticate first" }
+                ],
+                "scenarios": [
+                  { "label": "Happy withdrawal",  "fire": ["card", "pin_ok", "wd"] },
+                  { "label": "Three wrong PINs",  "fire": ["card", "pin_bad", "pin_bad", "pin_bad"] },
+                  { "label": "Lose your nerve",   "fire": ["card", "pin_bad", "cancel"] }
+                ]
+              }
+              </script>
+            </figure>
+            <p>The "three wrong PINs" run is the whole lesson: the <em>same event</em> (<code>pin_bad</code>) self-loops twice and then exits to <code>CardCaptured</code> — one event, two destinations, chosen by a guard reading the attempt counter. No diagram without guards can express that.</p>
+          </section>
+
+          <!-- 4. CODE -->
+          <section class="section reveal" id="code">
+            <h2><span class="section-num">04</span> &nbsp;The implementation — guards in the states</h2>
+            <p>The skeleton mirrors the vending machine (rejecting defaults on the ABC, states drive transitions), so here we zoom into the two guard-heavy states only:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">atm_states.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">MAX_ATTEMPTS = 3
+
+class AuthenticatingState(AtmState):
+    def enter_pin(self, atm: "Atm", pin: str) -&gt; None:
+        if atm.bank.verify(atm.card, pin):          # guard 1: PIN
+            atm.set_state(SelectingTxnState())
+            return
+        atm.attempts += 1                           # counter on the CONTEXT
+        if atm.attempts &gt;= MAX_ATTEMPTS:            # guard 2: attempts
+            atm.reader.capture_card()
+            atm.set_state(CardCapturedState())
+        else:
+            atm.screen.show(f"Wrong PIN ({atm.attempts}/{MAX_ATTEMPTS})")
+
+
+class SelectingTxnState(AtmState):
+    def withdraw(self, atm: "Atm", amount: int) -&gt; None:
+        if atm.bank.balance(atm.card) &lt; amount:     # guard: account side
+            atm.screen.show("Insufficient funds")
+            return
+        if not atm.dispenser.can_dispense(amount):  # guard: hardware side
+            atm.screen.show("Machine low on cash")
+            return
+        atm.bank.debit(atm.card, amount)            # debit BEFORE notes move
+        atm.set_state(DispensingState(amount))
+        atm.dispense()</code></pre></div>
+            </div>
+            <p>Note the order in <code>withdraw</code>: <strong>debit, then dispense</strong>. If the dispenser jams you refund a debit; the other order hands out cash you never collected. Saying that ordering trade-off (and that real ATMs solve it with a two-phase, journaled protocol) is a senior flourish. The <code>bank</code>, <code>reader</code>, <code>dispenser</code>, <code>screen</code> are injected Protocols — the FSM is fully testable with fakes.</p>
+            <p>And the note tray itself? Paying out 180 from 100/50/20 notes is a textbook <a href="../patterns/behavioral.html#chain">Chain of Responsibility</a>: a <code>NoteHandler(100)</code> dispenses what it can and passes the remainder to <code>NoteHandler(50)</code>, and so on. If the chain ends with a remainder, the guard above (<code>can_dispense</code>) should have caught it — run the chain "dry" first to answer that.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">Why does <code>can_dispense(amount)</code> need to be more than <code>amount &lt;= total_cash</code>?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>It doesn't — total cash is exactly the right check</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Denominations matter: a tray with three 50s holds 150 but cannot pay 80 — the chain must verify a valid note combination exists</button>
+                <button class="quiz-opt"><span class="mark"></span>Because floats lose precision on large amounts</button>
+              </div>
+              <div class="quiz-explain"><b>Right:</b> 150 in the tray ≠ "can pay 80". The dry-run of the note chain (greedy 50+20+… or DP for awkward currencies) is the real guard. This is the detail that makes interviewers sit up.</div>
+            </div>
+          </section>
+
+          <!-- 5. COMPARE -->
+          <section class="section reveal" id="compare">
+            <h2><span class="section-num">05</span> &nbsp;Pick your FSM flavour — the four cases side by side</h2>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Case</th><th>Encoding</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td><a href="../lld/traffic-light.html">Traffic light</a></td><td>Transition <strong>table</strong></td><td>Uniform, behaviour-free transitions — pure data</td></tr>
+                  <tr><td><a href="../lld/vending-machine.html">Vending machine</a></td><td>State <strong>classes</strong></td><td>Per-state behaviour (balance, stock, dispensing)</td></tr>
+                  <tr><td><strong>ATM</strong></td><td>State classes + <strong>guards</strong></td><td>Same event, multiple destinations, decided by session data</td></tr>
+                  <tr><td><a href="../advanced/elevator-system.html">Elevator</a></td><td>FSM <strong>inside a loop</strong></td><td>States flip themselves during step(); events merge into a target set</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>That table is a ready-made interview answer to "when would you <em>not</em> use the State pattern?" — the honest spectrum runs from data table to guarded classes, chosen by how much behaviour the states carry.</p>
+          </section>
+
+          <!-- 6. EXTENSIONS -->
+          <section class="section reveal" id="extensions">
+            <h2><span class="section-num">06</span> &nbsp;Extend it yourself</h2>
+            <div class="exercise">
+              <div class="ex-tag">Exercise · deposits with an envelope</div>
+              <p class="ex-q">Add a <code>deposit()</code> flow: SelectingTxn → AcceptingEnvelope → (validated) → SelectingTxn. The envelope scanner can reject. Which new states, which guards, and what must <em>not</em> change?</p>
+              <p>Hint: the existing states shouldn't gain a line. New states + a rejecting default on the ABC for <code>deposit()</code> mean the old states reject it for free — the same trick as the vending machine's <code>cancel()</code>.</p>
+            </div>
+            <div class="kv">
+              <dt>Daily limits</dt><dd>Another guard on <code>withdraw</code> — but the counter lives with the <em>bank</em>, not the machine (you can hop ATMs). Good prompt for "which side of the interface does this state belong on?"</dd>
+              <dt>Receipt printer</dt><dd>An Observer on completed transactions — the FSM publishes, the printer subscribes, nothing couples.</dd>
+              <dt>Concurrent sessions?</dt><dd>One physical machine = one session, so the FSM itself needs no lock. The <em>account</em> does: two ATMs, one account, simultaneous withdrawals — that's the <a href="../advanced/movie-booking.html">movie-booking race</a> wearing a different hat.</dd>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../lld/traffic-light.html"><span class="pn-k">‹ Back</span><span class="pn-t">Case: Traffic light</span></a>
+            <a class="next" href="../lld/notification-service.html"><span class="pn-k">Next ›</span><span class="pn-t">Case: Notification service</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#requirements">Requirements</a>
+          <a href="#states">States &amp; guards</a>
+          <a href="#diagram">Drive the machine</a>
+          <a href="#code">Implementation</a>
+          <a href="#compare">FSM flavours compared</a>
+          <a href="#extensions">Extend it yourself</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">LLD · ATM</span>
+        <span class="fmono">The Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/fsm.js"></script>
+</body>
+</html>
