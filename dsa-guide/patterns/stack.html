@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Stack | DSA Field Guide</title>
-  <meta name="description" content="The Stack pattern, explained for a curious beginner: a last-in-first-out pile for matching pairs and 'next bigger thing' (monotonic stack) problems, with animated walk-throughs and two runnable Python problems (Valid Parentheses, Daily Temperatures)." />
+  <meta name="description" content="The Stack pattern, explained for a curious beginner: a last-in-first-out pile for matching pairs and 'next bigger thing' (monotonic stack) problems, with animated walk-throughs and three runnable Python problems (Valid Parentheses, Daily Temperatures, Largest Rectangle in Histogram)." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -42,6 +42,8 @@
           <a class="nav-link" href="#pattern">The idea</a>
           <a class="nav-link" href="#valid-parentheses">Valid Parentheses</a>
           <a class="nav-link" href="#daily-temperatures">Daily Temperatures</a>
+          <a class="nav-link" href="#monotonic">Monotonic stack</a>
+          <a class="nav-link" href="#largest-rectangle">Largest Rectangle</a>
         </div>
         <a class="nav-link" href="../patterns/binary-search.html">Binary Search</a>
         <a class="nav-link" href="../patterns/linked-list.html">Linked List</a>
@@ -81,7 +83,7 @@
           <section class="hero reveal" style="padding-top:8px;">
             <span class="eyebrow">Patterns · stack</span>
             <h1>Stack</h1>
-            <p class="lead">A <strong>stack</strong> is a pile where you only ever add to the top and remove from the top — <em>last in, first out</em>. That one rule makes it perfect for two jobs: matching things that nest (brackets, tags) and answering "what's the next bigger thing?" with a clever variant called a <em>monotonic</em> stack. Let's see it move, then solve two classics with it.</p>
+            <p class="lead">A <strong>stack</strong> is a pile where you only ever add to the top and remove from the top — <em>last in, first out</em>. That one rule makes it perfect for two jobs: matching things that nest (brackets, tags) and answering "what's the next bigger thing?" with a clever variant called the <strong>monotonic stack</strong> — a tool worth knowing by name. Let's see it move, then solve three classics with it, ending on the famous Largest Rectangle in Histogram.</p>
           </section>
 
           <!-- ===== THE IDEA ===== -->
@@ -373,6 +375,158 @@ print(daily_temperatures([73, 74, 75, 71, 69, 72, 76, 73]))
             </details>
           </section>
 
+          <!-- ===== NAME THE TOOL: THE MONOTONIC STACK ===== -->
+          <section class="section reveal" id="monotonic">
+            <h2><span class="section-num">03</span> &nbsp;Name the tool: the monotonic stack</h2>
+            <p class="lead">Daily Temperatures wasn't a one-off trick — it's an instance of a named, reusable template that interviewers expect seniors to know <em>by name</em>: a stack you keep sorted by <strong>popping anyone who'd break the order</strong>. Saying "this is a monotonic stack problem" out loud in an interview is like a doctor naming the diagnosis: the moment it's named, the treatment is standard.</p>
+
+            <p>Here is the whole template — the <strong>next-greater-element skeleton</strong>. Nearly every monotonic stack problem is this loop with two blanks filled in:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">monotonic_stack_template.py</span></div>
+              <pre><code>stack = []                                  # indices, kept sorted by value
+for i, x in enumerate(items):
+    while stack and items[stack[-1]] &lt; x:   # knob 1: the comparison
+        j = stack.pop()
+        # knob 2: ANSWER FOR j IS i (or x) — record it here
+    stack.append(i)</code></pre>
+            </div>
+            <p>The two knobs are everything. <strong>Knob 1 is the comparison direction:</strong> <code>&lt;</code> keeps the stack <em>decreasing</em>, so each pop says "I just found <code>j</code>'s <em>next greater</em> element"; flip it to <code>&gt;</code> and the stack stays <em>increasing</em>, answering <em>next smaller</em> instead. <strong>Knob 2 is what you record at pop time:</strong> the distance <code>i - j</code> (Daily Temperatures' wait), the value <code>x</code> itself (classic next-greater-element), or a width between the popped index and the new stack top (the histogram problem below).</p>
+
+            <p>And the cost argument fits in one line: <strong>each index is pushed once and popped at most once, so the whole run is amortized O(n)</strong> — despite the nested-looking <code>while</code> inside the <code>for</code>. If that still feels like sorcery, it's exactly the trap question from the <a href="../foundations/big-o.html#speed-quiz">Big-O speed quiz</a>: count total work, not loop nesting.</p>
+
+            <h3>Where you'll sight it in the wild</h3>
+            <div class="kv">
+              <dt>Next greater / smaller element</dt><dd>The vanilla form — for each item, the first later (or earlier) item that beats it.</dd>
+              <dt>Spans</dt><dd>Stock Span and friends: "how many consecutive previous days were lower?" — record a width at pop time.</dd>
+              <dt>"How far can this extend?"</dt><dd>Any question where each element stretches until something stops it — the stack finds each element's stopper.</dd>
+              <dt>Histogram rectangles</dt><dd>Largest Rectangle in Histogram (next section) — each bar extends until a <em>shorter</em> bar walls it in on each side.</dd>
+              <dt>Sliding-window max</dt><dd>A close cousin using a <em>deque</em> (pop from both ends), but the same "evict everyone I beat" idea.</dd>
+            </div>
+          </section>
+
+          <!-- ===== PROBLEM 3: LARGEST RECTANGLE IN HISTOGRAM ===== -->
+          <section class="section problem reveal" id="largest-rectangle">
+            <header class="problem-meta">
+              <h2><span class="section-num">04</span> &nbsp;Largest Rectangle in Histogram</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Stack</span>
+                <span class="pm-chip diff-hard">Hard</span>
+                <span class="pm-chip"><span class="dot"></span>~30 min</span>
+                <span class="pm-chip cx">O(n) time · O(n) space</span>
+              </div>
+            </header>
+            <p class="lead">Given bar heights (every bar has width 1), find the area of the largest rectangle that fits entirely inside the histogram. For <code>[2, 1, 5, 6, 2, 3]</code> the answer is <code>10</code>. Let's be honest up front: this is a famous <strong>Hard</strong> — but it's the direct payoff of the monotonic template above, and a senior-loop favorite for exactly that reason.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Every bar dreams of being the shortest <span class="tag">analogy</span></div>
+                <p>Every bar dreams of being the <em>shortest</em> bar of some rectangle: its own height, times how far it can stretch left and right before hitting a bar shorter than itself. Those two shorter bars are its "walls". Find each bar's two walls, compute each bar's dream rectangle, and the answer is the best dream in the room.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="An increasing monotonic stack finding the largest rectangle in the histogram 2 1 5 6 2 3">
+              <figcaption class="viz-title">Keep heights increasing — every pop finalizes one bar's rectangle</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": [2, 1, 5, 6, 2, 3] },
+                "frames": [
+                  {"active":[0],"dim":[1,2,3,4,5],"caption":"Push bar 0 (h=2) — the stack keeps INCREASING heights, bottom to top."},
+                  {"compare":[0,1],"reject":[0],"dim":[2,3,4,5],"caption":"Bar 1 (h=1) is shorter — bar 0 must finalize: width 1, area 2×1 = 2."},
+                  {"active":[1],"dim":[2,3,4,5],"caption":"Push bar 1 (h=1). It's now the lone, lowest waiter on the stack."},
+                  {"active":[2,3],"dim":[4,5],"caption":"Bars 2 (5) and 3 (6) keep increasing — push, push. Stack heights: 1, 5, 6."},
+                  {"compare":[3,4],"reject":[3],"dim":[5],"caption":"Bar 4 (h=2) arrives: pop bar 3 (h=6): width 1 → area 6."},
+                  {"compare":[2,4],"reject":[2],"dim":[5],"caption":"Still shorter: pop bar 2 (h=5): width 2 (bars 2–3) → area 10 — the champion!"},
+                  {"match":[2,3],"done":[2,3],"caption":"Nothing taller survives; 10 stands. The sentinel 0 at the end would flush the rest (areas 8, 6…)."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Use a <strong>monotonic increasing stack of indices</strong>. As long as bars keep getting taller, push. The moment a bar arrives that's <em>shorter</em> than the top, the top bar has met its right wall — pop it and compute its dream rectangle right there:</p>
+            <ol>
+              <li>Pop index <code>top</code>; its rectangle's <strong>height</strong> is <code>heights[top]</code>.</li>
+              <li>Its right wall is the current bar <code>i</code>; its left wall is whatever is <em>now</em> on top of the stack. So <strong>width = <code>i - stack[-1] - 1</code></strong> — or <strong><code>i</code> if the stack just emptied</strong>, because then nothing to the left was shorter and the bar stretches all the way to the edge. Spell this case out — it is <em>the</em> off-by-one of this problem.</li>
+              <li>Keep popping while the new bar is shorter, then push <code>i</code>.</li>
+              <li>Append a <strong>sentinel bar of height 0</strong> at the end so every bar still waiting is forced to finalize.</li>
+            </ol>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(n)</span></td><td>The template's argument: each bar is pushed once and popped at most once.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(n)</span></td><td>A strictly increasing histogram keeps every bar on the stack until the sentinel.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+              <div class="co-body"><div class="co-title">The emptied-stack width</div><p>After popping, if the stack is <em>empty</em>, the popped bar was the smallest seen so far — no bar to its left was shorter, so it stretches all the way to the left edge: <strong>width = <code>i</code></strong>. (You can think of it as <code>i - (-1) - 1</code>, as if a virtual wall sat at index −1 — same number, but write the empty case explicitly so you don't fumble it live.) Otherwise width is <code>i - stack[-1] - 1</code>: the gap strictly between the new top and <code>i</code>.</p></div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why append a sentinel bar of height <code>0</code> at the end of the histogram?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>To stop the loop from running off the end of the list</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Bars still on the stack at the end (an increasing tail) never met a shorter bar — the 0 forces every one of them to pop and be measured</button>
+                <button class="quiz-opt"><span class="mark"></span>It makes the stack strictly decreasing, which is faster</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> Pops only happen when a <em>shorter</em> bar arrives. An increasing run at the end — like the final <code>2, 3</code> in our example — would otherwise finish the scan still waiting, never measured. A height of 0 is shorter than everything, so it flushes the whole stack through the same pop-and-measure code path. No special end-of-loop logic needed.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>For each bar you need two things: the first shorter bar to its <em>left</em>, and the first shorter bar to its <em>right</em>. Which structure from this lesson finds both in one pass? (When a bar gets popped, the popper is its right wall — and whatever remains below it on the stack is its left wall.)</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">largest_rectangle.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="16">
+def largest_rectangle(heights):
+    best = 0
+    stack = []  # indices, heights increasing bottom to top
+    for i, h in enumerate(heights + [0]):  # sentinel 0 flushes everyone
+        while stack and heights[stack[-1]] > h:
+            top = stack.pop()
+            height = heights[top]
+            width = i if not stack else i - stack[-1] - 1
+            best = max(best, height * width)
+        stack.append(i)
+    return best
+
+print(largest_rectangle([2, 1, 5, 6, 2, 3]))
+print(largest_rectangle([3, 3, 3]))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">10
+9</pre></div>
+                </div>
+                <p>It's the monotonic template with both knobs turned: the comparison flipped (pop while <em>taller</em>, keeping the stack increasing) and the pop-time record changed to an area, <code>height × width</code>. <code>[3, 3, 3]</code> shows the sentinel earning its keep: nothing pops until the 0 arrives, then the last 3 measures width 3 → area 9.</p>
+              </div>
+            </details>
+
+            <div class="callout note">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span>
+              <div class="co-body"><div class="co-title">Then test yourself cold</div><p>This exact problem is the expert-level question in the <a href="../drill/index.html">timed drills</a> — study it here until the walls-and-dreams picture is yours, then run it cold under the clock a few days later.</p></div>
+            </div>
+          </section>
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -386,6 +540,8 @@ print(daily_temperatures([73, 74, 75, 71, 69, 72, 76, 73]))
           <a href="#pattern">The idea</a>
           <a href="#valid-parentheses">Valid Parentheses</a>
           <a href="#daily-temperatures">Daily Temperatures</a>
+          <a href="#monotonic">Monotonic stack</a>
+          <a href="#largest-rectangle">Largest Rectangle</a>
         </aside>
       </div>
 

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Binary Search | DSA Field Guide</title>
-  <meta name="description" content="The Binary Search pattern, explained for a curious beginner: halve a sorted list each step with an animated walk-through, plus two classic problems (Binary Search, Search in Rotated Sorted Array) with hints and runnable Python solutions." />
+  <meta name="description" content="The Binary Search pattern, explained for a curious beginner: halve a sorted list each step with an animated walk-through, plus three classic problems (Binary Search, Search in Rotated Sorted Array, Koko Eating Bananas) and the binary-search-on-the-answer technique, with hints and runnable Python solutions." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -43,6 +43,8 @@
           <a class="nav-link" href="#pattern">The idea</a>
           <a class="nav-link" href="#binary-search">Binary Search</a>
           <a class="nav-link" href="#search-rotated">Search in Rotated Sorted Array</a>
+          <a class="nav-link" href="#bsearch-answer">On the answer</a>
+          <a class="nav-link" href="#koko">Koko Eating Bananas</a>
         </div>
         <a class="nav-link" href="../patterns/linked-list.html">Linked List</a>
         <a class="nav-link" href="../patterns/trees-traversal.html">Trees · BFS &amp; DFS</a>
@@ -81,7 +83,7 @@
           <section class="hero reveal" style="padding-top:8px;">
             <span class="eyebrow">Patterns · binary search</span>
             <h1>Binary Search</h1>
-            <p class="lead">When a list is already <strong>sorted</strong>, you never have to check every item. Look at the middle, decide which half the answer lives in, and throw the other half away. Each peek halves what's left — so even a million items take only about twenty looks. Let's watch it work, then solve two classic problems with it.</p>
+            <p class="lead">When a list is already <strong>sorted</strong>, you never have to check every item. Look at the middle, decide which half the answer lives in, and throw the other half away. Each peek halves what's left — so even a million items take only about twenty looks. Let's watch it work, then solve three classic problems with it — and learn the senior trick of binary-searching the <em>answer</em> itself.</p>
           </section>
 
           <!-- ===== THE IDEA ===== -->
@@ -369,6 +371,152 @@ print(search([4, 5, 6, 7, 0, 1, 2], 3))
             </details>
           </section>
 
+          <!-- ===== TECHNIQUE: BINARY SEARCH ON THE ANSWER ===== -->
+          <section class="section reveal" id="bsearch-answer">
+            <h2><span class="section-num">03</span> &nbsp;Binary search on the answer</h2>
+            <p class="lead">Here's the senior move: the haystack doesn't have to be an array at all. If you can ask a <strong>yes/no question</strong> whose answers form <code>NNN…YYY</code> as some number grows — "can speed <code>k</code> finish in time?" (if yes for <code>k</code>, it's yes for every faster <code>k</code> too) — then you can binary-search the <em>number itself</em>. Interviewers call this <strong>"binary search on the answer"</strong>, and naming it out loud is worth points.</p>
+
+            <h3>The tells</h3>
+            <div class="kv">
+              <dt>"Minimize the maximum"</dt><dd>Or "maximize the minimum" — that wording is practically a flashing sign for this technique.</dd>
+              <dt>The answer is a number with obvious bounds</dt><dd>You can immediately name a smallest possible value (<code>lo</code>) and a largest possible value (<code>hi</code>) it must sit between.</dd>
+              <dt>Checking one candidate is cheap, trying all is huge</dt><dd>A single "does candidate <code>x</code> work?" check costs O(n), but the candidate range is enormous — so you binary-search it instead of scanning it.</dd>
+            </div>
+
+            <h3>The template</h3>
+            <p>The skeleton barely changes — only what <code>lo</code> and <code>hi</code> mean. They are candidate <em>answers</em> now, not indices:</p>
+            <ol>
+              <li>Start with <code>lo, hi = smallest possible answer, largest possible answer</code>.</li>
+              <li>While <code>lo &lt; hi</code>: compute <code>mid = (lo + hi) // 2</code>.</li>
+              <li>If <code>works(mid)</code> is true, the answer is <code>mid</code> <em>or something smaller</em> — keep it: <code>hi = mid</code>.</li>
+              <li>If <code>works(mid)</code> is false, <code>mid</code> can't be the answer — exclude it: <code>lo = mid + 1</code>.</li>
+              <li>When the loop ends, <code>lo == hi</code> is the first <code>Y</code> in <code>NNN…YYY</code>: <code>return lo</code>.</li>
+            </ol>
+            <p>The rule worth memorising: a <strong>feasible</strong> <code>mid</code> stays in the range (<code>hi = mid</code>, because it might be the optimum), while an <strong>infeasible</strong> one is excluded (<code>lo = mid + 1</code>). The window shrinks every turn until it pins the boundary.</p>
+          </section>
+
+          <!-- ===== PROBLEM 3: KOKO EATING BANANAS ===== -->
+          <section class="section problem reveal" id="koko">
+            <header class="problem-meta">
+              <h2><span class="section-num">04</span> &nbsp;Koko Eating Bananas</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Binary Search</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~20 min</span>
+                <span class="pm-chip cx">O(n log m) time · O(1) space</span>
+              </div>
+            </header>
+            <p class="lead">Koko has piles of bananas and <code>h</code> hours. Each hour she picks <strong>one</strong> pile and eats up to <code>k</code> bananas from it — if the pile runs out early, the rest of that hour is wasted. Find the <em>minimum</em> integer speed <code>k</code> that finishes everything within <code>h</code> hours. For piles <code>[3, 6, 7, 11]</code> and <code>h = 8</code>, the answer is <code>4</code>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Picking a reading speed <span class="tag">analogy</span></div>
+                <p>You have a stack of books and one evening per book. Read too slowly and you run out of evenings before the stack is done. But any speed that works keeps working if you read <em>faster</em> — finishing earlier never hurts. So across the speeds, the verdicts line up as <strong>NO NO NO YES YES</strong>, and your job is to hunt the boundary: the slowest speed that still gets a YES.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Binary searching the speed range 1 to 11 for the minimum feasible eating speed">
+              <figcaption class="viz-title">Searching speeds, not piles: hunt the first feasible k</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+                "frames": [
+                  {"pointers":[{"name":"lo","at":0},{"name":"hi","at":10},{"name":"mid","at":5}],"active":[5],"dim":[6,7,8,9,10],"caption":"hours(6) = ceil(3/6)+ceil(6/6)+ceil(7/6)+ceil(11/6) = 1+1+2+2 = 6 ≤ 8 — feasible! The answer is 6 or slower: hi = mid"},
+                  {"pointers":[{"name":"lo","at":0},{"name":"hi","at":5},{"name":"mid","at":2}],"active":[2],"dim":[6,7,8,9,10],"caption":"hours(3) = 1+2+3+4 = 10 > 8 — too slow. lo = mid+1"},
+                  {"pointers":[{"name":"lo","at":3},{"name":"hi","at":5},{"name":"mid","at":4}],"active":[4],"dim":[0,1,2,6,7,8,9,10],"caption":"hours(5) = 1+2+2+3 = 8 ≤ 8 — feasible, hi = mid"},
+                  {"pointers":[{"name":"lo","at":3},{"name":"hi","at":4},{"name":"mid","at":3}],"active":[3],"dim":[0,1,2,5,6,7,8,9,10],"caption":"hours(4) = 1+2+2+3 = 8 ≤ 8 — feasible, hi = mid"},
+                  {"match":[3],"dim":[0,1,2,4,5,6,7,8,9,10],"caption":"Converged: k = 4. We searched the ANSWER SPACE (speeds 1..11), never the array."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Two pieces: a cheap feasibility check, and the on-the-answer template wrapped around it.</p>
+            <ol>
+              <li>Write a helper <code>hours(k)</code>: at speed <code>k</code>, each pile <code>p</code> takes <code>ceil(p / k)</code> hours, so total hours is the sum of those ceilings. The integer idiom <code>(p + k - 1) // k</code> computes a ceiling without floats.</li>
+              <li>Binary-search the speed: <code>lo = 1</code> (slowest imaginable) and <code>hi = max(piles)</code> (any faster is pointless — one pile per hour is the floor).</li>
+              <li>If <code>hours(mid) &lt;= h</code>, speed <code>mid</code> is feasible — it might be the answer, so keep it: <code>hi = mid</code>. Otherwise it's too slow: <code>lo = mid + 1</code>.</li>
+              <li>When <code>lo == hi</code>, that's the minimum feasible speed.</li>
+            </ol>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-great">O(n log max(piles))</span></td><td>The log is over the <strong>answer range</strong> (speeds 1..max), not the array length — each of the ~log m candidate speeds costs one O(n) pass through the piles.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-great">O(1)</span></td><td>Just <code>lo</code>, <code>hi</code>, <code>mid</code>, and a running sum.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+              <div class="co-body"><div class="co-title">Don't evict the feasible mid</div><p>Writing <code>hi = mid - 1</code> on a <em>feasible</em> mid throws away a possibly-optimal answer — that speed might be exactly the minimum you're hunting. Feasible candidates must <strong>stay</strong> in the range (<code>hi = mid</code>); only infeasible ones get excluded (<code>lo = mid + 1</code>). That's the one place this template differs from the classic find-a-target loop.</p></div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Which property makes binary search legal here?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>The piles are sorted</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Feasibility is monotonic in k — if speed k works, every faster speed works (NNNYYY)</button>
+                <button class="quiz-opt"><span class="mark"></span>The array of piles is small</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> The piles are never sorted and never need to be — we don't search them. We search the <em>speeds</em>, and that only works because the yes/no verdicts line up as <code>NNN…YYY</code>: one clean boundary to hunt, so halving is safe.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Write <code>hours(k)</code> first — both brute force and binary search need it. It's just the sum of <code>(p + k - 1) // k</code> over the piles. Once that works, wrap the on-the-answer template around it: <code>lo, hi = 1, max(piles)</code>, and <code>hours(mid) &lt;= h</code> is your <code>works(mid)</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">koko.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="18">
+def min_speed(piles, h):
+    def hours(k):
+        return sum((p + k - 1) // k for p in piles)
+
+    lo, hi = 1, max(piles)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if hours(mid) <= h:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo
+
+print(min_speed([3, 6, 7, 11], 8))
+print(min_speed([30, 11, 23, 4, 20], 5))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">4
+30</pre></div>
+                </div>
+                <p>The loop never touches the piles' order — it halves the <em>speed range</em>, calling <code>hours(mid)</code> to ask "feasible?" at each step. Back to the bookshelf: each test read tells you whether to try a slower pace (it might still work) or admit you must go faster.</p>
+              </div>
+            </details>
+
+            <div class="callout note">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span>
+              <div class="co-body"><div class="co-title">Same template, more problems</div><p>The exact same <code>NNN…YYY</code> template solves "ship packages in D days" and "split array largest sum" — and it's drilled under the clock in the <a href="../drill/index.html">timed drills</a>.</p></div>
+            </div>
+          </section>
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -382,6 +530,8 @@ print(search([4, 5, 6, 7, 0, 1, 2], 3))
           <a href="#pattern">The idea</a>
           <a href="#binary-search">Binary Search</a>
           <a href="#search-rotated">Search in Rotated Sorted Array</a>
+          <a href="#bsearch-answer">On the answer</a>
+          <a href="#koko">Koko Eating Bananas</a>
         </aside>
       </div>
 
