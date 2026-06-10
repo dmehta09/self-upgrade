@@ -93,6 +93,36 @@
 <section class="section reveal" id="search">
   <h2><span class="section-num">06</span> &nbsp;Search &amp; faceted navigation</h2>
   <p><span class="mono">SQL LIKE '%term%'</span> is a leading wildcard → full table scan, hopeless at 10⁶–10⁸ products. The right tool is an <strong>inverted index</strong> (term → posting list of doc ids; queries are set intersections, sublinear and shardable). <strong>Facets</strong> are value counts over the <em>filtered</em> set (so users never click into a zero-result filter), computed as bucket aggregations — and you must <strong>flatten</strong> nested SKU attributes to top-level <span class="mono">keyword</span> fields:</p>
+  <div class="figbox">
+    <div class="fig-title">Inverted index — a query is set intersection</div>
+    <svg viewBox="0 0 640 210" role="img" aria-label="Terms map to posting lists; a query intersects the lists and facets count the survivors">
+      <text class="svg-faint" x="20" y="24">term → posting list (doc ids)</text>
+      <rect class="svg-fill" x="20" y="36" width="120" height="32" rx="8"/>
+      <text class="svg-mono" x="80" y="56" text-anchor="middle">"running"</text>
+      <rect class="svg-fill" x="20" y="78" width="120" height="32" rx="8"/>
+      <text class="svg-mono" x="80" y="98" text-anchor="middle">brand:Nike</text>
+      <rect class="svg-fill" x="20" y="120" width="120" height="32" rx="8"/>
+      <text class="svg-mono" x="80" y="140" text-anchor="middle">size:42</text>
+
+      <text class="svg-mono" x="160" y="56">→ [3, 7, 12, 31, 48, 95 …]</text>
+      <text class="svg-mono" x="160" y="98">→ [7, 12, 19, 48, 77 …]</text>
+      <text class="svg-mono" x="160" y="140">→ [2, 12, 48, 60 …]</text>
+
+      <rect class="svg-accent-fill" x="420" y="78" width="200" height="40" rx="9"/>
+      <text class="svg-mono" x="520" y="96" text-anchor="middle">∩ intersect → [12, 48]</text>
+      <text class="svg-faint" x="520" y="111" text-anchor="middle">sublinear · shardable by doc id</text>
+      <path class="svg-accent" d="M388 56 C 408 56, 408 90, 420 92"/>
+      <path class="svg-accent" d="M368 98 L 420 98"/>
+      <path class="svg-accent" d="M340 140 C 380 140, 396 108, 420 104"/>
+
+      <rect class="svg-fill" x="420" y="142" width="200" height="44" rx="9"/>
+      <text class="svg-mono" x="520" y="160" text-anchor="middle">facets over survivors:</text>
+      <text class="svg-mono" x="520" y="176" text-anchor="middle">colour { black:2 } ✓ no zero-hits</text>
+      <path class="svg-stroke" d="M520 118 L 520 142"/>
+      <text class="svg-faint" x="220" y="196">SQL LIKE '%running%' would scan every row — the index inverts the problem: look up the term, not the document</text>
+    </svg>
+    <div class="cap">Each filter is a pre-sorted posting list; the query result is their intersection, and facet counts are bucket aggregations over that result — which is why facet numbers always match what users will actually see.</div>
+  </div>
   <div class="codeblock">
     <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">search.json</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
     <div class="code-pane active"><pre><code data-lang="text">POST /products/_search

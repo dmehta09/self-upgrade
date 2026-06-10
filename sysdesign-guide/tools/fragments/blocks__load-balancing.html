@@ -62,7 +62,69 @@
     <dt>Hash (by IP / key)</dt><dd>Same client always lands on the same server — a poor man's stickiness. (For data, prefer <a href="../data/consistent-hashing.html">consistent hashing</a>.)</dd>
   </div>
   <p>Crucially, the load balancer runs <strong>health checks</strong> — pinging each server and removing any that stop responding, so traffic only goes to live boxes. The LB itself must be redundant (two of them, or a managed one) so it isn't a single point of failure.</p>
-  <div class="quiz" data-quiz>
+  <p>See the health checks act — kill a server, then the load balancer itself:</p>
+  <figure class="failsim" data-failsim aria-label="Failure simulator: load balancer health checks">
+    <figcaption class="fs-title">Kill a server — health checks at work</figcaption>
+    <div class="fs-scenarios"></div>
+    <div class="fs-stage"></div>
+    <div class="fs-caption" aria-live="polite"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reset" type="button" aria-label="Reset to healthy">⏮</button>
+      <button class="fs-btn fs-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="fs-btn fs-play" type="button" aria-label="Play">▶</button>
+      <button class="fs-btn fs-next" type="button" aria-label="Next step">›</button>
+      <div class="fs-progress"><div class="fs-progress-fill"></div></div>
+      <span class="fs-step">– / –</span>
+    </div>
+    <div class="fs-note" hidden></div>
+    <script type="application/json" class="fs-config">
+    {
+      "nodes": [
+        { "id": "u",   "label": "Users",          "type": "user", "col": 0, "row": 1 },
+        { "id": "lb",  "label": "Load balancer",   "type": "L7",   "col": 1, "row": 1 },
+        { "id": "lb2", "label": "Standby LB",      "type": "L7",   "col": 1, "row": 2 },
+        { "id": "s1",  "label": "Server 1",        "type": "app",  "col": 2, "row": 0 },
+        { "id": "s2",  "label": "Server 2",        "type": "app",  "col": 2, "row": 1 },
+        { "id": "s3",  "label": "Server 3",        "type": "app",  "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "u",  "to": "lb" },
+        { "from": "lb", "to": "s1" },
+        { "from": "lb", "to": "s2" },
+        { "from": "lb", "to": "s3" }
+      ],
+      "scenarios": [
+        {
+          "id": "server-dies",
+          "label": "Kill server 2",
+          "target": { "node": "s2" },
+          "steps": [
+            { "caption": "Server 2 stops answering. For a few seconds, some requests routed there fail or hang — this window is real, design for it.",
+              "fail": ["s2"], "degrade": ["lb"], "edgesDown": [["lb","s2"]] },
+            { "caption": "Health checks miss 2–3 in a row → the LB ejects server 2 from rotation. Traffic spreads over the survivors.",
+              "fail": ["s2"], "reroute": [["lb","s1"],["lb","s3"]], "badges": [{ "node": "s1", "text": "+50% load" }, { "node": "s3", "text": "+50% load" }] },
+            { "caption": "Because servers are stateless, users never noticed — any server can serve any request. Server 2 rejoins after passing checks.", "recover": true }
+          ],
+          "interviewer": "Mention the detection window (checks × threshold ≈ seconds of errors), why clients should retry idempotent requests, and that ejection only works because the servers are stateless."
+        },
+        {
+          "id": "lb-dies",
+          "label": "Kill the load balancer",
+          "target": { "node": "lb" },
+          "steps": [
+            { "caption": "The LB itself dies — the textbook single point of failure. All traffic stops, every server is healthy but unreachable.",
+              "fail": ["lb"], "degrade": ["u"], "edgesDown": [["u","lb"],["lb","s1"],["lb","s2"],["lb","s3"]] },
+            { "caption": "The standby takes over the virtual IP (VRRP/keepalived) or DNS/anycast shifts — failover in seconds.",
+              "fail": ["lb"], "promote": ["lb2"], "reroute": [["u","lb2"],["lb2","s2"]] },
+            { "caption": "This is why the answer to 'what if the LB fails?' is always: the LB is redundant too — active-passive pair or a managed LB that is itself a fleet.", "recover": true }
+          ],
+          "interviewer": "Anticipate the recursive question — 'who balances the balancer?' Active-passive with a floating VIP, or a managed/anycast LB. Never leave an SPOF in your diagram unnamed."
+        }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="quiz" data-quiz
     <p class="q">Why do we insist app servers be <em>stateless</em> for load balancing to work well?</p>
     <div class="quiz-opts">
       <button class="quiz-opt"><span class="mark"></span>Stateless servers use less memory</button>

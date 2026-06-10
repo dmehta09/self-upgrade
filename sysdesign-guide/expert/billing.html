@@ -208,6 +208,82 @@ WHERE  meter = $1 AND ts &gt;= $period_start AND ts &lt; $period_end
 GROUP  BY customer_id, bucket;</code></pre></div>
   </div>
   <p class="small"><strong>Late / out-of-order events</strong> are the hard part. A query-over-immutable-events model (Orb-style) handles them naturally — a late event just changes the query result. Define a <strong>watermark / grace window</strong>: finalize the invoice in <em>draft</em> at cycle end, hold a few hours for stragglers, then finalize; truly-late events become adjustments on the next invoice. (Stripe rejects events older than 35 days.)</p>
+  <p>The metering pipeline is exactly where billing systems break in production. Break it yourself:</p>
+  <figure class="failsim" data-failsim aria-label="Failure simulator: the metering pipeline under failure">
+    <figcaption class="fs-title">Break the metering pipeline</figcaption>
+    <div class="fs-scenarios"></div>
+    <div class="fs-stage"></div>
+    <div class="fs-caption" aria-live="polite"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reset" type="button" aria-label="Reset to healthy">⏮</button>
+      <button class="fs-btn fs-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="fs-btn fs-play" type="button" aria-label="Play">▶</button>
+      <button class="fs-btn fs-next" type="button" aria-label="Next step">›</button>
+      <div class="fs-progress"><div class="fs-progress-fill"></div></div>
+      <span class="fs-step">– / –</span>
+    </div>
+    <div class="fs-note" hidden></div>
+    <script type="application/json" class="fs-config">
+    {
+      "nodes": [
+        { "id": "app",   "label": "Product services", "type": "source", "col": 0, "row": 1 },
+        { "id": "ing",   "label": "Ingest API",        "type": "edge",   "col": 1, "row": 1 },
+        { "id": "queue", "label": "Event stream",      "type": "kafka",  "col": 2, "row": 1 },
+        { "id": "agg",   "label": "Aggregator",        "type": "worker", "col": 3, "row": 0 },
+        { "id": "store", "label": "Usage store",       "type": "store",  "col": 3, "row": 2 },
+        { "id": "inv",   "label": "Invoicer",          "type": "worker", "col": 4, "row": 1 }
+      ],
+      "edges": [
+        { "from": "app",   "to": "ing",   "label": "events" },
+        { "from": "ing",   "to": "queue" },
+        { "from": "queue", "to": "agg" },
+        { "from": "agg",   "to": "store", "label": "rollups" },
+        { "from": "store", "to": "inv",   "label": "rate" }
+      ],
+      "scenarios": [
+        {
+          "id": "agg-down",
+          "label": "Aggregator falls behind",
+          "target": { "node": "agg" },
+          "steps": [
+            { "caption": "The aggregator crashes (or just can't keep up). Events pile up in the stream — but ingest keeps accepting, nothing is lost.",
+              "fail": ["agg"], "edgesDown": [["queue","agg"]], "badges": [{ "node": "queue", "text": "lag 4 h" }] },
+            { "caption": "Restart and replay. Because ingest deduped on event_id and rollups are recomputed from immutable events, reprocessing is safe.",
+              "promote": ["agg"], "reroute": [["queue","agg"],["agg","store"]], "badges": [{ "node": "queue", "text": "draining" }] },
+            { "caption": "The invoice draft picks up the corrected totals at finalization. This is why you bill from a draft + grace window, not live numbers.", "recover": true }
+          ],
+          "interviewer": "Decouple ingest from aggregation with a durable log, make replay idempotent, and alert on consumer lag against the invoicing watermark — lag is fine until it crosses the grace window."
+        },
+        {
+          "id": "dupes",
+          "label": "Client retries duplicate events",
+          "target": { "node": "ing" },
+          "steps": [
+            { "caption": "A network blip makes product services retry — the same usage events arrive twice. Naive ingest would double-charge the customer.",
+              "degrade": ["ing"], "badges": [{ "node": "ing", "text": "dupes ×2" }] },
+            { "caption": "The event_id uniqueness constraint (ON CONFLICT DO NOTHING) makes the duplicate a no-op. Dedup is the whole game.",
+              "promote": ["ing"], "reroute": [["ing","queue"]], "badges": [{ "node": "store", "text": "counted once" }] },
+            { "caption": "Overcharging is the cardinal sin of billing — it destroys trust faster than any outage. Idempotent ingest is non-negotiable.", "recover": true }
+          ],
+          "interviewer": "At-least-once delivery is a given, so the meter must dedupe on a client-generated event id. Say 'we'd rather undercount briefly than ever double-charge'."
+        },
+        {
+          "id": "late",
+          "label": "Late events after cycle end",
+          "target": { "edge": ["app","ing"] },
+          "steps": [
+            { "caption": "The billing period closed at midnight, but a batch of usage events from 23:50 arrives at 02:00 — out of order and late.",
+              "degrade": ["inv"], "badges": [{ "node": "ing", "text": "late events" }] },
+            { "caption": "The invoice is still a DRAFT inside the grace window. Late events flow through; the draft total simply updates.",
+              "reroute": [["ing","queue"],["queue","agg"],["agg","store"]], "badges": [{ "node": "inv", "text": "draft +$" }] },
+            { "caption": "After the watermark, the invoice finalizes. Anything later becomes an adjustment on the NEXT invoice — never an edit to a finalized one.", "recover": true }
+          ],
+          "interviewer": "Name the watermark/grace-window pattern: draft at cycle end, hold for stragglers, finalize, and push truly-late usage to next cycle as an adjustment — immutability of finalized invoices is an accounting requirement."
+        }
+      ]
+    }
+    </script>
+  </figure>
 </section>
 
 <section class="section reveal" id="pricing">
@@ -295,5 +371,6 @@ GROUP  BY customer_id, bucket;</code></pre></div>
   <script src="../assets/js/progress.js"></script>
   <script src="../assets/js/reqflow.js"></script>
   <script src="../assets/js/tradeoff.js"></script>
+  <script src="../assets/js/failsim.js"></script>
 </body>
 </html>

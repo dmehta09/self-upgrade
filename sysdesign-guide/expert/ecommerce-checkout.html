@@ -182,6 +182,80 @@
     }
     </script>
   </figure>
+  <p>That was the happy path. The interview is won on the unhappy ones — break the saga at each step and watch the compensations walk backwards:</p>
+  <figure class="failsim" data-failsim aria-label="Failure simulator: the checkout saga under failure">
+    <figcaption class="fs-title">Break the saga — compensation in action</figcaption>
+    <div class="fs-scenarios"></div>
+    <div class="fs-stage"></div>
+    <div class="fs-caption" aria-live="polite"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reset" type="button" aria-label="Reset to healthy">⏮</button>
+      <button class="fs-btn fs-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="fs-btn fs-play" type="button" aria-label="Play">▶</button>
+      <button class="fs-btn fs-next" type="button" aria-label="Next step">›</button>
+      <div class="fs-progress"><div class="fs-progress-fill"></div></div>
+      <span class="fs-step">– / –</span>
+    </div>
+    <div class="fs-note" hidden></div>
+    <script type="application/json" class="fs-config">
+    {
+      "nodes": [
+        { "id": "client", "label": "Client",               "type": "user",     "col": 0, "row": 1 },
+        { "id": "orch",   "label": "Checkout orchestrator", "type": "saga",     "col": 1, "row": 1 },
+        { "id": "inv",    "label": "Inventory",             "type": "store",    "col": 2, "row": 0 },
+        { "id": "pay",    "label": "Payment (PSP)",         "type": "external", "col": 2, "row": 1 },
+        { "id": "order",  "label": "Order service",         "type": "store",    "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "client", "to": "orch",  "label": "place order" },
+        { "from": "orch",   "to": "inv",   "label": "1 reserve" },
+        { "from": "orch",   "to": "pay",   "label": "2 authorize" },
+        { "from": "orch",   "to": "order", "label": "3 create" }
+      ],
+      "scenarios": [
+        {
+          "id": "pay-fails",
+          "label": "Payment fails after the reserve",
+          "target": { "node": "pay" },
+          "steps": [
+            { "caption": "Inventory is already held when the PSP declines (or times out). Stop the saga — never create the order.",
+              "fail": ["pay"], "degrade": ["orch"], "edgesDown": [["orch","pay"],["orch","order"]], "badges": [{ "node": "inv", "text": "hold ⏳" }] },
+            { "caption": "Compensation runs in reverse order: release the inventory hold. If the release itself fails, the hold's TTL is the backstop.",
+              "fail": ["pay"], "reroute": [["orch","inv"]], "badges": [{ "node": "inv", "text": "released" }] },
+            { "caption": "Clean failure: no money moved, no stock leaked, customer sees an actionable error.", "recover": true }
+          ],
+          "interviewer": "Compensations are semantic undos executed in reverse order. Pair every step with one when you draw the saga, and name the TTL hold as the backstop for a failed release."
+        },
+        {
+          "id": "order-fails",
+          "label": "Order write fails after capture",
+          "target": { "node": "order" },
+          "steps": [
+            { "caption": "The most dangerous spot: money captured, but the order row never lands. A customer was charged for nothing.",
+              "fail": ["order"], "degrade": ["orch"], "edgesDown": [["orch","order"]], "badges": [{ "node": "pay", "text": "captured $" }] },
+            { "caption": "Compensation: refund via the PSP — with the same idempotency key, so a crash-retry can't double-refund.",
+              "fail": ["order"], "reroute": [["orch","pay"]], "badges": [{ "node": "pay", "text": "refunded" }] },
+            { "caption": "Then release the reservation. The saga ends in a consistent 'failed' terminal state, fully audited.", "recover": true }
+          ],
+          "interviewer": "Call out why the order write and the outbox event share one local transaction — and that the refund compensation must be idempotent because it can be replayed."
+        },
+        {
+          "id": "orch-crash",
+          "label": "Orchestrator crashes mid-saga",
+          "target": { "node": "orch" },
+          "steps": [
+            { "caption": "Crash between authorize and create: naive code leaks a reservation AND a captured payment with nobody driving.",
+              "fail": ["orch"], "edgesDown": [["client","orch"]], "badges": [{ "node": "inv", "text": "hold ⏳" }, { "node": "pay", "text": "captured $" }] },
+            { "caption": "Durable execution (Temporal-style) replays the workflow from its event history — completed steps are skipped, the next step resumes.",
+              "promote": ["orch"], "reroute": [["orch","order"]] },
+            { "caption": "The saga finishes as if nothing happened. Without durable execution you'd need a reconciler scanning for stuck sagas.", "recover": true }
+          ],
+          "interviewer": "This scenario is why you say 'durable execution' out loud: orchestrator state survives crashes, steps replay idempotently, and the alternative is a hand-rolled reconciler."
+        }
+      ]
+    }
+    </script>
+  </figure>
 </section>
 
 <section class="section reveal" id="inventory">
@@ -304,5 +378,6 @@ COMMIT;
   <script src="../assets/js/progress.js"></script>
   <script src="../assets/js/reqflow.js"></script>
   <script src="../assets/js/tradeoff.js"></script>
+  <script src="../assets/js/failsim.js"></script>
 </body>
 </html>

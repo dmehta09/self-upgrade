@@ -170,6 +170,36 @@
 <section class="section reveal" id="model">
   <h2><span class="section-num">03</span> &nbsp;Data model: separate identity, profile &amp; emails</h2>
   <p>Separate things that change at different rates and have different sensitivity: the small hot <strong>anchor</strong>, the security-critical <strong>identities</strong>, and the read-hot <strong>profile</strong>.</p>
+  <div class="figbox">
+    <div class="fig-title">One user, three tables — split by heat and sensitivity</div>
+    <svg viewBox="0 0 640 240" role="img" aria-label="The users anchor table linked to identities and profile tables">
+      <rect class="svg-accent-fill" x="240" y="86" width="160" height="68" rx="11"/>
+      <text class="svg-label" x="320" y="112" text-anchor="middle" font-weight="700">users (anchor)</text>
+      <text class="svg-mono" x="320" y="130" text-anchor="middle">id · status · created_at</text>
+      <text class="svg-faint" x="320" y="146" text-anchor="middle">tiny · hot · cached everywhere</text>
+
+      <rect class="svg-fill" x="20" y="20" width="180" height="64" rx="11"/>
+      <text class="svg-label" x="110" y="44" text-anchor="middle" font-weight="700">identities</text>
+      <text class="svg-mono" x="110" y="60" text-anchor="middle">email · password hash · SSO</text>
+      <text class="svg-faint" x="110" y="74" text-anchor="middle">security-critical · write-rare</text>
+
+      <rect class="svg-fill" x="20" y="156" width="180" height="64" rx="11"/>
+      <text class="svg-label" x="110" y="180" text-anchor="middle" font-weight="700">profiles</text>
+      <text class="svg-mono" x="110" y="196" text-anchor="middle">name · avatar · prefs</text>
+      <text class="svg-faint" x="110" y="210" text-anchor="middle">read-hot · PII → anonymizable</text>
+
+      <rect class="svg-fill" x="440" y="86" width="180" height="68" rx="11"/>
+      <text class="svg-label" x="530" y="110" text-anchor="middle" font-weight="700">everything else</text>
+      <text class="svg-mono" x="530" y="126" text-anchor="middle">orders · posts · billing…</text>
+      <text class="svg-faint" x="530" y="142" text-anchor="middle">FK → users.id, never email</text>
+
+      <path class="svg-stroke" d="M200 52 C 230 52, 230 100, 240 100"/>
+      <path class="svg-stroke" d="M200 188 C 230 188, 230 140, 240 140"/>
+      <path class="svg-accent" d="M440 120 L 404 120"/>
+      <text class="svg-faint" x="422" y="112" text-anchor="middle">FK</text>
+    </svg>
+    <div class="cap">The anchor stays tiny so it can be cached and FK'd by every other service; emails and PII live in side tables you can rotate, verify, or anonymize without touching the anchor.</div>
+  </div>
   <div class="codeblock">
     <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">users.sql</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
     <div class="code-pane active"><pre><code data-lang="text">-- THE ANCHOR: small, hot, cached everywhere; FK target for the whole company.

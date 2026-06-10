@@ -245,6 +245,73 @@ COMMIT;</code></pre></div>
     <dt>Fair queuing</dt><dd>Weighted round-robin on async work so a free tenant gets a small share but is never fully starved.</dd>
     <dt>Tier the hot tenant</dt><dd>When a pooled tenant outgrows fair-share, promote it to its own silo/cell — the bridge model as an escape hatch.</dd>
   </div>
+  <p>Watch the defenses earn their keep — saturate the pool with one hot tenant, then take a whole cell down:</p>
+  <figure class="failsim" data-failsim aria-label="Failure simulator: noisy neighbour and cell blast radius">
+    <figcaption class="fs-title">A noisy neighbour vs the pool — and a dead cell vs the platform</figcaption>
+    <div class="fs-scenarios"></div>
+    <div class="fs-stage"></div>
+    <div class="fs-caption" aria-live="polite"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reset" type="button" aria-label="Reset to healthy">⏮</button>
+      <button class="fs-btn fs-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="fs-btn fs-play" type="button" aria-label="Play">▶</button>
+      <button class="fs-btn fs-next" type="button" aria-label="Next step">›</button>
+      <div class="fs-progress"><div class="fs-progress-fill"></div></div>
+      <span class="fs-step">– / –</span>
+    </div>
+    <div class="fs-note" hidden></div>
+    <script type="application/json" class="fs-config">
+    {
+      "nodes": [
+        { "id": "tA",    "label": "Tenant A (hot)",    "type": "tenant", "col": 0, "row": 0 },
+        { "id": "tB",    "label": "Tenants B…Z",        "type": "tenant", "col": 0, "row": 2 },
+        { "id": "gw",    "label": "Gateway + quotas",   "type": "edge",   "col": 1, "row": 1 },
+        { "id": "cell1", "label": "Cell 1 (pool)",      "type": "stack",  "col": 2, "row": 0 },
+        { "id": "cell2", "label": "Cell 2 (pool)",      "type": "stack",  "col": 2, "row": 1 },
+        { "id": "cell3", "label": "Cell 3 (silo)",      "type": "stack",  "col": 2, "row": 2 },
+        { "id": "db",    "label": "Pooled DB · cell 1", "type": "store",  "col": 3, "row": 0 }
+      ],
+      "edges": [
+        { "from": "tA", "to": "gw" },
+        { "from": "tB", "to": "gw" },
+        { "from": "gw", "to": "cell1" },
+        { "from": "gw", "to": "cell2" },
+        { "from": "gw", "to": "cell3" },
+        { "from": "cell1", "to": "db" }
+      ],
+      "scenarios": [
+        {
+          "id": "noisy",
+          "label": "Tenant A floods cell 1",
+          "target": { "node": "tA" },
+          "steps": [
+            { "caption": "Tenant A's batch import goes wild. Without limits it would eat cell 1's connections and CPU — every tenant on that cell suffers.",
+              "degrade": ["tA","cell1","db"], "badges": [{ "node": "db", "text": "conns ↑↑" }] },
+            { "caption": "Defense layer 1: the gateway's per-tenant token bucket starts returning 429s to A. Backpressure beats shared pain.",
+              "degrade": ["tA"], "edgesDown": [["tA","gw"]], "badges": [{ "node": "gw", "text": "429 Tenant A" }] },
+            { "caption": "Defense layer 2: A's connection-pool cap and statement timeouts contain what gets through. B…Z never notice.",
+              "degrade": ["tA"], "reroute": [["tB","gw"],["gw","cell2"]] },
+            { "caption": "If A is persistently hot, promote it to its own silo cell — the bridge model as an escape hatch. A pays for the isolation it consumes.", "recover": true }
+          ],
+          "interviewer": "Enumerate the contention vectors (CPU, connections, locks, IO) and a defense per layer: gateway quotas → 429 early, per-tier connection caps, fair queuing on async work, and eviction-to-silo as the last resort."
+        },
+        {
+          "id": "cell-down",
+          "label": "Kill cell 1 entirely",
+          "target": { "node": "cell1" },
+          "steps": [
+            { "caption": "A bad deploy (or AZ failure) takes cell 1 down. Every tenant homed on cell 1 is hard-down — that's the blast radius.",
+              "fail": ["cell1","db"], "degrade": ["gw"], "edgesDown": [["gw","cell1"],["cell1","db"]] },
+            { "caption": "But cells 2 and 3 never shared anything with cell 1 — no common DB, no common deploy. With N cells, at most 1/N of tenants are hit.",
+              "fail": ["cell1","db"], "reroute": [["gw","cell2"],["gw","cell3"]] },
+            { "caption": "Deploys roll cell-by-cell in waves, so the bad version stopped at cell 1. Roll back, restore, re-home if needed.", "recover": true }
+          ],
+          "interviewer": "Define the cell as the unit of blast radius AND the unit of deploy: a failure or bad release hits ≤1/N of tenants, and shuffle sharding makes it rare for two tenants to share every cell."
+        }
+      ]
+    }
+    </script>
+  </figure>
 </section>
 
 <section class="section reveal" id="cells">
@@ -330,5 +397,6 @@ COMMIT;</code></pre></div>
   <script src="../assets/js/progress.js"></script>
   <script src="../assets/js/reqflow.js"></script>
   <script src="../assets/js/tradeoff.js"></script>
+  <script src="../assets/js/failsim.js"></script>
 </body>
 </html>

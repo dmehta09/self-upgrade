@@ -253,6 +253,84 @@ def route_to_recipient(user, msg):
     <dt>E2E encryption</dt><dd>Signal Protocol (X3DH/PQXDH + Double Ratchet). The server routes <strong>ciphertext only</strong> — it can't read, search, rank, or moderate content; it still sees metadata (who→whom, when). Push carries placeholders, decrypted on-device.</dd>
     <dt>Observability &amp; cost</dt><dd>Message delivery latency p99 (headline SLO), concurrent-connection count, reconnect rate (spike = failure/storm), undelivered-mailbox depth, per-conversation seq gaps (loss detector). Cost = persistent-connection memory (cheap with epoll: ~1.5 TB for 300M conns) but is dominated by <strong>fan-out CPU/network</strong> — which is why these systems run on tiny teams using BEAM/epoll gateways.</dd>
   </div>
+  <p>And the evolution story — chat has a distinctive journey because the bottleneck is <em>connections</em>, not QPS:</p>
+  <figure class="journey" data-journey aria-label="Scale journey: a chat system from 1K to 300M connections">
+    <figcaption class="jy-title">A chat system from 1K to 300M connections</figcaption>
+    <div class="jy-stops"></div>
+    <div class="jy-stage"></div>
+    <div class="jy-caption" aria-live="polite"></div>
+    <div class="jy-stats"></div>
+    <div class="jy-controls">
+      <button class="jy-btn jy-prev" type="button" aria-label="Previous stage">‹</button>
+      <button class="jy-btn jy-next" type="button" aria-label="Next stage">›</button>
+    </div>
+    <script type="application/json" class="jy-config">
+    {
+      "stages": [
+        {
+          "label": "1K online",
+          "nodes": [
+            { "id":"u",  "label":"Clients",        "type":"user", "col":0, "row":1 },
+            { "id":"gw", "label":"One server (WS)", "type":"app",  "col":1, "row":1 },
+            { "id":"db", "label":"Messages DB",     "type":"store","col":2, "row":1 }
+          ],
+          "edges": [ { "from":"u","to":"gw", "label":"WebSocket" }, { "from":"gw","to":"db" } ],
+          "bottleneck": { "node":"gw", "text":"Every open WebSocket holds memory and a file descriptor — one box tops out at tens of thousands." },
+          "fix": "Add gateway servers — but now two chatting users may sit on different boxes.",
+          "caption": "One server holds every connection in memory and routes messages locally. Delightfully simple.",
+          "stats": [ { "k":"connections", "v":"1K" }, { "k":"gateways", "v":"1" } ]
+        },
+        {
+          "label": "100K",
+          "nodes": [
+            { "id":"u",   "label":"Clients",      "type":"user",  "col":0, "row":1 },
+            { "id":"gw",  "label":"Gateway 1",     "type":"ws",    "col":1, "row":0 },
+            { "id":"gw2", "label":"Gateway 2",     "type":"ws",    "col":1, "row":2 },
+            { "id":"reg", "label":"Session registry", "type":"redis", "col":2, "row":1 },
+            { "id":"db",  "label":"Messages DB",   "type":"store", "col":3, "row":1 }
+          ],
+          "edges": [ { "from":"u","to":"gw" }, { "from":"u","to":"gw2" }, { "from":"gw","to":"reg", "label":"who's where" }, { "from":"gw2","to":"reg" }, { "from":"gw","to":"gw2", "label":"relay" }, { "from":"gw","to":"db" } ],
+          "bottleneck": { "node":"reg", "text":"Every message looks up the recipient's gateway — the registry becomes the hot path." },
+          "fix": "Route gateway-to-gateway over a pub/sub backplane instead of point-to-point lookups.",
+          "caption": "The defining problem appears: Alice is on gateway 1, Bob on gateway 2. A session registry maps user → gateway so messages can hop.",
+          "stats": [ { "k":"connections", "v":"100K" }, { "k":"gateways", "v":"a few" } ]
+        },
+        {
+          "label": "10M",
+          "nodes": [
+            { "id":"u",   "label":"Clients",       "type":"user",   "col":0, "row":1 },
+            { "id":"gw",  "label":"Gateway fleet",  "type":"ws ×N",  "col":1, "row":0 },
+            { "id":"gw2", "label":"Gateway fleet",  "type":"ws ×N",  "col":1, "row":2 },
+            { "id":"bus", "label":"Pub/sub backplane", "type":"kafka", "col":2, "row":1 },
+            { "id":"reg", "label":"Session registry",  "type":"redis", "col":2, "row":0 },
+            { "id":"mb",  "label":"Offline mailbox",   "type":"store", "col":3, "row":2 },
+            { "id":"db",  "label":"Messages DB",       "type":"store", "col":3, "row":0 }
+          ],
+          "edges": [ { "from":"u","to":"gw" }, { "from":"u","to":"gw2" }, { "from":"gw","to":"bus" }, { "from":"bus","to":"gw2" }, { "from":"gw","to":"reg" }, { "from":"bus","to":"mb", "label":"offline" }, { "from":"gw","to":"db" } ],
+          "bottleneck": { "node":"db", "text":"Hundreds of thousands of message writes per second overwhelm a single SQL primary." },
+          "fix": "Move messages to a wide-column store (Cassandra/Scylla) partitioned by conversation.",
+          "caption": "Gateways publish to a backplane; whichever gateway holds the recipient delivers. Offline users get a durable mailbox + push notification.",
+          "stats": [ { "k":"connections", "v":"10M" }, { "k":"msg/s", "v":"~100K" } ]
+        },
+        {
+          "label": "300M",
+          "nodes": [
+            { "id":"u",   "label":"Clients",        "type":"user",    "col":0, "row":1 },
+            { "id":"gw",  "label":"Gateways · US",   "type":"epoll",   "col":1, "row":0 },
+            { "id":"gw2", "label":"Gateways · EU",   "type":"epoll",   "col":1, "row":2 },
+            { "id":"bus", "label":"Regional backplanes", "type":"kafka", "col":2, "row":1 },
+            { "id":"reg", "label":"Region-aware registry", "type":"redis", "col":2, "row":0 },
+            { "id":"mb",  "label":"Offline mailbox",  "type":"store",   "col":3, "row":2 },
+            { "id":"db",  "label":"Cassandra multi-DC", "type":"sharded", "col":3, "row":0 }
+          ],
+          "edges": [ { "from":"u","to":"gw", "label":"GeoDNS" }, { "from":"u","to":"gw2" }, { "from":"gw","to":"bus" }, { "from":"bus","to":"gw2", "label":"cross-region" }, { "from":"gw","to":"reg" }, { "from":"bus","to":"mb" }, { "from":"gw2","to":"db" } ],
+          "caption": "Planet scale: users connect to the nearest region, the registry is region-aware, and the message store replicates multi-DC. WhatsApp ran ~1M connections per box on BEAM — say that number.",
+          "stats": [ { "k":"connections", "v":"300M" }, { "k":"per box", "v":"~1M" }, { "k":"regions", "v":"4+" } ]
+        }
+      ]
+    }
+    </script>
+  </figure>
 </section>
 
 <section class="section reveal" id="recap">
@@ -302,5 +380,6 @@ def route_to_recipient(user, msg):
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
   <script src="../assets/js/reqflow.js"></script>
+  <script src="../assets/js/journey.js"></script>
 </body>
 </html>

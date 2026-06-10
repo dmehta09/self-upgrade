@@ -170,6 +170,46 @@
     <dt>Log / stream</dt><dd>An ordered, replayable log of events, partitioned for scale; consumers track their own position (offset). (Kafka, Kinesis, Pulsar.) Use for analytics, event sourcing, and high-throughput pipelines where you may re-read history.</dd>
   </div>
   <p>The big win in all three: the producer doesn't wait, and a slow or down consumer just makes the backlog grow rather than failing the user's request. That's <strong>decoupling</strong> and <strong>load-levelling</strong> — a queue absorbs a traffic spike that would otherwise crush a synchronous system.</p>
+  <div class="figbox">
+    <div class="fig-title">Queue vs log — the structural difference</div>
+    <svg viewBox="0 0 640 250" role="img" aria-label="A queue deletes messages on consumption; a log keeps them and consumers track offsets">
+      <text class="svg-faint" x="20" y="24">QUEUE — a message is consumed, then GONE</text>
+      <rect class="svg-fill" x="20" y="36" width="44" height="34" rx="7"/>
+      <rect class="svg-fill" x="70" y="36" width="44" height="34" rx="7"/>
+      <rect class="svg-accent-fill" x="120" y="36" width="44" height="34" rx="7"/>
+      <text class="svg-mono" x="42" y="58" text-anchor="middle">m3</text>
+      <text class="svg-mono" x="92" y="58" text-anchor="middle">m2</text>
+      <text class="svg-mono" x="142" y="58" text-anchor="middle">m1</text>
+      <path class="svg-accent" d="M164 53 L 210 53"/>
+      <rect class="svg-fill" x="210" y="36" width="110" height="34" rx="9"/>
+      <text class="svg-mono" x="265" y="58" text-anchor="middle">worker pool</text>
+      <text class="svg-faint" x="350" y="50">each msg → ONE worker,</text>
+      <text class="svg-faint" x="350" y="64">then deleted · no replay</text>
+
+      <text class="svg-faint" x="20" y="116">LOG — messages are KEPT; consumers move, data doesn't</text>
+      <rect class="svg-fill" x="20" y="128" width="44" height="34" rx="7"/>
+      <rect class="svg-fill" x="70" y="128" width="44" height="34" rx="7"/>
+      <rect class="svg-fill" x="120" y="128" width="44" height="34" rx="7"/>
+      <rect class="svg-fill" x="170" y="128" width="44" height="34" rx="7"/>
+      <rect class="svg-fill" x="220" y="128" width="44" height="34" rx="7"/>
+      <text class="svg-mono" x="42" y="150" text-anchor="middle">0</text>
+      <text class="svg-mono" x="92" y="150" text-anchor="middle">1</text>
+      <text class="svg-mono" x="142" y="150" text-anchor="middle">2</text>
+      <text class="svg-mono" x="192" y="150" text-anchor="middle">3</text>
+      <text class="svg-mono" x="242" y="150" text-anchor="middle">4</text>
+      <text class="svg-faint" x="278" y="150">… append-only →</text>
+
+      <path class="svg-accent" d="M92 174 L 92 188"/>
+      <rect class="svg-accent-fill" x="30" y="190" width="130" height="30" rx="8"/>
+      <text class="svg-mono" x="95" y="209" text-anchor="middle">analytics @ offset 1</text>
+      <path class="svg-accent" d="M242 174 L 242 188"/>
+      <rect class="svg-accent-fill" x="180" y="190" width="130" height="30" rx="8"/>
+      <text class="svg-mono" x="245" y="209" text-anchor="middle">search-index @ 4</text>
+      <text class="svg-faint" x="340" y="200">independent consumers, own pace,</text>
+      <text class="svg-faint" x="340" y="214">rewind to re-read history anytime</text>
+    </svg>
+    <div class="cap">A queue distributes disposable work; a log is shared, replayable history. The moment two systems need the same events — or you need to reprocess the past — you want the log.</div>
+  </div>
 </section>
 
 <section class="section reveal" id="guarantees">

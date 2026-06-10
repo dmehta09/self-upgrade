@@ -228,6 +228,69 @@ class HashRing:
   <h2><span class="section-num">06</span> &nbsp;Replication &amp; failure</h2>
   <p>Each shard = one primary + async replicas. On primary death a coordinator (Redis Sentinel, or cluster gossip + quorum) promotes a replica in <strong>single-digit seconds</strong>; consistent hashing confines the impact to that shard. Replication is async, so an acked write can be lost on failover — an accepted trade for a cache (the DB is truth).</p>
   <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why a cache picks AP</div><p>A node with no surviving replica loses its slice → those keys become misses and refill from the DB. The danger is a <strong>correlated miss storm</strong> on the DB for the lost slice — which is why you keep replicas (limit loss to ~1/N), use consistent hashing, and add stampede protection (next section). A cache that blocked to guarantee consistency would defeat its own purpose.</p></div></div>
+  <p>Run both failures — with a replica to promote, and without one:</p>
+  <figure class="failsim" data-failsim aria-label="Failure simulator: cache node loss">
+    <figcaption class="fs-title">Lose a cache node — failover vs miss storm</figcaption>
+    <div class="fs-scenarios"></div>
+    <div class="fs-stage"></div>
+    <div class="fs-caption" aria-live="polite"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reset" type="button" aria-label="Reset to healthy">⏮</button>
+      <button class="fs-btn fs-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="fs-btn fs-play" type="button" aria-label="Play">▶</button>
+      <button class="fs-btn fs-next" type="button" aria-label="Next step">›</button>
+      <div class="fs-progress"><div class="fs-progress-fill"></div></div>
+      <span class="fs-step">– / –</span>
+    </div>
+    <div class="fs-note" hidden></div>
+    <script type="application/json" class="fs-config">
+    {
+      "nodes": [
+        { "id": "app",  "label": "App servers",       "type": "client", "col": 0, "row": 1 },
+        { "id": "sh1",  "label": "Shard A · primary",  "type": "cache",  "col": 1, "row": 0 },
+        { "id": "sh1r", "label": "Shard A · replica",  "type": "cache",  "col": 2, "row": 0 },
+        { "id": "sh2",  "label": "Shard B · primary",  "type": "cache",  "col": 1, "row": 2 },
+        { "id": "db",   "label": "Database (truth)",   "type": "store",  "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "app", "to": "sh1", "label": "keys a–m" },
+        { "from": "sh1", "to": "sh1r", "label": "async repl" },
+        { "from": "app", "to": "sh2", "label": "keys n–z" },
+        { "from": "app", "to": "db",  "label": "on miss" }
+      ],
+      "scenarios": [
+        {
+          "id": "with-replica",
+          "label": "Kill shard A (has a replica)",
+          "target": { "node": "sh1" },
+          "steps": [
+            { "caption": "Shard A's primary dies. Reads for keys a–m start failing; Sentinel/gossip notices within seconds.",
+              "fail": ["sh1"], "degrade": ["app"], "edgesDown": [["app","sh1"],["sh1","sh1r"]] },
+            { "caption": "The replica is promoted and clients re-route. Async replication may have dropped the last writes — fine for a cache, the DB is truth.",
+              "fail": ["sh1"], "promote": ["sh1r"], "reroute": [["app","sh1r"]] },
+            { "caption": "Single-digit-second failover, blast radius = one shard. This is the design working as intended.", "recover": true }
+          ],
+          "interviewer": "State the trade explicitly: async replication can lose acked writes on failover, and a cache accepts that because the database remains the source of truth (AP choice)."
+        },
+        {
+          "id": "no-replica",
+          "label": "Kill shard B (no replica)",
+          "target": { "node": "sh2" },
+          "steps": [
+            { "caption": "Shard B dies with no replica. Its whole key slice (n–z) vanishes — every read for those keys is now a miss.",
+              "fail": ["sh2"], "degrade": ["app"], "edgesDown": [["app","sh2"]] },
+            { "caption": "The correlated miss storm: all n–z traffic lands on the database at once. The DB sized for 10% of reads now gets 50%.",
+              "fail": ["sh2"], "degrade": ["db"], "reroute": [["app","db"]], "badges": [{ "node": "db", "text": "QPS ×5" }] },
+            { "caption": "Defenses: request coalescing (one DB fetch per key, everyone else waits), consistent hashing so a replacement node takes the slice, jittered TTLs.",
+              "fail": ["sh2"], "promote": ["db"], "badges": [{ "node": "db", "text": "coalesced" }] },
+            { "caption": "A replacement node joins the ring and warms up. The lesson: replicas and stampede protection aren't optional at scale.", "recover": true }
+          ],
+          "interviewer": "Name the miss storm unprompted and pair every cache-loss answer with stampede protection: coalescing/single-flight, jittered TTLs, and consistent hashing limiting the remap to the lost slice."
+        }
+      ]
+    }
+    </script>
+  </figure>
 </section>
 
 <section class="section reveal" id="hotkey">
@@ -340,5 +403,6 @@ class HashRing:
   <script src="../assets/js/reqflow.js"></script>
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/tradeoff.js"></script>
+  <script src="../assets/js/failsim.js"></script>
 </body>
 </html>

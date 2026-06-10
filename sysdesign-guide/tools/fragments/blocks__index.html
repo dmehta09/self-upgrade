@@ -72,7 +72,89 @@
     <dt><a href="../data/index.html">Database</a></dt><dd>The durable source of truth — SQL or NoSQL, sharded and replicated. Covered in the Data module.</dd>
   </div>
   <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">The golden rule: keep services stateless</div><p>If your app servers hold no per-user state (sessions live in a cache/DB, not in memory), then any server can handle any request — so a load balancer can spread traffic freely and you scale by simply adding more boxes. Almost every scaling story starts here.</p></div></div>
-  <div class="quiz" data-quiz>
+  <p>Now watch the kit assemble itself. Each block enters the diagram only when a specific pain forces it — which is exactly how you should add boxes on a whiteboard:</p>
+  <figure class="journey" data-journey aria-label="Scale journey: the building blocks assemble">
+    <figcaption class="jy-title">The kit assembles, one pain at a time</figcaption>
+    <div class="jy-stops"></div>
+    <div class="jy-stage"></div>
+    <div class="jy-caption" aria-live="polite"></div>
+    <div class="jy-stats"></div>
+    <div class="jy-controls">
+      <button class="jy-btn jy-prev" type="button" aria-label="Previous stage">‹</button>
+      <button class="jy-btn jy-next" type="button" aria-label="Next stage">›</button>
+    </div>
+    <script type="application/json" class="jy-config">
+    {
+      "stages": [
+        {
+          "label": "Bare bones",
+          "nodes": [
+            { "id":"u",   "label":"Users",      "type":"user",  "col":0, "row":1 },
+            { "id":"app", "label":"App server",  "type":"app",   "col":2, "row":1 },
+            { "id":"db",  "label":"Database",    "type":"store", "col":4, "row":1 }
+          ],
+          "edges": [ { "from":"u","to":"app" }, { "from":"app","to":"db" } ],
+          "bottleneck": { "node":"app", "text":"One box does everything — TLS, auth, routing, business logic — and it's a single point of failure." },
+          "fix": "Put a load balancer + gateway in front and run several identical, stateless app servers.",
+          "caption": "Users, an app, a database. Every system you'll ever design starts as this picture.",
+          "stats": [ { "k":"blocks", "v":"2" } ]
+        },
+        {
+          "label": "+ LB & gateway",
+          "nodes": [
+            { "id":"u",   "label":"Users",         "type":"user",  "col":0, "row":1 },
+            { "id":"lb",  "label":"Load balancer",  "type":"edge",  "col":1, "row":1 },
+            { "id":"gw",  "label":"API gateway",    "type":"edge",  "col":2, "row":1 },
+            { "id":"app", "label":"App server",     "type":"app",   "col":3, "row":0 },
+            { "id":"app2","label":"App server",     "type":"app",   "col":3, "row":2 },
+            { "id":"db",  "label":"Database",       "type":"store", "col":4, "row":1 }
+          ],
+          "edges": [ { "from":"u","to":"lb" }, { "from":"lb","to":"gw" }, { "from":"gw","to":"app" }, { "from":"gw","to":"app2" }, { "from":"app","to":"db" }, { "from":"app2","to":"db" } ],
+          "bottleneck": { "node":"db", "text":"App servers scale out fine now — so the database becomes the choke point: every read hits disk." },
+          "fix": "Add an in-memory cache for hot reads (and a CDN for static bytes).",
+          "caption": "The LB spreads traffic and routes around dead servers; the gateway centralizes TLS, auth and rate limiting. Capacity = add boxes.",
+          "stats": [ { "k":"blocks", "v":"4" } ]
+        },
+        {
+          "label": "+ Cache & CDN",
+          "nodes": [
+            { "id":"u",    "label":"Users",         "type":"user",  "col":0, "row":1 },
+            { "id":"cdn",  "label":"CDN",            "type":"edge",  "col":1, "row":0 },
+            { "id":"lb",   "label":"Load balancer",  "type":"edge",  "col":1, "row":1 },
+            { "id":"gw",   "label":"API gateway",    "type":"edge",  "col":2, "row":1 },
+            { "id":"app",  "label":"App server",     "type":"app",   "col":3, "row":0 },
+            { "id":"app2", "label":"App server",     "type":"app",   "col":3, "row":2 },
+            { "id":"cache","label":"Cache",           "type":"redis", "col":4, "row":0 },
+            { "id":"db",   "label":"Database",       "type":"store", "col":4, "row":2 }
+          ],
+          "edges": [ { "from":"u","to":"cdn", "label":"static" }, { "from":"u","to":"lb" }, { "from":"lb","to":"gw" }, { "from":"gw","to":"app" }, { "from":"gw","to":"app2" }, { "from":"app","to":"cache", "label":"hot reads" }, { "from":"app","to":"db", "label":"on miss" }, { "from":"app2","to":"cache" } ],
+          "bottleneck": { "node":"app", "text":"Requests still do slow, non-urgent work inline — emails, analytics, image resizing — and users wait for it." },
+          "fix": "Push slow work onto a message queue; background workers consume it.",
+          "caption": "The cache turns ~10 ms database reads into ~1 ms lookups and absorbs most read traffic; the CDN serves static bytes from the edge.",
+          "stats": [ { "k":"blocks", "v":"6" } ]
+        },
+        {
+          "label": "+ Queue",
+          "nodes": [
+            { "id":"u",    "label":"Users",         "type":"user",   "col":0, "row":1 },
+            { "id":"cdn",  "label":"CDN",            "type":"edge",   "col":1, "row":0 },
+            { "id":"lb",   "label":"Load balancer",  "type":"edge",   "col":1, "row":1 },
+            { "id":"gw",   "label":"API gateway",    "type":"edge",   "col":2, "row":1 },
+            { "id":"app",  "label":"App server",     "type":"app",    "col":3, "row":0 },
+            { "id":"app2", "label":"App server",     "type":"app",    "col":3, "row":2 },
+            { "id":"q",    "label":"Queue + workers", "type":"async", "col":2, "row":2 },
+            { "id":"cache","label":"Cache",           "type":"redis",  "col":4, "row":0 },
+            { "id":"db",   "label":"Database",       "type":"store",  "col":4, "row":2 }
+          ],
+          "edges": [ { "from":"u","to":"cdn", "label":"static" }, { "from":"u","to":"lb" }, { "from":"lb","to":"gw" }, { "from":"gw","to":"app" }, { "from":"gw","to":"app2" }, { "from":"app","to":"cache" }, { "from":"app","to":"db" }, { "from":"app2","to":"q", "label":"async work" }, { "from":"q","to":"db" } ],
+          "caption": "The full kit: this exact picture, re-drawn with different labels, is the high-level design for almost every case study in this guide. Learn each box's lesson and you can assemble anything.",
+          "stats": [ { "k":"blocks", "v":"7" }, { "k":"reused in", "v":"every design" } ]
+        }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="quiz" data-quiz
     <p class="q">In this stack, where does <em>slow or non-urgent</em> work (sending emails, updating analytics) belong?</p>
     <div class="quiz-opts">
       <button class="quiz-opt"><span class="mark"></span>Inline in the request, so the user waits for it</button>

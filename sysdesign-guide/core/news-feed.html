@@ -260,6 +260,86 @@ def get_home_timeline(user, cursor, limit=20):                 # read = push lis
     <div class="card feature"><span class="f-ic fx">💰</span><h4>Cost</h4><p>Timeline-cache RAM (~13 TB working set × replication) is the big fixed cost — cache only active users, cap length, store IDs not objects. Fan-out compute scales with posts × followers; ML inference is now a first-order driver.</p></div>
   </div>
   <p class="small">Observability: home-timeline read p99 (SLO &lt; ~200 ms), <strong>fan-out lag / post-to-visible</strong> (SLO p99 &lt; ~5 s), cache hit ratios. Alert on a hit-ratio drop <em>combined with</em> a DB-read surge — the classic cache-failure → stampede signature.</p>
+  <p>One last lens: nobody designs this architecture on day one. Walk the journey a feed actually takes — each stage is the previous one plus exactly one bottleneck fix, which is how you should present it on the whiteboard:</p>
+  <figure class="journey" data-journey aria-label="Scale journey: how a feed architecture evolves">
+    <figcaption class="jy-title">A feed from 10K to 250M users</figcaption>
+    <div class="jy-stops"></div>
+    <div class="jy-stage"></div>
+    <div class="jy-caption" aria-live="polite"></div>
+    <div class="jy-stats"></div>
+    <div class="jy-controls">
+      <button class="jy-btn jy-prev" type="button" aria-label="Previous stage">‹</button>
+      <button class="jy-btn jy-next" type="button" aria-label="Next stage">›</button>
+    </div>
+    <script type="application/json" class="jy-config">
+    {
+      "stages": [
+        {
+          "label": "10K",
+          "nodes": [
+            { "id":"u",   "label":"Users",      "type":"user",  "col":0, "row":1 },
+            { "id":"app", "label":"App server",  "type":"app",   "col":1, "row":1 },
+            { "id":"db",  "label":"Posts + graph DB", "type":"store", "col":2, "row":1 }
+          ],
+          "edges": [ { "from":"u","to":"app" }, { "from":"app","to":"db", "label":"join at read" } ],
+          "bottleneck": { "node":"db", "text":"The feed is a fan-in JOIN over everyone you follow — it slows down with every follow edge and every reader." },
+          "fix": "Precompute each user's timeline into a cache (fan-out on write).",
+          "caption": "Day one: the feed is just a SQL query. Correct, simple — and doomed past a few thousand active users.",
+          "stats": [ { "k":"feed reads/s", "v":"~50" }, { "k":"strategy", "v":"pull" } ]
+        },
+        {
+          "label": "100K",
+          "nodes": [
+            { "id":"u",   "label":"Users",          "type":"user",  "col":0, "row":1 },
+            { "id":"app", "label":"App server",      "type":"app",   "col":1, "row":1 },
+            { "id":"tc",  "label":"Timeline cache",  "type":"redis", "col":2, "row":0 },
+            { "id":"db",  "label":"Posts + graph DB","type":"store", "col":2, "row":2 }
+          ],
+          "edges": [ { "from":"u","to":"app" }, { "from":"app","to":"tc", "label":"read + fan-out" }, { "from":"app","to":"db", "label":"write post" } ],
+          "bottleneck": { "node":"app", "text":"Posting now writes to every follower's timeline synchronously — post latency grows with follower count." },
+          "fix": "Move fan-out behind a queue: ack the post fast, let workers deliver it.",
+          "caption": "Fan-out on write: reading a feed is one cache fetch. The cost moved from read time to write time — that's the trade.",
+          "stats": [ { "k":"feed reads/s", "v":"~500" }, { "k":"strategy", "v":"push (inline)" } ]
+        },
+        {
+          "label": "10M",
+          "nodes": [
+            { "id":"u",   "label":"Users",          "type":"user",   "col":0, "row":1 },
+            { "id":"lb",  "label":"Load balancer",   "type":"edge",   "col":1, "row":1 },
+            { "id":"app", "label":"App fleet",       "type":"app ×N", "col":2, "row":0 },
+            { "id":"app2","label":"App fleet",       "type":"app ×N", "col":2, "row":2 },
+            { "id":"q",   "label":"Kafka",           "type":"queue",  "col":3, "row":2 },
+            { "id":"wk",  "label":"Fan-out workers", "type":"worker", "col":4, "row":2 },
+            { "id":"tc",  "label":"Timeline cache",  "type":"redis",  "col":3, "row":0 },
+            { "id":"db",  "label":"Posts + graph DB","type":"store",  "col":4, "row":0 }
+          ],
+          "edges": [ { "from":"u","to":"lb" }, { "from":"lb","to":"app" }, { "from":"lb","to":"app2" }, { "from":"app","to":"tc", "label":"read" }, { "from":"app2","to":"q", "label":"post" }, { "from":"q","to":"wk" }, { "from":"wk","to":"tc", "label":"fan-out" }, { "from":"wk","to":"db" } ],
+          "bottleneck": { "node":"wk", "text":"One celebrity post = 50M timeline writes. The workers (and Redis) drown on viral moments." },
+          "fix": "Go hybrid: push for normal accounts, pull-at-read for accounts above a follower threshold.",
+          "caption": "Async fan-out: posts ack in milliseconds, workers deliver in the background. Post-to-visible lag becomes a metric you watch.",
+          "stats": [ { "k":"feed reads/s", "v":"~30K" }, { "k":"strategy", "v":"push (async)" } ]
+        },
+        {
+          "label": "250M",
+          "nodes": [
+            { "id":"u",   "label":"Users",          "type":"user",   "col":0, "row":1 },
+            { "id":"lb",  "label":"Load balancer",   "type":"edge",   "col":1, "row":1 },
+            { "id":"app", "label":"Feed service",    "type":"app ×N", "col":2, "row":0 },
+            { "id":"app2","label":"Post service",    "type":"app ×N", "col":2, "row":2 },
+            { "id":"rk",  "label":"Ranker (ML)",     "type":"ml",     "col":3, "row":1 },
+            { "id":"q",   "label":"Kafka",           "type":"queue",  "col":3, "row":2 },
+            { "id":"wk",  "label":"Fan-out workers", "type":"worker", "col":4, "row":2 },
+            { "id":"tc",  "label":"Timeline cache",  "type":"redis ×N","col":3, "row":0 },
+            { "id":"db",  "label":"Posts + graph DB","type":"sharded", "col":4, "row":0 }
+          ],
+          "edges": [ { "from":"u","to":"lb" }, { "from":"lb","to":"app" }, { "from":"lb","to":"app2" }, { "from":"app","to":"tc", "label":"push part" }, { "from":"app","to":"db", "label":"pull celebs" }, { "from":"app","to":"rk", "label":"rank" }, { "from":"app2","to":"q" }, { "from":"q","to":"wk" }, { "from":"wk","to":"tc" } ],
+          "caption": "The 2026 shape: hybrid fan-out (push for most, pull for celebrities, merged at read) plus a ranking stage. Every box exists because a specific bottleneck forced it — tell the story in that order.",
+          "stats": [ { "k":"feed reads/s", "v":"~350K" }, { "k":"strategy", "v":"hybrid + ranked" } ]
+        }
+      ]
+    }
+    </script>
+  </figure>
 </section>
 
 <section class="section reveal" id="recap">
@@ -310,5 +390,6 @@ def get_home_timeline(user, cursor, limit=20):                 # read = push lis
   <script src="../assets/js/reqflow.js"></script>
   <script src="../assets/js/tradeoff.js"></script>
   <script src="../assets/js/capacity.js"></script>
+  <script src="../assets/js/journey.js"></script>
 </body>
 </html>
