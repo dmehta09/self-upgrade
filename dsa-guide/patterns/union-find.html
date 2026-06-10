@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Union-Find | DSA Field Guide</title>
+  <meta name="description" content="Union-Find (disjoint sets) explained for a curious beginner: clubs with presidents, merging groups in near-constant time, path compression — with three runnable problems (Number of Provinces, Redundant Connection, Accounts Merge)." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M4 20V11h3.2v9zM10.4 20V4h3.2v16zM16.8 20v-6h3.2v6z' fill='%23818cf8'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="patterns" data-page="pat-union-find" data-lesson="pat-union-find">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="DSA Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0b1020" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.3" fill="#0b1020"/><circle cx="6" cy="18.5" r="2.3" fill="#0b1020"/><circle cx="18" cy="18.5" r="2.3" fill="#0b1020"/><path d="M12 7.3 6.8 16.4M12 7.3l5.2 9.1"/></svg></span>
+        <span class="brand-text"><b>DSA Field Guide</b><span>Visual interview prep</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here"><h4>Start here</h4><a class="nav-link" href="../index.html">Home</a></nav>
+      <nav class="nav-group is-foundations" aria-label="Foundations">
+        <h4><span class="dot"></span>Foundations</h4>
+        <a class="nav-link" href="../foundations/index.html">How to use this guide</a>
+        <a class="nav-link" href="../foundations/big-o.html">Big-O &amp; complexity</a>
+        <a class="nav-link" href="../foundations/arrays-strings.html">Arrays, strings &amp; hashing</a>
+        <a class="nav-link" href="../foundations/linked-lists.html">Linked lists, stacks &amp; queues</a>
+        <a class="nav-link" href="../foundations/trees-graphs.html">Trees, heaps &amp; graphs</a>
+      </nav>
+      <nav class="nav-group is-patterns" aria-label="Patterns">
+        <h4><span class="dot"></span>Patterns</h4>
+        <a class="nav-link" href="../patterns/index.html">The pattern map</a>
+        <a class="nav-link" href="../patterns/arrays-hashing.html">Arrays &amp; Hashing</a>
+        <a class="nav-link" href="../patterns/two-pointers.html">Two Pointers</a>
+        <a class="nav-link" href="../patterns/sliding-window.html">Sliding Window</a>
+        <a class="nav-link" href="../patterns/stack.html">Stack</a>
+        <a class="nav-link" href="../patterns/binary-search.html">Binary Search</a>
+        <a class="nav-link" href="../patterns/linked-list.html">Linked List</a>
+        <a class="nav-link" href="../patterns/trees-traversal.html">Trees · BFS &amp; DFS</a>
+        <a class="nav-link" href="../patterns/heap-topk.html">Heap / Top-K</a>
+        <a class="nav-link" href="../patterns/backtracking.html">Backtracking</a>
+        <a class="nav-link" href="../patterns/graphs.html">Graphs</a>
+        <a class="nav-link" href="../patterns/dynamic-programming.html">Dynamic Programming</a>
+        <a class="nav-link" href="../patterns/intervals.html">Intervals</a>
+        <a class="nav-link" href="../patterns/greedy.html">Greedy</a>
+        <a class="nav-link" href="../patterns/tries.html">Tries</a>
+        <a class="nav-link" href="../patterns/union-find.html">Union-Find</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#pattern">The idea</a>
+          <a class="nav-link" href="#provinces">Number of Provinces</a>
+          <a class="nav-link" href="#redundant">Redundant Connection</a>
+          <a class="nav-link" href="#accounts-merge">Accounts Merge</a>
+        </div>
+        <a class="nav-link" href="../patterns/bits.html">Bit Manipulation</a>
+      </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Timed coding drills</a>
+      </nav>
+      <nav class="nav-group" aria-label="Reference"><h4>Reference</h4><a class="nav-link" href="../reference/cheatsheet.html">Cheat-sheet &amp; glossary</a></nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../patterns/index.html" style="color:var(--accent)">Patterns</a><span class="sep">/</span><span class="current">Union-Find</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Patterns · union-find</span>
+            <h1>Union-Find</h1>
+            <p class="lead">Some problems keep asking one little question over and over: <strong>"are these two in the same group?"</strong> — while the groups themselves keep <em>merging</em>. Friend circles grow, islands get bridged, wires get connected. Union-Find (also called Disjoint Set Union) answers that question in what is basically constant time, no matter how big the groups get. Let's meet the clubs and their presidents.</p>
+          </section>
+
+          <!-- ===== THE IDEA ===== -->
+          <section class="section reveal" id="pattern">
+            <h2><span class="section-num">00</span> &nbsp;The idea</h2>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Clubs with presidents <span class="tag">analogy</span></div>
+                <p>Every kid in school belongs to exactly one club, and every club has exactly one <strong>president</strong>. To check whether two kids are in the same club, each kid walks up the chain — "who do you report to?" — until they reach someone who reports to <em>themselves</em>. That self-reporting person is the president. Same president → same club. To <strong>merge</strong> two clubs, you don't move all the members — one president simply agrees to work for the other. That's the entire data structure: a <code>parent</code> array (or dict) saying who each kid reports to.</p>
+              </div>
+            </div>
+
+            <p>In plain words: <code>find(x)</code> follows parents upward until it reaches someone who is their own parent — that's the president (the "root"), and it's the group's name. <code>union(a, b)</code> calls <code>find</code> on both, and if the two presidents differ, points one at the other. Two clubs just became one, in a single pointer write.</p>
+
+            <p>Done naively, the chains can grow long and <code>find</code> gets slow. Two famous one-line upgrades fix that:</p>
+            <ul>
+              <li><strong>Path compression</strong> — while walking up, make every kid you pass report <em>directly</em> to the president ("once you've met the president, skip the middle managers forever"): <code>parent[x] = find(parent[x])</code>.</li>
+              <li><strong>Union by size / rank</strong> — the smaller club always joins the bigger one, keeping chains short: <code>parent[small] = big</code>.</li>
+            </ul>
+
+            <figure class="viz reveal" data-viz aria-label="Path compression flattening a chain of parents into direct links to the root">
+              <figcaption class="viz-title">Path compression, before and after</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              { "type":"graph",
+                "meta":{"directed":true,"width":520,"height":230,
+                  "nodes":[
+                    {"id":"A","x":80,"y":180,"label":"A"},
+                    {"id":"B","x":180,"y":130,"label":"B"},
+                    {"id":"C","x":280,"y":80,"label":"C"},
+                    {"id":"R","x":400,"y":40,"label":"R (president)"}],
+                  "edges":[["A","B"],["B","C"],["C","R"],["A","R"],["B","R"]]},
+                "frames":[
+                 {"active":["A"],"edgesOn":[["A","B"],["B","C"],["C","R"]],"caption":"find(A) walks A→B→C→R: three hops to reach the president."},
+                 {"visited":["A","B","C","R"],"edgesOn":[["A","B"],["B","C"],["C","R"]],"caption":"On the way back, A, B and C are re-pointed straight at R — they've met the president, so they skip the middle managers."},
+                 {"visited":["A","B","C","R"],"edgesOn":[["A","R"],["B","R"],["C","R"]],"caption":"Next find(A) is ONE hop. Trees stay nearly flat forever — that's why ops are 'basically O(1)'."}
+                ] }
+              </script>
+            </figure>
+
+            <details class="deeper">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Go deeper: "basically O(1)" has a real name <span class="tag">deeper</span></summary>
+              <div class="deeper-body"><p>The honest cost of <code>find</code>/<code>union</code> with both upgrades is <strong>O(α(n))</strong> amortized, where α is the <em>inverse Ackermann function</em> — a function that grows so absurdly slowly that α(n) ≤ 4 for any n that fits in the observable universe. In an interview, say "amortized inverse-Ackermann, effectively constant" and move on; nobody expects the proof.</p></div>
+            </details>
+
+            <h3>When to reach for union-find</h3>
+            <p>These are the tells:</p>
+            <div class="kv">
+              <dt>Groups that merge over time</dt><dd>Connections <em>arrive</em> one by one and groups only ever fuse together — never split.</dd>
+              <dt>Repeated "same group?" questions</dt><dd>You're asked "are a and b connected?" again and again, interleaved with new connections.</dd>
+              <dt>Cycle detection on undirected edges</dt><dd>While adding edges, the first edge whose two ends are already in the same group closes a cycle.</dd>
+              <dt>Counting components</dt><dd>Track how many groups remain without re-walking the whole graph after each new edge — start at n and decrement on every real merge.</dd>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Which of these questions is union-find the WRONG tool for?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Are these two people transitively connected through friends?</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>What is the shortest path between two nodes?</button>
+                <button class="quiz-opt"><span class="mark"></span>How many friend circles exist?</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Union-find only remembers <em>which group</em> each node is in — it deliberately forgets the actual paths, so it can't measure distance. Shortest path is BFS territory (see <a href="../patterns/graphs.html">Graphs</a>). Connectivity questions and group counts, though, are exactly its home turf.</div>
+            </div>
+          </section>
+
+          <!-- ===== PROBLEM 1: NUMBER OF PROVINCES ===== -->
+          <section class="section problem reveal" id="provinces">
+            <header class="problem-meta">
+              <h2><span class="section-num">01</span> &nbsp;Number of Provinces</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Union-Find</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~20 min</span>
+                <span class="pm-chip cx">O(n² α) time · O(n) space</span>
+              </div>
+            </header>
+            <p class="lead">There are <code>n</code> cities and an adjacency <strong>matrix</strong> <code>isConnected</code>, where <code>isConnected[i][j] = 1</code> means cities i and j are directly connected. A <strong>province</strong> is a group of cities connected directly or indirectly. Count the provinces. Example: <code>[[1,1,0],[1,1,0],[0,0,1]]</code> → <code>2</code>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Every handshake merges two clubs <span class="tag">analogy</span></div>
+                <p>Start with every city as its own one-kid club — n cities, n clubs. Every "1" in the matrix is a <strong>handshake</strong> that merges the two clubs involved (if they weren't already one). When all the handshakes are done, count the presidents left standing. That count is the number of provinces.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Five cities merging into two provinces as handshakes arrive">
+              <figcaption class="viz-title">Five clubs shrink to two as handshakes land</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              { "type":"graph",
+                "meta":{"width":520,"height":230,
+                  "nodes":[
+                    {"id":"0","x":80,"y":60,"label":"0"},
+                    {"id":"1","x":210,"y":45,"label":"1"},
+                    {"id":"2","x":140,"y":175,"label":"2"},
+                    {"id":"3","x":380,"y":65,"label":"3"},
+                    {"id":"4","x":445,"y":180,"label":"4"}],
+                  "edges":[["0","1"],["1","2"],["3","4"]]},
+                "frames":[
+                 {"caption":"5 cities, 5 clubs, count=5. Now we read the matrix's handshakes one by one."},
+                 {"edgesOn":[["0","1"]],"visited":["0","1"],"caption":"union(0,1): two clubs become one — count drops to 4."},
+                 {"edgesOn":[["0","1"],["1","2"]],"visited":["0","1","2"],"caption":"union(1,2): the whole left side is one club — count 3."},
+                 {"edgesOn":[["0","1"],["1","2"],["3","4"]],"visited":["0","1","2","3","4"],"caption":"union(3,4): count 2."},
+                 {"edgesOn":[["0","1"],["1","2"],["3","4"]],"visited":["0","1","2","3","4"],"caption":"No more handshakes. 2 presidents = 2 provinces."}
+                ] }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <ol>
+              <li>Make a <code>parent</code> list where every city starts as its own parent: <code>parent = list(range(n))</code>.</li>
+              <li>Write <code>find</code> with path compression (re-point as you climb).</li>
+              <li>Write <code>union(a, b)</code> so it returns <code>True</code> only when it <em>actually merged</em> two different clubs.</li>
+              <li>Start <code>count = n</code>. Scan the <strong>upper triangle</strong> of the matrix (j &gt; i — the matrix is symmetric, no need to read each handshake twice); for every 1, call <code>union</code> and decrement <code>count</code> on each successful merge.</li>
+            </ol>
+            <p>At the end, <code>count</code> is the number of provinces — no second pass, no graph walk.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-bad">O(n² · α(n))</span></td><td>Reading the n×n matrix dominates; each union/find is effectively constant.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(n)</span></td><td>One parent entry per city.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="muted">New to this notation? See the <a href="../foundations/big-o.html">Big-O cheat-sheet</a>.</p>
+
+            <div class="callout note">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span>
+              <div class="co-body"><div class="co-title">DFS flood-fill also works here</div><p>You could equally DFS from each unvisited city and count the launches — see the <a href="../patterns/graphs.html">Graphs</a> page. Union-find earns its keep when connections <strong>arrive over time</strong> and you must answer "how many groups now?" <em>between</em> arrivals — DFS would have to re-walk everything each time; union-find just keeps a counter.</p></div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why do we decrement <code>count</code> only when <code>find(a) != find(b)</code>?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because find is too slow to call twice otherwise</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Because a handshake inside the same club merges nothing — the number of clubs doesn't change</button>
+                <button class="quiz-opt"><span class="mark"></span>Because the matrix diagonal is always 1</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> If both cities already report to the same president, the "merge" is a no-op — there were 3 clubs before and 3 after. Only a union of two <em>different</em> presidents fuses two clubs into one, so only then does the count drop.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>You need three small pieces: <code>parent = list(range(n))</code>; a <code>find(x)</code> that loops while <code>parent[x] != x</code>, re-pointing with <code>parent[x] = parent[parent[x]]</code> as it goes; and a <code>union(a, b)</code> that returns whether it merged. Then it's just a double loop over the matrix with a counter starting at n.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">provinces.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="24">
+def find_circle_num(is_connected):
+    n = len(is_connected)
+    parent = list(range(n))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]   # path compression
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            return False        # same president already - nothing merged
+        parent[ra] = rb
+        return True
+
+    count = n                   # everyone starts as their own club
+    for i in range(n):
+        for j in range(i + 1, n):           # upper triangle only
+            if is_connected[i][j] == 1 and union(i, j):
+                count -= 1
+    return count
+
+print(find_circle_num([[1, 1, 0], [1, 1, 0], [0, 0, 1]]))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">2</pre></div>
+                </div>
+                <p><code>union</code> returning <code>True</code> only on a real merge is the trick that makes counting free: <code>count</code> starts at n and falls exactly once per fusion. Cities 0 and 1 shake hands (count 2), city 2 stays alone — two provinces.</p>
+              </div>
+            </details>
+          </section>
+
+          <!-- ===== PROBLEM 2: REDUNDANT CONNECTION ===== -->
+          <section class="section problem reveal" id="redundant">
+            <header class="problem-meta">
+              <h2><span class="section-num">02</span> &nbsp;Redundant Connection</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Union-Find</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~20 min</span>
+                <span class="pm-chip cx">O(n α) time · O(n) space</span>
+              </div>
+            </header>
+            <p class="lead">You're given a graph that started as a tree and then got exactly <strong>one extra edge</strong>. The edges arrive in order. Return the edge that closes the cycle — the last edge that connects two <em>already-connected</em> nodes. Example: <code>[[1,2],[1,3],[2,3]]</code> → <code>[2,3]</code>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">The bridge nobody needed <span class="tag">analogy</span></div>
+                <p>Kids keep building bridges between islands, one at a time. Each new bridge between two <em>separate</em> island-groups is useful — it joins them. But the moment someone proposes a bridge between two islands that are <strong>already connected</strong> (maybe through a chain of other bridges), that bridge is the redundant one. You can already walk between them; the new bridge only creates a loop.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Edges arriving one by one until one connects two already-connected nodes">
+              <figcaption class="viz-title">Add edges in order — the first "already connected!" is the answer</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              { "type":"graph",
+                "meta":{"width":520,"height":230,
+                  "nodes":[
+                    {"id":"n1","x":260,"y":50,"label":"1"},
+                    {"id":"n2","x":140,"y":180,"label":"2"},
+                    {"id":"n3","x":380,"y":180,"label":"3"}],
+                  "edges":[["n1","n2"],["n1","n3"],["n2","n3"]]},
+                "frames":[
+                 {"caption":"Three islands, no bridges yet. Edges will arrive in the input order: [1,2], [1,3], [2,3]."},
+                 {"edgesOn":[["n1","n2"]],"visited":["n1","n2"],"caption":"Edge [1,2]: 1 and 2 were strangers — union them. One club of {1,2}."},
+                 {"edgesOn":[["n1","n2"],["n1","n3"]],"visited":["n1","n2","n3"],"caption":"Edge [1,3]: 1 and 3 union. Now {1,2,3} is one club — a perfectly fine tree so far."},
+                 {"edgesOn":[["n1","n2"],["n1","n3"],["n2","n3"]],"visited":["n1"],"active":["n2","n3"],"caption":"Edge [2,3]: find(2) == find(3) already! This edge closes a cycle → answer [2,3]."}
+                ] }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <ol>
+              <li>Process the edges <strong>in the given order</strong>.</li>
+              <li>For each edge <code>(a, b)</code>, try <code>union(a, b)</code>.</li>
+              <li>The first time union returns <code>False</code> (both ends already share a president), that edge is the answer — return it immediately.</li>
+            </ol>
+            <p>No DFS, no cycle-walking — the parent array <em>is</em> the memory of everything connected so far, and one <code>find</code> per endpoint consults it in effectively constant time.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(n · α(n))</span></td><td>One union per edge, each effectively constant.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(n)</span></td><td>The parent map.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+              <div class="co-body"><div class="co-title">"Return the LAST such edge" — already handled</div><p>The problem says that if several edges could be removed to restore a tree, return the one that appears <em>last</em> in the input. Processing edges in input order with union-find finds exactly that one for free: every earlier edge got unioned while it was still useful, so the edge that trips "already connected" is necessarily the latest possible one.</p></div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">What does it mean when <code>find(a) == find(b)</code> BEFORE you union a new edge (a, b)?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>The edge (a, b) was already in the input earlier</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A path between a and b already exists, so adding the edge creates a cycle</button>
+                <button class="quiz-opt"><span class="mark"></span>Nothing — it's just a coincidence of the parent array</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Same president means a and b are already in one connected club — there's some path of earlier edges between them. Adding a direct edge on top of an existing path is precisely what a cycle is. (Note: it doesn't mean the <em>exact</em> edge (a, b) appeared before — only that some route exists.)</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>You don't need to detect the cycle after building the graph — detect it <em>while</em> building. Walk the edge list once; for each edge compare <code>find(a)</code> and <code>find(b)</code>. Equal presidents → return that edge. Otherwise union and keep going.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">redundant_connection.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="19">
+def find_redundant_connection(edges):
+    parent = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]   # path compression
+            x = parent[x]
+        return x
+
+    for a, b in edges:
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            return [a, b]       # already connected: this edge closes the cycle
+        parent[ra] = rb         # otherwise merge and continue
+    return []
+
+print(find_redundant_connection([[1, 2], [1, 3], [2, 3]]))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">[2, 3]</pre></div>
+                </div>
+                <p>One pass, one union per edge. <code>[1,2]</code> and <code>[1,3]</code> merge strangers; by the time <code>[2,3]</code> arrives, 2 and 3 already share a president, so it's returned on the spot — the bridge nobody needed.</p>
+              </div>
+            </details>
+          </section>
+
+          <!-- ===== PROBLEM 3: ACCOUNTS MERGE ===== -->
+          <section class="section problem reveal" id="accounts-merge">
+            <header class="problem-meta">
+              <h2><span class="section-num">03</span> &nbsp;Accounts Merge</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Union-Find</span>
+                <span class="pm-chip diff-hard">Hard</span>
+                <span class="pm-chip"><span class="dot"></span>~30 min</span>
+                <span class="pm-chip cx">O(E α + E log E)</span>
+              </div>
+            </header>
+            <p class="lead">Each account is a list <code>[name, email1, email2, …]</code>. Two accounts belong to the same person if they share <strong>any</strong> email — transitively! Names repeat across different people, so they prove nothing. Merge the accounts and output each person as <code>[name, sorted unique emails]</code>. This one is a senior favorite — it also lives in the <a href="../drill/index.html">timed coding drills</a>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Email chains prove "same human" <span class="tag">analogy</span></div>
+                <p>People keep signing up with new email addresses, but any <em>shared</em> address proves "same human". And the proof chains: if accounts A and B share one address, and B and C share a different one, then A, B and C are all the same human — even though A and C share nothing directly. That "groups keep fusing through chains" shape is the union-find bat-signal.</p>
+              </div>
+            </div>
+
+            <h3>How to solve it: three passes</h3>
+            <div class="steps">
+              <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Union</h4><p>For each account, union every email with the account's <strong>first</strong> email (so all of one account's emails land in one club), and record <code>email → name</code> along the way.</p></div></div>
+              <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Regroup</h4><p>Bucket every email under <code>find(email)</code>. Each bucket is one human — every address that's transitively linked ends up under the same president email.</p></div></div>
+              <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Format</h4><p>For each bucket, output <code>[name] + sorted(emails)</code>, taking the name from any email in the bucket (they all belong to the same person, so any recorded name works).</p></div></div>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+              <div class="co-body"><div class="co-title">Names lie</div><p>Two Johns with disjoint emails are two different people; one person might even appear under a name typo. <strong>Only emails identify.</strong> That's exactly why we union <em>emails</em> (not account indices): the structure then groups by identity automatically, and the name is just a label we pin on at the end.</p></div>
+            </div>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(E · α + E log E)</span></td><td>E = total emails. Unions are effectively constant each; sorting each bucket's emails is what dominates.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(E)</span></td><td>Parent map, name map, and the buckets.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Accounts <code>[["John","a@x"],["John","b@x"]]</code> — one person or two?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>One — the names match, so they merge</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Two — no shared email, and names prove nothing</button>
+                <button class="quiz-opt"><span class="mark"></span>It depends on the order the accounts appear</button>
+              </div>
+              <div class="quiz-explain"><b>Two people.</b> The only evidence of identity is a shared email, and <code>a@x</code> and <code>b@x</code> never touch. The matching name "John" is a red herring — the problem plants it on purpose. Your union structure never even looks at names until output time.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Use a <em>dict</em> as the parent map so emails (strings) can be keys — <code>parent.setdefault(x, x)</code> auto-registers new emails inside <code>find</code>. In pass 1, you only need <code>union(email, emails[0])</code> for each email in an account: linking everyone to the first email chains the whole account together. A <code>defaultdict(list)</code> makes pass 2 a three-liner.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">accounts_merge.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="40">
+from collections import defaultdict
+
+def accounts_merge(accounts):
+    parent = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]   # path compression
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    # pass 1: union every email with the account's FIRST email
+    owner = {}
+    for acc in accounts:
+        name, emails = acc[0], acc[1:]
+        for email in emails:
+            owner[email] = name
+            union(email, emails[0])
+
+    # pass 2: bucket every email under its president
+    groups = defaultdict(list)
+    for email in owner:
+        groups[find(email)].append(email)
+
+    # pass 3: format [name] + sorted emails
+    merged = [[owner[root]] + sorted(emails) for root, emails in groups.items()]
+    merged.sort()           # sort by name for deterministic output
+    return merged
+
+result = accounts_merge([["John", "j1@x", "j2@x"],
+                         ["John", "j2@x", "j3@x"],
+                         ["Mary", "m@x"]])
+for account in result:
+    print(account)
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">['John', 'j1@x', 'j2@x', 'j3@x']
+['Mary', 'm@x']</pre></div>
+                </div>
+                <p>The shared <code>j2@x</code> chains the two John accounts into one human with three addresses, while Mary stays her own club. Notice nothing in the union step ever compared names — the gotcha above is solved by the <em>shape</em> of the data structure, not by extra code.</p>
+              </div>
+            </details>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../patterns/tries.html"><span class="pn-k">‹ Back</span><span class="pn-t">Pattern: Tries</span></a>
+            <a class="next" href="../patterns/bits.html"><span class="pn-k">Next ›</span><span class="pn-t">Pattern: Bit Manipulation</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#pattern">The idea</a>
+          <a href="#provinces">Number of Provinces</a>
+          <a href="#redundant">Redundant Connection</a>
+          <a href="#accounts-merge">Accounts Merge</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Patterns · Union-Find</span>
+        <span class="fmono">DSA Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/runpad.js"></script>
+  <script src="../assets/js/visualizer.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

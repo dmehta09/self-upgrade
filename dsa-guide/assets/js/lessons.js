@@ -26,7 +26,11 @@ window.LESSONS = [
   { id: "pat-backtracking",    title: "Backtracking",                  url: "patterns/backtracking.html",        module: "patterns",    tool: "patterns" },
   { id: "pat-graphs",          title: "Graphs",                        url: "patterns/graphs.html",              module: "patterns",    tool: "patterns" },
   { id: "pat-dp",              title: "Dynamic Programming",           url: "patterns/dynamic-programming.html", module: "patterns",    tool: "patterns" },
-  { id: "pat-intervals",       title: "Intervals",                     url: "patterns/intervals.html",           module: "patterns",    tool: "patterns" }
+  { id: "pat-intervals",       title: "Intervals",                     url: "patterns/intervals.html",           module: "patterns",    tool: "patterns" },
+  { id: "pat-greedy",          title: "Greedy",                        url: "patterns/greedy.html",              module: "patterns",    tool: "patterns" },
+  { id: "pat-tries",           title: "Tries",                         url: "patterns/tries.html",               module: "patterns",    tool: "patterns" },
+  { id: "pat-union-find",      title: "Union-Find",                    url: "patterns/union-find.html",          module: "patterns",    tool: "patterns" },
+  { id: "pat-bits",            title: "Bit Manipulation",              url: "patterns/bits.html",                module: "patterns",    tool: "patterns" }
 ];
 
 /* Ordered module groups for the home dashboard. */

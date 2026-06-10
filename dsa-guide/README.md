@@ -11,9 +11,9 @@ A sibling of `langstack`, `fastapi-guide`, and `lld-guide`; it shares their desi
 ## What's inside
 - **Foundations** (5 pages): how to use the guide · Big-O & complexity · arrays/strings/hashing ·
   linked lists/stacks/queues · trees/heaps/graphs.
-- **Patterns** (the pattern map + 12 pattern pages): Arrays & Hashing, Two Pointers, Sliding Window,
+- **Patterns** (the pattern map + 16 pattern pages): Arrays & Hashing, Two Pointers, Sliding Window,
   Stack, Binary Search, Linked List, Trees (BFS/DFS), Heap/Top-K, Backtracking, Graphs, Dynamic
-  Programming, Intervals — **~30 curated problems** in total.
+  Programming, Intervals, Greedy, Tries, Union-Find, Bit Manipulation — **40+ curated problems**.
 - **Reference**: a Big-O cheat-sheet (cost tables per data structure) + a plain-words glossary.
 
 Every problem follows the same rhythm: a **"explain like I'm 10" analogy** → an **animated
@@ -51,7 +51,7 @@ Tip: to browse over HTTP instead, run `python3 -m http.server` in this folder an
 dsa-guide/
 ├── index.html              home: hero + progress dashboard
 ├── foundations/            Big-O + core data structures
-├── patterns/               the pattern map + 12 pattern pages (~30 problems)
+├── patterns/               the pattern map + 16 pattern pages (40+ problems)
 ├── drill/                  timed coding drills (40-min mock rounds)
 ├── reference/cheatsheet.html
 ├── assets/css/             styles.css (shared design system) + theme.css (this site)
