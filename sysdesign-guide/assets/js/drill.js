@@ -46,9 +46,10 @@
     if (cfgEl) { try { cfg = JSON.parse(cfgEl.textContent) || {}; } catch (e) { cfg = {}; } }
 
     var PHASES = window.SD_DRILL_PHASES || [];
+    var LEVEL_ORDER = { warm: 0, core: 1, advanced: 2, expert: 3 };
     var BANK = (window.SD_DRILLS || []).filter(function (d) {
       return !cfg.levels || cfg.levels.indexOf(d.level) !== -1;
-    });
+    }).sort(function (a, b) { return (LEVEL_ORDER[a.level] || 0) - (LEVEL_ORDER[b.level] || 0); });
     if (!PHASES.length || !BANK.length) return;
     var TOTAL = PHASES.reduce(function (a, p) { return a + p.min * 60; }, 0);
 

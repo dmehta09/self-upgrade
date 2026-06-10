@@ -50,9 +50,11 @@ window.LESSONS = [
   { id: "adv-payments",        title: "Payment system",            url: "advanced/payments.html",             module: "advanced", tool: "advanced" },
   { id: "adv-llm",             title: "LLM serving",               url: "advanced/llm-serving.html",          module: "advanced", tool: "advanced" },
   { id: "adv-vector",          title: "Vector search & recsys",    url: "advanced/vector-recommender.html",   module: "advanced", tool: "advanced" },
+  { id: "adv-feature-store",   title: "ML feature store",          url: "advanced/feature-store.html",        module: "advanced", tool: "advanced" },
 
   /* ---- Case studies · Expert ---- */
   { id: "expert-multi-tenancy",  title: "Multi-tenant SaaS",       url: "expert/multi-tenancy.html",          module: "expert", tool: "expert" },
+  { id: "expert-cells",          title: "Cell architecture",       url: "expert/cell-architecture.html",      module: "expert", tool: "expert" },
   { id: "expert-user-management",title: "User management",         url: "expert/user-management.html",        module: "expert", tool: "expert" },
   { id: "expert-org-management", title: "Organizations & teams",   url: "expert/org-management.html",          module: "expert", tool: "expert" },
   { id: "expert-authentication", title: "Authentication",          url: "expert/authentication.html",         module: "expert", tool: "expert" },

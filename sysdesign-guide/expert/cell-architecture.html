@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design a cell-based architecture | The System Design Field Guide</title>
+  <meta name="description" content="Bound the blast radius: shared-nothing cells with a thin static-stable router, wave deploys, shuffle sharding, poison-pill containment, and cell migration — the Slack/AWS playbook." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="expert" data-page="expert-cells" data-lesson="expert-cells">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+        <a class="nav-link" href="../advanced/feature-store.html">ML feature store</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/cell-architecture.html">Cell architecture</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Mock-interview drills</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><span style="color:var(--accent)">Expert designs</span><span class="sep">/</span><span class="current">Design a cell-based architecture</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Case studies · expert</span>
+  <h1>Design a cell-based architecture.</h1>
+  <p class="lead">Past a certain size, the scariest failures aren't machines dying — they're <strong>platform-wide</strong> ones: a bad deploy, a poison request, a corrupted config that takes <em>everyone</em> down at once. Cell-based architecture is the answer the biggest operators converged on: partition the whole stack into <strong>N self-contained copies</strong> ("cells"), give each a slice of customers, and let nothing cross between them. Now any failure — hardware, software, or human — is capped at <strong>1/N of customers</strong>. This page is the deep-dive the <a href="multi-tenancy.html">multi-tenancy</a> lesson points at: blast radius, shuffle sharding, cell routing, and migration.</p>
+</section>
+
+<section class="section reveal" id="why">
+  <h2><span class="section-num">01</span> &nbsp;Why cells: the failures redundancy can't fix</h2>
+  <p>Replicas and multi-AZ protect you from <em>infrastructure</em> failure. They do nothing against <strong>correlated</strong> failure: the bad deploy reaches every replica; the poison pill request crashes every server that touches it; the config typo propagates everywhere in seconds. The fix is not more copies of one big system — it's <strong>many small systems that share nothing</strong>.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>A ship's hull is divided into watertight compartments — not because compartments prevent collisions, but so that one breach floods one compartment instead of sinking the ship. Cells are watertight compartments for your platform: the breach still happens; the sinking doesn't.</p>
+    </div>
+  </div>
+  <div class="kv">
+    <dt>A cell is</dt><dd>A <strong>complete, independent stack</strong> — gateway, services, queues, databases — serving a fixed subset of customers, with a <strong>capacity ceiling</strong>. You scale by adding cells, never by growing one.</dd>
+    <dt>A cell is not</dt><dd>A shard (shards split <em>data</em> under shared services), an AZ (an infrastructure boundary, not a software one), or a region (cells live <em>inside</em> regions; a region may hold many cells).</dd>
+    <dt>Who runs them</dt><dd>AWS (cell-based architecture is their prescriptive guidance and underlies many AWS services), Slack, DoorDash, Roblox, Salesforce (the original "pods"). When an interviewer asks "how does Slack survive a bad deploy?", this is the answer.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="routing">
+  <h2><span class="section-num">02</span> &nbsp;The thin router: the only shared thing</h2>
+  <p>If cells share nothing, something must still answer "which cell owns customer X?" That's the <strong>cell router</strong> — and it is the design's crux, because it's the one component every request touches: it must be <em>boring</em>. Keep it a thin lookup (no business logic), cache its answers aggressively (client-side + edge), and make it <strong>static-stable</strong>: if the mapping service dies, routers keep serving the last known map.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">A request finds its cell</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Cell routing",
+      "nodes": [
+        { "id": "client", "label": "Customer 4821",   "type": "user",    "col": 0, "row": 1 },
+        { "id": "router", "label": "Cell router",      "type": "thin",    "col": 1, "row": 1 },
+        { "id": "map",    "label": "Mapping store",    "type": "control", "col": 1, "row": 0 },
+        { "id": "c1",     "label": "Cell 1 (full stack)", "type": "cell", "col": 2, "row": 0 },
+        { "id": "c2",     "label": "Cell 2 (full stack)", "type": "cell", "col": 2, "row": 1 },
+        { "id": "c3",     "label": "Cell 3 (full stack)", "type": "cell", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "client", "to": "router" },
+        { "from": "map",    "to": "router", "label": "cached map" },
+        { "from": "router", "to": "c1" },
+        { "from": "router", "to": "c2" },
+        { "from": "router", "to": "c3" }
+      ],
+      "steps": [
+        { "edge": ["client","router"], "caption": "Request arrives carrying its partition key — customer id 4821. The router's ONLY job: key → cell." },
+        { "edge": ["map","router"], "caption": "The mapping (a small directory table: customer → cell) is cached at the router and refreshed async. Mapping store down ≠ routing down — static stability." },
+        { "edge": ["router","c2"], "caption": "Customer 4821 → cell 2. Every byte of their traffic, every queue message, every DB row lives inside cell 2.", "status": "hit" },
+        { "node": "c2", "caption": "Inside the cell it's a normal architecture — LB, services, DB. Cells don't call other cells; cross-cell = a design smell to call out." }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="kv">
+    <dt>Directory vs hash</dt><dd>A <strong>directory mapping</strong> (explicit customer→cell table) beats pure consistent hashing here: you control placement (pin a big customer to a quiet cell, honor residency), and migration is a row update. Hashing places blindly; directories place deliberately. Use consistent hashing only to pick a <em>default</em> for new customers.</dd>
+    <dt>Partition key choice</dt><dd>Pick the key ALL traffic naturally carries: tenant/org id for B2B, user id for consumer. If a request can't name its key, it can't be routed — surface that in the API design early.</dd>
+    <dt>Cell size</dt><dd>Big enough to amortize the fixed cost (each cell runs full infra), small enough that 1/N is an acceptable loss <em>and</em> a cell fits the largest customer with headroom. Common shape: dozens of cells, each capped well below what the stack has been load-tested to.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="shuffle">
+  <h2><span class="section-num">03</span> &nbsp;Shuffle sharding: blast radius below 1/N</h2>
+  <p>Plain cells cap damage at one cell's customer list. <strong>Shuffle sharding</strong> goes further for <em>request-routing</em> layers: give each customer a random <em>combination</em> of nodes (their "virtual cell"). Two customers then rarely share their full set — so a poison customer who kills their own nodes takes out… mostly just themselves.</p>
+  <figure class="viz" data-viz aria-label="Shuffle sharding: overlapping combinations contain a poison customer">
+    <figcaption class="viz-title">8 nodes, 2 per customer — who does a poison pill hurt?</figcaption>
+    <div class="viz-stage" aria-live="polite"></div>
+    <div class="viz-caption"></div>
+    <div class="viz-controls">
+      <button class="viz-btn viz-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="viz-btn viz-prev" type="button" aria-label="Previous">‹</button>
+      <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+      <button class="viz-btn viz-next" type="button" aria-label="Next">›</button>
+      <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+      <span class="viz-step">1 / 1</span>
+      <select class="viz-speed-sel" aria-label="Speed"><option value="1500">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+    </div>
+    <script type="application/json" class="viz-config">
+    {
+      "type": "array",
+      "meta": { "values": ["N1","N2","N3","N4","N5","N6","N7","N8"] },
+      "frames": [
+        { "caption": "8 worker nodes. With plain sharding into 4 cells of 2, a poison request from one customer kills 2 nodes — and 1/4 of ALL customers share them." },
+        { "active": [0,1], "pointers": [{"name":"A","at":0},{"name":"A","at":1}], "caption": "Shuffle sharding instead: customer A gets a random PAIR — N1+N2. There are C(8,2) = 28 possible pairs." },
+        { "active": [0,1], "compare": [2,4], "pointers": [{"name":"A","at":0},{"name":"A","at":1},{"name":"B","at":2},{"name":"B","at":4}], "caption": "Customer B gets N3+N5. C gets N2+N7, D gets N4+N8… each customer a different combination, mostly overlapping by at most one node." },
+        { "reject": [0,1], "pointers": [{"name":"☠","at":0},{"name":"☠","at":1}], "caption": "Customer A sends a poison request that crashes both their nodes. With 28 combinations, the chance another customer shares BOTH is ~3.6%." },
+        { "reject": [0,1], "match": [2,3,4,5,6,7], "caption": "Customer C (N2+N7) lost one node but retries onto N7: degraded, alive. Full-overlap victims: ~1/28 of customers instead of 1/4. More nodes per shard → vanishingly small." }
+      ]
+    }
+    </script>
+  </figure>
+  <p class="small">The math: with <span class="mono">n</span> nodes and shards of size <span class="mono">k</span>, there are <span class="mono">C(n,k)</span> virtual cells. For n=100, k=5 that's ~75 million combinations — two customers sharing all 5 nodes is a lottery jackpot. AWS Route 53 runs exactly this scheme.</p>
+</section>
+
+<section class="section reveal" id="failure">
+  <h2><span class="section-num">04</span> &nbsp;Failure &amp; deploys: the payoff</h2>
+  <p>This is where cells earn their cost. Kill things:</p>
+  <figure class="failsim" data-failsim aria-label="Failure simulator: cell isolation under failure and bad deploys">
+    <figcaption class="fs-title">Break the platform — watch the compartments hold</figcaption>
+    <div class="fs-scenarios"></div>
+    <div class="fs-stage"></div>
+    <div class="fs-caption" aria-live="polite"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reset" type="button" aria-label="Reset to healthy">⏮</button>
+      <button class="fs-btn fs-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="fs-btn fs-play" type="button" aria-label="Play">▶</button>
+      <button class="fs-btn fs-next" type="button" aria-label="Next step">›</button>
+      <div class="fs-progress"><div class="fs-progress-fill"></div></div>
+      <span class="fs-step">– / –</span>
+    </div>
+    <div class="fs-note" hidden></div>
+    <script type="application/json" class="fs-config">
+    {
+      "nodes": [
+        { "id": "u",      "label": "All customers", "type": "user",    "col": 0, "row": 1 },
+        { "id": "router", "label": "Cell router",    "type": "thin",    "col": 1, "row": 1 },
+        { "id": "c1",     "label": "Cell 1",         "type": "v2 → v3", "col": 2, "row": 0 },
+        { "id": "c2",     "label": "Cell 2",         "type": "v2",      "col": 2, "row": 1 },
+        { "id": "c3",     "label": "Cell 3",         "type": "v2",      "col": 2, "row": 2 },
+        { "id": "db1",    "label": "Cell 1 DB",      "type": "store",   "col": 3, "row": 0 },
+        { "id": "db2",    "label": "Cell 2 DB",      "type": "store",   "col": 3, "row": 1 },
+        { "id": "db3",    "label": "Cell 3 DB",      "type": "store",   "col": 3, "row": 2 }
+      ],
+      "edges": [
+        { "from": "u",      "to": "router" },
+        { "from": "router", "to": "c1" },
+        { "from": "router", "to": "c2" },
+        { "from": "router", "to": "c3" },
+        { "from": "c1",     "to": "db1" },
+        { "from": "c2",     "to": "db2" },
+        { "from": "c3",     "to": "db3" }
+      ],
+      "scenarios": [
+        {
+          "id": "bad-deploy",
+          "label": "Ship a bad release (wave deploy)",
+          "target": { "node": "c1" },
+          "steps": [
+            { "caption": "Deploys roll cell by cell, in waves. Wave 1 ships v3 to cell 1 only — cells 2 and 3 still run v2.",
+              "degrade": ["c1"], "badges": [{ "node": "c1", "text": "v3 canary" }] },
+            { "caption": "v3 has a crash bug. Cell 1's error rate spikes — but the blast radius is exactly cell 1's customers. v2 cells never received the build.",
+              "fail": ["c1"], "edgesDown": [["c1","db1"]], "badges": [{ "node": "router", "text": "errors: cell 1 only" }] },
+            { "caption": "Bake-time metrics halt the wave automatically. Roll cell 1 back to v2. Total damage: 1/3 of customers, minutes — not everyone, hours.",
+              "promote": ["c1"], "recover": false, "reroute": [["router","c1"]] },
+            { "caption": "Without cells, that deploy reached every replica everywhere — redundancy is zero protection against software you install on all of it.", "recover": true }
+          ],
+          "interviewer": "Frame the cell as the unit of DEPLOY, not just failure: wave-based rollout with bake time per cell turns the worst incident class (bad global deploy) into a contained canary."
+        },
+        {
+          "id": "cell-dies",
+          "label": "Cell 2 hard-down (AZ + DB loss)",
+          "target": { "node": "c2" },
+          "steps": [
+            { "caption": "Cell 2's stack is gone — infra failure took the cell and its DB. Its customers are hard-down; cells 1 and 3 don't even notice.",
+              "fail": ["c2","db2"], "edgesDown": [["router","c2"],["c2","db2"]] },
+            { "caption": "The router keeps sending cell-2 traffic to… cell 2. You do NOT spill traffic into other cells: their capacity ceilings protect THEIR customers.",
+              "fail": ["c2","db2"], "badges": [{ "node": "router", "text": "no spillover" }], "reroute": [["router","c1"],["router","c3"]] },
+            { "caption": "Recovery = restore cell 2 (its DB backups, its infra), not redistribute. Spillover under stress is how one cell's failure cascades into all of them.", "recover": true }
+          ],
+          "interviewer": "The counterintuitive senior point: NOT failing over between cells is the feature. Cells have fixed ceilings; spilling a dead cell's load into the others trades a 1/N outage for a total one."
+        },
+        {
+          "id": "poison",
+          "label": "Poison-pill customer",
+          "target": { "node": "u" },
+          "steps": [
+            { "caption": "One customer's pathological request reliably crashes whatever serves it. In a shared fleet this request would walk through every server, killing each in turn.",
+              "degrade": ["u"], "badges": [{ "node": "u", "text": "☠ request" }] },
+            { "caption": "Routed by key, the poison only ever reaches its owner's cell — cell 3. It crashes there, repeatedly. Cells 1 and 2 never see the request at all.",
+              "fail": ["c3"], "edgesDown": [["c3","db3"]], "badges": [{ "node": "c3", "text": "☠ contained" }] },
+            { "caption": "With shuffle sharding inside the cell, the blast radius shrinks again — the poison customer mostly hurts their own node combination.", "recover": true }
+          ],
+          "interviewer": "Name the poison-pill class explicitly (one input that deterministically kills servers) — it defeats replicas, autoscaling, and retries; partitioning by customer is the only structural defense."
+        }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="migration">
+  <h2><span class="section-num">05</span> &nbsp;Migration, ceilings &amp; what cells cost you</h2>
+  <div class="kv">
+    <dt>Moving a customer</dt><dd>Directory mapping makes it a controlled dance: dual-write (or replicate) the customer's data old→new cell, drain in-flight work, flip the directory row, clean up. Same playbook as the <a href="multi-tenancy.html">pool→silo promotion</a>. Practice it routinely — a migration path you've never exercised is a migration path you don't have.</dd>
+    <dt>The whale problem</dt><dd>Your largest customer must fit in one cell with headroom — they're the floor on cell size. Whales get dedicated cells (a cell of one = the silo model); shuffle sharding handles the long tail.</dd>
+    <dt>Capacity ceilings</dt><dd>Each cell has a tested max. New customers go to the emptiest cell (bin-packing by the directory); cells nearing the ceiling stop accepting. You provision by ADDING CELLS on a predictable cadence — capacity planning becomes counting.</dd>
+    <dt>What it costs</dt><dd>N copies of fixed infra (N× control planes, queues, DB clusters — real money); cross-customer features get hard (global search/analytics need an <em>aggregation plane</em> fed async from all cells); operational tooling must be cell-aware (deploys, dashboards, on-call all speak "which cell?"). Cells are an investment you make when blast radius is worth more than efficiency — usually past serious B2B scale or a painful global outage.</dd>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">The router is your new SPOF — treat it like one</div><p>Everything shared got squeezed into one thin layer, so that layer gets the full paranoia budget: static (precomputed) routing data shipped to the edge, no runtime dependency on the mapping store, multiple independent router deployments, and changes to the map rolled out as carefully as code. AWS's phrase for the property you want is <strong>static stability</strong>: the router keeps working on cached state even when its control plane is down.</p></div></div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">06</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Cell 2 dies and its customers are down. An engineer proposes the router immediately fail their traffic over to cells 1 and 3, "since they're healthy." What's the senior answer?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Do it — availability always comes first</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Don't — cells have fixed capacity ceilings and don't share state; spillover overloads the healthy cells and risks turning a 1/3 outage into a total one. Restore cell 2 instead</button>
+      <button class="quiz-opt"><span class="mark"></span>Split the traffic 50/50 to be fair</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> cell 2's customers' <em>data</em> lives in cell 2 — other cells couldn't serve them correctly anyway — and the healthy cells' ceilings exist to protect their own customers. Containment, not redistribution, is the design's entire point. Restore the cell; don't breach the compartments.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this in the interview</div><p>"I'd partition the platform into cells — complete shared-nothing stacks, each owning a directory-assigned slice of customers with a capacity ceiling. A thin, static-stable router is the only shared component. Failures and deploys are then bounded at 1/N: waves roll cell by cell, a dead cell is restored rather than spilled over, and shuffle sharding shrinks the poison-pill blast radius below 1/N. The costs I'm accepting: N× fixed infrastructure, and cross-customer features move to an async aggregation plane."</p></div></div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../expert/multi-tenancy.html"><span class="pn-k">‹ Back</span><span class="pn-t">Design a multi-tenant SaaS architecture</span></a>
+            <a class="next" href="../expert/user-management.html"><span class="pn-k">Next ›</span><span class="pn-t">Design a user management system</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#why">Why cells: the failures redundancy can't fix</a>
+          <a href="#routing">The thin router: the only shared thing</a>
+          <a href="#shuffle">Shuffle sharding: blast radius below 1/N</a>
+          <a href="#failure">Failure & deploys: the payoff</a>
+          <a href="#migration">Migration, ceilings & what cells cost you</a>
+          <a href="#recap">Trade-offs & interview recap</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Expert designs · Design a cell-based architecture</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+  <script src="../assets/js/visualizer.js"></script>
+  <script src="../assets/js/failsim.js"></script>
+</body>
+</html>

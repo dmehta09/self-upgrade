@@ -1,0 +1,185 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Case studies · advanced</span>
+  <h1>Design a real-time ML feature store.</h1>
+  <p class="lead">Every ML-powered product — fraud checks, ETA prediction, feed ranking, dynamic pricing — needs <strong>features</strong>: the input signals a model consumes. A feature store is the system that computes them once and serves them twice: in <strong>bulk to training</strong> (months of history) and in <strong>milliseconds to inference</strong> (the freshest value right now). The two consumers want opposite things from the same data, and the bugs that arise when they disagree — <em>training-serving skew</em> and <em>data leakage</em> — are silent: the model just quietly gets worse. Increasingly asked at ML-heavy companies in 2026.</p>
+</section>
+
+<section class="section reveal" id="requirements">
+  <h2><span class="section-num">01</span> &nbsp;Requirements &amp; scale</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✅</span><h4>Functional</h4><p>Define a feature once (e.g. <span class="mono">user_txn_count_7d</span>); serve point lookups at inference (<em>online</em>); generate point-in-time-correct training sets (<em>offline</em>); discover/share features across teams via a registry.</p></div>
+    <div class="card feature"><span class="f-ic fx">⚙️</span><h4>Non-functional</h4><p>Online reads p99 <strong>&lt; 10 ms</strong> (the model call already eats the budget); freshness from <em>daily</em> (churn score) to <em>seconds</em> (fraud velocity); training reads scan <strong>terabytes</strong>; exactly the same feature values in both paths.</p></div>
+  </div>
+  <p>A worked scale: a payments company scoring fraud on 5,000 transactions/s, each model call fetching ~50 features for 2–3 entities (user, card, merchant) → <strong>~500K feature reads/s</strong> against the online store, while nightly training jobs replay 6 months of history offline. The read amplification (features × entities per inference) is the number candidates forget to compute.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>A restaurant kitchen preps ingredients once, then uses them two ways: the <em>line cooks</em> need small, ready-to-grab portions <em>right now</em> (online store), while the <em>test kitchen</em> developing next month's menu needs the full pantry history of what was used when (offline store). If the test kitchen develops a recipe with ingredients the line cooks won't actually have at dinner time, the dish fails in service — that's training-serving skew.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="skew">
+  <h2><span class="section-num">02</span> &nbsp;The two silent killers</h2>
+  <div class="kv">
+    <dt>Training-serving skew</dt><dd>The feature is computed <em>twice</em> — once in the training pipeline (Spark SQL over the warehouse), once in the serving path (hand-written Java) — and the two implementations drift: different null handling, different time windows, different rounding. The model trains on one distribution and serves on another. <strong>Fix: define the transformation once</strong>, in the feature store, and have both paths consume <em>its</em> output.</dd>
+    <dt>Data leakage (time travel)</dt><dd>A training row for a prediction made on <strong>March 3</strong> must only see feature values as they were <em>on March 3</em>. Join against today's values and the model "sees the future" — it scores brilliantly offline and collapses in production. <strong>Fix: point-in-time-correct joins</strong> (below).</dd>
+  </div>
+  <div class="figbox">
+    <div class="fig-title">Point-in-time correctness — the ASOF join</div>
+    <svg viewBox="0 0 640 230" role="img" aria-label="A training label at time T joins the latest feature value before T, not the current value">
+      <line class="svg-grid" x1="40" y1="60" x2="600" y2="60"/>
+      <text class="svg-faint" x="600" y="48" text-anchor="end">feature timeline: user_txn_count_7d</text>
+      <rect class="svg-fill" x="60" y="44" width="58" height="30" rx="7"/>
+      <text class="svg-mono" x="89" y="63" text-anchor="middle">v=3</text>
+      <rect class="svg-fill" x="200" y="44" width="58" height="30" rx="7"/>
+      <text class="svg-mono" x="229" y="63" text-anchor="middle">v=5</text>
+      <rect class="svg-fill" x="380" y="44" width="58" height="30" rx="7"/>
+      <text class="svg-mono" x="409" y="63" text-anchor="middle">v=9</text>
+      <rect class="svg-fill" x="520" y="44" width="68" height="30" rx="7"/>
+      <text class="svg-mono" x="554" y="63" text-anchor="middle">v=14</text>
+      <text class="svg-faint" x="89" y="92" text-anchor="middle">Mar 1</text>
+      <text class="svg-faint" x="229" y="92" text-anchor="middle">Mar 2</text>
+      <text class="svg-faint" x="409" y="92" text-anchor="middle">Mar 4</text>
+      <text class="svg-faint" x="554" y="92" text-anchor="middle">today</text>
+
+      <rect class="svg-accent-fill" x="240" y="130" width="200" height="44" rx="9"/>
+      <text class="svg-mono" x="340" y="148" text-anchor="middle">label @ Mar 3: fraud=yes</text>
+      <text class="svg-faint" x="340" y="164" text-anchor="middle">training row</text>
+      <path class="svg-good-s" d="M300 130 C 280 104, 250 86, 235 74"/>
+      <text class="svg-good" x="222" y="110" font-family="var(--font-mono)" font-size="11">✓ ASOF: v=5</text>
+      <path class="svg-bad-s" d="M420 132 C 470 110, 520 90, 548 74" stroke-dasharray="6 5"/>
+      <text class="svg-bad" x="500" y="118" font-family="var(--font-mono)" font-size="11">✗ leakage: v=14</text>
+      <text class="svg-faint" x="320" y="208" text-anchor="middle">"latest value AT OR BEFORE the label's timestamp" — every offline read is this join, per row, per feature</text>
+    </svg>
+    <div class="cap">The offline store keeps every historical value with timestamps precisely so training can ask "what did we know <em>then</em>?" — the single most important sentence on this page.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="architecture">
+  <h2><span class="section-num">03</span> &nbsp;Architecture: one definition, two stores</h2>
+  <p>The canonical shape (Feast's design, Tecton/Databricks/SageMaker manage the same parts): a <strong>registry</strong> holds feature definitions; pipelines <strong>materialize</strong> values into an <strong>offline store</strong> (warehouse / lakehouse tables — complete history) and an <strong>online store</strong> (Redis / DynamoDB / Bigtable — latest value per key only); a thin <strong>serving API</strong> does the millisecond lookups.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Write path (materialization) and read path (inference)</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Feature store data flow",
+      "nodes": [
+        { "id": "ev",     "label": "Events (Kafka)",     "type": "stream", "col": 0, "row": 0 },
+        { "id": "wh",     "label": "Warehouse tables",    "type": "batch",  "col": 0, "row": 2 },
+        { "id": "pipe",   "label": "Transform pipelines", "type": "compute","col": 1, "row": 1 },
+        { "id": "off",    "label": "Offline store",       "type": "history","col": 2, "row": 2 },
+        { "id": "on",     "label": "Online store",        "type": "redis",  "col": 2, "row": 0 },
+        { "id": "svc",    "label": "Feature serving API", "type": "service","col": 3, "row": 0 },
+        { "id": "model",  "label": "Model inference",     "type": "ml",     "col": 4, "row": 0 },
+        { "id": "train",  "label": "Training job",        "type": "batch",  "col": 3, "row": 2 }
+      ],
+      "edges": [
+        { "from": "ev",   "to": "pipe", "label": "stream" },
+        { "from": "wh",   "to": "pipe", "label": "batch" },
+        { "from": "pipe", "to": "on",   "label": "latest" },
+        { "from": "pipe", "to": "off",  "label": "history" },
+        { "from": "on",   "to": "svc" },
+        { "from": "svc",  "to": "model", "label": "&lt;10 ms" },
+        { "from": "off",  "to": "train", "label": "ASOF join" }
+      ],
+      "steps": [
+        { "node": "pipe", "caption": "ONE transformation definition (registered in the registry) computes user_txn_count_7d — there is no second implementation anywhere." },
+        { "edge": ["pipe","off"], "caption": "Materialize to the offline store: append-only, timestamped history. This is what makes point-in-time joins possible." },
+        { "edge": ["pipe","on"], "caption": "Materialize to the online store: latest value per entity key only. Tiny, hot, O(1) lookups.", "status": "hit" },
+        { "edge": ["on","svc"], "caption": "Inference path: the app asks for 50 features for (user, card, merchant) — one batched multi-get." },
+        { "edge": ["svc","model"], "caption": "Feature vector reaches the model in single-digit milliseconds; the model spends the rest of the latency budget.", "latency": "~5 ms" },
+        { "edge": ["off","train"], "caption": "Training path: replay 6 months with ASOF joins — same values the online path would have served at each moment in history." }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="kv">
+    <dt>Online store choice</dt><dd>Redis (sub-ms, RAM cost) vs DynamoDB/Bigtable (ms, cheaper at huge entity counts). Key = <span class="mono">entity_key + feature_view</span>; value = packed latest features. It's a cache-shaped workload — but one you <em>cannot</em> lazily refill on miss, because the source is a pipeline, not a DB row.</dd>
+    <dt>Offline store choice</dt><dd>Lakehouse tables (Parquet/Iceberg/Delta) or the warehouse (BigQuery/Snowflake). Append-only, partitioned by time; cheap scans, time travel.</dd>
+    <dt>Registry</dt><dd>Feature names, owners, schemas, freshness SLAs, lineage. The governance layer that makes features <em>shared infrastructure</em> instead of every team's private scripts.</dd>
+  </div>
+</section>
+
+<section class="section reveal" id="freshness">
+  <h2><span class="section-num">04</span> &nbsp;Freshness vs cost — the central dial</h2>
+  <p>Every feature has a freshness requirement, and freshness is the cost driver. Three materialization modes:</p>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Materialization strategy",
+      "axisLabel": "How fresh must user_txn_count_7d be?",
+      "stops": [
+        { "label": "Daily batch", "dims": { "Freshness": 15, "Cost": 90, "Simplicity": 95, "Coverage": 100 }, "note": "One Spark job at 02:00 recomputes everything. Fine for slow-moving signals (churn risk, lifetime value). A day of staleness is invisible to these models — and it's 10–100× cheaper than streaming." },
+        { "label": "Micro-batch (15 min)", "dims": { "Freshness": 60, "Cost": 65, "Simplicity": 70, "Coverage": 90 }, "note": "Incremental jobs over recent partitions. The workhorse for 'fresh-ish' features (today's session count). Watch job overlap: if a run takes longer than the interval, lag compounds." },
+        { "label": "Streaming", "dims": { "Freshness": 100, "Cost": 25, "Simplicity": 35, "Coverage": 60 }, "note": "Flink/Spark-Streaming aggregates over Kafka, written to the online store within seconds. Mandatory for fraud velocity (txns in the last 5 min). You now own windowing, late events, and state recovery — spend it only where seconds matter." }
+      ]
+    }
+    </script>
+  </div>
+  <p>Size the bill before choosing — the interview move is showing that streaming-everything is indefensible:</p>
+  <div class="calc" data-calc>
+    <script type="application/json" class="calc-config">
+    {
+      "title": "Online store + pipeline sizing",
+      "model": {
+        "inputs": [
+          { "key": "infQps",   "label": "Inference calls / s",        "min": 100,   "max": 50000,   "step": 100,   "def": 5000,   "fmt": "num" },
+          { "key": "feats",    "label": "Features per call",           "min": 5,     "max": 300,     "step": 5,     "def": 50,     "fmt": "num" },
+          { "key": "entities", "label": "Entities (users+cards+…)",    "min": 1000000, "max": 1000000000, "step": 1000000, "def": 100000000, "fmt": "num" },
+          { "key": "bytesPerFeat", "label": "Bytes per feature value", "min": 8,     "max": 200,     "step": 8,     "def": 32,     "fmt": "bytes" },
+          { "key": "featsPerEnt", "label": "Features stored / entity", "min": 10,    "max": 500,     "step": 10,    "def": 100,    "fmt": "num" }
+        ],
+        "outputs": [
+          { "key": "reads",  "label": "Feature reads / s",  "formula": "infQps * feats",                          "fmt": "num/s", "note": "calls × features — the amplification" },
+          { "key": "ram",    "label": "Online store size",  "formula": "entities * featsPerEnt * bytesPerFeat",   "fmt": "bytes", "note": "entities × features × bytes" },
+          { "key": "shards", "label": "Redis shards",       "formula": "max(ceil(reads / 100000), ceil(ram / 25000000000))", "fmt": "num", "note": "⌈by 100K ops⌉ vs ⌈by 25 GB⌉ — take the max" }
+        ],
+        "presets": [
+          { "label": "Fraud scoring",  "values": { "infQps": 5000,  "feats": 50,  "entities": 100000000 } },
+          { "label": "Feed ranking",   "values": { "infQps": 30000, "feats": 200, "entities": 500000000, "featsPerEnt": 300 } }
+        ],
+        "summary": "{reads} feature reads/s against a {ram} online store → about {shards} Redis shards. Note which constraint won — ops or memory — and say it out loud."
+      }
+    }
+    </script>
+    <noscript><p>The calculator needs JavaScript.</p></noscript>
+  </div>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">05</span> &nbsp;Failure modes &amp; the 2026 landscape</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🥶</span><h4>Stale features</h4><p>A stuck streaming job silently serves yesterday's velocity counts — fraud models miss in production with zero errors anywhere. Monitor <strong>feature freshness lag</strong> per feature view against its SLA; alert on lag, not on job failure.</p></div>
+    <div class="card feature"><span class="f-ic fx">🕳️</span><h4>Missing values at inference</h4><p>New user → no features yet. Define <strong>defaults per feature</strong> in the registry (and train with them!), never null-crash the scoring path. The cold-start default is part of the feature definition.</p></div>
+    <div class="card feature"><span class="f-ic fx">🪞</span><h4>Online/offline divergence</h4><p>Run a continuous <strong>consistency audit</strong>: sample online reads, log them, replay the same keys offline, diff. Drift = a materialization bug you'd otherwise discover via model decay months later.</p></div>
+    <div class="card feature"><span class="f-ic fx">💥</span><h4>Online store down</h4><p>Inference must degrade, not die: serve defaults / cached vectors and let the model run slightly dumber, or fail over to a replica. A fraud model scoring with stale features beats no fraud scoring at all.</p></div>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">2026 landscape</div><p><strong>Feast</strong> remains the open-source reference architecture (registry + materialization + online/offline duality); <strong>Tecton</strong> the managed leader for streaming features; warehouse-native stores (<strong>Databricks</strong>, <strong>SageMaker</strong>, <strong>Vertex</strong>) won the "we're already there" crowd. The notable shift: feature stores now also serve <strong>embeddings</strong> alongside scalar features — the online store doubles as the profile-vector source for <a href="vector-recommender.html">RAG and recommender</a> pipelines, which is why this page and that one increasingly appear in the same interview.</p></div></div>
+</section>
+
+<section class="section reveal" id="recap">
+  <h2><span class="section-num">06</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Your fraud model performs superbly in offline evaluation but degrades badly in production. Training joins features by user id against the feature tables' <em>current</em> values. What's the most likely cause?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>The online store is too slow, so the model times out</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Data leakage — training rows saw feature values from <em>after</em> the prediction moment, so offline metrics were inflated; joins must be point-in-time (ASOF)</button>
+      <button class="quiz-opt"><span class="mark"></span>The model needs more features</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> joining against current values lets each training row "see the future" (e.g. a chargeback count that only exists <em>because</em> of the fraud being predicted). Offline metrics soar; production, which can only see the past, can't match them. Every offline read must be an ASOF join at the label's timestamp.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say this in the interview</div><p>"A feature store is one definition with two materializations: an append-only offline history for point-in-time-correct training, and a latest-value online store for sub-10 ms inference. The two failure modes I design against are training-serving skew — killed by defining the transform once — and leakage, killed by ASOF joins. Freshness is per-feature: batch by default, streaming only where seconds change the prediction."</p></div></div>
+</section>
