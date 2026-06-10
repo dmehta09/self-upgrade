@@ -67,6 +67,10 @@
         <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
         <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
       </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Machine-coding drills</a>
+      </nav>
     </aside>
     <div class="sidebar-scrim"></div>
 
@@ -192,6 +196,45 @@ agency.publish("Market up 2%")</code></pre></div>
             </div>
             <div class="io-out"><b>Output</b>Phone buzzes: Market up 2%
 Email sent: Market up 2%</div>
+            <p>Here's that exact code <em>running</em> — step through and watch the fan-out happen one call at a time, with the executing line highlighted:</p>
+            <figure class="pflow" data-pflow aria-label="Observer pattern call flow, animated">
+              <figcaption class="pf-title">Observer · the notify fan-out, call by call</figcaption>
+              <script type="application/json" class="pf-config">
+              {
+                "lanes": [
+                  { "id": "client",  "label": "client code" },
+                  { "id": "subject", "label": "NewsAgency" },
+                  { "id": "phone",   "label": "Phone" },
+                  { "id": "email",   "label": "Email" }
+                ],
+                "code": [
+                  "agency.subscribe(phone)",
+                  "agency.subscribe(email)",
+                  "agency.publish(\"Market up 2%\")",
+                  "  for obs in self._subscribers:",
+                  "      obs.update(headline)"
+                ],
+                "steps": [
+                  { "from": "client", "to": "subject", "label": "subscribe(phone)", "line": 0,
+                    "caption": "The agency stores the observer behind one tiny Protocol — it never learns it's a Phone." },
+                  { "from": "client", "to": "subject", "label": "subscribe(email)", "line": 1,
+                    "caption": "Second subscriber joins the same list. Subscribers can come and go at runtime." },
+                  { "from": "client", "to": "subject", "label": "publish(headline)", "line": 2,
+                    "caption": "One call from the client side. The agency now owns the fan-out." },
+                  { "from": "subject", "to": "subject", "label": "loop subscribers", "kind": "self", "line": 3,
+                    "caption": "The subject walks its list — it has no idea what's on it, only that each item has update()." },
+                  { "from": "subject", "to": "phone", "label": "update(headline)", "line": 4,
+                    "caption": "Same message, first observer. The Phone decides what 'update' means for a phone." },
+                  { "from": "phone", "to": "subject", "kind": "return", "line": 4,
+                    "caption": "Phone returns. The agency neither knows nor cares what buzzing looked like." },
+                  { "from": "subject", "to": "email", "label": "update(headline)", "line": 4,
+                    "caption": "Same call again, second observer — this is the fan-out. Add a 3rd display? Zero agency edits." },
+                  { "from": "email", "to": "subject", "kind": "return", "line": 4,
+                    "caption": "Done. One publish() became N update() calls — the subject stayed completely decoupled." }
+                ]
+              }
+              </script>
+            </figure>
             <div class="kv">
               <dt>Use when</dt><dd>a change in one object must fan out to many others that can come and go.</dd>
               <dt>Avoid when</dt><dd>there's exactly one dependent forever — just call it directly.</dd>
@@ -533,5 +576,6 @@ level 9: unhandled</div>
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/patternflow.js"></script>
 </body>
 </html>

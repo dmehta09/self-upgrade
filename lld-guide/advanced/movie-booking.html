@@ -67,6 +67,10 @@
         <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
         <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
       </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Machine-coding drills</a>
+      </nav>
     </aside>
     <div class="sidebar-scrim"></div>
 
@@ -108,6 +112,32 @@
             <p>This is the whole case in one paragraph, so read it slowly. Two requests arrive for seat <code>A1</code> at the same instant. Each one does the obvious thing: <em>check</em> that <code>A1</code> is <code>FREE</code>, see that it is, then <em>book</em> it. But if both threads run the <em>check</em> before either runs the <em>book</em>, they <strong>both</strong> see <code>FREE</code> and they <strong>both</strong> book — two customers, one seat. The seat was double-sold, and worse, both got a "success." This is a classic <strong>read–modify–write</strong> race (see the <a href="../advanced/index.html#concurrency">concurrency primer</a>).</p>
             <p>The fix is to make <strong>"check that all requested seats are free, THEN mark them held"</strong> a single, indivisible <strong>critical section</strong> under a lock. While one thread holds the lock, no other thread can even peek at the seats — so the second request sees <code>A1</code> as <code>HELD</code> and fails cleanly, exactly as it should.</p>
             <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">"Check-then-act" is not atomic</div><p>Any code shaped like <em>"if the seat is free, then take it"</em> is two operations with a gap in between — and a thread can be switched out right in that gap. CPython's GIL does <strong>not</strong> save you: it serialises single bytecodes, not your multi-step logic. The only fix is to put the <em>check</em> and the <em>act</em> inside the same <code>with self._lock:</code> block so nothing can run between them.</p></div></div>
+            <p>Don't take the paragraph's word for it — <strong>watch the gap happen</strong>. The same read-then-write shape that lets both threads see <code>FREE</code> also corrupts this booking counter. Scrub the unlucky interleaving, then replay the <em>identical</em> schedule with the lock:</p>
+            <figure class="conviz" data-conviz aria-label="Interactive race condition simulator: two booking threads, one shared counter">
+              <figcaption class="cv-title">Two booking requests · one counter — scrub the interleaving</figcaption>
+              <script type="application/json" class="cv-config">
+              {
+                "shared": [ { "id": "sold", "label": "tickets_sold", "init": 0 } ],
+                "threads": [
+                  { "id": "a", "label": "Request A", "ops": [
+                    { "op": "lock" },
+                    { "op": "read",  "var": "sold", "into": "n", "text": "n = tickets_sold    # read" },
+                    { "op": "calc",  "reg": "n", "add": 1,       "text": "n = n + 1           # modify" },
+                    { "op": "write", "var": "sold", "from": "n", "text": "tickets_sold = n    # write" },
+                    { "op": "unlock" } ] },
+                  { "id": "b", "label": "Request B", "ops": "same" }
+                ],
+                "schedules": [
+                  { "id": "racy",   "label": "⚡ Unlucky interleaving · no lock", "lock": false,
+                    "order": ["a", "b", "a", "b", "a", "b"], "expect": 2 },
+                  { "id": "locked", "label": "🔒 Same arrival order · with Lock", "lock": true,
+                    "order": ["a", "b", "a", "b", "a", "b"], "expect": 2 }
+                ],
+                "verdictVar": "sold"
+              }
+              </script>
+            </figure>
+            <p>In the racy run both requests <em>read</em> <code>0</code> before either <em>writes</em> — B's write lands on top of A's and one sale vanishes. With the lock, B blocks at <code>acquire()</code> until A's whole read–modify–write finishes, so it reads <code>1</code> and the count ends correct. Seat booking is this exact shape with <code>FREE/HELD</code> in place of the counter — which is why <code>hold()</code> below does its check <em>and</em> its act inside one <code>with self._lock:</code> block.</p>
           </section>
 
           <!-- 3. SEAT STATES -->
@@ -323,5 +353,6 @@ def _expire_stale_holds(self, now):
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/concurrency.js"></script>
 </body>
 </html>

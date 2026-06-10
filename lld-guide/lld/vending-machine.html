@@ -67,6 +67,10 @@
         <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
         <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
       </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Machine-coding drills</a>
+      </nav>
     </aside>
     <div class="sidebar-scrim"></div>
 
@@ -163,6 +167,43 @@
               </div>
               <div class="cap">The <code>VendingMachine</code> context holds one of these at a time and delegates every call to it.</div>
             </div>
+            <p>Diagrams show the legal moves — this player lets you try the <em>illegal</em> ones too. Fire events at the machine and watch each state accept or reject them:</p>
+            <figure class="fsm" data-fsm aria-label="Interactive vending machine state machine">
+              <figcaption class="fsm-title">Live state machine — fire events at it</figcaption>
+              <script type="application/json" class="fsm-config">
+              {
+                "initial": "idle",
+                "states": [
+                  { "id": "idle",     "label": "Idle",       "note": "balance = 0",        "col": 0, "row": 0 },
+                  { "id": "hasmoney", "label": "HasMoney",   "note": "pick a product",     "col": 2, "row": 0 },
+                  { "id": "dispense", "label": "Dispensing", "note": "vend + change",      "col": 1, "row": 1, "transient": true }
+                ],
+                "events": [
+                  { "id": "coin",   "label": "insert_coin(25)" },
+                  { "id": "select", "label": "select(\"cola\")" },
+                  { "id": "cancel", "label": "cancel()" }
+                ],
+                "transitions": [
+                  { "from": "idle",     "on": "coin",   "to": "hasmoney", "log": "balance += 25c" },
+                  { "from": "hasmoney", "on": "coin",   "to": "hasmoney", "log": "balance += 25c (stay)" },
+                  { "from": "hasmoney", "on": "select", "to": "dispense", "guard": "balance ≥ price, stock > 0", "log": "vending cola…" },
+                  { "from": "dispense", "auto": true,   "to": "idle",     "delayMs": 1000, "log": "dispensed + change, balance = 0" },
+                  { "from": "hasmoney", "on": "cancel", "to": "idle",     "log": "refunded full balance" },
+                  { "from": "idle",     "on": "select", "reject": "insert money first" },
+                  { "from": "idle",     "on": "cancel", "reject": "nothing to refund" },
+                  { "from": "dispense", "on": "coin",   "reject": "busy dispensing" },
+                  { "from": "dispense", "on": "select", "reject": "already dispensing" },
+                  { "from": "dispense", "on": "cancel", "reject": "can't un-vend a snack" }
+                ],
+                "scenarios": [
+                  { "label": "Buy a cola",       "fire": ["coin", "coin", "select"] },
+                  { "label": "Cancel + refund",  "fire": ["coin", "cancel"] },
+                  { "label": "Press select first", "fire": ["select", "coin", "select"] }
+                ]
+              }
+              </script>
+            </figure>
+            <p>Every red ✕ in the log is a line of code you <em>don't</em> have to write — the rejecting defaults on the abstract state handle it. That's the State pattern's quiet win.</p>
           </section>
 
           <!-- 4. CODE -->
@@ -434,5 +475,6 @@ vm.cancel()                # refunded 100c, back to Idle</code></pre></div>
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/fsm.js"></script>
 </body>
 </html>

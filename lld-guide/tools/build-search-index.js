@@ -21,6 +21,7 @@ const FILES = [
   "advanced/index.html", "advanced/lru-cache.html", "advanced/logging-framework.html", "advanced/file-system.html",
   "advanced/elevator-system.html", "advanced/splitwise.html", "advanced/rate-limiter.html",
   "advanced/movie-booking.html", "advanced/pubsub-queue.html", "advanced/ride-hailing.html",
+  "drill/index.html",
   "reference/glossary.html",
 ];
 

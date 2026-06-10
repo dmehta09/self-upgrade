@@ -67,6 +67,10 @@
         <a class="nav-link" href="../advanced/pubsub-queue.html">Pub/Sub queue</a>
         <a class="nav-link" href="../advanced/ride-hailing.html">Ride-hailing</a>
       </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Machine-coding drills</a>
+      </nav>
     </aside>
     <div class="sidebar-scrim"></div>
 
@@ -170,6 +174,59 @@
               </div>
               <div class="cap">Filled diamond = <code>ParkingLot</code> owns its spots (composition). Solid arrow = a spot holds a reference to its parked <code>Vehicle</code> (association). Hollow triangle = the concrete rates <em>are</em> a <code>PricingStrategy</code> (interface realization). The lot depends on the <em>interface</em>, never a concrete rate.</div>
             </div>
+            <p>Now explore the same model interactively. Click any class to isolate its relationships and see which <em>pattern role</em> it plays; the chips hide whole relationship families (try viewing just the composition spine):</p>
+            <figure class="umlx" data-umlx aria-label="Interactive parking lot class diagram">
+              <figcaption class="ux-title">Explore the class model — click a class, toggle relationship types</figcaption>
+              <script type="application/json" class="ux-config">
+              {
+                "classes": [
+                  { "id": "ticket", "name": "Ticket", "col": 0, "row": 0,
+                    "attrs": ["spot: ParkingSpot", "entry_hour: int"],
+                    "methods": [],
+                    "duty": "An immutable receipt: which spot, since when. It carries everything unpark() needs — no global lookup table." },
+                  { "id": "lot", "name": "ParkingLot", "col": 1, "row": 0,
+                    "attrs": ["spots: list[ParkingSpot]", "pricing: PricingStrategy"],
+                    "methods": [
+                      { "sig": "park(vehicle) → Ticket", "role": "finds the smallest free spot that fits" },
+                      { "sig": "unpark(ticket, hr) → fee", "role": "frees the spot, delegates fee to the strategy" }
+                    ],
+                    "role": "Facade",
+                    "duty": "The single entry point. Callers see two methods; floors, spots and pricing stay behind it." },
+                  { "id": "strategy", "name": "PricingStrategy", "kind": "interface", "col": 2, "row": 0,
+                    "methods": [{ "sig": "price(hours) → float", "role": "the one seam product can change" }],
+                    "role": "Strategy",
+                    "duty": "The swap point for fee math. The lot depends on this interface, never on a concrete rate." },
+                  { "id": "vehicle", "name": "Vehicle", "col": 0, "row": 1,
+                    "attrs": ["license_plate: str", "type: VehicleType"],
+                    "methods": [],
+                    "duty": "Plain data — a plate and a size enum. It has no behavior; it is the thing being parked." },
+                  { "id": "spot", "name": "ParkingSpot", "col": 1, "row": 1,
+                    "attrs": ["type: SpotType", "parked: Vehicle | None"],
+                    "methods": [
+                      { "sig": "can_fit(vehicle) → bool", "role": "size logic lives here, not in a lot-side type switch" },
+                      { "sig": "park(v) / vacate()", "role": "the only mutations in the model" }
+                    ],
+                    "duty": "Knows its own size and occupant. Asking the spot what fits keeps allocation free of if-ladders." },
+                  { "id": "flat", "name": "FlatRate", "col": 2, "row": 1,
+                    "methods": [{ "sig": "price(hours) → float", "role": "ConcreteStrategy" }],
+                    "role": "ConcreteStrategy",
+                    "duty": "One fixed fee, however long you stay." },
+                  { "id": "hourly", "name": "HourlyRate", "col": 3, "row": 1,
+                    "methods": [{ "sig": "price(hours) → float", "role": "ConcreteStrategy" }],
+                    "role": "ConcreteStrategy",
+                    "duty": "rate × hours. Adding WeekendRate later touches nothing else." }
+                ],
+                "relations": [
+                  { "from": "spot",    "to": "lot",      "type": "compose", "label": "1..*" },
+                  { "from": "lot",     "to": "ticket",   "type": "depend",  "label": "issues" },
+                  { "from": "lot",     "to": "strategy", "type": "depend",  "label": "uses" },
+                  { "from": "spot",    "to": "vehicle",  "type": "assoc",   "label": "parks 0..1" },
+                  { "from": "flat",    "to": "strategy", "type": "implement" },
+                  { "from": "hourly",  "to": "strategy", "type": "implement" }
+                ]
+              }
+              </script>
+            </figure>
           </section>
 
           <!-- 4. CODE -->
@@ -457,5 +514,6 @@ print(f"Nearest spot for car: floor {level}, spot {spot.spot_id}")</code></pre><
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/umlx.js"></script>
 </body>
 </html>
