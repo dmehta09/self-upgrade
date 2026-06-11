@@ -25,6 +25,8 @@ const FILES = [
   "code/skills-plugins.html", "code/mcp.html", "code/headless-ci.html", "code/power-user.html",
   // Reference
   "reference/cheatsheet.html", "reference/glossary.html", "reference/resources.html",
+  // Practice
+  "drill/index.html",
 ];
 
 function decode(s) {

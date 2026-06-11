@@ -14,8 +14,11 @@ same house style. Content verified **June 2026**.
 - **Claude Code** (`code/`, 14 lessons) — install &amp; surfaces, your first session, context hygiene,
   the explore→plan→code→commit workflow, verification, CLAUDE.md, slash commands, permissions,
   subagents, hooks, skills &amp; plugins, MCP servers, headless &amp; CI, and power-user workflows.
-- **Reference** (`reference/`) — a cheat sheet with an interactive command explorer, a glossary, and
-  curated best GitHub references.
+- **Reference** (`reference/`) — a cheat sheet with an interactive command explorer (plus a built-in
+  speed quiz), a glossary, and curated best GitHub references.
+- **Practice** (`drill/`) — three timed quiz drills (*pick the mechanism* / *which API feature?* /
+  *debug the session*) with traps, explanations, and miss-links back to lessons, plus two flashcard
+  decks (commands &amp; flags, API concepts).
 
 ## Interactive pieces
 
@@ -26,6 +29,14 @@ same house style. Content verified **June 2026**.
   Claude reply plus a "why" note. Fully offline, no API key.
 - **Command explorer** (`assets/js/command-explorer.js` + `commands-data.js`) — searchable,
   filterable reference of slash commands, settings, flags, hooks, and env vars.
+- **Context meter** (`assets/js/ctxmeter.js`) — an animated context-window bar that fills, runs hot,
+  and gets compacted as a session story plays out.
+- **Gate flow** (`assets/js/gateflow.js`) — a tool call walking the gates: permission rules,
+  the ask prompt, hooks that can veto, execution. Powers both the permissions and hooks lessons.
+- **Quiz drills** (`assets/js/quizdrill.js`) — timed chip quizzes with per-question countdowns and
+  trap explanations. Best scores in `localStorage["claude-drill"]`.
+- **Flashcards** (`assets/js/flashcards.js`) — flip cards, mark known/review; persists to
+  `localStorage["claude-cards"]`.
 - Plus the shared house features: offline full-text **search** (press `/`), **progress** tracking
   ("mark as learned"), light/dark **theme**, quizzes, and reveal-on-scroll.
 

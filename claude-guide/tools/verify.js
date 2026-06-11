@@ -103,6 +103,8 @@ for (const f of files) {
     [/class="cmd-explorer"/, "commands-data.js"],
     [/data-ctxmeter/, "ctxmeter.js"],
     [/data-gateflow/, "gateflow.js"],
+    [/data-trainer/, "quizdrill.js"],
+    [/class="flashdeck"/, "flashcards.js"],
   ];
   for (const [re, js] of ENGINES) {
     if (re.test(html) && !html.includes("assets/js/" + js))
