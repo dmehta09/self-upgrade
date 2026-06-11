@@ -45,11 +45,16 @@ langstack/                     ← this project
 ├── prompt.md                  ← reusable prompt to regenerate this whole project
 ├── docs/
 │   └── skills-used.md         ← how this project was built (Claude Code skills)
-├── index.html                 ← entry point (the hub)
+├── index.html                 ← entry point (the hub + progress dashboard)
+├── tools/
+│   ├── build-search-index.js   ← regenerates assets/js/search-index.js
+│   └── verify.js               ← link/anchor/asset/wiring checker
 ├── assets/
 │   ├── css/styles.css          ← shared design system (themes, components)
-│   └── js/main.js              ← theme toggle, scrollspy, code tabs/copy,
-│                                  quizzes, offline Python syntax highlighter
+│   └── js/                     ← main.js (theme, scrollspy, tabs, quizzes,
+│       │                          highlighter) + lessons.js, progress.js,
+│       │                          search.js, search-index.js (generated)
+│       └── …engines             ← graphsim.js, tracelab.js, pipeviz.js
 ├── langchain/
 │   ├── index.html              ← overview
 │   └── concepts.html           ← deep dive
@@ -64,13 +69,22 @@ langstack/                     ← this project
     └── glossary.html
 ```
 
-9 HTML pages + 2 shared assets. Every page reuses the same sidebar, top bar, and footer; all links are relative within the tree.
+9 HTML pages + shared assets. Every page reuses the same sidebar, top bar, and footer; all links are relative within the tree.
+
+**After editing any page content**, rebuild the search index and check the tree:
+
+```text
+node tools/build-search-index.js && node tools/verify.js
+```
 
 ---
 
 ## ✨ Features
 
 - **Visual-first** — hand-drawn SVG/CSS flow diagrams for LCEL, RAG, state graphs, conditional routing, the trace run-tree, and more.
+- **Interactive simulators** — a **StateGraph stepper** (`graphsim.js`: watch the router pick edges, the tool loop fire, state merge, and checkpoints replay), a **LangSmith-style trace waterfall** (`tracelab.js`: click runs to inspect inputs/outputs/latency/tokens), and an **LCEL pipe stepper** (`pipeviz.js`: see the payload change shape at every hop).
+- **Full-text search** — press `/` or ⌘/Ctrl-K anywhere; results deep-link to the exact section.
+- **Progress tracking** — a "mark as learned" button per lesson, sidebar checkmarks, and a home dashboard (saved in `localStorage["lang-progress"]`).
 - **Interactive** — collapsible "go deeper" sections, tabbed code blocks with copy buttons, mini self-check quizzes with instant feedback, sidebar nav with scroll-spy, and a live-filtering glossary.
 - **Light & dark mode** — toggle in the top bar; your choice is remembered (`localStorage`).
 - **Per-tool theming** — LangChain green · LangGraph indigo · LangSmith amber.

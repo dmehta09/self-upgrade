@@ -10,8 +10,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../assets/css/styles.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.4' fill='%2334d399'/><circle cx='19' cy='6' r='2.4' fill='%23818cf8'/><circle cx='12' cy='18' r='2.4' fill='%23fbbf24'/></svg>" />
+  <script>window.SITE_BASE = "../";</script>
 </head>
-<body data-tool="langgraph" data-page="lg-concepts">
+<body data-tool="langgraph" data-page="lg-concepts" data-lesson="lg-concepts">
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="scroll-progress"></div>
   <div class="app">
@@ -62,6 +63,7 @@
         <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../langgraph/index.html" style="color:var(--accent)">LangGraph</a><span class="sep">/</span><span class="current">Core concepts</span></nav>
         <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
         <span class="pill"><span class="dot"></span>Python · v1.2</span>
         <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
           <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
@@ -177,6 +179,47 @@ class State(TypedDict):
 builder.add_conditional_edges("agent", route, {"tools": "tools", END: END})
 builder.add_edge("tools", "agent")    # loop back -&gt; this is what makes an agent loop</code></pre></div>
             </div>
+
+            <p><strong>Run it in slow motion.</strong> This is the exact graph above — step through one question and watch the router pick an edge, the tool loop fire, and the state grow:</p>
+            <figure class="graphsim reveal" data-graphsim aria-label="Conditional edge routing simulator">
+              <script type="application/json" class="graphsim-config">
+              {
+                "nodes": [
+                  {"id": "start", "label": "START", "x": 60,  "y": 52,  "kind": "start"},
+                  {"id": "agent", "label": "agent", "x": 215, "y": 52,  "kind": "node"},
+                  {"id": "end",   "label": "END",   "x": 400, "y": 52,  "kind": "end"},
+                  {"id": "tools", "label": "tools", "x": 300, "y": 150, "kind": "tool"}
+                ],
+                "edges": [
+                  {"from": "start", "to": "agent"},
+                  {"from": "agent", "to": "end",   "cond": "done"},
+                  {"from": "agent", "to": "tools", "cond": "needs tool"},
+                  {"from": "tools", "to": "agent"}
+                ],
+                "frames": [
+                  {"active": "start",
+                   "state": {"messages": "1 msg — \"Weather in Paris?\"", "needs_tool": "—"},
+                   "caption": "A user asks about the weather. Execution begins at START with the input in state."},
+                  {"active": "agent", "diff": ["messages", "needs_tool"],
+                   "state": {"messages": "2 msgs (+ tool call)", "needs_tool": "true"},
+                   "caption": "agent runs the model. It can't know today's weather, so it returns a TOOL CALL — a partial update that LangGraph merges into state."},
+                  {"active": "tools", "diff": ["messages"],
+                   "branch": {"taken": ["agent->tools"], "skipped": ["agent->end"]},
+                   "state": {"messages": "3 msgs (+ tool result)", "needs_tool": "true"},
+                   "caption": "route() reads the state: needs_tool is true → take the dashed edge to tools. The weather API actually runs."},
+                  {"active": "agent", "diff": ["messages", "needs_tool"],
+                   "branch": {"taken": ["tools->agent"]},
+                   "state": {"messages": "4 msgs (+ final answer)", "needs_tool": "false"},
+                   "caption": "The loop! tools always feeds back into agent. With the API result in hand, the model writes the real answer."},
+                  {"active": "end",
+                   "branch": {"taken": ["agent->end"], "skipped": ["agent->tools"]},
+                   "state": {"messages": "4 msgs", "needs_tool": "false"},
+                   "caption": "route() runs again: needs_tool is now false → END. The final state is returned to your code."}
+                ]
+              }
+              </script>
+            </figure>
+
             <div class="quiz" data-quiz>
               <p class="q">What makes a LangGraph agent able to LOOP (call a tool, then think again)?</p>
               <div class="quiz-opts">
@@ -237,6 +280,44 @@ graph.invoke({"messages": [{"role": "user", "content": "Hi, I'm Sam."}]}, config
 graph.invoke({"messages": [{"role": "user", "content": "What's my name?"}]}, config)
 # -&gt; remembers "Sam", because the same thread_id replays the saved checkpoints</code></pre></div>
             </div>
+
+            <p><strong>See the replay happen.</strong> Two invocations, one <code>thread_id</code> — watch the second call restore everything the first one saved:</p>
+            <figure class="graphsim reveal" data-graphsim aria-label="Checkpointer replay simulator">
+              <script type="application/json" class="graphsim-config">
+              {
+                "nodes": [
+                  {"id": "start", "label": "START", "x": 60,  "y": 50, "kind": "start"},
+                  {"id": "agent", "label": "agent", "x": 215, "y": 50, "kind": "node"},
+                  {"id": "end",   "label": "END",   "x": 400, "y": 50, "kind": "end"}
+                ],
+                "edges": [
+                  {"from": "start", "to": "agent"},
+                  {"from": "agent", "to": "end"}
+                ],
+                "frames": [
+                  {"active": "start",
+                   "state": {"thread_id": "\"user-1\"", "messages": "— (no checkpoints found)"},
+                   "caption": "Turn 1, thread \"user-1\": the checkpointer looks for saved state, finds none, starts empty."},
+                  {"active": "agent", "diff": ["messages"],
+                   "state": {"thread_id": "\"user-1\"", "messages": "2 msgs — \"Hi, I'm Sam.\" + reply"},
+                   "caption": "agent replies. After the step, the checkpointer SAVES this state — keyed by thread_id."},
+                  {"active": "end",
+                   "state": {"thread_id": "\"user-1\"", "messages": "2 msgs (checkpointed ✓)"},
+                   "caption": "invoke() returns. Your process could crash right now — the checkpoint is already safe."},
+                  {"active": "start", "diff": ["messages"],
+                   "state": {"thread_id": "\"user-1\"", "messages": "3 msgs — replayed + \"What's my name?\""},
+                   "caption": "Turn 2, SAME thread_id: the saved checkpoints are replayed first, then the new question is appended."},
+                  {"active": "agent", "diff": ["messages"],
+                   "state": {"thread_id": "\"user-1\"", "messages": "4 msgs — + \"You're Sam!\""},
+                   "caption": "The model sees the whole restored conversation, not just the new message — so it knows the name."},
+                  {"active": "end",
+                   "state": {"thread_id": "\"user-2\" would start fresh", "messages": "4 msgs"},
+                   "caption": "Done. A DIFFERENT thread_id keys a different save slot: no checkpoints, no Sam, fresh start."}
+                ]
+              }
+              </script>
+            </figure>
+
             <div class="quiz" data-quiz>
               <p class="q">You call the graph twice with the SAME <code>thread_id</code>. What happens on the second call?</p>
               <div class="quiz-opts">
@@ -349,6 +430,8 @@ builder.add_node("tools", tool_node)</code></pre></div>
             <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">A missing <code>thread_id</code> silently starts over</div><p>Forget to pass a consistent <code>thread_id</code> (or change it by accident) and the graph quietly begins a brand-new conversation with no memory. If "it forgot everything," check the thread_id first.</p></div></div>
           </section>
 
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
           <nav class="page-nav reveal">
             <a href="../langgraph/index.html"><span class="pn-k">‹ Back</span><span class="pn-t">LangGraph · Overview</span></a>
             <a class="next" href="../langsmith/index.html"><span class="pn-k">Next ›</span><span class="pn-t">LangSmith · Overview</span></a>
@@ -378,6 +461,11 @@ builder.add_node("tools", tool_node)</code></pre></div>
       </footer>
     </div>
   </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
   <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/graphsim.js"></script>
 </body>
 </html>
