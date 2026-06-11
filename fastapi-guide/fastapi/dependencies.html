@@ -177,6 +177,46 @@ def list_items(session: SessionDep):
               </div>
               <div class="quiz-explain"><b>Right.</b> Everything before <code>yield</code> is setup; the yielded value is injected; the code after <code>yield</code> (typically in a <code>finally</code>) runs once the response is done. That's how sessions get reliably closed.</div>
             </div>
+            <p>Let's put the whole machinery together — resolution order, the per-request cache, and yield teardown — for one <code>DELETE /items/7</code>:</p>
+            <figure class="reqtrace reveal" data-reqtrace aria-label="Dependency resolution simulator">
+              <script type="application/json" class="rt-config">
+              { "stages": [ { "id": "router",  "label": "router",            "kind": "router" },
+                            { "id": "session", "label": "get_session",       "kind": "dep" },
+                            { "id": "user",    "label": "get_current_user",  "kind": "dep" },
+                            { "id": "dbuser",  "label": "get_db_user",       "kind": "dep" },
+                            { "id": "admin",   "label": "require_admin",     "kind": "dep" },
+                            { "id": "handler", "label": "delete_item",       "kind": "handler" },
+                            { "id": "respond", "label": "response",          "kind": "respond" } ],
+                "frames": [
+                  { "call": "DELETE /items/7", "at": "router", "verdict": "pass", "detail": "route needs Depends(require_admin) + a session",
+                    "caption": "Before your function can run, FastAPI walks its <b>dependency tree</b> — depth-first, leaves before branches." },
+                  { "call": "DELETE /items/7", "at": "session", "verdict": "run", "detail": "session = open_session(); yield session",
+                    "caption": "The <b>yield dependency</b> runs its setup half and parks: the session is now available to anything that asks for it." },
+                  { "call": "DELETE /items/7", "at": "user", "verdict": "run", "detail": "reads the auth header → \"ada\"",
+                    "caption": "<code>require_admin</code> needs <code>get_db_user</code>, which needs <code>get_current_user</code> — so the deepest one runs first." },
+                  { "call": "DELETE /items/7", "at": "dbuser", "verdict": "run", "detail": "looks up the account → is_admin: true",
+                    "caption": "One level up: <code>get_db_user</code> receives the already-resolved user and builds the account dict." },
+                  { "call": "DELETE /items/7", "at": "user", "verdict": "cached", "detail": "another dep asks for get_current_user — not re-run",
+                    "caption": "Suppose a second dependency also declares <code>CurrentUser</code>. FastAPI serves it from the <b>per-request cache</b> — each dependency runs <b>once per request</b>, no matter how many things need it." },
+                  { "call": "DELETE /items/7", "at": "admin", "verdict": "pass", "detail": "account[\"is_admin\"] is true → returns account",
+                    "caption": "The gate passes. (If it didn't, it would raise <code>HTTPException(403)</code> and the request would stop right here.)" },
+                  { "call": "DELETE /items/7", "at": "handler", "verdict": "run", "detail": "delete_item(id=7, admin={\"name\": \"ada\", …})",
+                    "caption": "Finally <b>your function</b> runs — every argument already resolved, validated, and typed." },
+                  { "call": "DELETE /items/7", "at": "respond", "verdict": "return", "badge": "← 200", "detail": "{\"deleted\": 7, \"by\": \"ada\"}",
+                    "caption": "The response goes out…" },
+                  { "call": "DELETE /items/7", "at": "session", "verdict": "cleanup", "detail": "finally: session.close()",
+                    "caption": "…and only <b>then</b> does the code after <code>yield</code> run. Teardown happens after the response — your session is reliably closed, success or error." } ] }
+              </script>
+              <div data-role="stage"><p>An animated dependency-resolution simulator. Enable JavaScript to play it.</p></div>
+              <div class="rt-caption" data-role="caption"></div>
+              <div class="rt-controls">
+                <button class="rt-btn rt-reset" aria-label="Restart">⏮</button>
+                <button class="rt-btn rt-prev" aria-label="Previous step">‹</button>
+                <button class="rt-btn rt-play" aria-label="Play">▶</button>
+                <button class="rt-btn rt-next" aria-label="Next step">›</button>
+                <span class="rt-step">1 / 9</span>
+              </div>
+            </figure>
             <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Bonus: overriding deps in tests</div><p>FastAPI lets you swap any dependency in tests with <code>app.dependency_overrides[get_session] = fake_session</code> — so you can point at a throwaway test database. We use this on the <a href="../deploy/index.html">Testing</a> page.</p></div></div>
           </section>
 
@@ -211,5 +251,6 @@ def list_items(session: SessionDep):
   <script src="../assets/js/runpad.js"></script>
   <script src="../assets/js/playground.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqtrace.js"></script>
 </body>
 </html>

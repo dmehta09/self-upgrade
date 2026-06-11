@@ -130,6 +130,45 @@ print(results)                        # ...but order matches the arguments
               <div class="rp-output"><pre class="rp-expected">['users done', 'orders done', 'stats done']</pre></div>
             </div>
             <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title"><code>gather</code> vs <code>create_task</code></div><p><code>gather(...)</code> is the quick way to fan out and wait for everything. <code>asyncio.create_task(coro)</code> schedules a coroutine to run in the background <em>now</em> and hands you a handle to await later — useful when you want work started but not yet joined.</p></div></div>
+            <p>Same three fetches, two ways — watch the difference between awaiting one-by-one and <code>gather</code>:</p>
+            <figure class="looplab reveal" data-looplab aria-label="Event loop timeline: sequential awaits vs gather">
+              <script type="application/json" class="ll-config">
+              { "lanes": [ { "id": "u", "label": "fetch users" },
+                           { "id": "o", "label": "fetch orders" },
+                           { "id": "s", "label": "fetch stats" } ],
+                "frames": [
+                  { "marks": { "u": "await" },
+                    "caption": "<b>One-by-one:</b> <code>await fetch(\"users\")</code> — while it waits, the other two haven't even started." },
+                  { "marks": { "u": "done", "o": "await" },
+                    "caption": "Only when users finishes does orders begin…" },
+                  { "marks": { "u": "done", "o": "done", "s": "await" },
+                    "caption": "…then stats. Each wait happens <b>after</b> the previous one — the delays add up." },
+                  { "marks": { "u": "done", "o": "done", "s": "done" },
+                    "caption": "Sequential total: <code>0.03 + 0.01 + 0.02</code>. Concurrency bought us nothing — we never overlapped the waiting." },
+                  { "marks": { "u": "await", "o": "await", "s": "await" },
+                    "caption": "<b>Now with <code>gather</code>:</b> all three coroutines start at once — three sleeps ticking <b>simultaneously</b>." },
+                  { "marks": { "u": "await", "o": "done", "s": "await" },
+                    "caption": "Orders (the shortest delay) finishes first — finish order ≠ argument order." },
+                  { "marks": { "u": "await", "o": "done", "s": "done" },
+                    "caption": "Stats is done too; only users is still waiting." },
+                  { "marks": { "u": "done", "o": "done", "s": "done" },
+                    "caption": "Total wait ≈ the <b>longest</b> delay (0.03), not the sum — and <code>gather</code> still returns results in the order you passed them." } ] }
+              </script>
+              <div data-role="stage"><p>An animated event-loop timeline. Enable JavaScript to play it.</p></div>
+              <div class="ll-legend">
+                <span class="lg-await"><i></i>awaiting I/O</span>
+                <span class="lg-run"><i></i>running</span>
+                <span class="lg-done"><i></i>done</span>
+              </div>
+              <div class="ll-caption" data-role="caption"></div>
+              <div class="ll-controls">
+                <button class="ll-btn ll-reset" aria-label="Restart">⏮</button>
+                <button class="ll-btn ll-prev" aria-label="Previous step">‹</button>
+                <button class="ll-btn ll-play" aria-label="Play">▶</button>
+                <button class="ll-btn ll-next" aria-label="Next step">›</button>
+                <span class="ll-step">1 / 8</span>
+              </div>
+            </figure>
           </section>
 
           <!-- 3 · concurrency vs parallelism -->
@@ -317,5 +356,6 @@ print(results)        # ['A', 'B', 'C']  — order matches the arguments</code><
   <script src="../assets/js/runpad.js"></script>
   <script src="../assets/js/playground.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/looplab.js"></script>
 </body>
 </html>

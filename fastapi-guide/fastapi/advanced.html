@@ -88,6 +88,44 @@
               <dt>def</dt><dd>Use for normal blocking code (most DB drivers, file I/O). FastAPI runs it in a thread pool so it won't block the server.</dd>
             </div>
             <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">The dangerous middle ground</div><p>Putting <strong>blocking</strong> code inside an <code>async def</code> (e.g. a synchronous DB call or <code>time.sleep</code>) blocks the whole event loop and stalls every other request. If a library isn't async, use a plain <code>def</code> endpoint and let FastAPI thread it.</p></div></div>
+            <p>Watch that gotcha happen. Three requests hit your server — two <code>async def</code>, one <code>def</code>:</p>
+            <figure class="looplab reveal" data-looplab aria-label="Event loop timeline: async def vs def">
+              <script type="application/json" class="ll-config">
+              { "lanes": [ { "id": "a", "label": "req A · async" },
+                           { "id": "b", "label": "req B · async" },
+                           { "id": "c", "label": "req C · def" } ],
+                "frames": [
+                  { "marks": { "a": "run" },
+                    "caption": "Request A hits an <code>async def</code> endpoint and runs on the <b>event loop</b>." },
+                  { "marks": { "a": "await", "b": "run" },
+                    "caption": "A <code>await</code>s an async DB call and parks. The loop instantly picks up request B — one thread, many requests." },
+                  { "marks": { "a": "await", "b": "blocked" },
+                    "caption": "B calls <code>time.sleep(3)</code> — a <b>sync</b> call inside <code>async def</code>. The loop itself is now hostage." },
+                  { "marks": { "a": "blocked", "b": "blocked" },
+                    "caption": "A's data came back, but the loop can't resume it — <b>one blocking line stalls every request on the server</b>." },
+                  { "marks": { "a": "run", "b": "done" },
+                    "caption": "The sleep finally ends. B finishes; A resumes three seconds late through no fault of its own." },
+                  { "marks": { "a": "done", "b": "done", "c": "run" },
+                    "caption": "Request C hits a plain <code>def</code> endpoint. FastAPI runs it in the <b>threadpool</b> — blocking code there occupies a worker thread, not the loop." },
+                  { "marks": { "a": "done", "b": "done", "c": "done" },
+                    "caption": "The rule: <code>await</code>-friendly code in <code>async def</code> · blocking code in <code>def</code> · <b>never</b> blocking code inside <code>async def</code>." } ] }
+              </script>
+              <div data-role="stage"><p>An animated event-loop timeline. Enable JavaScript to play it.</p></div>
+              <div class="ll-legend">
+                <span class="lg-run"><i></i>running</span>
+                <span class="lg-await"><i></i>awaiting I/O</span>
+                <span class="lg-blocked"><i></i>blocked</span>
+                <span class="lg-done"><i></i>done</span>
+              </div>
+              <div class="ll-caption" data-role="caption"></div>
+              <div class="ll-controls">
+                <button class="ll-btn ll-reset" aria-label="Restart">⏮</button>
+                <button class="ll-btn ll-prev" aria-label="Previous step">‹</button>
+                <button class="ll-btn ll-play" aria-label="Play">▶</button>
+                <button class="ll-btn ll-next" aria-label="Next step">›</button>
+                <span class="ll-step">1 / 7</span>
+              </div>
+            </figure>
           </section>
 
           <section class="section reveal" id="background">
@@ -130,6 +168,42 @@ app.add_middleware(
 )</code></pre></div>
             </div>
             <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">“CORS error” = missing this</div><p>If your browser console says a request was “blocked by CORS policy,” you almost always just need to add <code>CORSMiddleware</code> with your front-end's origin. Avoid <code>allow_origins=["*"]</code> together with <code>allow_credentials=True</code> — browsers reject that combination.</p></div></div>
+            <p>Here's middleware earning its keep — a browser request from your front-end, start to finish:</p>
+            <figure class="reqtrace reveal" data-reqtrace aria-label="CORS middleware simulator">
+              <script type="application/json" class="rt-config">
+              { "stages": [ { "id": "client",  "label": "browser",          "kind": "client" },
+                            { "id": "mw",      "label": "CORS middleware",  "kind": "middleware" },
+                            { "id": "router",  "label": "router",           "kind": "router" },
+                            { "id": "handler", "label": "your function",    "kind": "handler" },
+                            { "id": "respond", "label": "response",         "kind": "respond" } ],
+                "frames": [
+                  { "call": "OPTIONS /items (preflight)", "at": "client", "detail": "Origin: https://myfrontend.com",
+                    "caption": "Before a cross-origin POST, the browser sends a <b>preflight</b>: an OPTIONS request asking “may I?”" },
+                  { "call": "OPTIONS /items (preflight)", "at": "mw", "verdict": "return", "badge": "← 204", "detail": "CORSMiddleware answers the preflight itself",
+                    "caption": "Middleware can <b>short-circuit</b>: the preflight never reaches the router or your code. CORSMiddleware answers it directly with the allowed origins/methods." },
+                  { "call": "GET /items", "at": "client", "detail": "Origin: https://myfrontend.com",
+                    "caption": "Preflight approved — now the real request goes out." },
+                  { "call": "GET /items", "at": "mw", "verdict": "pass", "detail": "origin is in allow_origins → continue inward",
+                    "caption": "On the way <b>in</b>, middleware inspects the request and lets it continue." },
+                  { "call": "GET /items", "at": "handler", "verdict": "run", "detail": "list_items() runs normally",
+                    "caption": "Router matches, your function runs — middleware is invisible to your handler code." },
+                  { "call": "GET /items", "at": "mw", "verdict": "pass", "detail": "adds Access-Control-Allow-Origin: https://myfrontend.com",
+                    "caption": "On the way <b>out</b>, the same middleware stamps the response with the CORS headers the browser is waiting for." },
+                  { "call": "GET /items", "at": "respond", "verdict": "return", "badge": "← 200", "detail": "browser hands the JSON to your JavaScript",
+                    "caption": "Header present → the browser releases the response to your front-end code." },
+                  { "call": "GET /items", "at": "mw", "verdict": "reject", "badge": "✕ no header", "detail": "Origin: https://evil.com — not in allow_origins",
+                    "caption": "From an unknown origin the request may still run server-side, but the response carries <b>no</b> allow header — and the <b>browser</b> refuses to give the data to that page's JS. CORS protects users in browsers; it is <i>not</i> server-side auth." } ] }
+              </script>
+              <div data-role="stage"><p>An animated CORS-middleware simulator. Enable JavaScript to play it.</p></div>
+              <div class="rt-caption" data-role="caption"></div>
+              <div class="rt-controls">
+                <button class="rt-btn rt-reset" aria-label="Restart">⏮</button>
+                <button class="rt-btn rt-prev" aria-label="Previous step">‹</button>
+                <button class="rt-btn rt-play" aria-label="Play">▶</button>
+                <button class="rt-btn rt-next" aria-label="Next step">›</button>
+                <span class="rt-step">1 / 8</span>
+              </div>
+            </figure>
           </section>
 
           <section class="section reveal" id="routers">
@@ -246,5 +320,7 @@ app = FastAPI(lifespan=lifespan)</code></pre></div>
   <script src="../assets/js/runpad.js"></script>
   <script src="../assets/js/playground.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/reqtrace.js"></script>
+  <script src="../assets/js/looplab.js"></script>
 </body>
 </html>
