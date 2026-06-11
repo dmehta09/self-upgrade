@@ -18,6 +18,7 @@ const FILES = [
   "langchain/index.html", "langchain/concepts.html", "langchain/rag.html",
   "langgraph/index.html", "langgraph/concepts.html", "langgraph/agents.html", "langgraph/advanced.html",
   "langsmith/index.html", "langsmith/concepts.html", "langsmith/evals.html",
+  "drill/index.html",
 ];
 
 function decode(s) {

@@ -30,8 +30,9 @@ A beginner-first path through the three core "Lang" tools and how they fit toget
 | **LangChain** | Chat models · messages · prompt templates · output parsers · **LCEL** (`prompt \| model \| parser`) · tools & tool-calling · retrieval · **RAG** · memory · agents — plus **RAG in production** (chunking strategies, hybrid search & RRF, reranking, query rewriting, citations) |
 | **LangGraph** | Graphs/nodes/edges · **StateGraph** · reducers · conditional edges · checkpointers & threads · human-in-the-loop · memory & the Store · multi-agent · prebuilt ReAct agent — plus **Agent architectures** (ReAct internals, supervisor, swarm/handoffs, planner-executor) and **Advanced LangGraph** (subgraphs, streaming modes, interrupts, durability, Studio & Platform) |
 | **LangSmith** | Traces & the run tree · enabling tracing · the Playground · Prompt Hub · datasets · **evaluation** (heuristic / LLM-as-judge / pairwise) · experiments · monitoring · human feedback — plus **Evaluation in depth** (custom evaluators, judge calibration, annotation queues, online evals, CI wiring) |
-| **Ecosystem** | Side-by-side comparison, a "which one do I use?" decision guide, a learning roadmap, and a consolidated version table |
+| **Ecosystem** | Side-by-side comparison, a "which one do I use?" decision guide (with a built-in speed quiz), a learning roadmap, and a consolidated version table |
 | **Glossary** | 51 searchable terms, each cross-linked to where it's taught |
+| **Practice** | Three timed quiz drills — *which tool?*, *design it* (pick the primitive), *debug it* (name the cause) — with explanations and links back to the lessons |
 
 **Recommended order:** Home → The big picture → LangChain → LangGraph → LangSmith.
 
@@ -54,7 +55,9 @@ langstack/                     ← this project
 │   └── js/                     ← main.js (theme, scrollspy, tabs, quizzes,
 │       │                          highlighter) + lessons.js, progress.js,
 │       │                          search.js, search-index.js (generated)
-│       └── …engines             ← graphsim.js, tracelab.js, pipeviz.js
+│       └── …engines             ← graphsim.js, tracelab.js, pipeviz.js, quizdrill.js
+├── drill/
+│   └── index.html              ← timed quiz drills (3 modes)
 ├── langchain/
 │   ├── index.html              ← overview
 │   ├── concepts.html           ← deep dive
@@ -73,7 +76,7 @@ langstack/                     ← this project
     └── glossary.html
 ```
 
-13 HTML pages + shared assets. Every page reuses the same sidebar, top bar, and footer; all links are relative within the tree.
+14 HTML pages + shared assets. Every page reuses the same sidebar, top bar, and footer; all links are relative within the tree.
 
 **After editing any page content**, rebuild the search index and check the tree:
 
@@ -89,6 +92,7 @@ node tools/build-search-index.js && node tools/verify.js
 - **Interactive simulators** — a **StateGraph stepper** (`graphsim.js`: watch the router pick edges, the tool loop fire, state merge, and checkpoints replay), a **LangSmith-style trace waterfall** (`tracelab.js`: click runs to inspect inputs/outputs/latency/tokens), and an **LCEL pipe stepper** (`pipeviz.js`: see the payload change shape at every hop).
 - **Full-text search** — press `/` or ⌘/Ctrl-K anywhere; results deep-link to the exact section.
 - **Progress tracking** — a "mark as learned" button per lesson, sidebar checkmarks, and a home dashboard (saved in `localStorage["lang-progress"]`).
+- **Timed quiz drills** (`drill/`) — three modes (*which tool?* / *design it* / *debug it*) with per-question countdowns, trap explanations, and miss-links back to lessons. Best scores in `localStorage["lang-drill"]`.
 - **Interactive** — collapsible "go deeper" sections, tabbed code blocks with copy buttons, mini self-check quizzes with instant feedback, sidebar nav with scroll-spy, and a live-filtering glossary.
 - **Light & dark mode** — toggle in the top bar; your choice is remembered (`localStorage`).
 - **Per-tool theming** — LangChain green · LangGraph indigo · LangSmith amber.
