@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LangGraph — Advanced: subgraphs, streaming, interrupts &amp; Platform | The Lang Stack</title>
+  <meta name="description" content="Advanced LangGraph for production: composing subgraphs, the four streaming modes, interrupts & human-in-the-loop done right, durability & retries, LangGraph Studio, and deploying with LangGraph Platform." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.4' fill='%2334d399'/><circle cx='19' cy='6' r='2.4' fill='%23818cf8'/><circle cx='12' cy='18' r='2.4' fill='%23fbbf24'/></svg>" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="langgraph" data-page="lg-advanced" data-lesson="lg-advanced">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Lang Stack home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06140f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M6.8 7.4 10.4 16M17.2 7.4 13.6 16M7 6h10"/></svg></span>
+        <span class="brand-text"><b>The Lang Stack</b><span>Visual field guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../ecosystem/index.html">The big picture</a>
+        <a class="nav-link" href="../ecosystem/glossary.html">Glossary</a>
+      </nav>
+      <nav class="nav-group is-lc" aria-label="LangChain">
+        <h4><span class="dot"></span>LangChain</h4>
+        <a class="nav-link" href="../langchain/index.html">Overview</a>
+        <a class="nav-link" href="../langchain/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langchain/rag.html">RAG in production</a>
+      </nav>
+      <nav class="nav-group is-lg" aria-label="LangGraph">
+        <h4><span class="dot"></span>LangGraph</h4>
+        <a class="nav-link" href="../langgraph/index.html">Overview</a>
+        <a class="nav-link" href="../langgraph/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langgraph/agents.html">Agent architectures</a>
+        <a class="nav-link" href="../langgraph/advanced.html">Advanced LangGraph</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#subgraphs">Subgraphs</a>
+          <a class="nav-link" href="#streaming">Streaming</a>
+          <a class="nav-link" href="#interrupts">Interrupts &amp; HITL</a>
+          <a class="nav-link" href="#durability">Durability</a>
+          <a class="nav-link" href="#studio">Studio</a>
+          <a class="nav-link" href="#platform">Platform</a>
+        </div>
+      </nav>
+      <nav class="nav-group is-ls" aria-label="LangSmith">
+        <h4><span class="dot"></span>LangSmith</h4>
+        <a class="nav-link" href="../langsmith/index.html">Overview</a>
+        <a class="nav-link" href="../langsmith/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langsmith/evals.html">Evaluation in depth</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../langgraph/index.html" style="color:var(--accent)">LangGraph</a><span class="sep">/</span><span class="current">Advanced</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <span class="pill"><span class="dot"></span>Python · v1.2</span>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">LangGraph · advanced</span>
+            <h1>The production toolbox.</h1>
+            <p class="lead">Six things separate a demo from a deployed agent: composing graphs out of graphs, streaming the right events to the UI, pausing mid-run for a human, surviving crashes, and shipping it all with Studio &amp; Platform. Here's each one, with the gotchas.</p>
+          </section>
+
+          <!-- 1. SUBGRAPHS -->
+          <section class="section reveal" id="subgraphs">
+            <h2><span class="section-num">01</span> &nbsp;Subgraphs: graphs made of graphs</h2>
+            <p>Here's the trick that makes multi-agent systems possible: <strong>a compiled graph IS a node</strong>. Anything you can pass to <code>add_node</code> — a function, a <code>ToolNode</code> — can also be a whole compiled graph. So you build a research agent as its own graph, a writing agent as another, and compose them into a parent graph that orchestrates the team.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c2-3 4-4 6-4s4 1 6 4 4 4 6 4M2 12c2 3 4 4 6 4s4-1 6-4 4-4 6-4"/></svg></span><div class="co-body"><div class="co-title">Departments inside a company</div><p>The parent graph is the company org chart: research → writing → review. But zoom into the "research" box and it has its <em>own</em> org chart inside — search, summarize, fact-check. Each department runs itself; the company only sees what goes in and what comes out.</p></div></div>
+            <p>There are exactly two wiring styles, and which one you need depends on one question: <strong>do the parent and the subgraph share state keys?</strong></p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">subgraph_shared.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python"># Style 1 — SHARED state keys: just add the compiled graph as a node.
+research_builder = StateGraph(ResearchState)   # ResearchState has "messages"
+# ... add research nodes &amp; edges ...
+research_graph = research_builder.compile()
+
+parent = StateGraph(ParentState)               # ParentState ALSO has "messages"
+parent.add_node("research", research_graph)    # a graph, dropped in as a node
+parent.add_edge(START, "research")
+# LangGraph passes the overlapping keys in, and merges them back out.</code></pre></div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">subgraph_mapped.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python"># Style 2 — DIFFERENT schemas: wrap the subgraph in a translator function.
+def call_research(state: ParentState):
+    # map parent state -&gt; subgraph input
+    sub_out = research_graph.invoke({"topic": state["question"]})
+    # map subgraph output -&gt; parent state update
+    return {"findings": sub_out["summary"]}
+
+parent.add_node("research", call_research)     # the function is the node</code></pre></div>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">No shared keys, no function? No data.</div><p>If you add a compiled graph directly (Style 1) but its state schema shares <em>zero</em> keys with the parent's, there's nothing to pass in or merge out. Subgraph keys must <strong>overlap with the parent's</strong> — or you must explicitly map state in and out with a wrapper function (Style 2).</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">Your parent graph's state has <code>question</code> and <code>findings</code>. Your research subgraph's state has <code>topic</code> and <code>summary</code>. How do you wire it in?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span><code>parent.add_node("research", research_graph)</code> — LangGraph maps the keys automatically</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Wrap it in a function that calls <code>research_graph.invoke()</code> and translates the keys both ways</button>
+                <button class="quiz-opt"><span class="mark"></span>Rename the parent's keys to match — schemas must always be identical</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> The schemas share no keys, so LangGraph has no way to pass state across the boundary. A translator function maps <code>question → topic</code> on the way in and <code>summary → findings</code> on the way out. (If the keys <em>did</em> overlap, Style 1's direct <code>add_node</code> would work — and only matching keys need to overlap, not all of them.)</div>
+            </div>
+          </section>
+
+          <!-- 2. STREAMING -->
+          <section class="section reveal" id="streaming">
+            <h2><span class="section-num">02</span> &nbsp;Streaming, properly <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p>An agent that "thinks" for 30 silent seconds feels broken. Streaming is how you show progress — and LangGraph gives you <strong>four different feeds</strong> to choose from, each answering a different question:</p>
+            <div class="kv">
+              <dt>values</dt><dd>The <strong>full state</strong> after every step. Heavy, but you always have the complete picture — great for debugging or syncing a UI that renders whole state.</dd>
+              <dt>updates</dt><dd>Just each node's <strong>delta</strong> as it finishes — <code>{"agent": {...}}</code>, then <code>{"tools": {...}}</code>. The "what just happened?" feed.</dd>
+              <dt>messages</dt><dd><strong>LLM tokens as they generate</strong> — the typewriter effect. Each chunk arrives the instant the model produces it.</dd>
+              <dt>custom</dt><dd><strong>Your own progress events</strong>, emitted from inside a node via <code>get_stream_writer()</code> — "searching 1,200 docs…", "page 3 of 9…".</dd>
+            </div>
+            <p>You can combine modes in one call — each event arrives tagged with which feed it came from:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">streaming.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langgraph.config import get_stream_writer
+
+def search_node(state: State):
+    writer = get_stream_writer()
+    writer({"progress": "searching 1,200 docs..."})   # a "custom" event
+    ...
+
+# Combine modes: each event is a (mode, chunk) pair.
+for mode, chunk in graph.stream(inputs, stream_mode=["updates", "messages"]):
+    if mode == "messages":
+        token, metadata = chunk
+        print(token.content, end="")    # the typewriter, token by token
+    elif mode == "updates":
+        print(chunk)                    # {'agent': {...}} -&gt; node-level progress</code></pre></div>
+            </div>
+            <p><strong>What the user sees</strong>, mode by mode:</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>mode</th><th>what arrives</th><th>use it for</th></tr></thead>
+                <tbody>
+                  <tr><td><code>values</code></td><td>the whole state, after each step</td><td>debugging; UIs that re-render full state</td></tr>
+                  <tr><td><code>updates</code></td><td>one node's returned delta</td><td>step indicators: "✓ searched, ✓ summarized…"</td></tr>
+                  <tr><td><code>messages</code></td><td>individual LLM tokens + metadata</td><td>the chat typewriter effect</td></tr>
+                  <tr><td><code>custom</code></td><td>whatever your nodes <code>writer(...)</code></td><td>progress bars inside long-running nodes</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">You're building a chat UI and want the reply to appear token by token as the model writes it. Which stream mode?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span><code>values</code> — it has everything, including the message</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>messages</code> — it yields LLM tokens the instant they're generated</button>
+                <button class="quiz-opt"><span class="mark"></span><code>custom</code> — write each token manually with <code>get_stream_writer()</code></button>
+              </div>
+              <div class="quiz-explain"><b>Yes.</b> <code>messages</code> is the token feed — chunks arrive as the model generates them, which is exactly the typewriter effect. <code>values</code> only fires <em>after</em> a node completes (the whole reply at once), and <code>custom</code> would be reinventing what <code>messages</code> already does.</div>
+            </div>
+          </section>
+
+          <!-- 3. INTERRUPTS -->
+          <section class="section reveal" id="interrupts">
+            <h2><span class="section-num">03</span> &nbsp;Interrupts &amp; human-in-the-loop, for real <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p><a href="../langgraph/concepts.html#hitl">Core concepts</a> introduced the idea; here's the full machinery. Calling <code>interrupt(payload)</code> pauses the graph <strong>mid-node</strong> — and because the state is checkpointed at that exact moment, it can stay paused for seconds or days, even across a process restart. <strong>A checkpointer is required</strong>: no checkpointer, no pause to come back to.</p>
+            <p>Three moving parts:</p>
+            <div class="kv">
+              <dt>interrupt(payload)</dt><dd>Called <em>inside</em> a node. Execution stops; the payload travels out to your code.</dd>
+              <dt>__interrupt__</dt><dd>Where the payload surfaces: the result of <code>invoke()</code> (or a stream event) carries an <code>__interrupt__</code> entry describing what the graph is waiting for.</dd>
+              <dt>Command(resume=...)</dt><dd>How you answer. Invoke the graph again with this (same <code>thread_id</code>!) and the paused node <strong>re-runs from its start</strong> — this time <code>interrupt()</code> returns your resume value instead of pausing.</dd>
+            </div>
+            <p>The classic use: an approval gate in front of a dangerous tool.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">approval_gate.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langgraph.types import interrupt, Command
+
+def approval(state: State):
+    decision = interrupt({                       # graph PAUSES right here
+        "action": state["draft_action"],         # "refund $120 on order #4912"
+    })
+    # On resume this node re-runs from the top — side effects go AFTER:
+    return {"approved": decision == "approve"}
+
+graph = builder.compile(checkpointer=checkpointer)   # REQUIRED for interrupt
+config = {"configurable": {"thread_id": "ticket-88"}}
+
+result = graph.invoke({"request": "Refund order #4912"}, config)
+print(result["__interrupt__"])     # -&gt; what the graph is waiting for
+
+# ...a human reviews it in your UI, then:
+graph.invoke(Command(resume="approve"), config)      # picks up mid-graph</code></pre></div>
+            </div>
+            <p><strong>Watch the pause happen.</strong> Step through a refund request — note the frame where the graph stops cold, checkpointed, waiting for a human:</p>
+            <figure class="graphsim reveal" data-graphsim aria-label="Interrupt approval-gate simulator">
+              <script type="application/json" class="graphsim-config">
+              {
+                "nodes": [
+                  {"id": "start",    "label": "START",    "x": 55,  "y": 50,  "kind": "start"},
+                  {"id": "agent",    "label": "agent",    "x": 180, "y": 50,  "kind": "node"},
+                  {"id": "approval", "label": "approval", "x": 330, "y": 50,  "kind": "tool"},
+                  {"id": "execute",  "label": "execute",  "x": 330, "y": 155, "kind": "node"},
+                  {"id": "end",      "label": "END",      "x": 468, "y": 102, "kind": "end"}
+                ],
+                "edges": [
+                  {"from": "start",    "to": "agent"},
+                  {"from": "agent",    "to": "approval"},
+                  {"from": "approval", "to": "execute", "cond": "approved"},
+                  {"from": "approval", "to": "end",     "cond": "rejected"},
+                  {"from": "execute",  "to": "end"}
+                ],
+                "frames": [
+                  {"active": "start",
+                   "state": {"request": "\"Refund order #4912\"", "draft_action": "—", "approved": "—"},
+                   "caption": "A support ticket asks for a refund. Execution starts with the request in state — and a checkpointer attached (it matters in 3 frames)."},
+                  {"active": "agent", "diff": ["draft_action"],
+                   "state": {"request": "\"Refund order #4912\"", "draft_action": "refund $120", "approved": "—"},
+                   "caption": "agent checks the order and DRAFTS the action: refund $120. It doesn't execute anything — it only writes the plan into state."},
+                  {"active": "approval", "interrupt": true,
+                   "state": {"request": "\"Refund order #4912\"", "draft_action": "refund $120", "approved": "—"},
+                   "caption": "approval calls interrupt({...draft...}). The graph is PAUSED — state is checkpointed, the payload surfaces under __interrupt__, and the process could even restart without losing this moment."},
+                  {"active": "approval", "interrupt": true,
+                   "state": {"request": "\"Refund order #4912\"", "draft_action": "refund $120", "approved": "—"},
+                   "caption": "Time passes. Minutes, hours, days — nothing is running. The pending approval is just a row in the checkpointer's database, waiting under thread \"ticket-88\"."},
+                  {"active": "approval", "diff": ["approved"],
+                   "state": {"request": "\"Refund order #4912\"", "draft_action": "refund $120", "approved": "true"},
+                   "caption": "A human clicks Approve. Your code calls invoke(Command(resume=\"approve\"), config) — the approval node re-runs from its top, and this time interrupt() RETURNS the resume value."},
+                  {"active": "execute", "diff": ["request"],
+                   "branch": {"taken": ["approval->execute"], "skipped": ["approval->end"]},
+                   "state": {"request": "refund issued ✓", "draft_action": "refund $120", "approved": "true"},
+                   "caption": "approved is true → the router takes the edge to execute, and the refund API actually fires. Had the human rejected, the dashed edge to END would skip it entirely."},
+                  {"active": "end",
+                   "branch": {"taken": ["execute->end"]},
+                   "state": {"request": "refund issued ✓", "draft_action": "refund $120", "approved": "true"},
+                   "caption": "Done. One run, one pause in the middle, one human decision — and the dangerous side effect only happened after explicit approval."}
+                ]
+              }
+              </script>
+            </figure>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Code before <code>interrupt()</code> RE-RUNS on resume</div><p>Resuming doesn't continue from the interrupt line — it re-executes the node <em>from its first line</em>, then hands the resume value to <code>interrupt()</code>. Anything above the interrupt (sending an email, charging a card, incrementing a counter) runs <strong>twice</strong>. Keep side effects after the interrupt, where they run exactly once.</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">A node logs "charging card…", charges the card, THEN calls <code>interrupt()</code> to confirm. The human resumes. What happened to the card?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Charged once — LangGraph caches the lines before the interrupt</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Charged <strong>twice</strong> — the node re-ran from its first line on resume</button>
+                <button class="quiz-opt"><span class="mark"></span>Never charged — interrupts roll back the node's earlier work</button>
+              </div>
+              <div class="quiz-explain"><b>Twice — and that's the bug.</b> Resume re-runs the whole node from the top; nothing before the <code>interrupt()</code> is cached or rolled back. The fix: interrupt <em>first</em> (asking permission with the draft), and only charge after the approval comes back.</div>
+            </div>
+          </section>
+
+          <!-- 4. DURABILITY -->
+          <section class="section reveal" id="durability">
+            <h2><span class="section-num">04</span> &nbsp;Durability &amp; fault tolerance</h2>
+            <p>You met the <a href="../langgraph/concepts.html#persistence">checkpointer</a> as "memory." In production it's something bigger: <strong>crash insurance</strong>. Because state is saved at every step, a pod that dies mid-run can resume from its last checkpoint instead of replaying expensive LLM calls from scratch. The knob that controls <em>when</em> saves happen is the <strong>durability mode</strong>:</p>
+            <div class="kv">
+              <dt>"exit"</dt><dd>Checkpoint only when the run finishes. Fastest — but a mid-run crash loses everything. Fine for cheap, retryable graphs.</dd>
+              <dt>"async"</dt><dd>Checkpoint after each step, <em>in the background</em> while the next step starts. The default tradeoff: nearly as fast, tiny crash window.</dd>
+              <dt>"sync"</dt><dd>Checkpoint after each step and <em>wait</em> for the write before continuing. Slowest, safest — every completed step is guaranteed on disk.</dd>
+            </div>
+            <p>For flaky nodes — rate-limited APIs, wobbly networks — attach a <strong>retry policy</strong> instead of writing try/except loops:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">durability.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langgraph.types import RetryPolicy
+
+# Retry just the flaky node, with exponential backoff:
+builder.add_node("fetch_prices", fetch_prices,
+                 retry=RetryPolicy(max_attempts=3, retry_on=(TimeoutError,)))
+
+# Pick how aggressively state is persisted, per run:
+graph.invoke(inputs, config, durability="sync")   # or "async" / "exit"</code></pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Make tool side effects idempotent</div><p>Retries and resume-after-crash both mean a node <em>might run twice</em>. Design tools so a repeat is harmless: pass an idempotency key to payment APIs, use <code>INSERT ... ON CONFLICT DO NOTHING</code> for database writes, check "did I already send this?" before emailing. Durable execution plus idempotent tools is what makes "just re-run it" a safe answer.</p></div></div>
+          </section>
+
+          <!-- 5. STUDIO -->
+          <section class="section reveal" id="studio">
+            <h2><span class="section-num">05</span> &nbsp;LangGraph Studio: the visual IDE</h2>
+            <p>Studio is where graphs stop being invisible. Point it at your project and you get a live picture of your agent that you can poke at:</p>
+            <ul>
+              <li><strong>See the graph</strong> — nodes, edges, conditional branches, rendered from your actual code.</li>
+              <li><strong>Run it</strong> — type an input, watch execution light up node by node, inspect every state update.</li>
+              <li><strong>Time-travel</strong> — jump back to <em>any checkpoint</em>, fork from there, and replay with changes.</li>
+              <li><strong>Edit state mid-run</strong> — fix a bad tool result by hand and continue, instead of restarting.</li>
+              <li><strong>Hot reload</strong> — edit your Python, and the running graph updates in place.</li>
+            </ul>
+            <p>It runs against a local dev server. Two pieces: the CLI, and a <code>langgraph.json</code> telling it where your graph lives:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="bash">pip install -U "langgraph-cli[inmem]"
+langgraph dev      # starts the local server + opens Studio in your browser</code></pre></div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">langgraph.json</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="json">{
+  "dependencies": ["."],
+  "graphs": { "agent": "./my_agent/graph.py:graph" },
+  "env": ".env"
+}</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Studio needs the langgraph-cli</div><p>Studio isn't a separate install — it's the UI that <code>langgraph dev</code> serves. No CLI, no Studio. The <code>[inmem]</code> extra runs everything in-process locally, no Docker required.</p></div></div>
+          </section>
+
+          <!-- 6. PLATFORM -->
+          <section class="section reveal" id="platform">
+            <h2><span class="section-num">06</span> &nbsp;LangGraph Platform: deploying it</h2>
+            <p>Eventually the graph has to leave your laptop. <strong>LangGraph Platform</strong> wraps your compiled graph in a production server that exposes it as an API — with <strong>built-in Postgres checkpointing, task queues, and autoscaling</strong> handled for you. The API speaks four nouns:</p>
+            <div class="kv">
+              <dt>assistant</dt><dd>A <strong>configured graph</strong> — your graph plus a specific config (model, prompt, tools). One graph can back many assistants.</dd>
+              <dt>thread</dt><dd><strong>One conversation</strong> — the same thread_id idea, now a first-class API object with stored checkpoints.</dd>
+              <dt>run</dt><dd><strong>One execution</strong> of an assistant on a thread. Runs queue, stream, retry, and can run in the background.</dd>
+              <dt>cron</dt><dd>A <strong>scheduled run</strong> — "summarize this inbox every morning at 8" with no extra scheduler infrastructure.</dd>
+            </div>
+            <p>Two ways to run it: <strong>cloud</strong> — push your repo and LangChain hosts, scales, and upgrades the server for you; <strong>self-hosted</strong> — run the same server as a container on your own infrastructure, your data never leaves.</p>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Do you actually need it?</div><p>Not on day one. A plain <strong>FastAPI service + a Postgres checkpointer</strong> is a perfectly good first deployment — it's just your graph behind an endpoint you already know how to run. Reach for Platform when its problems become <em>your</em> problems: background queues for long runs, bursty autoscaling, cron runs, or the Studio-connected debugging of live deployments.</p></div></div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Built. Shipped. Now: is it any good?</div><p>You can compose, stream, pause, survive crashes, and deploy. The last discipline is proving the agent actually <em>works</em> — and keeps working as you change prompts and models. That's evaluation, and it's LangSmith's home turf: <a href="../langsmith/evals.html">Evaluation in depth →</a></p></div></div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../langgraph/agents.html"><span class="pn-k">‹ Back</span><span class="pn-t">Agent architectures</span></a>
+            <a class="next" href="../langsmith/index.html"><span class="pn-k">Next ›</span><span class="pn-t">LangSmith · Overview</span></a>
+          </nav>
+        </div>
+
+        <!-- On this page -->
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#subgraphs">Subgraphs</a>
+          <a href="#streaming">Streaming</a>
+          <a href="#interrupts">Interrupts &amp; HITL</a>
+          <a href="#durability">Durability</a>
+          <a href="#studio">Studio</a>
+          <a href="#platform">Platform</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">LangGraph · Advanced</span>
+        <span class="fmono">The Lang Stack · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/graphsim.js"></script>
+</body>
+</html>

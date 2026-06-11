@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LangSmith — Evaluation in depth | The Lang Stack</title>
+  <meta name="description" content="LangSmith evaluation in depth: custom evaluators, LLM-as-judge calibration, pairwise experiments, annotation queues, online evals on production traffic, and wiring evals into CI." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.4' fill='%2334d399'/><circle cx='19' cy='6' r='2.4' fill='%23818cf8'/><circle cx='12' cy='18' r='2.4' fill='%23fbbf24'/></svg>" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="langsmith" data-page="ls-evals" data-lesson="ls-evals">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Lang Stack home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06140f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M6.8 7.4 10.4 16M17.2 7.4 13.6 16M7 6h10"/></svg></span>
+        <span class="brand-text"><b>The Lang Stack</b><span>Visual field guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../ecosystem/index.html">The big picture</a>
+        <a class="nav-link" href="../ecosystem/glossary.html">Glossary</a>
+      </nav>
+      <nav class="nav-group is-lc" aria-label="LangChain">
+        <h4><span class="dot"></span>LangChain</h4>
+        <a class="nav-link" href="../langchain/index.html">Overview</a>
+        <a class="nav-link" href="../langchain/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langchain/rag.html">RAG in production</a>
+      </nav>
+      <nav class="nav-group is-lg" aria-label="LangGraph">
+        <h4><span class="dot"></span>LangGraph</h4>
+        <a class="nav-link" href="../langgraph/index.html">Overview</a>
+        <a class="nav-link" href="../langgraph/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langgraph/agents.html">Agent architectures</a>
+        <a class="nav-link" href="../langgraph/advanced.html">Advanced LangGraph</a>
+      </nav>
+      <nav class="nav-group is-ls" aria-label="LangSmith">
+        <h4><span class="dot"></span>LangSmith</h4>
+        <a class="nav-link" href="../langsmith/index.html">Overview</a>
+        <a class="nav-link" href="../langsmith/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langsmith/evals.html">Evaluation in depth</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#dataset-design">Dataset design</a>
+          <a class="nav-link" href="#custom-evaluators">Custom evaluators</a>
+          <a class="nav-link" href="#llm-judge">LLM-as-judge</a>
+          <a class="nav-link" href="#experiments">Experiments &amp; pairwise</a>
+          <a class="nav-link" href="#annotation">Annotation queues</a>
+          <a class="nav-link" href="#online-evals">Online evaluation</a>
+          <a class="nav-link" href="#ci">Evals in CI</a>
+        </div>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../langsmith/index.html" style="color:var(--accent)">LangSmith</a><span class="sep">/</span><span class="current">Evaluation in depth</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <span class="pill"><span class="dot"></span>SDK · 0.7</span>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">LangSmith · evaluation in depth</span>
+            <h1>Stop eyeballing it. Start grading it.</h1>
+            <p class="lead">You've seen <code>evaluate()</code> in <a href="../langsmith/concepts.html#evaluation">Core concepts</a>. This lesson takes you the rest of the way: datasets that actually catch bugs, evaluators you write yourself, an LLM judge you can trust, humans in the loop, evals on live traffic — and finally a regression suite your CI runs on every pull request.</p>
+          </section>
+
+          <!-- 1. DATASET DESIGN -->
+          <section class="section reveal" id="dataset-design">
+            <h2><span class="section-num">01</span> &nbsp;Designing datasets that catch bugs</h2>
+            <p>An eval is only as good as its dataset. Twenty examples that probe your app's weak spots beat five hundred easy ones — a suite full of softballs scores 100% forever and tells you nothing.</p>
+            <p><strong>Where do good examples come from? Real traces.</strong> The best source is production: in the LangSmith UI, any trace is one click away from "Add to dataset." When a user hits a bad answer, that trace — with its real, messy input — becomes a test case. Hand-written examples are fine for day one, but real failures are where the bugs live.</p>
+            <div class="diagram">
+              <div class="dg-title">The harvest loop: production failures become test cases</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">production</div><div class="fn-t">bad trace spotted</div><div class="fn-d">user asks, app fumbles</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">one click</div><div class="fn-t">"Add to dataset"</div><div class="fn-d">real input, fixed reference</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">dataset · new version</div><div class="fn-t">qa-regressions:v8</div><div class="fn-d">every future eval re-checks it</div></div>
+              </div>
+              <div class="cap">Each harvested failure makes the suite permanently harder to pass — that's the point.</div>
+            </div>
+            <p>Most teams end up with three kinds of examples, often as separate datasets or tagged subsets:</p>
+            <div class="kv">
+              <dt>golden set</dt><dd>Representative, everyday inputs with carefully checked expected outputs. Answers the question "does the normal stuff still work?"</dd>
+              <dt>adversarial set</dt><dd>Inputs designed to break things: weird phrasing, prompt-injection attempts, off-topic questions, edge-case data. Answers "does it fail safely?"</dd>
+              <dt>regression set</dt><dd>One example per bug you've ever fixed, harvested from real traces. Answers "did the old bug come back?" — and it only ever grows.</dd>
+            </div>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 13c1 1.5 2.5 2 4 2s3-.5 4-2M9 9h.01M15 9h.01"/></svg></span><div class="co-body"><div class="co-title">Analogy: the driving test route</div><p>A driving examiner doesn't pick a random street — the route deliberately includes the hard left turn across traffic, the steep hill start, the tight parallel park. And if a student crashed at a particular junction last month, that junction is <em>on the route now</em>. Your dataset is the route: it must include every turn that has ever caused a crash.</p></div></div>
+            <p>Two structural features make datasets scale beyond a flat list:</p>
+            <ul>
+              <li><strong>Splits</strong> — named slices of one dataset (e.g. <code>billing</code>, <code>shipping</code>, <code>multilingual</code>). Run an experiment and read scores <em>per split</em>: "v2 improved billing questions but tanked multilingual" is a far more useful sentence than "v2 scored 84%."</li>
+              <li><strong>Versions</strong> — datasets are append-only with versions: every time you add or edit examples, LangSmith records a new version, and you can evaluate against a specific one (e.g. <code>data="qa-examples:v3"</code> or an as-of timestamp). Pin a version in CI so a teammate adding ten hard examples doesn't make your PR look like it caused a regression.</li>
+            </ul>
+            <div class="quiz" data-quiz>
+              <p class="q">Your eval suite has scored 100% on every run for three months. What's the most likely explanation?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>The app is perfect — ship it and stop testing</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>The dataset is too easy — it's missing the adversarial and regression examples that would expose real failures</button>
+                <button class="quiz-opt"><span class="mark"></span>The evaluator is broken and always returns 1</button>
+              </div>
+              <div class="quiz-explain"><b>Almost certainly the dataset.</b> (Check the evaluator too — but) a suite that never fails isn't proving quality, it's proving the route has no hard turns. Harvest failing production traces into a regression set and add adversarial inputs until the score has room to move.</div>
+            </div>
+          </section>
+
+          <!-- 2. CUSTOM EVALUATORS -->
+          <section class="section reveal" id="custom-evaluators">
+            <h2><span class="section-num">02</span> &nbsp;Custom evaluators: just Python functions</h2>
+            <p>Here's the secret that makes evaluation approachable: <strong>an evaluator is just a Python function</strong>. It receives the example's <code>inputs</code>, your app's <code>outputs</code>, and the expected <code>reference_outputs</code> — and returns a score. That can be a <code>bool</code>, a number, or a dict when you want to name the metric yourself.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">evaluators.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import re
+
+# 1) Exactness — a bool is a perfectly good score
+def exact_match(outputs: dict, reference_outputs: dict) -&gt; bool:
+    return outputs["answer"].strip() == reference_outputs["answer"].strip()
+
+# 2) Contains / regex — "did it cite a source like [doc-name §N]?"
+def contains_citation(outputs: dict) -&gt; bool:
+    return bool(re.search(r"\[[\w\-]+ §\d+\]", outputs["answer"]))
+
+# 3) Multi-key return — name the metric and score it yourself
+def conciseness(outputs: dict) -&gt; dict:
+    words = len(outputs["answer"].split())
+    return {"key": "conciseness", "score": max(0.0, 1 - words / 200)}
+    # e.g. {"key": "conciseness", "score": 0.8} for a 40-word answer</code></pre></div>
+            </div>
+            <p>Wire them in with <code>evaluate()</code> — same call you met in Core concepts, now with your own graders:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">run_evals.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langsmith import evaluate
+
+def target_fn(inputs: dict) -&gt; dict:
+    return {"answer": rag_pipeline(inputs["question"])}
+
+results = evaluate(
+    target_fn,
+    data="my-dataset",
+    evaluators=[exact_match, contains_citation, conciseness],
+    experiment_prefix="rag-v2",
+)</code></pre></div>
+            </div>
+            <p>LangSmith inspects each function's signature and passes only the arguments it asks for — <code>contains_citation</code> above never mentions <code>reference_outputs</code>, so it works even on examples (or live traces) that have no expected answer.</p>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Deterministic evaluators first</div><p>Before you reach for an LLM judge, squeeze everything you can out of plain code: exact match, contains, regex, "is it valid JSON?", length limits. They're <strong>free, fast, and never disagree with themselves</strong> — the same answer always gets the same score. Save the judge for the qualities code genuinely can't measure.</p></div></div>
+          </section>
+
+          <!-- 3. LLM-AS-JUDGE -->
+          <section class="section reveal" id="llm-judge">
+            <h2><span class="section-num">03</span> &nbsp;LLM-as-judge, calibrated</h2>
+            <p>Some qualities no regex can score: was the answer <em>helpful</em>? Was the tone right for an apology email? Did it actually address the question? For these you hand the answer to a strong model and ask it to grade. That works — but a judge is itself an LLM, with its own failure modes. Trust it the way you'd trust a new intern grader: only after you've checked their work.</p>
+            <div class="kv">
+              <dt>position bias</dt><dd>In side-by-side comparisons, judges favor whichever answer comes first. <em>Fix:</em> evaluate both orders (A-then-B and B-then-A) and keep only consistent verdicts.</dd>
+              <dt>verbosity bias</dt><dd>Longer answers score higher even when they say less. <em>Fix:</em> tell the judge length is not a virtue — and pair it with a deterministic conciseness check.</dd>
+              <dt>score inflation</dt><dd>Ask for 1–10 and everything lands at 7–9; the scale compresses and signal vanishes. <em>Fix:</em> use <strong>binary pass/fail</strong> or a short rubric (0 / 0.5 / 1), with the rubric written <em>in the prompt</em>.</dd>
+              <dt>judge drift</dt><dd>The judge model gets updated or swapped, and your scores shift with no change to your app. <em>Fix:</em> pin the judge's model version, and <strong>spot-check the judge against human labels</strong> (see §05) before trusting a trend.</dd>
+            </div>
+            <p>A calibrated judge in code — structured output so you get a clean verdict <em>and</em> the reasoning behind it:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">judge.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from pydantic import BaseModel, Field
+from langchain.chat_models import init_chat_model
+
+class Verdict(BaseModel):
+    reasoning: str = Field(description="One or two sentences explaining the grade.")
+    correct: bool = Field(description="Does the answer match the reference in substance?")
+
+judge = init_chat_model("gpt-4o").with_structured_output(Verdict)
+
+def correctness(inputs: dict, outputs: dict, reference_outputs: dict) -&gt; dict:
+    verdict = judge.invoke(
+        "You are grading a support bot. Rubric: PASS only if the answer "
+        "states the same facts as the reference; wording may differ. "
+        "Extra length earns nothing. FAIL on any contradiction or omission.\n\n"
+        f"Question: {inputs['question']}\n"
+        f"Reference: {reference_outputs['answer']}\n"
+        f"Answer: {outputs['answer']}"
+    )
+    return {"key": "correctness", "score": int(verdict.correct),
+            "comment": verdict.reasoning}</code></pre></div>
+            </div>
+            <p>Note what's in there: the rubric lives <strong>inside the prompt</strong> (the judge isn't left to invent standards), the output is a <strong>bool</strong> (no inflated 7/10s), and the <code>comment</code> lands in LangSmith next to the score so you can audit <em>why</em> something failed.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">Why do practitioners prefer pass/fail (or a tiny rubric) over asking the judge for a 1–10 score?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>LLMs can't output numbers reliably</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Judges inflate and compress fine-grained scales — everything clusters at 7–9 — while a binary verdict with a clear rubric stays consistent and auditable</button>
+                <button class="quiz-opt"><span class="mark"></span>Pass/fail is cheaper because it uses fewer output tokens</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> A 1–10 scale invites <b>score inflation</b>: the judge hedges toward the top, the difference between 7 and 8 means nothing, and trends get noisy. A binary question against an explicit rubric ("PASS only if…") is a decision the judge can make consistently — and a human can check.</div>
+            </div>
+          </section>
+
+          <!-- 4. EXPERIMENTS & PAIRWISE -->
+          <section class="section reveal" id="experiments">
+            <h2><span class="section-num">04</span> &nbsp;Experiments &amp; pairwise comparison</h2>
+            <p>Every <code>evaluate()</code> call produces an <strong>experiment</strong>: one dataset × one version of your app, with every example's output and every evaluator's score recorded. Change the prompt, run again, and you have two experiments to put <strong>side-by-side</strong> in the UI — LangSmith aligns them row by row, so you see exactly <em>which</em> examples got better and which regressed, not just the aggregate.</p>
+            <p>Two refinements matter once you compare seriously:</p>
+            <ul>
+              <li><strong>Pairwise evals</strong> — for subjective qualities ("which reply sounds more empathetic?"), absolute scores are mushy. Instead, give a judge both experiments' answers to the <em>same</em> example and ask it to pick A or B (remember position bias: run both orders). A preference is a much easier question than a grade.</li>
+              <li><strong>Repetitions</strong> — LLMs are nondeterministic, so a single run can flatter or slander a version. <code>evaluate(..., num_repetitions=3)</code> runs each example several times and averages, taming variance before you conclude "v2 is better."</li>
+            </ul>
+            <p>Under the hood, each example in an experiment is itself a trace: your target function runs, then each evaluator runs over its output. Here's one example's run tree — example #14, where one evaluator passes and the other <strong>catches a regression</strong>. Click the runs:</p>
+            <figure class="tracelab reveal" data-tracelab aria-label="Interactive experiment run tree">
+              <script type="application/json" class="tracelab-config">
+              {
+                "total_ms": 2400,
+                "runs": [
+                  {"id": "root", "parent": null, "name": "evaluate (example #14)", "type": "chain", "start": 0, "dur": 2400,
+                   "input": "question: \"What's the refund window for sale items?\"\nreference: \"14 days, store credit only [refund-policy.md §4]\"",
+                   "output": "scores -> correctness: 1 · contains_citation: 0"},
+                  {"id": "target", "parent": "root", "name": "target: rag_pipeline", "type": "chain", "start": 15, "dur": 1480,
+                   "input": "\"What's the refund window for sale items?\"",
+                   "output": "\"Sale items can be returned within 14 days for store credit.\""},
+                  {"id": "tllm", "parent": "target", "name": "call_llm", "type": "llm", "start": 130, "dur": 1340, "tokens": 1840, "cost": 0.0092,
+                   "input": "system + question + 3 retrieved chunks",
+                   "output": "AIMessage(\"Sale items can be returned within 14 days for store credit.\")"},
+                  {"id": "ev1", "parent": "root", "name": "eval: correctness", "type": "llm", "start": 1510, "dur": 860, "tokens": 412, "cost": 0.0021,
+                   "input": "rubric + reference + answer",
+                   "output": "score: 1 — \"States the same facts as the reference: 14 days, store credit.\""},
+                  {"id": "ev2", "parent": "root", "name": "eval: contains_citation", "type": "tool", "start": 2385, "dur": 2,
+                   "input": "answer: \"Sale items can be returned within 14 days for store credit.\"",
+                   "output": "score: 0 — no [doc §N] citation found. The new prompt dropped the cite-your-source instruction."}
+                ]
+              }
+              </script>
+            </figure>
+            <p>That's what a caught regression looks like: no error, no crash — the answer is even <em>correct</em> — but the 2-millisecond regex evaluator noticed the citation vanished. The aggregate <code>contains_citation</code> score for this experiment drops, and the side-by-side view points straight at the prompt change that caused it.</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Evaluators cost money too</div><p>Notice the judge run above burned 412 tokens — per example, per repetition. The regex check cost nothing. This is the economic argument for §02's gotcha: deterministic checks scale to thousands of examples for free; judges should be reserved for the questions worth paying for.</p></div></div>
+          </section>
+
+          <!-- 5. ANNOTATION QUEUES -->
+          <section class="section reveal" id="annotation">
+            <h2><span class="section-num">05</span> &nbsp;Annotation queues &amp; human feedback</h2>
+            <p>Some judgments still need a person: subtle correctness in a specialist domain, policy and brand-voice calls, anything where you wouldn't trust the intern <em>or</em> the judge. LangSmith's tool for this is the <strong>annotation queue</strong> — an inbox of runs routed to human reviewers.</p>
+            <p>The flow: you (or a rule) send runs to a queue — say, every run a user thumbed-down, or a 2% random sample. Reviewers open the queue, see one run at a time with your <strong>rubric</strong> alongside it, and attach <strong>feedback</strong>: scores and notes that stick to the run permanently. No spreadsheets, no copy-pasting transcripts into Slack.</p>
+            <div class="diagram">
+              <div class="dg-title">An annotation queue is an inbox with a rubric</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">routing rule</div><div class="fn-t">👎 runs + 2% sample</div><div class="fn-d">auto-fills the queue</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">reviewer</div><div class="fn-t">run + rubric, side by side</div><div class="fn-d">scores &amp; notes attach to the run</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">labels feed</div><div class="fn-t">datasets + judge calibration</div><div class="fn-d">spent twice, never wasted</div></div>
+              </div>
+              <div class="cap">Reviewers grade in LangSmith itself — no spreadsheet export, no lost context.</div>
+            </div>
+            <p>Those human labels are the most expensive data you'll ever collect, so spend them twice:</p>
+            <ul>
+              <li><strong>Build datasets</strong> — runs labeled "bad" become regression examples (§01); runs labeled "great" become golden examples with trusted reference outputs.</li>
+              <li><strong>Calibrate your judge</strong> — run your LLM judge over the same runs humans labeled and measure agreement. 90%+ agreement: trust the judge to scale. 60%: your judge prompt needs work before its scores mean anything.</li>
+            </ul>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">End users are annotators too</div><p>The 👍/👎 buttons in your app can call <code>client.create_feedback(run_id, key="user-score", score=0)</code> — that lands in the <em>same</em> feedback system as reviewer labels. Filter for thumbed-down traces, route them to a queue for a closer look, and graduate the confirmed failures into your regression set.</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">You have 200 production runs labeled by human reviewers. Beyond fixing the bad ones, what's the highest-leverage use of those labels?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Delete them — labeled runs are stale data</button>
+                <button class="quiz-opt"><span class="mark"></span>Fine-tune the production model immediately</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Measure your LLM judge's agreement with the human labels, and turn the labeled runs into dataset examples</button>
+              </div>
+              <div class="quiz-explain"><b>Yes — spend them twice.</b> Human labels are ground truth: comparing the judge's verdicts against them tells you whether you can trust the judge at scale, and the labeled runs themselves become golden/regression examples. (Fine-tuning may come later, but 200 examples is calibration-sized, not training-sized.)</div>
+            </div>
+          </section>
+
+          <!-- 6. ONLINE EVALS -->
+          <section class="section reveal" id="online-evals">
+            <h2><span class="section-num">06</span> &nbsp;Online evaluation: grading live traffic</h2>
+            <p>Offline evals grade a fixed dataset. But production has a habit of inventing inputs your dataset never predicted — a new product launch shifts every question, a retriever index goes stale, an upstream model update changes behavior overnight. <strong>Online evaluation</strong> runs evaluators automatically on a <em>sample</em> of live traces as they arrive.</p>
+            <p>The crucial difference: live traffic has <strong>no reference answers</strong>. Nobody wrote down the expected output for a question a user asked thirty seconds ago. Online evaluators therefore judge <strong>inputs and outputs only</strong> — reference-free questions like:</p>
+            <ul>
+              <li>Does the answer actually address the question? (LLM judge, no reference needed)</li>
+              <li>Is the output valid JSON / does it carry a citation? (your deterministic checks from §02 — they never needed a reference anyway)</li>
+              <li>Did the answer leak a system prompt, refuse unnecessarily, or use a forbidden phrase?</li>
+            </ul>
+            <div class="diagram">
+              <div class="dg-title">Online evaluation: the loop that closes itself</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">live traffic</div><div class="fn-t">all traces</div><div class="fn-d">sample 1–5%</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">online evaluator</div><div class="fn-t">reference-free judge</div><div class="fn-d">scores inputs + outputs</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">alert</div><div class="fn-t">relevance &lt; 0.85</div><div class="fn-d">page the team</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">triage</div><div class="fn-t">queue → dataset</div><div class="fn-d">failures join the suite (§01)</div></div>
+              </div>
+              <div class="cap">Drift caught by a sampled judge today becomes a deterministic regression test tomorrow.</div>
+            </div>
+            <p>Scores attach to the live traces and flow into the same dashboards as everything else — so you set an <strong>alert</strong> on "answer-relevance dropped below 0.85 this hour" and hear about drift from a pager, not from a customer. When the alert fires, the low-scoring traces are right there: triage them, send the confirmed failures to an annotation queue, and add them to the regression set. The loop closes.</p>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Online judges bill you per sampled trace</div><p>Every sampled trace triggers a real LLM call to the judge. At 100% sampling on a busy app, your <em>evaluation</em> bill can rival your application's model bill. Sample <strong>1–5%</strong> of traffic — drift is a trend, and a trend shows up fine in a sample. Run cheap deterministic checks at a higher rate if you like; they're free.</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">Why can't your offline <code>exact_match</code> evaluator be used as-is for online evaluation?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Online evaluators must be LLM judges — code isn't allowed</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>It compares against <code>reference_outputs</code>, and live traces have no expected answer to compare with</button>
+                <button class="quiz-opt"><span class="mark"></span>Production traces arrive too fast for Python to keep up</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> Live traffic is <b>reference-free</b> — nobody pre-wrote the right answer to a question a user just invented. Online evaluators may only look at <code>inputs</code> and <code>outputs</code>: format checks, citation regexes, and reference-free judges ("does the answer address the question?") all work; anything that needs <code>reference_outputs</code> doesn't.</div>
+            </div>
+          </section>
+
+          <!-- 7. CI -->
+          <section class="section reveal" id="ci">
+            <h2><span class="section-num">07</span> &nbsp;Wiring evals into CI</h2>
+            <p>Everything so far is still optional until it runs <em>automatically</em>. The end state: a teammate opens a PR that tweaks a prompt, CI runs the eval suite, and the PR goes red if quality regressed — exactly like unit tests, because that's what these are.</p>
+            <p>Two ways to wire it. The pytest integration marks tests so their runs land in LangSmith:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">test_quality.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import pytest
+
+@pytest.mark.langsmith                       # logs this test as a LangSmith experiment
+def test_refund_question_cites_source():
+    out = rag_pipeline("What's the refund window for sale items?")
+    assert "14 days" in out
+    assert "[refund-policy.md" in out        # the §04 regression, now a permanent test</code></pre></div>
+            </div>
+            <p>Or a plain script: run <code>evaluate()</code> over a <strong>pinned dataset version</strong> and assert on the aggregate — one threshold, one exit code, any CI system:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">ci_eval.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import sys
+from langsmith import evaluate
+
+results = evaluate(
+    target_fn,
+    data="qa-regressions:v7",        # PIN the version — same exam for every PR
+    evaluators=[exact_match, contains_citation, correctness],
+    experiment_prefix=f"ci-{GIT_SHA[:7]}",
+    max_concurrency=8,               # keep the suite fast
+)
+
+df = results.to_pandas()
+score = df["feedback.correctness"].mean()
+print(f"correctness: {score:.2%}")
+if score &lt; 0.85:                     # the regression gate
+    sys.exit(1)                      # red PR — quality dropped</code></pre></div>
+            </div>
+            <p>Most teams split the work between two tiers:</p>
+            <div class="kv">
+              <dt>per-PR suite</dt><dd>The regression split + deterministic evaluators only. Sampled, concurrent, done in 2–3 minutes — fast enough that nobody is tempted to skip it.</dd>
+              <dt>nightly suite</dt><dd>The full golden + adversarial sets with LLM judges and repetitions. Slower and pricier, but it runs while you sleep and posts a morning report.</dd>
+            </div>
+            <p>Keeping it healthy in practice:</p>
+            <ul>
+              <li><strong>Pin the dataset version</strong> (§01) so score changes mean <em>code</em> changes, not dataset changes.</li>
+              <li><strong>Keep it under a few minutes.</strong> Run a sampled subset (or just the regression split) on every PR with concurrency turned up; save the full golden + judge suite for a nightly job.</li>
+              <li><strong>Fail loudly, link richly.</strong> Print the experiment URL in the CI log — a red build that links straight to the failing rows gets fixed; a bare exit code gets ignored.</li>
+            </ul>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Start embarrassingly small</div><p>Twenty examples and one strict deterministic evaluator, wired into CI <em>today</em>. A small suite that <strong>runs on every PR</strong> catches more regressions than a five-hundred-example masterpiece that's "almost ready." Grow it one harvested production failure at a time.</p></div></div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Need the basics again?</div><p>Datasets, examples, and the anatomy of <code>evaluate()</code> are covered from scratch in <a href="../langsmith/concepts.html#datasets">Core concepts · Datasets</a> and the <a href="../langsmith/concepts.html#evaluation">Evaluation</a> section.</p></div></div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../langsmith/concepts.html"><span class="pn-k">‹ Back</span><span class="pn-t">LangSmith · Core concepts</span></a>
+            <a class="next" href="../ecosystem/glossary.html"><span class="pn-k">Next ›</span><span class="pn-t">Glossary</span></a>
+          </nav>
+        </div>
+
+        <!-- On this page -->
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#dataset-design">Dataset design</a>
+          <a href="#custom-evaluators">Custom evaluators</a>
+          <a href="#llm-judge">LLM-as-judge</a>
+          <a href="#experiments">Experiments &amp; pairwise</a>
+          <a href="#annotation">Annotation queues</a>
+          <a href="#online-evals">Online evaluation</a>
+          <a href="#ci">Evals in CI</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">LangSmith · Evaluation in depth</span>
+        <span class="fmono">The Lang Stack · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/tracelab.js"></script>
+</body>
+</html>

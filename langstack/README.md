@@ -27,11 +27,11 @@ A beginner-first path through the three core "Lang" tools and how they fit toget
 | Section | Teaches |
 |---|---|
 | **Home** | The big picture, the three tools at a glance, a "how they fit together" diagram, and a learning path |
-| **LangChain** | Chat models · messages · prompt templates · output parsers · **LCEL** (`prompt \| model \| parser`) · tools & tool-calling · retrieval · **RAG** · memory · agents |
-| **LangGraph** | Graphs/nodes/edges · **StateGraph** · reducers · conditional edges · checkpointers & threads · human-in-the-loop · memory & the Store · multi-agent · prebuilt ReAct agent |
-| **LangSmith** | Traces & the run tree · enabling tracing · the Playground · Prompt Hub · datasets · **evaluation** (heuristic / LLM-as-judge / pairwise) · experiments · monitoring · human feedback |
+| **LangChain** | Chat models · messages · prompt templates · output parsers · **LCEL** (`prompt \| model \| parser`) · tools & tool-calling · retrieval · **RAG** · memory · agents — plus **RAG in production** (chunking strategies, hybrid search & RRF, reranking, query rewriting, citations) |
+| **LangGraph** | Graphs/nodes/edges · **StateGraph** · reducers · conditional edges · checkpointers & threads · human-in-the-loop · memory & the Store · multi-agent · prebuilt ReAct agent — plus **Agent architectures** (ReAct internals, supervisor, swarm/handoffs, planner-executor) and **Advanced LangGraph** (subgraphs, streaming modes, interrupts, durability, Studio & Platform) |
+| **LangSmith** | Traces & the run tree · enabling tracing · the Playground · Prompt Hub · datasets · **evaluation** (heuristic / LLM-as-judge / pairwise) · experiments · monitoring · human feedback — plus **Evaluation in depth** (custom evaluators, judge calibration, annotation queues, online evals, CI wiring) |
 | **Ecosystem** | Side-by-side comparison, a "which one do I use?" decision guide, a learning roadmap, and a consolidated version table |
-| **Glossary** | 44 searchable terms, each cross-linked to where it's taught |
+| **Glossary** | 51 searchable terms, each cross-linked to where it's taught |
 
 **Recommended order:** Home → The big picture → LangChain → LangGraph → LangSmith.
 
@@ -57,19 +57,23 @@ langstack/                     ← this project
 │       └── …engines             ← graphsim.js, tracelab.js, pipeviz.js
 ├── langchain/
 │   ├── index.html              ← overview
-│   └── concepts.html           ← deep dive
+│   ├── concepts.html           ← deep dive
+│   └── rag.html                ← RAG in production
 ├── langgraph/
 │   ├── index.html
-│   └── concepts.html
+│   ├── concepts.html
+│   ├── agents.html             ← agent architectures
+│   └── advanced.html           ← subgraphs · streaming · interrupts · Platform
 ├── langsmith/
 │   ├── index.html
-│   └── concepts.html
+│   ├── concepts.html
+│   └── evals.html              ← evaluation in depth
 └── ecosystem/
     ├── index.html              ← "the big picture"
     └── glossary.html
 ```
 
-9 HTML pages + shared assets. Every page reuses the same sidebar, top bar, and footer; all links are relative within the tree.
+13 HTML pages + shared assets. Every page reuses the same sidebar, top bar, and footer; all links are relative within the tree.
 
 **After editing any page content**, rebuild the search index and check the tree:
 

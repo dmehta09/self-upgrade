@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAG in production | The Lang Stack</title>
+  <meta name="description" content="Advanced RAG with LangChain: chunking strategies, hybrid search with RRF, cross-encoder reranking, query rewriting & multi-query, and citations that ground every answer. With diagrams and Python." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.4' fill='%2334d399'/><circle cx='19' cy='6' r='2.4' fill='%23818cf8'/><circle cx='12' cy='18' r='2.4' fill='%23fbbf24'/></svg>" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="langchain" data-page="lc-rag" data-lesson="lc-rag">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Lang Stack home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06140f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M6.8 7.4 10.4 16M17.2 7.4 13.6 16M7 6h10"/></svg></span>
+        <span class="brand-text"><b>The Lang Stack</b><span>Visual field guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../ecosystem/index.html">The big picture</a>
+        <a class="nav-link" href="../ecosystem/glossary.html">Glossary</a>
+      </nav>
+      <nav class="nav-group is-lc" aria-label="LangChain">
+        <h4><span class="dot"></span>LangChain</h4>
+        <a class="nav-link" href="../langchain/index.html">Overview</a>
+        <a class="nav-link" href="../langchain/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langchain/rag.html">RAG in production</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#why-naive-fails">Why naive RAG plateaus</a>
+          <a class="nav-link" href="#chunking">Chunking</a>
+          <a class="nav-link" href="#hybrid">Hybrid search &amp; RRF</a>
+          <a class="nav-link" href="#rerank">Reranking</a>
+          <a class="nav-link" href="#rewriting">Query rewriting</a>
+          <a class="nav-link" href="#citations">Citations</a>
+          <a class="nav-link" href="#when-enough">When naive is enough</a>
+        </div>
+      </nav>
+      <nav class="nav-group is-lg" aria-label="LangGraph">
+        <h4><span class="dot"></span>LangGraph</h4>
+        <a class="nav-link" href="../langgraph/index.html">Overview</a>
+        <a class="nav-link" href="../langgraph/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langgraph/agents.html">Agent architectures</a>
+        <a class="nav-link" href="../langgraph/advanced.html">Advanced LangGraph</a>
+      </nav>
+      <nav class="nav-group is-ls" aria-label="LangSmith">
+        <h4><span class="dot"></span>LangSmith</h4>
+        <a class="nav-link" href="../langsmith/index.html">Overview</a>
+        <a class="nav-link" href="../langsmith/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langsmith/evals.html">Evaluation in depth</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../langchain/index.html" style="color:var(--accent)">LangChain</a><span class="sep">/</span><span class="current">RAG in production</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <span class="pill"><span class="dot"></span>Python · v1.3</span>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">LangChain · RAG in production</span>
+            <h1>Naive RAG gets you a demo. This gets you to prod.</h1>
+            <p class="lead">You built the basic loop — embed, retrieve, stuff, answer — in <a href="../langchain/concepts.html#rag">Core concepts</a>. It works great on five PDFs and falls apart on five thousand. This page is the upgrade path: better chunks, hybrid search, reranking, query rewriting, and citations.</p>
+          </section>
+
+          <!-- 1. WHY NAIVE FAILS -->
+          <section class="section reveal" id="why-naive-fails">
+            <h2><span class="section-num">01</span> &nbsp;Why naive RAG plateaus</h2>
+            <p>Naive RAG makes one optimistic bet: <em>the user's question, embedded once, will land near the right chunk, and the model will use it faithfully.</em> On a demo corpus that bet usually pays off. In production, every link in that chain breaks in its own way:</p>
+            <div class="kv">
+              <dt>wrong chunks retrieved</dt><dd>The nearest vectors are <strong>about</strong> the topic but don't contain the answer. Recall looks fine in a demo; on a big corpus, near-misses crowd out the one chunk that matters.</dd>
+              <dt>answer buried mid-chunk</dt><dd>The chunk is technically correct, but the answer is one sentence inside 1,500 characters of context the model has to dig through — and sometimes it stops digging.</dd>
+              <dt>question wording ≠ document wording</dt><dd>Users say "how do I get my money back?"; the doc says "refund eligibility policy". Pure embedding similarity can bridge that gap — but exact IDs, SKUs, and jargon often slip through.</dd>
+              <dt>model ignores context</dt><dd>Retrieval was perfect, but the model answers from its training data anyway — or blends the two. Without grounding, you can't even tell which happened.</dd>
+            </div>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1 0 5.6l-1.4 1.4-5.6-5.6 1.4-1.4a4 4 0 0 1 5.6 0ZM3 21l4-1 11-11"/></svg></span><div class="co-body"><div class="co-title">The librarian who only matches titles</div><p>Naive RAG is a librarian who finds books whose <em>titles sound like</em> your question. Ask for "that book about the whale and the obsessed captain" and you might get <em>Whales of the North Atlantic</em>. A production librarian also checks the index (keyword search), skims the candidates before handing them over (reranking), and asks "do you mean Moby-Dick?" (query rewriting). The rest of this page builds that librarian.</p></div></div>
+            <p>Each section below fixes one failure mode. The good news: they're <strong>independent upgrades</strong> — you can adopt them one at a time, in any order, and measure each.</p>
+          </section>
+
+          <!-- 2. CHUNKING -->
+          <section class="section reveal" id="chunking">
+            <h2><span class="section-num">02</span> &nbsp;Chunking strategies <span class="badge" style="vertical-align:middle">foundation</span></h2>
+            <p>Chunking is where most RAG quality is won or lost — before a single query runs. The core tension: <strong>small chunks embed precisely</strong> (one idea per vector, easy to match) but <strong>lose context</strong>; <strong>big chunks keep context</strong> but their embedding becomes a mushy average of many ideas. <code>chunk_overlap</code> softens the cut: each chunk repeats the tail of the previous one, so a sentence sliced in half still appears whole in <em>one</em> of them.</p>
+            <p>Two upgrades beyond fixed-size splitting:</p>
+            <div class="kv">
+              <dt>structure-aware splitting</dt><dd>Split on <strong>headings, paragraphs, and code blocks</strong> — the document's natural seams — instead of every N characters. A code example cut in half is worse than useless. <code>RecursiveCharacterTextSplitter</code> already tries separators in order (paragraph → line → word) for exactly this reason.</dd>
+              <dt>the parent-document trick</dt><dd><strong>Search small, feed big.</strong> Embed small, precise child chunks for matching — but when a child matches, hand the model its <em>parent</em> (the full section it came from). You get pinpoint retrieval <em>and</em> full context. In LangChain this is the <code>ParentDocumentRetriever</code> pattern.</dd>
+            </div>
+            <div class="diagram">
+              <div class="dg-title">Parent-document: search small, feed big</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">query</div><div class="fn-t">"max upload size?"</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">match</div><div class="fn-t">child chunk · 300 chars</div><div class="fn-d">one precise idea per vector</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">feed</div><div class="fn-t">parent section · 2,000 chars</div><div class="fn-d">full context for the model</div></div>
+              </div>
+              <div class="cap">The tiny child wins the similarity search; its parent — with the limits table, the exceptions, the footnote — is what goes into the prompt.</div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">chunking.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+# Typical starting points (tune with evals, not vibes):
+#   content type        chunk_size   chunk_overlap
+#   chat / FAQ snippets   300-500       50
+#   prose docs / wikis    800-1200     100-200
+#   code / API refs      1200-1500     150   (split on functions if you can)
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=150,        # ~15% of chunk_size is a sane default
+    separators=["\n\n", "\n", " ", ""],   # tries paragraph first, then line...
+)
+chunks = splitter.split_documents(docs)</code></pre></div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">What problem does <code>chunk_overlap</code> actually solve?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>It makes chunks bigger so the model gets more context</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>It stops a sentence or idea from being cut in half at a chunk boundary</button>
+                <button class="quiz-opt"><span class="mark"></span>It deduplicates chunks that say the same thing</button>
+              </div>
+              <div class="quiz-explain"><b>That's it.</b> Overlap repeats the tail of each chunk at the head of the next, so any idea that straddles a boundary appears <em>intact</em> in at least one chunk. It costs a little storage (the repeated text is embedded twice) — a cheap price for never losing a boundary sentence.</div>
+            </div>
+          </section>
+
+          <!-- 3. HYBRID -->
+          <section class="section reveal" id="hybrid">
+            <h2><span class="section-num">03</span> &nbsp;Hybrid search &amp; RRF <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p>Dense vectors and keyword search fail in <em>opposite</em> directions. Embeddings are great at paraphrase ("get my money back" ≈ "refund policy") but blur out exact tokens — error codes, SKUs, <code>ERR_TLS_402</code>, "Form 16B". Keyword search (BM25) nails exact tokens but has zero idea that "refund" and "money back" are the same thing. So run <strong>both</strong>, and fuse the results with <strong>Reciprocal Rank Fusion</strong>: each document scores <code>1 / (k + rank)</code> in each list, sum across lists, re-sort. Documents that rank well in <em>either</em> list — or decently in both — float to the top.</p>
+            <div class="diagram">
+              <div class="dg-title">One query, two searches, one fused list</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">query</div><div class="fn-t">"ERR_TLS_402 refund?"</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">in parallel</div><div class="fn-t">vector + BM25</div><div class="fn-d">paraphrase + exact tokens</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">RRF</div><div class="fn-t">fuse the ranks</div><div class="fn-d">1/(k+rank), summed</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">output</div><div class="fn-t">top-k docs</div></div>
+              </div>
+              <div class="cap">BM25 catches <code>ERR_TLS_402</code> exactly; the vector side catches "refund" phrased ten different ways. RRF merges both lists into one.</div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">hybrid.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain_community.retrievers import BM25Retriever
+from langchain.retrievers import EnsembleRetriever
+
+keyword = BM25Retriever.from_documents(chunks, k=10)   # exact-token search
+semantic = vector_store.as_retriever(search_kwargs={"k": 10})
+
+hybrid = EnsembleRetriever(                # fuses with Reciprocal Rank Fusion
+    retrievers=[keyword, semantic],
+    weights=[0.4, 0.6],                    # nudge toward the semantic side
+)
+docs = hybrid.invoke("ERR_TLS_402 refund eligibility")</code></pre></div>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Fuse RANKS, not scores</div><p>A cosine similarity of 0.82 and a BM25 score of 14.7 live on <strong>completely different scales</strong> — adding or averaging them is meaningless. RRF sidesteps this by ignoring scores entirely and using only each document's <em>position</em> in each list. That's the whole reason it works across any pair of search systems.</p></div></div>
+
+            <p><strong>Watch the whole production chain run.</strong> This is hybrid retrieval wired into the standard stuff-the-context chain — step through and watch the payload change shape at every stage:</p>
+            <figure class="pipeviz reveal" data-pipeviz aria-label="Production RAG chain stepper">
+              <script type="application/json" class="pipeviz-config">
+              {
+                "stages": [
+                  {"id": "retriever", "label": "retriever", "kind": "retriever"},
+                  {"id": "stuff",     "label": "format docs", "kind": "custom"},
+                  {"id": "prompt",    "label": "prompt",    "kind": "prompt"},
+                  {"id": "model",     "label": "model",     "kind": "model"},
+                  {"id": "parser",    "label": "parser",    "kind": "parser"}
+                ],
+                "frames": [
+                  {"at": "in", "payload": "\"What does ERR_TLS_402 mean for refunds?\"",
+                   "caption": "A plain question string enters the chain — exactly what the user typed."},
+                  {"at": "retriever", "payload": "[Document(id=\"kb-104\", \"ERR_TLS_402 indicates...\"),\n Document(id=\"kb-031\", \"Refund eligibility requires...\"),\n Document(id=\"kb-217\", \"TLS errors during checkout...\")]",
+                   "caption": "Hybrid retrieval (vector + BM25, fused by RRF) returns a LIST OF 3 CHUNKS — BM25 caught the exact error code, the vector side caught the refund paraphrase."},
+                  {"at": "stuff", "payload": "\"[kb-104] ERR_TLS_402 indicates...\n\n[kb-031] Refund eligibility requires...\n\n[kb-217] TLS errors during checkout...\"",
+                   "caption": "The chunks are formatted into one context string — each prefixed with its id so the model can cite it later."},
+                  {"at": "prompt", "payload": "ChatPromptValue(messages=[\n  SystemMessage(\"Answer ONLY from the context. Cite ids.\"),\n  HumanMessage(\"Context:\n[kb-104]...\n\nQ: What does ERR_TLS_402 mean for refunds?\")\n])",
+                   "caption": "The prompt stuffs context + question into messages, with grounding instructions in the system message."},
+                  {"at": "model", "payload": "AIMessage(\n  content=\"ERR_TLS_402 is a checkout failure, so the charge\n  never settled — you qualify for an automatic refund\n  [kb-104, kb-031].\"\n)",
+                   "caption": "The model answers FROM the context and cites the chunk ids it used — that's section 06 in action."},
+                  {"at": "parser", "payload": "\"ERR_TLS_402 is a checkout failure... automatic refund [kb-104, kb-031].\"",
+                   "caption": "The parser unwraps the AIMessage into a plain string — grounded, cited, ready to show the user."}
+                ]
+              }
+              </script>
+            </figure>
+          </section>
+
+          <!-- 4. RERANK -->
+          <section class="section reveal" id="rerank">
+            <h2><span class="section-num">04</span> &nbsp;Reranking: the funnel <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p>Why are embeddings imprecise in the first place? Because each document is squeezed into a vector <strong>before it ever sees your question</strong>. A <strong>cross-encoder</strong> reranker does the opposite: it reads the question and a candidate <em>together</em>, token by token, and outputs one relevance score. Far more accurate — and far too slow to run against a million documents:</p>
+            <div class="grid grid-2">
+              <div class="card"><h4 class="mt-0">Bi-encoder (vector search)</h4><p class="mb-0">Embeds query and documents <strong>separately</strong>; docs are pre-computed once, so comparing is just fast vector math. Scales to millions — but each side is summarized <em>blind</em>, without seeing the other.</p></div>
+              <div class="card"><h4 class="mt-0">Cross-encoder (reranker)</h4><p class="mb-0">Reads query + document <strong>together</strong> in one pass — every word can attend to every word. Far more accurate, but nothing can be pre-computed, so it only works on a <em>short</em> list.</p></div>
+            </div>
+            <p>So you build a <strong>funnel</strong>:</p>
+            <div class="diagram">
+              <div class="dg-title">Cheap and wide, then expensive and narrow</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">corpus</div><div class="fn-t">1,000,000 chunks</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">retrieve</div><div class="fn-t">top 25</div><div class="fn-d">hybrid, milliseconds</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">rerank</div><div class="fn-t">cross-encoder</div><div class="fn-d">reads each pair fully</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">keep</div><div class="fn-t">best 4</div><div class="fn-d">into the prompt</div></div>
+              </div>
+              <div class="cap">Retrieval optimizes for <strong>recall</strong> (don't miss it); the reranker optimizes for <strong>precision</strong> (put it first). Scoring 25 pairs is fast; scoring a million would take minutes.</div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">rerank.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain.retrievers import ContextualCompressionRetriever
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
+from langchain.retrievers.document_compressors import CrossEncoderReranker
+
+wide = hybrid_retriever          # cast a wide net: k=25
+reranker = CrossEncoderReranker(
+    model=HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-v2-m3"),
+    top_n=4,                     # keep only the best 4 for the prompt
+)
+retriever = ContextualCompressionRetriever(
+    base_retriever=wide, base_compressor=reranker,
+)
+docs = retriever.invoke("refund eligibility after a TLS checkout error")</code></pre></div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">Where does the reranker sit in the pipeline?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Before retrieval — it pre-scores the whole corpus overnight</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Between retrieval and the prompt — it re-orders a small candidate set</button>
+                <button class="quiz-opt"><span class="mark"></span>After the model — it checks whether the answer was relevant</button>
+              </div>
+              <div class="quiz-explain"><b>Between, always.</b> A cross-encoder must see the <em>live query</em> paired with each candidate, so it can't pre-compute anything — and it's too slow for the full corpus. The funnel is the compromise: cheap search narrows a million to 25, the reranker reads those 25 carefully and keeps the best 4.</div>
+            </div>
+          </section>
+
+          <!-- 5. REWRITING -->
+          <section class="section reveal" id="rewriting">
+            <h2><span class="section-num">05</span> &nbsp;Query rewriting &amp; multi-query</h2>
+            <p>Everything so far improves the <em>search</em>. This section improves the <em>query</em>. Real users ask vague follow-ups: after discussing the enterprise plan, they type <em>"and how much is that for 50 seats?"</em> Embed that literally and "that" matches nothing. The fix: a small, cheap LLM call that <strong>rewrites the follow-up into a standalone query</strong> using the conversation so far — before retrieval runs.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">rewrite.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+
+rewrite_prompt = ChatPromptTemplate.from_messages([
+    ("system", "Rewrite the user's last message as ONE standalone search "
+               "query. Resolve pronouns using the conversation. Query only."),
+    ("placeholder", "{history}"),
+    ("human", "{question}"),
+])
+rewrite_chain = rewrite_prompt | small_model | StrOutputParser()   # plain LCEL
+
+q = rewrite_chain.invoke({"history": history,
+                          "question": "and how much is that for 50 seats?"})
+# -&gt; "enterprise plan pricing for 50 seats"
+docs = retriever.invoke(q)        # NOW retrieval has something to bite on</code></pre></div>
+            </div>
+            <p>The same trick scales up to <strong>multi-query fan-out</strong>: ask the model for 3–4 different phrasings of the question ("refund policy", "money-back eligibility", "cancellation reimbursement"), retrieve for <em>each</em>, then <strong>dedupe</strong> the union by document id. Any single phrasing might miss; the union rarely does. LangChain ships this as <code>MultiQueryRetriever</code> — and RRF (section 03) is again the right way to merge the lists.</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Rewriting is the cheapest upgrade here</div><p>It's one extra call to a small, fast model — no re-indexing, no new infrastructure. If your bot handles <em>conversations</em> (not one-shot questions), do this first: no retrieval trick can save a query that literally says "that".</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">A user's follow-up is "does it work offline too?". What should hit the retriever?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>The raw string "does it work offline too?" — never alter user input</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A rewritten standalone query, e.g. "mobile app offline mode support"</button>
+                <button class="quiz-opt"><span class="mark"></span>The entire conversation history, embedded as one giant vector</button>
+              </div>
+              <div class="quiz-explain"><b>Rewrite it.</b> "It" only means something inside the conversation — the vector store wasn't in the room. Resolving the pronoun first gives retrieval real words to match. (Embedding the whole history is the mushy-average problem from section 02 all over again.)</div>
+            </div>
+          </section>
+
+          <!-- 6. CITATIONS -->
+          <section class="section reveal" id="citations">
+            <h2><span class="section-num">06</span> &nbsp;Citations &amp; grounding</h2>
+            <p>A RAG answer without citations says <em>"trust me."</em> An answer with citations says <em>"check me"</em> — and that single change is what makes RAG deployable in places where wrong answers cost money. The recipe has two halves: <strong>label every chunk with an id</strong> when you stuff the context (you saw <code>[kb-104]</code> in the pipeviz above), and <strong>force the model to return the ids it used</strong> via structured output:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">citations.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from pydantic import BaseModel, Field
+
+class CitedAnswer(BaseModel):
+    answer: str = Field(description="Answer based ONLY on the given context.")
+    sources: list[str] = Field(
+        description="Ids of the context chunks that support the answer.")
+
+cited_model = model.with_structured_output(CitedAnswer)
+result = cited_model.invoke(stuffed_messages)
+
+result.answer    # -&gt; "ERR_TLS_402 means the charge never settled, so..."
+result.sources   # -&gt; ["kb-104", "kb-031"]   ...link these in your UI</code></pre></div>
+            </div>
+            <p>Three things have to line up for citations to be trustworthy:</p>
+            <div class="kv">
+              <dt>stable chunk ids</dt><dd>Each chunk keeps the <strong>same id across re-indexes</strong> (hash the source + position) so a citation from last week still points somewhere real.</dd>
+              <dt>ids visible in the context</dt><dd>The model can only cite what it can <strong>see</strong> — prefix every chunk with its id when you format the context (the <code>[kb-104]</code> labels in the pipeviz above).</dd>
+              <dt>empty list = honest "I don't know"</dt><dd>If <code>sources</code> comes back empty, don't show the answer — show <em>"I couldn't find this in the docs."</em> An uncited answer is a guess wearing a suit.</dd>
+            </div>
+            <p>Now your app can render each source as a link to the original document, and — just as important — your <strong>evals can check the citations</strong>: do the cited chunks actually contain the claim? An answer citing chunks that don't support it is a hallucination you can <em>detect automatically</em> — no human in the loop needed.</p>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Citations also fix "model ignores context"</div><p>Asking for sources nudges the model to actually <em>read</em> the chunks: it can't cite what it didn't use. Teams consistently see grounding improve just from requiring a <code>sources</code> list — the structure is the leash.</p></div></div>
+          </section>
+
+          <!-- 7. WHEN ENOUGH -->
+          <section class="section reveal" id="when-enough">
+            <h2><span class="section-num">07</span> &nbsp;When naive RAG is actually enough</h2>
+            <p>Every upgrade on this page adds latency, cost, or moving parts. Don't install all five because a blog post said so — <strong>diagnose the symptom, apply the matching fix</strong>, and re-measure. The map:</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Symptom you observe</th><th>Upgrade to reach for</th><th>Why it's the match</th></tr></thead>
+                <tbody>
+                  <tr><td>Bad recall on jargon, IDs, error codes</td><td><strong>Hybrid search</strong> (§03)</td><td>BM25 matches exact tokens that embeddings blur out</td></tr>
+                  <tr><td>Right document found, wrong snippet fed</td><td><strong>Parent-document</strong> chunking (§02)</td><td>Search small for precision, feed big for context</td></tr>
+                  <tr><td>Vague follow-ups retrieve junk</td><td><strong>Query rewriting</strong> (§05)</td><td>Resolves "it"/"that" before the vector store sees them</td></tr>
+                  <tr><td>Relevant chunks retrieved, but not ranked first</td><td><strong>Reranking</strong> (§04)</td><td>A cross-encoder reads query + chunk together for precision</td></tr>
+                  <tr><td>Good retrieval, wrong answer anyway</td><td><strong>Prompting / reranking</strong> (§04)</td><td>Fewer, better chunks + firmer grounding instructions</td></tr>
+                  <tr><td>"It lies" — confident unsupported claims</td><td><strong>Citations + evals</strong> (§06)</td><td>Makes hallucinations detectable, then measurable</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>And if you have a small, clean corpus, one-shot questions, and users who phrase things like the docs do — congratulations, naive RAG <em>is</em> your production architecture. Simple and measured beats fancy and unmeasured.</p>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Measure before you upgrade</div><p>You can't pick from this table without knowing which symptom you actually have. Build a small eval set of real questions with known-good answers and score retrieval <em>before</em> touching anything — <a href="../langsmith/evals.html">LangSmith · Evaluation in depth</a> shows exactly how. Every upgrade here should move a number you're tracking.</p></div></div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../langchain/concepts.html"><span class="pn-k">‹ Back</span><span class="pn-t">LangChain · Core concepts</span></a>
+            <a class="next" href="../langgraph/index.html"><span class="pn-k">Next ›</span><span class="pn-t">LangGraph · Overview</span></a>
+          </nav>
+        </div>
+
+        <!-- On this page -->
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#why-naive-fails">Why naive RAG plateaus</a>
+          <a href="#chunking">Chunking</a>
+          <a href="#hybrid">Hybrid search &amp; RRF</a>
+          <a href="#rerank">Reranking</a>
+          <a href="#rewriting">Query rewriting</a>
+          <a href="#citations">Citations</a>
+          <a href="#when-enough">When naive is enough</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">LangChain · RAG in production</span>
+        <span class="fmono">The Lang Stack · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/pipeviz.js"></script>
+</body>
+</html>

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LangGraph — Agent architectures | The Lang Stack</title>
+  <meta name="description" content="Agent architectures in LangGraph: the agent loop, ReAct demystified, tool-loop failure modes, the supervisor pattern, swarm-style handoffs with Command, planner–executor, and how to choose. With simulators and Python." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.4' fill='%2334d399'/><circle cx='19' cy='6' r='2.4' fill='%23818cf8'/><circle cx='12' cy='18' r='2.4' fill='%23fbbf24'/></svg>" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="langgraph" data-page="lg-agents" data-lesson="lg-agents">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Lang Stack home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06140f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M6.8 7.4 10.4 16M17.2 7.4 13.6 16M7 6h10"/></svg></span>
+        <span class="brand-text"><b>The Lang Stack</b><span>Visual field guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../ecosystem/index.html">The big picture</a>
+        <a class="nav-link" href="../ecosystem/glossary.html">Glossary</a>
+      </nav>
+      <nav class="nav-group is-lc" aria-label="LangChain">
+        <h4><span class="dot"></span>LangChain</h4>
+        <a class="nav-link" href="../langchain/index.html">Overview</a>
+        <a class="nav-link" href="../langchain/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langchain/rag.html">RAG in production</a>
+      </nav>
+      <nav class="nav-group is-lg" aria-label="LangGraph">
+        <h4><span class="dot"></span>LangGraph</h4>
+        <a class="nav-link" href="../langgraph/index.html">Overview</a>
+        <a class="nav-link" href="../langgraph/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langgraph/agents.html">Agent architectures</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#anatomy">What "agent" means</a>
+          <a class="nav-link" href="#react">ReAct</a>
+          <a class="nav-link" href="#failure">Failure modes</a>
+          <a class="nav-link" href="#supervisor">Supervisor</a>
+          <a class="nav-link" href="#swarm">Swarm &amp; handoffs</a>
+          <a class="nav-link" href="#planner">Planner–executor</a>
+          <a class="nav-link" href="#choosing">Choosing</a>
+        </div>
+        <a class="nav-link" href="../langgraph/advanced.html">Advanced LangGraph</a>
+      </nav>
+      <nav class="nav-group is-ls" aria-label="LangSmith">
+        <h4><span class="dot"></span>LangSmith</h4>
+        <a class="nav-link" href="../langsmith/index.html">Overview</a>
+        <a class="nav-link" href="../langsmith/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langsmith/evals.html">Evaluation in depth</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../langgraph/index.html" style="color:var(--accent)">LangGraph</a><span class="sep">/</span><span class="current">Agent architectures</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <span class="pill"><span class="dot"></span>Python · v1.2</span>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">LangGraph · agent architectures</span>
+            <h1>One loop, many shapes.</h1>
+            <p class="lead">You know nodes and edges. Now meet the patterns people actually ship: the basic agent loop, ReAct, supervisors with specialist workers, swarm-style handoffs, and planner–executor — plus how to pick one without over-engineering.</p>
+          </section>
+
+          <!-- 1. ANATOMY -->
+          <section class="section reveal" id="anatomy">
+            <h2><span class="section-num">01</span> &nbsp;What "agent" actually means</h2>
+            <p>Strip the hype away and an <strong>agent</strong> is a remarkably small idea: a <strong>model</strong> with <strong>tools</strong>, run in a <strong>loop</strong> until it decides it's done. The model looks at the conversation, either calls a tool or writes a final answer, and if it called a tool, the result comes back and the model looks again. That's it. Every architecture on this page is a variation of that one loop.</p>
+            <div class="kv">
+              <dt>a model</dt><dd>The brain. It reads the message history and decides the <em>next step</em> — never the whole plan at once.</dd>
+              <dt>tools</dt><dd>The hands. Functions the model can ask to run: search, a database query, a calculator, an API call.</dd>
+              <dt>a loop</dt><dd>The patience. After each tool result, control returns to the model — until it answers without asking for a tool.</dd>
+            </div>
+            <p>As a graph, the loop is exactly the conditional-edge pattern from <a href="../langgraph/concepts.html#edges">Core concepts</a>: <code>model</code> → a router → either <code>tools</code> (which loops back to <code>model</code>) or <code>END</code>.</p>
+            <div class="diagram">
+              <div class="dg-title">The agent loop as a graph</div>
+              <div class="flow">
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">node</div><div class="fn-t">model</div><div class="fn-d">decides next step</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">route()</div><div class="fn-t">tool call?</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">yes →</div><div class="fn-t">tools</div><div class="fn-d">result loops back to model</div></div>
+              </div>
+              <div class="cap">No tool call from the model? The router heads to <strong>END</strong> and the last message is your answer.</div>
+            </div>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21h6M12 3a6 6 0 0 0-3.5 10.9c.9.7 1.5 1.7 1.5 2.8V18h4v-1.3c0-1.1.6-2.1 1.5-2.8A6 6 0 0 0 12 3Z"/></svg></span><div class="co-body"><div class="co-title">An intern with a phone</div><p>Picture an intern you hand a task to. They can't know everything, but they have a phone (tools): they can call accounting, look something up, run a number. They make a call, listen to the answer, think, maybe make another call — and they <em>keep going until the task is done</em>, then report back. The intern is the model; the phone calls are tool calls; "keep going until done" is the loop.</p></div></div>
+          </section>
+
+          <!-- 2. REACT -->
+          <section class="section reveal" id="react">
+            <h2><span class="section-num">02</span> &nbsp;ReAct, demystified <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p><strong>ReAct</strong> stands for <em>Reason + Act</em>. It sounds academic, but it's just the agent loop with a name: the model <strong>reasons</strong> about what to do, <strong>acts</strong> by calling a tool, observes the result, and repeats. The whole dance is visible in the message history. One trip around the loop looks like this:</p>
+            <div class="kv">
+              <dt>1 · assistant msg</dt><dd>Contains a <strong>tool call</strong>: "call <code>get_weather(city="Paris")</code>" — the <em>act</em> step, with the reasoning that led to it.</dd>
+              <dt>2 · tool msg</dt><dd>The tool's <strong>result</strong>, appended as a message: <code>"18°C, light rain"</code> — the <em>observation</em>.</dd>
+              <dt>3 · assistant msg</dt><dd>With the result in context, the model writes the <strong>final answer</strong> — no tool call this time, so the loop ends.</dd>
+            </div>
+            <p>In June 2026 you build this in one line with LangChain 1.3's <code>create_agent</code> — which compiles down to a LangGraph graph under the hood:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">react_quick.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain.agents import create_agent
+
+agent = create_agent("gpt-4o", tools=[get_weather, search])
+
+result = agent.invoke({"messages": [{"role": "user", "content": "Weather in Paris?"}]})
+print(result["messages"][-1].content)   # the final assistant answer</code></pre></div>
+            </div>
+            <p>And here is the <em>same thing</em> hand-built in LangGraph, so you can see there's no magic — just the model node, a <code>ToolNode</code>, and the loop-back conditional edge from <a href="../langgraph/concepts.html#edges">Core concepts §04</a>:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">react_by_hand.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langgraph.graph import StateGraph, MessagesState, START, END
+from langgraph.prebuilt import ToolNode
+
+model = chat_model.bind_tools([get_weather, search])
+
+def call_model(state: MessagesState):
+    return {"messages": [model.invoke(state["messages"])]}
+
+def route(state: MessagesState) -&gt; str:
+    last = state["messages"][-1]
+    return "tools" if last.tool_calls else END   # no tool calls = done
+
+builder = StateGraph(MessagesState)
+builder.add_node("model", call_model)
+builder.add_node("tools", ToolNode([get_weather, search]))
+builder.add_edge(START, "model")
+builder.add_conditional_edges("model", route, {"tools": "tools", END: END})
+builder.add_edge("tools", "model")               # the loop
+graph = builder.compile()</code></pre></div>
+            </div>
+            <div class="quiz" data-quiz>
+              <p class="q">What actually ENDS a ReAct loop?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>The model outputs a special <code>STOP</code> token you must parse</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>The model returns a message with <em>no tool calls</em>, so the router heads to END</button>
+                <button class="quiz-opt"><span class="mark"></span>The tools list is exhausted — each tool can only be called once</button>
+              </div>
+              <div class="quiz-explain"><b>Yes.</b> The loop's exit condition is simply "the assistant message has no tool calls." The router reads that and routes to <code>END</code>. Tools can be called as many times as the model wants — which is exactly why the next section exists.</div>
+            </div>
+          </section>
+
+          <!-- 3. FAILURE MODES -->
+          <section class="section reveal" id="failure">
+            <h2><span class="section-num">03</span> &nbsp;Tool-loop failure modes</h2>
+            <p>The loop's power — "keep going until done" — is also its danger. Four failure modes account for most broken agents in production, and each has a standard fix:</p>
+            <div class="kv">
+              <dt>infinite loops</dt><dd>The model keeps calling tools and never answers. Fix: <strong>cap the iterations</strong> — pass <code>{"recursion_limit": 25}</code> in the run config so a runaway loop errors out instead of burning money forever.</dd>
+              <dt>wrong tool args</dt><dd>The model calls <code>get_user(id="bob")</code> when ids are integers. Fix: <strong>validate inputs</strong> (typed/Pydantic schemas) and <strong>return the error to the model</strong> as a tool message so it can retry with corrected args.</dd>
+              <dt>tool spam</dt><dd>Given 40 tools, the model picks badly or dithers between near-duplicates. Fix: <strong>fewer, better-described tools</strong> — a tight set with crisp docstrings beats a kitchen sink every time.</dd>
+              <dt>context bloat</dt><dd>Long loops stuff the history with huge tool results; quality drops and cost climbs. Fix: <strong>trim or summarize old turns</strong>, and have tools return compact results instead of raw dumps.</dd>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Return tool ERRORS to the model — don't raise</div><p>When a tool fails, the instinct is to raise an exception. But raising <strong>kills the whole loop</strong>. Instead, catch the error and return it as the tool's result message ("Error: user id must be an integer"). The model reads it on the next turn and usually <em>self-corrects</em> — retrying with fixed arguments or choosing a different tool. <code>ToolNode</code> does this for you by default.</p></div></div>
+          </section>
+
+          <!-- 4. SUPERVISOR -->
+          <section class="section reveal" id="supervisor">
+            <h2><span class="section-num">04</span> &nbsp;The supervisor pattern <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p>One agent with twelve tools and three jobs gets confused. The <strong>supervisor pattern</strong> splits the work: a <strong>router agent</strong> sits in the middle and delegates each step to a <strong>specialist worker</strong> (a researcher, a writer, a coder). Workers do their piece and <em>always report back</em> to the supervisor, which decides what happens next — another worker, the same one again, or done.</p>
+            <p>Structurally it's the agent loop one level up: instead of "model → tools → model," it's "supervisor → worker → supervisor." The conditional edge out of the supervisor is the whole trick:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">supervisor.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">def supervisor(state: State):
+    # An LLM (with structured output) picks: "researcher", "writer", or "done"
+    decision = router_model.invoke(render_progress(state))
+    return {"next": decision.next_worker}
+
+def route(state: State) -&gt; str:
+    return END if state["next"] == "done" else state["next"]
+
+builder.add_node("supervisor", supervisor)
+builder.add_node("researcher", researcher_agent)   # each worker = its own agent
+builder.add_node("writer", writer_agent)
+builder.add_edge(START, "supervisor")
+builder.add_conditional_edges("supervisor", route,
+                              {"researcher": "researcher", "writer": "writer", END: END})
+builder.add_edge("researcher", "supervisor")       # workers ALWAYS report back
+builder.add_edge("writer", "supervisor")</code></pre></div>
+            </div>
+            <p><strong>Watch one task flow through.</strong> The supervisor routes a writing task to research first, then to the writer, then calls it done:</p>
+            <figure class="graphsim reveal" data-graphsim aria-label="Supervisor pattern simulator">
+              <script type="application/json" class="graphsim-config">
+              {
+                "nodes": [
+                  {"id": "start",      "label": "START",      "x": 60,  "y": 100, "kind": "start"},
+                  {"id": "supervisor", "label": "supervisor", "x": 210, "y": 100, "kind": "node"},
+                  {"id": "researcher", "label": "researcher", "x": 400, "y": 40,  "kind": "tool"},
+                  {"id": "writer",     "label": "writer",     "x": 400, "y": 160, "kind": "tool"},
+                  {"id": "end",        "label": "END",        "x": 210, "y": 188, "kind": "end"}
+                ],
+                "edges": [
+                  {"from": "start",      "to": "supervisor"},
+                  {"from": "supervisor", "to": "researcher", "cond": "research"},
+                  {"from": "supervisor", "to": "writer",     "cond": "write"},
+                  {"from": "supervisor", "to": "end",        "cond": "done"},
+                  {"from": "researcher", "to": "supervisor"},
+                  {"from": "writer",     "to": "supervisor"}
+                ],
+                "frames": [
+                  {"active": "start",
+                   "state": {"task": "\"Short post on RAG\"", "notes": "—", "draft": "—", "next": "—"},
+                   "caption": "A task arrives: write a short post about RAG. Only the task is in state — no notes, no draft."},
+                  {"active": "supervisor", "diff": ["next"],
+                   "state": {"task": "\"Short post on RAG\"", "notes": "—", "draft": "—", "next": "\"researcher\""},
+                   "caption": "The supervisor (an LLM) looks at the state: no notes yet, so writing would be premature. It sets next = researcher."},
+                  {"active": "researcher", "diff": ["notes"],
+                   "branch": {"taken": ["supervisor->researcher"], "skipped": ["supervisor->writer", "supervisor->end"]},
+                   "state": {"task": "\"Short post on RAG\"", "notes": "4 sourced bullet points", "draft": "—", "next": "\"researcher\""},
+                   "caption": "The conditional edge fires toward the researcher. It runs its own little tool loop (search, read) and returns notes as a state update."},
+                  {"active": "supervisor", "diff": ["next"],
+                   "branch": {"taken": ["researcher->supervisor"]},
+                   "state": {"task": "\"Short post on RAG\"", "notes": "4 sourced bullet points", "draft": "—", "next": "\"writer\""},
+                   "caption": "Workers ALWAYS report back. The supervisor sees notes exist but no draft — so next = writer."},
+                  {"active": "writer", "diff": ["draft"],
+                   "branch": {"taken": ["supervisor->writer"], "skipped": ["supervisor->researcher", "supervisor->end"]},
+                   "state": {"task": "\"Short post on RAG\"", "notes": "4 sourced bullet points", "draft": "280-word draft", "next": "\"writer\""},
+                   "caption": "The writer turns the notes into a draft. It never talks to the researcher directly — only through state, via the supervisor."},
+                  {"active": "supervisor", "diff": ["next"],
+                   "branch": {"taken": ["writer->supervisor"]},
+                   "state": {"task": "\"Short post on RAG\"", "notes": "4 sourced bullet points", "draft": "280-word draft", "next": "\"done\""},
+                   "caption": "Back to the boss one last time. Notes ✓, draft ✓ — nothing left to delegate. The supervisor declares the task done."},
+                  {"active": "end",
+                   "branch": {"taken": ["supervisor->end"], "skipped": ["supervisor->researcher", "supervisor->writer"]},
+                   "state": {"task": "\"Short post on RAG\"", "notes": "4 sourced bullet points", "draft": "280-word draft", "next": "\"done\""},
+                   "caption": "The done edge routes to END and the final state — draft included — is returned to your code."}
+                ]
+              }
+              </script>
+            </figure>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Each worker can be a full agent</div><p>The researcher box above can itself be a <code>create_agent</code> loop with its own tools, mounted as a <strong>subgraph</strong>. The supervisor doesn't care how a worker does its job — it only reads the state updates that come back.</p></div></div>
+          </section>
+
+          <!-- 5. SWARM -->
+          <section class="section reveal" id="swarm">
+            <h2><span class="section-num">05</span> &nbsp;Handoffs &amp; the swarm style</h2>
+            <p>The supervisor pattern has a boss. The <strong>swarm</strong> style doesn't: peer agents <strong>hand control directly to each other</strong>, like support reps transferring your call to the right department. The mechanism is <code>Command</code> — a node's return value that says <em>both</em> "update the state like this" <em>and</em> "go to that node next," replacing the conditional edge for that step:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">handoff.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langgraph.types import Command
+
+def triage_agent(state: MessagesState) -&gt; Command:
+    decision = classify(state["messages"])        # the triage LLM decides
+    if decision == "billing":
+        return Command(
+            goto="billing_agent",                  # control transfers directly
+            update={"handoff_reason": "double charge on invoice"},
+        )
+    return Command(goto="tech_agent", update={"handoff_reason": decision})</code></pre></div>
+            </div>
+            <p><strong>One handoff, start to finish.</strong> A billing question lands on triage, gets handed off, and is answered by the specialist:</p>
+            <figure class="graphsim reveal" data-graphsim aria-label="Swarm handoff simulator">
+              <script type="application/json" class="graphsim-config">
+              {
+                "nodes": [
+                  {"id": "start",   "label": "START",   "x": 55,  "y": 55,  "kind": "start"},
+                  {"id": "triage",  "label": "triage",  "x": 185, "y": 55,  "kind": "node"},
+                  {"id": "billing", "label": "billing", "x": 345, "y": 55,  "kind": "node"},
+                  {"id": "tech",    "label": "tech",    "x": 265, "y": 150, "kind": "node"},
+                  {"id": "end",     "label": "END",     "x": 470, "y": 150, "kind": "end"}
+                ],
+                "edges": [
+                  {"from": "start",   "to": "triage"},
+                  {"from": "triage",  "to": "billing", "cond": "handoff"},
+                  {"from": "triage",  "to": "tech",    "cond": "handoff"},
+                  {"from": "billing", "to": "end"},
+                  {"from": "tech",    "to": "end"}
+                ],
+                "frames": [
+                  {"active": "start",
+                   "state": {"messages": "1 msg — \"Why was I charged twice?\"", "handoff_reason": "—"},
+                   "caption": "A customer message arrives. No boss here — whichever agent holds control decides where it goes next."},
+                  {"active": "triage", "diff": ["handoff_reason"],
+                   "state": {"messages": "1 msg — \"Why was I charged twice?\"", "handoff_reason": "\"double charge\""},
+                   "caption": "triage reads the message: clearly a billing issue. It returns Command(goto=\"billing\", update={...}) — a handoff."},
+                  {"active": "billing",
+                   "branch": {"taken": ["triage->billing"], "skipped": ["triage->tech"]},
+                   "state": {"messages": "1 msg — \"Why was I charged twice?\"", "handoff_reason": "\"double charge\""},
+                   "caption": "Control transfers PEER to PEER — triage is out of the picture now. billing starts with the reason already in state."},
+                  {"active": "billing", "diff": ["messages"],
+                   "state": {"messages": "2 msgs — + refund explanation", "handoff_reason": "\"double charge\""},
+                   "caption": "billing runs its own tool loop (looks up the invoice), finds the duplicate, and writes the answer with a refund link."},
+                  {"active": "end",
+                   "branch": {"taken": ["billing->end"]},
+                   "state": {"messages": "2 msgs", "handoff_reason": "\"double charge\""},
+                   "caption": "billing finishes and the run ends. Nobody routed back through triage — that's the swarm difference."}
+                ]
+              }
+              </script>
+            </figure>
+            <div class="quiz" data-quiz>
+              <p class="q">Supervisor vs swarm: who decides where control goes next?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>In both patterns, a central router makes every routing decision</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Supervisor: the central router decides after every worker. Swarm: the agent currently holding control hands off directly</button>
+                <button class="quiz-opt"><span class="mark"></span>Swarm: the user decides each step. Supervisor: the framework picks randomly</button>
+              </div>
+              <div class="quiz-explain"><b>That's the whole distinction.</b> Supervisor = workers always report back to a central decider (easier to control and debug). Swarm = peers transfer control directly with <code>Command(goto=...)</code> (fewer hops, more conversational). Same loop, different topology.</div>
+            </div>
+          </section>
+
+          <!-- 6. PLANNER -->
+          <section class="section reveal" id="planner">
+            <h2><span class="section-num">06</span> &nbsp;Planner–executor</h2>
+            <p>Pure ReAct decides one step at a time — fine for short tasks, but on a long multi-step job it can wander, repeat work, or lose the thread. <strong>Planner–executor</strong> splits thinking from doing: a <strong>planner</strong> first writes the whole step list ("1. gather sales data, 2. compute trends, 3. draft summary"), then an <strong>executor</strong> works through the steps one by one. After each step, a checker can ask the planner to <strong>re-plan</strong> if the world changed.</p>
+            <div class="diagram">
+              <div class="dg-title">Plan first, then execute (and maybe re-plan)</div>
+              <div class="flow">
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">planner</div><div class="fn-t">write step list</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">executor</div><div class="fn-t">do step n</div><div class="fn-d">a small agent loop</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">check</div><div class="fn-t">done?</div><div class="fn-d">next step · re-plan · finish</div></div>
+              </div>
+              <div class="cap">The check step loops back: more steps → executor; plan stale → planner; all steps done → finish.</div>
+            </div>
+            <p>The trade is explicit: you get <strong>structure and steadiness</strong> on long tasks with dependencies, but you pay <strong>more LLM calls</strong> (planning, executing, checking, occasionally re-planning). For a two-step question, that overhead is pure waste — for a twenty-step research job, it's what keeps the agent on the rails.</p>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Keep the plan in state</div><p>Store the step list in a state channel (<code>plan: list[str]</code>, <code>done: list[str]</code>). Every node can see what's left, the checker's routing function becomes trivial, and with a checkpointer a crashed run resumes mid-plan instead of starting over.</p></div></div>
+          </section>
+
+          <!-- 7. CHOOSING -->
+          <section class="section reveal" id="choosing">
+            <h2><span class="section-num">07</span> &nbsp;Choosing an architecture</h2>
+            <p>Architecture choice is mostly about <em>who decides the next step</em> and <em>how long the task is</em>. The honest decision table:</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Architecture</th><th>Reach for it when…</th><th>Watch out for</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Single ReAct agent</strong></td><td>Most things. One job, a handful of well-described tools. Always your starting point.</td><td>Long tasks wander; too many tools confuse it.</td></tr>
+                  <tr><td><strong>Supervisor</strong></td><td>Distinct specialist skills (research vs write vs code) and you want central control and an audit trail.</td><td>Every hop goes through the boss — extra latency and tokens.</td></tr>
+                  <tr><td><strong>Swarm</strong></td><td>Conversational handoffs between peers — triage → billing → tech, where the current agent knows best who's next.</td><td>Harder to trace; no single place sees the whole flow.</td></tr>
+                  <tr><td><strong>Planner–executor</strong></td><td>Long multi-step tasks with dependencies, where step 4 needs step 2's output.</td><td>Most LLM calls of all; plans go stale without re-planning.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">When NOT to go multi-agent</div><p>Multi-agent <strong>multiplies cost, latency, and failure surface</strong> — every extra agent is another LLM call per hop and another place for state to go wrong. Before splitting, try making <em>one</em> agent better: sharper system prompt, fewer and better-described tools, trimmed context. Most "we need a supervisor" problems are actually "our tool descriptions are vague" problems.</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">Your single agent with 6 tools answers support questions well, but a new requirement adds 30 more tools across three unrelated domains. Best first move?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Planner–executor — more steps means you always need a plan</button>
+                <button class="quiz-opt"><span class="mark"></span>Keep one agent and give it all 36 tools with longer descriptions</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A supervisor with one specialist worker per domain, each holding only its own tools</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Three unrelated domains with their own tool sets is the textbook supervisor case: each worker sees a small, focused tool list (fixing the tool-spam failure mode), and the supervisor only chooses <em>which specialist</em>, not which of 36 tools. Planner–executor solves long tasks, not wide tool sets.</div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">"Better" needs a measuring stick</div><p>Whichever shape you pick, you can't compare architectures by vibes. Build a small eval set and measure — that's exactly what <a href="../langsmith/evals.html">LangSmith · Evaluation in depth</a> covers.</p></div></div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../langgraph/concepts.html"><span class="pn-k">‹ Back</span><span class="pn-t">LangGraph · Core concepts</span></a>
+            <a class="next" href="../langgraph/advanced.html"><span class="pn-k">Next ›</span><span class="pn-t">Advanced LangGraph</span></a>
+          </nav>
+        </div>
+
+        <!-- On this page -->
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#anatomy">What "agent" means</a>
+          <a href="#react">ReAct</a>
+          <a href="#failure">Failure modes</a>
+          <a href="#supervisor">Supervisor</a>
+          <a href="#swarm">Swarm &amp; handoffs</a>
+          <a href="#planner">Planner–executor</a>
+          <a href="#choosing">Choosing</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">LangGraph · Agent architectures</span>
+        <span class="fmono">The Lang Stack · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/graphsim.js"></script>
+</body>
+</html>

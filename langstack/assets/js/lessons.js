@@ -12,14 +12,18 @@ window.LESSONS = [
   /* ---- LANGCHAIN ---- */
   { id: "lc-overview",     title: "LangChain — Overview",       url: "langchain/index.html",    module: "langchain", tool: "langchain" },
   { id: "lc-concepts",     title: "LangChain — Core concepts",  url: "langchain/concepts.html", module: "langchain", tool: "langchain" },
+  { id: "lc-rag",          title: "RAG in production",          url: "langchain/rag.html",      module: "langchain", tool: "langchain" },
 
   /* ---- LANGGRAPH ---- */
   { id: "lg-overview",     title: "LangGraph — Overview",       url: "langgraph/index.html",    module: "langgraph", tool: "langgraph" },
   { id: "lg-concepts",     title: "LangGraph — Core concepts",  url: "langgraph/concepts.html", module: "langgraph", tool: "langgraph" },
+  { id: "lg-agents",       title: "Agent architectures",        url: "langgraph/agents.html",   module: "langgraph", tool: "langgraph" },
+  { id: "lg-advanced",     title: "Advanced LangGraph",         url: "langgraph/advanced.html", module: "langgraph", tool: "langgraph" },
 
   /* ---- LANGSMITH ---- */
   { id: "ls-overview",     title: "LangSmith — Overview",       url: "langsmith/index.html",    module: "langsmith", tool: "langsmith" },
-  { id: "ls-concepts",     title: "LangSmith — Core concepts",  url: "langsmith/concepts.html", module: "langsmith", tool: "langsmith" }
+  { id: "ls-concepts",     title: "LangSmith — Core concepts",  url: "langsmith/concepts.html", module: "langsmith", tool: "langsmith" },
+  { id: "ls-evals",        title: "Evaluation in depth",        url: "langsmith/evals.html",    module: "langsmith", tool: "langsmith" }
 ];
 
 /* Ordered module groups for the home dashboard. */
