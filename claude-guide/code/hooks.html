@@ -116,6 +116,36 @@
   }
 }</code></pre></div>
             </div>
+            <p>With that config in place, here's what actually happens to a tool call — including the moment a hook says no:</p>
+            <figure class="gateflow reveal" data-gateflow aria-label="Hook pipeline simulator">
+              <script type="application/json" class="gf-config">
+              { "stages": [ { "id": "pre",  "label": "PreToolUse hook", "kind": "hook" },
+                            { "id": "perm", "label": "permission gate", "kind": "rule" },
+                            { "id": "exec", "label": "execute",         "kind": "exec" },
+                            { "id": "post", "label": "PostToolUse hook", "kind": "hook" } ],
+                "frames": [
+                  { "call": "Edit(src/api.py)", "at": "pre", "verdict": "pass", "detail": "matcher Bash only — no hook for Edit; proceed",
+                    "caption": "<b>PreToolUse</b> fires before anything happens. This edit has no matching pre-hook, so it sails through." },
+                  { "call": "Edit(src/api.py)", "at": "perm", "verdict": "allow", "detail": "permission rules allow this edit",
+                    "caption": "Hooks don't replace permissions — the call still passes the normal <a href='permissions.html'>permission gate</a>." },
+                  { "call": "Edit(src/api.py)", "at": "exec", "verdict": "run", "detail": "file edited",
+                    "caption": "The edit lands on disk…" },
+                  { "call": "Edit(src/api.py)", "at": "post", "verdict": "run", "detail": "npx prettier --write src/api.py",
+                    "caption": "…and <b>PostToolUse</b> reacts: the matcher <code>Edit|Write</code> fires prettier on the file. Every edit, formatted, automatically — no reminders needed." },
+                  { "call": "Bash(psql -c 'DROP TABLE users')", "at": "pre", "verdict": "block", "detail": "guard.sh exit code 2 — blocked, reason fed back to Claude",
+                    "caption": "The <code>Bash</code> matcher runs <code>guard.sh</code>, which spots the destructive SQL and exits <b>2</b>. The call never executes. That's the difference between advice and a <b>guarantee</b>: Claude can't skip a hook." }
+                ] }
+              </script>
+              <div class="gf-stage-wrap" data-role="stage"><p class="sp-fallback">An animated hook-pipeline simulator. Enable JavaScript to play it.</p></div>
+              <div class="gf-caption" data-role="caption"></div>
+              <div class="gf-controls">
+                <button class="gf-btn gf-reset" aria-label="Restart">⏮</button>
+                <button class="gf-btn gf-prev" aria-label="Previous step">‹</button>
+                <button class="gf-btn gf-play" aria-label="Play">▶</button>
+                <button class="gf-btn gf-next" aria-label="Next step">›</button>
+                <span class="gf-step">1 / 5</span>
+              </div>
+            </figure>
             <div class="callout tip">
               <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></span>
               <div class="co-body"><div class="co-title">Ask Claude to write the hook <span class="tag">tip</span></div><p>You rarely hand-write these. Just say: <em>“write a hook that runs eslint --fix after every edit,”</em> or <em>“block any write to the migrations/ folder.”</em> Claude generates the config and the script.</p></div>
@@ -157,5 +187,6 @@
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/gateflow.js"></script>
 </body>
 </html>

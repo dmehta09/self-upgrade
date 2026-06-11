@@ -95,6 +95,20 @@ for (const f of files) {
   const dl = (html.match(/data-lesson="([^"]+)"/) || [])[1];
   if (dl && !lessonIds.has(dl)) problems.push(`${rel(f)}: data-lesson="${dl}" not found in lessons.js`);
 
+  // ---- engine wiring: a page that hosts an engine must load its script ----
+  const ENGINES = [
+    [/data-splayer/, "session-player.js"],
+    [/class="pl-config"/, "promptlab.js"],
+    [/class="cmd-explorer"/, "command-explorer.js"],
+    [/class="cmd-explorer"/, "commands-data.js"],
+    [/data-ctxmeter/, "ctxmeter.js"],
+    [/data-gateflow/, "gateflow.js"],
+  ];
+  for (const [re, js] of ENGINES) {
+    if (re.test(html) && !html.includes("assets/js/" + js))
+      problems.push(`${rel(f)}: hosts ${re} but missing <script> ${js}`);
+  }
+
   // ---- lesson wiring (pages that set data-lesson) ----
   // Universal modules every lesson page must load. Interactive engines
   // (session-player.js, promptlab.js, command-explorer.js + commands-data.js)

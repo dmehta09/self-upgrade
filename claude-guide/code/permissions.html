@@ -106,6 +106,44 @@
   }
 }</code></pre></div>
             </div>
+            <p>Here's how those exact rules decide, call by call — step through a few tool calls and watch each gate:</p>
+            <figure class="gateflow reveal" data-gateflow aria-label="Permission rule resolution simulator">
+              <script type="application/json" class="gf-config">
+              { "stages": [ { "id": "deny",  "label": "deny rules",  "kind": "rule" },
+                            { "id": "allow", "label": "allow rules", "kind": "rule" },
+                            { "id": "ask",   "label": "ask you",     "kind": "ask" },
+                            { "id": "exec",  "label": "execute",     "kind": "exec" } ],
+                "frames": [
+                  { "call": "Read(src/auth.ts)", "at": "deny", "detail": "deny list: Read(./.env), Edit(infra/**) — no match",
+                    "caption": "Every tool call is checked against <b>deny</b> first. Nothing matches, so this read moves on." },
+                  { "call": "Read(src/auth.ts)", "at": "allow", "verdict": "allow", "detail": "matches allow rule \"Read\"",
+                    "caption": "An <b>allow</b> match means no prompt — reads are safe, so this runs silently." },
+                  { "call": "Read(src/auth.ts)", "at": "exec", "verdict": "run", "detail": "file contents return to Claude",
+                    "caption": "Allowed calls execute immediately. This is why a good allowlist makes sessions feel fast." },
+                  { "call": "Read(./.env)", "at": "deny", "verdict": "deny", "detail": "matches deny rule \"Read(./.env)\"",
+                    "caption": "<b>Deny wins instantly.</b> Claude never sees your secrets — and unlike a polite instruction, it can't be talked out of a deny rule." },
+                  { "call": "Bash(git push origin main)", "at": "deny", "detail": "no deny rule matches",
+                    "caption": "A push isn't denied… but is it allowed?" },
+                  { "call": "Bash(git push origin main)", "at": "allow", "detail": "allow has Bash(git commit:*) — push doesn't match",
+                    "caption": "Patterns match <b>arguments</b>, not just tool names. <code>git commit</code> is allowed; <code>git push</code> is not." },
+                  { "call": "Bash(git push origin main)", "at": "ask", "verdict": "ask", "detail": "matches ask rule \"Bash(git push:*)\"",
+                    "caption": "<b>ask</b> rules always prompt. Outward-facing actions like pushing are a good fit — you stay in the loop." },
+                  { "call": "Bash(git push origin main)", "at": "exec", "verdict": "run", "detail": "you approved this one",
+                    "caption": "You approved, so it runs. Reject it and Claude gets told no — and adapts." },
+                  { "call": "Edit(infra/prod.tf)", "at": "deny", "verdict": "deny", "detail": "matches deny rule \"Edit(infra/**)\"",
+                    "caption": "Protected paths stay protected, whatever mode the session is in. That's the point of <b>deny</b>: guardrails that don't depend on anyone's judgment." }
+                ] }
+              </script>
+              <div class="gf-stage-wrap" data-role="stage"><p class="sp-fallback">An animated permission-gate simulator. Enable JavaScript to play it.</p></div>
+              <div class="gf-caption" data-role="caption"></div>
+              <div class="gf-controls">
+                <button class="gf-btn gf-reset" aria-label="Restart">⏮</button>
+                <button class="gf-btn gf-prev" aria-label="Previous step">‹</button>
+                <button class="gf-btn gf-play" aria-label="Play">▶</button>
+                <button class="gf-btn gf-next" aria-label="Next step">›</button>
+                <span class="gf-step">1 / 9</span>
+              </div>
+            </figure>
             <div class="callout tip">
               <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></span>
               <div class="co-body"><div class="co-title">Let Claude build the allowlist <span class="tag">tip</span></div><p>Tired of approving the same safe commands? Run <code>/permissions</code> to manage rules in a dialog, or the bundled <code>/fewer-permission-prompts</code> skill to scan your history and propose a sensible allowlist for the project.</p></div>
@@ -155,5 +193,6 @@
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/gateflow.js"></script>
 </body>
 </html>
