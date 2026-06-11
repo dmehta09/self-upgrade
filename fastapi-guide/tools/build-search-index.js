@@ -22,6 +22,8 @@ const FILES = [
   "fastapi/async-db.html", "fastapi/auth.html", "fastapi/advanced.html",
   "fastapi/streaming.html", "fastapi/production.html",
   "deploy/index.html",
+  // Practice
+  "drill/index.html",
 ];
 
 function decode(s) {

@@ -21,6 +21,12 @@ make it more than a wall of text:
 - **⌕ Full-text search** — press <kbd>/</kbd> (or <kbd>Cmd/Ctrl-K</kbd>) anywhere to jump to any topic.
 - **✓ Exercises &amp; progress tracking** — mini-challenges with reveal-able solutions, and a
   "mark as learned" tracker saved in your browser.
+- **◎ Quiz drills** (`drill/`, `assets/js/quizdrill.js`) — three timed chip quizzes: *pick the
+  tool* (dependency vs middleware vs background task…), *status codes* (401 vs 403, 404 vs 422),
+  and *debug it* (symptom → cause). Traps explained; misses link back to the lesson. Best scores
+  in `localStorage["fa-drill"]`.
+- **▤ Flashcards** (`assets/js/flashcards.js`) — two decks (status codes, core concepts) with
+  flip/known/review; persists to `localStorage["fa-cards"]`.
 
 ## Quick start
 
@@ -64,9 +70,12 @@ fastapi-guide/
 │       ├── reqtrace.js         # Request-lifecycle stepper (pipeline / DI / CORS stories)
 │       ├── looplab.js          # Event-loop timeline (gather vs sequential, blocking)
 │       └── progress.js         # localStorage progress + sidebar checks + home dashboard
+│       ├── quizdrill.js        # Timed quiz drills (3 modes; best scores in fa-drill)
+│       ├── flashcards.js       # Flip-card decks (known/review in fa-cards)
 ├── python/                     # Setup & tooling · The refresher (runnable)
 ├── fastapi/                    # Overview · Routing · Request body · Validation · Dependencies · Databases · Async DB · Auth · Advanced · Streaming · Production
 ├── deploy/                     # Testing & deployment
+├── drill/                      # Practice hub: quiz drills + flashcards
 └── tools/
     ├── build-search-index.js   # Regenerates assets/js/search-index.js
     └── verify.js               # Link/anchor/asset/wiring checks — run after every edit
@@ -104,7 +113,8 @@ shape (Pydantic v2, the `Annotated` + `Depends` style, `lifespan`).
 ## Notes
 
 - No package manager, no bundler, no framework. Edit a file, refresh the browser.
-- Dark/light theme is remembered in `localStorage` (`fa-theme`); progress under `fa-progress`.
+- Dark/light theme is remembered in `localStorage` (`fa-theme`); progress under `fa-progress`;
+  drill best scores under `fa-drill`; flashcard marks under `fa-cards`.
 - Built to be read top-to-bottom (Home → Python → FastAPI core → Databases → Auth → Advanced →
   Ship it), but every page stands alone and is reachable via search.
 - Databases is two lessons (SQLModel CRUD, then async SQLAlchemy + Alembic); Advanced is three
