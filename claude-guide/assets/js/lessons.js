@@ -15,6 +15,7 @@ window.LESSONS = [
   { id: "claude-api",             title: "The API & SDK",                     url: "claude/api-basics.html",            module: "claude",    tool: "claude" },
   { id: "claude-tools",           title: "Tool use (function calling)",       url: "claude/tool-use.html",              module: "claude",    tool: "claude" },
   { id: "claude-power",           title: "Power features",                    url: "claude/power-features.html",        module: "claude",    tool: "claude" },
+  { id: "claude-production",      title: "Shipping with the API",             url: "claude/production.html",            module: "claude",    tool: "claude" },
   { id: "claude-agents-mcp",      title: "Agents, MCP & the Agent SDK",       url: "claude/agents-and-mcp.html",        module: "claude",    tool: "claude" },
 
   /* ---- TRACK B · CLAUDE CODE ---- */
@@ -30,6 +31,7 @@ window.LESSONS = [
   { id: "code-hooks",         title: "Hooks",                         url: "code/hooks.html",                      module: "code", tool: "code" },
   { id: "code-skills",        title: "Skills & plugins",              url: "code/skills-plugins.html",             module: "code", tool: "code" },
   { id: "code-mcp",           title: "MCP servers",                   url: "code/mcp.html",                        module: "code", tool: "code" },
+  { id: "code-headless",      title: "Headless & CI",                 url: "code/headless-ci.html",                module: "code", tool: "code" },
   { id: "code-power",         title: "Power-user workflows",          url: "code/power-user.html",                 module: "code", tool: "code" },
 
   /* ---- REFERENCE ---- */

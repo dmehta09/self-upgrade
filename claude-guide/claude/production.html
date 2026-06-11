@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shipping with the API — Using Claude · Field Guide</title>
+  <meta name="description" content="Taking a Claude prototype to production: reading error codes, retrying with backoff, living within rate limits, streaming long requests, tool schemas that hold up, and engineering a predictable bill." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d97757' stroke-width='2.4' stroke-linecap='round'><path d='M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-page="claude-production" data-tool="claude" data-lesson="claude-production">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Claude &amp; Claude Code field guide — home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#1a0f0a" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg></span>
+        <span class="brand-text"><b>Claude &amp; Claude Code</b><span>Visual field guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here"><h4>Start here</h4><a class="nav-link" href="../index.html">Home</a></nav>
+      <nav class="nav-group is-claude" aria-label="Using Claude">
+        <h4><span class="dot"></span>Using Claude</h4>
+        <a class="nav-link" href="../claude/what-is-claude.html">What is Claude?</a>
+        <a class="nav-link" href="../claude/models.html">The model family</a>
+        <a class="nav-link" href="../claude/talking-to-claude.html">Talking to Claude</a>
+        <a class="nav-link" href="../claude/prompting-basics.html">Prompting 1 · be clear</a>
+        <a class="nav-link" href="../claude/prompting-advanced.html">Prompting 2 · examples</a>
+        <a class="nav-link" href="../claude/api-basics.html">The API &amp; SDK</a>
+        <a class="nav-link" href="../claude/tool-use.html">Tool use</a>
+        <a class="nav-link" href="../claude/power-features.html">Power features</a>
+        <a class="nav-link" href="../claude/production.html">Shipping with the API</a>
+        <a class="nav-link" href="../claude/agents-and-mcp.html">Agents, MCP &amp; the SDK</a>
+      </nav>
+      <nav class="nav-group is-code" aria-label="Claude Code">
+        <h4><span class="dot"></span>Claude Code</h4>
+        <a class="nav-link" href="../code/what-is-claude-code.html">What is Claude Code?</a>
+        <a class="nav-link" href="../code/first-session.html">Your first session</a>
+        <a class="nav-link" href="../code/context.html">Context is currency</a>
+        <a class="nav-link" href="../code/explore-plan-code-commit.html">Explore→Plan→Code→Commit</a>
+        <a class="nav-link" href="../code/verify.html">Closing the loop</a>
+        <a class="nav-link" href="../code/claude-md.html">Project memory · CLAUDE.md</a>
+        <a class="nav-link" href="../code/commands.html">Slash commands</a>
+        <a class="nav-link" href="../code/permissions.html">Permissions &amp; settings</a>
+        <a class="nav-link" href="../code/subagents.html">Subagents</a>
+        <a class="nav-link" href="../code/hooks.html">Hooks</a>
+        <a class="nav-link" href="../code/skills-plugins.html">Skills &amp; plugins</a>
+        <a class="nav-link" href="../code/mcp.html">MCP servers</a>
+        <a class="nav-link" href="../code/headless-ci.html">Headless &amp; CI</a>
+        <a class="nav-link" href="../code/power-user.html">Power-user workflows</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet &amp; explorer</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/resources.html">Best GitHub references</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../claude/what-is-claude.html">Using Claude</a><span class="sep">/</span><span class="current">Shipping with the API</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <main class="content" id="main">
+        <div class="prose">
+          <span class="eyebrow">Using Claude · lesson 9</span>
+          <h1>Shipping with the API</h1>
+          <p class="lead">The prototype works — it answered your test prompt and everyone clapped. This lesson is everything that changes when <strong>real traffic</strong> hits it: errors you must read instead of ignore, rate limits you must live within, retries that are polite instead of frantic, tool schemas that hold up under a million weird inputs, and a bill you can actually predict.</p>
+
+          <section class="section" id="errors">
+            <h2><span class="section-num">01</span>&nbsp; Read the error, then react</h2>
+            <p>Every API failure comes back with an HTTP status code and a typed error. The single most important production skill is knowing which errors mean <em>"you made a mistake — fix the request"</em> and which mean <em>"bad timing — try again in a moment."</em> Retrying a 401 in a loop fixes nothing; <em>not</em> retrying a 529 throws away a request that would have succeeded two seconds later.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Code</th><th>Error type</th><th>Retry?</th><th>What it means</th></tr></thead>
+                <tbody>
+                  <tr><td><code>400</code></td><td><code>invalid_request_error</code></td><td>No — fix the request</td><td>Malformed body, missing params, bad model ID format. Your bug.</td></tr>
+                  <tr><td><code>401</code></td><td><code>authentication_error</code></td><td>No — fix the key</td><td>Missing, invalid, or revoked API key.</td></tr>
+                  <tr><td><code>403</code></td><td><code>permission_error</code></td><td>No</td><td>Key is valid but lacks access to this model or feature.</td></tr>
+                  <tr><td><code>404</code></td><td><code>not_found_error</code></td><td>No</td><td>Usually a typo in the model ID (<code>claude-sonnet-4.6</code> vs <code>claude-sonnet-4-6</code>).</td></tr>
+                  <tr><td><code>413</code></td><td><code>request_too_large</code></td><td>No</td><td>Request exceeds size limits — trim history, shrink images, chunk documents.</td></tr>
+                  <tr><td><code>429</code></td><td><code>rate_limit_error</code></td><td><strong>Yes</strong> — with backoff</td><td>Too many requests or tokens per minute. Honor the <code>retry-after</code> header.</td></tr>
+                  <tr><td><code>500</code></td><td><code>api_error</code></td><td>Yes</td><td>Something went wrong on Anthropic's side. Transient.</td></tr>
+                  <tr><td><code>529</code></td><td><code>overloaded_error</code></td><td>Yes — with backoff</td><td>The API is at capacity. Wait and retry; it passes.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="callout tip">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></span>
+              <div class="co-body"><div class="co-title">The golden rule <span class="tag">tip</span></div><p>4xx is <strong>your bug</strong> — retrying replays the same mistake (the one exception is 429). 5xx and 429 are <strong>weather</strong> — nothing is wrong with your request, the conditions just aren't right. Fix bugs; wait out weather, politely.</p></div>
+            </div>
+          </section>
+
+          <section class="section" id="retries">
+            <h2><span class="section-num">02</span>&nbsp; Retries: politely persistent</h2>
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/><path d="M9 18h6"/></svg></span>
+              <div class="co-body"><div class="co-title">Redialing a busy line <span class="tag">analogy</span></div><p>When a phone line is busy, you don't redial instantly a hundred times — you wait a bit, then a bit longer. That's <strong>exponential backoff</strong>: 1s, then 2s, then 4s, then 8s. And if a whole office redials at the exact same second, they jam the line again — so everyone adds a small random delay. That's <strong>jitter</strong>. Backoff + jitter is how thousands of clients recover from a hiccup without piling onto it.</p></div>
+            </div>
+            <p>Good news: the official SDKs already do this. Connection errors, 429s, and 5xx responses are retried automatically with exponential backoff — you just configure how persistent to be via <code>max_retries</code>. Your own code only needs to handle the case where retries run out:</p>
+            <div class="codeblock">
+              <div class="code-head"><span class="code-dots"><i></i><i></i><i></i></span><span class="code-file">resilient_call.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import anthropic
+
+# The SDK retries 429s and 5xx with backoff + jitter automatically.
+client = anthropic.Anthropic(max_retries=4)  # default is 2
+
+try:
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": "Classify this ticket: ..."}],
+    )
+except anthropic.RateLimitError:
+    # Retries exhausted — queue the job for later instead of hammering.
+    enqueue_for_retry(job)
+except anthropic.APIStatusError as e:
+    if e.status_code &gt;= 500:
+        enqueue_for_retry(job)   # transient server trouble
+    else:
+        raise                    # 4xx: a real bug — surface it loudly</code></pre></div>
+            </div>
+            <p class="muted">Notice what's <em>not</em> here: no hand-rolled sleep loops. Let the SDK be polite for you, and design your app for the rare moment politeness runs out — a queue, a fallback message, a degraded mode.</p>
+          </section>
+
+          <div class="quiz" id="quiz">
+            <div class="q">Your service just got a <code>429 rate_limit_error</code>. Best reaction?</div>
+            <div class="quiz-opts">
+              <button class="quiz-opt" data-correct="true"><span class="mark"></span><span>Retry with exponential backoff, honoring the <code>retry-after</code> header</span></button>
+              <button class="quiz-opt" data-correct="false"><span class="mark"></span><span>Immediately retry in a tight loop until it succeeds</span></button>
+              <button class="quiz-opt" data-correct="false"><span class="mark"></span><span>Switch to a different API key and keep firing</span></button>
+            </div>
+            <div class="quiz-explain"><b>Right.</b> A 429 is the API telling you exactly how long to wait — <code>retry-after</code> is in the response headers. Tight-loop retries make the congestion worse (and burn your quota faster), and key-juggling is against the spirit of the limits and gets your whole org throttled anyway.</div>
+          </div>
+
+          <section class="section" id="rate-limits">
+            <h2><span class="section-num">03</span>&nbsp; Rate limits &amp; tiers</h2>
+            <p>Your organization has three meters running at once: <strong>requests per minute</strong> (RPM), <strong>input tokens per minute</strong>, and <strong>output tokens per minute</strong>. Cross any of them and you get a 429 — even if the other two have plenty of headroom. A few huge prompts can exhaust the token meter long before the request meter notices.</p>
+            <p>Limits grow with <strong>usage tiers</strong>: as your spend history builds, your caps rise automatically. And you never have to guess where you stand — every response carries <code>x-ratelimit-remaining-*</code> headers reporting how much of each budget is left this minute, plus <code>retry-after</code> when you do hit the wall.</p>
+            <div class="kv">
+              <dt>Spread bursts</dt><dd>A spike of 100 requests in one second can 429 even when 100/minute is fine. Smooth traffic at your edge.</dd>
+              <dt>Queue on your side</dt><dd>When the remaining-budget headers run low, hold jobs in <em>your</em> queue instead of letting the API bounce them.</dd>
+              <dt>Batch the non-urgent</dt><dd>Bulk work that can wait an hour belongs on the Batch API — separate capacity, half the price (see <a href="#cost">the cost section</a>).</dd>
+              <dt>Ask for a higher tier</dt><dd>If you're sustainably near your caps, request a tier increase — limits are meant to grow with real usage.</dd>
+            </div>
+          </section>
+
+          <section class="section" id="timeouts">
+            <h2><span class="section-num">04</span>&nbsp; Long requests want streaming</h2>
+            <p>A request that generates tens of thousands of tokens can take minutes — and idle HTTP connections get dropped by proxies, load balancers, and the SDK's own timeout long before the model finishes. The fix isn't a bigger timeout; it's <strong>streaming</strong>. With streaming, tokens flow back as they're generated: the connection is never idle, your user sees progress immediately, and a multi-minute generation completes without a single byte of dead air.</p>
+            <div class="kv">
+              <dt>Stream anything long</dt><dd>The SDKs even refuse very large non-streaming <code>max_tokens</code> values because timeouts are near-certain. Use the stream helper and grab the final message at the end.</dd>
+              <dt>Budget max_tokens sanely</dt><dd><code>max_tokens</code> is a hard cap, not a target. Set it to what the task actually needs — a classifier doesn't get 32K tokens to say "billing".</dd>
+              <dt>Many minutes? Batch it</dt><dd>If a job is so big you'd babysit the connection, it isn't an interactive request. Send it to the Batch API and poll for the result.</dd>
+            </div>
+          </section>
+
+          <section class="section" id="tool-schemas">
+            <h2><span class="section-num">05</span>&nbsp; Tool schemas that hold up</h2>
+            <p>In <a href="../claude/tool-use.html">Tool use</a> you defined tools that worked on your test prompts. Production tool schemas face a harder exam: thousands of users phrasing things in ways you never imagined. The model picks the right tool with the right arguments only as reliably as your schema teaches it to.</p>
+            <div class="kv">
+              <dt>Precise names</dt><dd><code>verb_noun</code>: <code>search_orders</code>, <code>refund_payment</code>. Never just <code>orders</code> — names are the model's first signal of what a tool does.</dd>
+              <dt>Rich descriptions</dt><dd>The model reads descriptions like documentation. Say when to use the tool, what it returns, <em>and when NOT to use it</em> ("for order status only — do not use for refunds").</dd>
+              <dt>Enums over free strings</dt><dd><code>"enum": ["pending", "shipped", "delivered"]</code> beats a free-text <code>status</code> field. Closed sets remove a whole class of invented values.</dd>
+              <dt>Few params, sane defaults</dt><dd>Mark only the truly required fields <code>required</code>; give the rest defaults. Every extra mandatory parameter is another chance to get one wrong.</dd>
+              <dt>Structured errors back</dt><dd>When a tool fails, return a message the model can act on — "order_id not found; ask the user to confirm it" — not a bare stack trace.</dd>
+              <dt>Structured outputs at the end</dt><dd>When the <em>final</em> answer feeds code (not a human), use structured outputs so the response is schema-guaranteed JSON — no regex parsing of prose.</dd>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><span class="code-dots"><i></i><i></i><i></i></span><span class="code-file">tool_schema.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">tools = [{
+    "name": "search_orders",
+    "description": (
+        "Search a customer's orders by status. Call this when the user asks "
+        "about order status, shipping, or delivery dates. Do NOT use it for "
+        "refunds or returns — use refund_payment for those. Returns up to "
+        "10 orders, newest first."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "customer_id": {"type": "string", "description": "Internal customer ID"},
+            "status": {
+                "type": "string",
+                "enum": ["pending", "shipped", "delivered", "any"],
+                "description": "Filter by order status; 'any' returns all",
+            },
+        },
+        "required": ["customer_id"],   # status defaults to "any" server-side
+    },
+}]</code></pre></div>
+            </div>
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+              <div class="co-body"><div class="co-title">The #1 wrong-tool cause <span class="tag">gotcha</span></div><p>Vague tool descriptions. When two tools have one-line descriptions like "handles orders" and "handles payments", the model is guessing at the boundary between them. Almost every "the model used the wrong tool" bug is fixed by rewriting descriptions to state explicit when-to-use and when-not-to-use rules.</p></div>
+            </div>
+          </section>
+
+          <section class="section" id="cost">
+            <h2><span class="section-num">06</span>&nbsp; Engineer the bill</h2>
+            <p>You're billed per token, in and out. At prototype scale that's pocket change; at a million requests a day it's a line item the CFO asks about. The good news: the bill is an engineering surface with real levers, and the biggest ones cut cost by 50–90% without touching quality.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Lever</th><th>Saves</th><th>When it applies</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Prompt caching</strong></td><td>Up to ~90% on cached input</td><td>The same big context (system prompt, docs, tool list) repeats across requests. Cache the stable prefix once, pay pennies to reread it.</td></tr>
+                  <tr><td><strong>Batch API</strong></td><td>~50% on everything</td><td>Work that doesn't need an answer in seconds — nightly classification, backfills, evals. Submit in bulk, collect within hours.</td></tr>
+                  <tr><td><strong>Model laddering</strong></td><td>Often the biggest lever</td><td>Route easy calls to Haiku, default traffic to Sonnet, the genuinely hard cases to Opus or Fable 5 — see <a href="../claude/models.html">the model family</a>.</td></tr>
+                  <tr><td><strong>max_tokens budgets</strong></td><td>Caps the worst case</td><td>Output tokens cost the most. A hard per-route cap turns "occasionally writes an essay" into a bounded line item.</td></tr>
+                  <tr><td><strong>Trim few-shot examples</strong></td><td>Input tokens, every request</td><td>Five examples that taught the prototype may do no more than two. Test, then cut — they're paid on every single call.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="callout tip">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></span>
+              <div class="co-body"><div class="co-title">Build first, optimize second <span class="tag">tip</span></div><p>Same rule as in <a href="../claude/power-features.html">Power features</a>: get it correct on a strong model first, then optimize. A cheap pipeline that's wrong costs infinitely more than an expensive one that's right. Once quality is proven, ladder down model by model and watch your eval scores — stop one rung above where they drop.</p></div>
+            </div>
+          </section>
+
+          <div class="quiz" id="quiz2">
+            <div class="q">Your support-ticket classifier runs millions of requests a day and the bill just exploded. First lever to pull?</div>
+            <div class="quiz-opts">
+              <button class="quiz-opt" data-correct="false"><span class="mark"></span><span>Raise <code>max_tokens</code> so each request does more work</span></button>
+              <button class="quiz-opt" data-correct="true"><span class="mark"></span><span>Ladder down to Haiku for the easy tickets and cache the shared prompt prefix</span></button>
+              <button class="quiz-opt" data-correct="false"><span class="mark"></span><span>Add more aggressive retries so fewer requests fail</span></button>
+            </div>
+            <div class="quiz-explain"><b>Right.</b> Classification is exactly the high-volume, low-difficulty shape Haiku is built for, and a classifier's prompt (instructions + label definitions) is identical on every call — a textbook prompt-caching win. More <code>max_tokens</code> raises the bill, and retries don't change per-request cost at all.</div>
+          </div>
+
+          <section class="section" id="beyond">
+            <h2><span class="section-num">07</span>&nbsp; Watch it &amp; test it</h2>
+            <p>Two disciplines round out a production deployment, each big enough to be its own guide. <strong>Observability</strong>: dashboards for latency, error rates, and cost per route, so a creeping 429 rate or a runaway prompt shows up on a graph before it shows up on the invoice. The <a href="../../observability-guide/index.html">observability field guide</a> covers logs, metrics, traces, and alerting end to end.</p>
+            <p><strong>Evals</strong>: a fixed test set of real inputs with known-good answers, run automatically whenever you change a prompt, swap a model, or ladder down a tier. Without evals, "did quality hold?" is a vibe; with them, it's a number. The <a href="../../genai-guide/index.html">GenAI guide</a> goes deep on building and scoring eval suites.</p>
+          </section>
+
+          <button class="lesson-complete"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav">
+            <a href="../claude/power-features.html"><span class="pn-k">‹ Previous</span><span class="pn-t">Power features</span></a>
+            <a class="next" href="../claude/agents-and-mcp.html"><span class="pn-k">Next ›</span><span class="pn-t">Agents, MCP &amp; the SDK</span></a>
+          </nav>
+        </div>
+      </main>
+      <footer class="footer"><span class="fmono">Claude &amp; Claude Code · a visual field guide</span><span class="fmono">Content verified Jun 2026 · built to open offline</span></footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

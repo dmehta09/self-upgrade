@@ -7,12 +7,13 @@ same house style. Content verified **June 2026**.
 
 ## Two tracks + reference
 
-- **Using Claude** (`claude/`, 9 lessons) — what an LLM is, the Opus/Sonnet/Haiku family, talking to
-  Claude, prompting (×2), the Messages API &amp; SDK, tool use, power features, and building agents
-  with MCP &amp; the Agent SDK.
-- **Claude Code** (`code/`, 13 lessons) — install &amp; surfaces, your first session, context hygiene,
+- **Using Claude** (`claude/`, 10 lessons) — what an LLM is, the model family (Fable 5 + the 4.x
+  trio), talking to Claude, prompting (×2), the Messages API &amp; SDK, tool use, power features,
+  shipping with the API (errors, retries, rate limits, tool-schema design, cost engineering), and
+  building agents with MCP &amp; the Agent SDK.
+- **Claude Code** (`code/`, 14 lessons) — install &amp; surfaces, your first session, context hygiene,
   the explore→plan→code→commit workflow, verification, CLAUDE.md, slash commands, permissions,
-  subagents, hooks, skills &amp; plugins, MCP servers, and power-user workflows.
+  subagents, hooks, skills &amp; plugins, MCP servers, headless &amp; CI, and power-user workflows.
 - **Reference** (`reference/`) — a cheat sheet with an interactive command explorer, a glossary, and
   curated best GitHub references.
 

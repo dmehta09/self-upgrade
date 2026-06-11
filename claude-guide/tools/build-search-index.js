@@ -17,12 +17,12 @@ const FILES = [
   // Track A — Using Claude
   "claude/what-is-claude.html", "claude/models.html", "claude/talking-to-claude.html",
   "claude/prompting-basics.html", "claude/prompting-advanced.html", "claude/api-basics.html",
-  "claude/tool-use.html", "claude/power-features.html", "claude/agents-and-mcp.html",
+  "claude/tool-use.html", "claude/power-features.html", "claude/production.html", "claude/agents-and-mcp.html",
   // Track B — Claude Code
   "code/what-is-claude-code.html", "code/first-session.html", "code/context.html",
   "code/explore-plan-code-commit.html", "code/verify.html", "code/claude-md.html",
   "code/commands.html", "code/permissions.html", "code/subagents.html", "code/hooks.html",
-  "code/skills-plugins.html", "code/mcp.html", "code/power-user.html",
+  "code/skills-plugins.html", "code/mcp.html", "code/headless-ci.html", "code/power-user.html",
   // Reference
   "reference/cheatsheet.html", "reference/glossary.html", "reference/resources.html",
 ];
