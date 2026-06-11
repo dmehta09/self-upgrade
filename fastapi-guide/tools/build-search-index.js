@@ -19,7 +19,8 @@ const FILES = [
   "python/generators.html", "python/typing.html", "python/async.html",
   "fastapi/index.html", "fastapi/routing.html", "fastapi/request-body.html",
   "fastapi/validation.html", "fastapi/dependencies.html", "fastapi/databases.html",
-  "fastapi/auth.html", "fastapi/advanced.html",
+  "fastapi/async-db.html", "fastapi/auth.html", "fastapi/advanced.html",
+  "fastapi/streaming.html", "fastapi/production.html",
   "deploy/index.html",
 ];
 

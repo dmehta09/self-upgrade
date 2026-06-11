@@ -1,16 +1,23 @@
 # FastAPI Field Guide
 
 A visual, beginner-first learning site for **Python &amp; FastAPI** — from a quick Python
-refresher to a complete backend (routing, validation, databases, auth, deployment). It's a
+refresher to a complete backend (routing, validation, sync &amp; async databases with real Alembic
+migrations, auth, WebSockets &amp; streaming, production patterns, deployment). 20 lessons. It's a
 static site with **zero build step and no dependencies**: pure HTML, CSS, and vanilla JavaScript.
 
-It builds on the design system of its sibling project `../langstack`, and adds four things that
+It builds on the design system of its sibling project `../langstack`, and adds the pieces that
 make it more than a wall of text:
 
 - **▶ Runnable Python** — edit and run real Python in the browser (via Pyodide), including live
   Pydantic v2 validation.
 - **⇄ Interactive API playground** — send requests to mock FastAPI endpoints and see the real
   status codes &amp; JSON, including the exact `422` validation envelope.
+- **⟲ Request tracer** (`assets/js/reqtrace.js`) — an animated request walking FastAPI's pipeline:
+  middleware → router → dependency resolution → validation → handler → response. Powers the
+  overview (happy path + 422), dependency-injection (sub-deps, caching, yield cleanup), and
+  CORS-middleware stories.
+- **≋ Loop lab** (`assets/js/looplab.js`) — an event-loop timeline that shows sequential awaits vs
+  `gather`, and a blocking call freezing every request (vs `def` in the threadpool).
 - **⌕ Full-text search** — press <kbd>/</kbd> (or <kbd>Cmd/Ctrl-K</kbd>) anywhere to jump to any topic.
 - **✓ Exercises &amp; progress tracking** — mini-challenges with reveal-able solutions, and a
   "mark as learned" tracker saved in your browser.
@@ -54,11 +61,15 @@ fastapi-guide/
 │       ├── search.js           # Full-text search overlay
 │       ├── runpad.js           # Runnable Python (Pyodide, lazy-loaded)
 │       ├── playground.js       # Mock FastAPI router + Pydantic-v2-faithful validator
+│       ├── reqtrace.js         # Request-lifecycle stepper (pipeline / DI / CORS stories)
+│       ├── looplab.js          # Event-loop timeline (gather vs sequential, blocking)
 │       └── progress.js         # localStorage progress + sidebar checks + home dashboard
 ├── python/                     # Setup & tooling · The refresher (runnable)
-├── fastapi/                    # Overview · Routing · Request body · Validation · Dependencies · Databases · Auth · Advanced
+├── fastapi/                    # Overview · Routing · Request body · Validation · Dependencies · Databases · Async DB · Auth · Advanced · Streaming · Production
 ├── deploy/                     # Testing & deployment
-└── tools/build-search-index.js # Regenerates assets/js/search-index.js
+└── tools/
+    ├── build-search-index.js   # Regenerates assets/js/search-index.js
+    └── verify.js               # Link/anchor/asset/wiring checks — run after every edit
 ```
 
 ## Regenerating the search index
@@ -68,6 +79,7 @@ rebuild it so search stays in sync:
 
 ```bash
 node tools/build-search-index.js
+node tools/verify.js   # link, anchor, asset & script-wiring checks
 ```
 
 It crawls every page, emits one record per heading-section (so results deep-link to anchors), and
@@ -95,3 +107,5 @@ shape (Pydantic v2, the `Annotated` + `Depends` style, `lifespan`).
 - Dark/light theme is remembered in `localStorage` (`fa-theme`); progress under `fa-progress`.
 - Built to be read top-to-bottom (Home → Python → FastAPI core → Databases → Auth → Advanced →
   Ship it), but every page stands alone and is reachable via search.
+- Databases is two lessons (SQLModel CRUD, then async SQLAlchemy + Alembic); Advanced is three
+  (async &amp; structure, WebSockets &amp; streaming, production patterns).

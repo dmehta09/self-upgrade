@@ -20,8 +20,11 @@ window.LESSONS = [
   { id: "fastapi-validation",  title: "Validation & errors",     url: "fastapi/validation.html",    module: "fastapi",  tool: "fastapi" },
   { id: "fastapi-dependencies",title: "Dependency injection",    url: "fastapi/dependencies.html",  module: "fastapi",  tool: "fastapi" },
   { id: "fastapi-databases",   title: "Databases (SQLModel)",    url: "fastapi/databases.html",     module: "db",       tool: "db" },
+  { id: "fastapi-async-db",    title: "Async DB & migrations",   url: "fastapi/async-db.html",      module: "db",       tool: "db" },
   { id: "fastapi-auth",        title: "Auth & security",         url: "fastapi/auth.html",          module: "auth",     tool: "auth" },
   { id: "fastapi-advanced",    title: "Async & structure",       url: "fastapi/advanced.html",      module: "advanced", tool: "advanced" },
+  { id: "fastapi-streaming",   title: "WebSockets & streaming",  url: "fastapi/streaming.html",     module: "advanced", tool: "advanced" },
+  { id: "fastapi-production",  title: "Production patterns",     url: "fastapi/production.html",    module: "advanced", tool: "advanced" },
   { id: "deploy",              title: "Testing & deployment",    url: "deploy/index.html",          module: "deploy",   tool: "deploy" }
 ];
 

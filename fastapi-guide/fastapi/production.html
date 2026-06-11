@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FastAPI — Production patterns | FastAPI Field Guide</title>
+  <meta name="description" content="Pagination (offset and cursor), API versioning, consistent error envelopes with exception handlers, rate limiting, HTTP and in-process caching, and structured logging with request IDs." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13 2 4 14h6l-1 8 9-12h-6z' fill='%231ec9b0'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="advanced" data-page="fa-production" data-lesson="fastapi-production">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="FastAPI Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="#06140f" stroke="#06140f" stroke-width="1.2" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>
+        <span class="brand-text"><b>FastAPI Field Guide</b><span>Runnable visual guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here"><h4>Start here</h4><a class="nav-link" href="../index.html">Home</a></nav>
+      <nav class="nav-group is-py" aria-label="Python">
+        <h4><span class="dot"></span>Python</h4>
+        <a class="nav-link" href="../python/index.html">Setup &amp; tooling</a>
+        <a class="nav-link" href="../python/concepts.html">The refresher</a>
+        <a class="nav-link" href="../python/oop.html">Classes &amp; OOP</a>
+        <a class="nav-link" href="../python/decorators.html">Decorators &amp; closures</a>
+        <a class="nav-link" href="../python/errors.html">Errors &amp; exceptions</a>
+        <a class="nav-link" href="../python/generators.html">Generators &amp; context</a>
+        <a class="nav-link" href="../python/typing.html">Typing in depth</a>
+        <a class="nav-link" href="../python/async.html">Async in depth</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="FastAPI core">
+        <h4><span class="dot"></span>FastAPI core</h4>
+        <a class="nav-link" href="../fastapi/index.html">Overview</a>
+        <a class="nav-link" href="../fastapi/routing.html">Routing &amp; params</a>
+        <a class="nav-link" href="../fastapi/request-body.html">Request body &amp; models</a>
+        <a class="nav-link" href="../fastapi/validation.html">Validation &amp; errors</a>
+        <a class="nav-link" href="../fastapi/dependencies.html">Dependency injection</a>
+      </nav>
+      <nav class="nav-group is-db" aria-label="Databases"><h4><span class="dot"></span>Databases</h4><a class="nav-link" href="../fastapi/databases.html">SQLModel &amp; CRUD</a>
+        <a class="nav-link" href="../fastapi/async-db.html">Async DB &amp; migrations</a></nav>
+      <nav class="nav-group is-auth" aria-label="Auth"><h4><span class="dot"></span>Auth &amp; security</h4><a class="nav-link" href="../fastapi/auth.html">OAuth2 &amp; JWT</a></nav>
+      <nav class="nav-group is-adv" aria-label="Advanced">
+        <h4><span class="dot"></span>Advanced</h4>
+        <a class="nav-link" href="../fastapi/advanced.html">Async &amp; structure</a>
+        <a class="nav-link" href="../fastapi/streaming.html">WebSockets &amp; streaming</a>
+        <a class="nav-link" href="../fastapi/production.html">Production patterns</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#pagination">Pagination</a>
+          <a class="nav-link" href="#versioning">Versioning</a>
+          <a class="nav-link" href="#exceptions">Consistent errors</a>
+          <a class="nav-link" href="#ratelimit">Rate limiting</a>
+          <a class="nav-link" href="#caching">Caching</a>
+          <a class="nav-link" href="#observability">Observability</a>
+        </div>
+      </nav>
+      <nav class="nav-group" aria-label="Ship it"><h4>Ship it</h4><a class="nav-link" href="../deploy/index.html">Testing &amp; deployment</a></nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../fastapi/index.html" style="color:var(--accent)">FastAPI</a><span class="sep">/</span><span class="current">Production patterns</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Advanced · APIs people can rely on</span>
+            <h1>The habits of APIs that don't fall over.</h1>
+            <p class="lead">An API that works on your laptop and an API that strangers depend on are different animals. The difference is a handful of habits: never return unbounded lists, never break clients silently, always fail in the same shape, say no politely when someone hammers you, don't recompute what you just computed, and leave footprints you can follow at 2 a.m. This page is those habits, one by one.</p>
+          </section>
+
+          <section class="section reveal" id="pagination">
+            <h2><span class="section-num">01</span> &nbsp;Pagination: never return everything</h2>
+            <p><code>GET /heroes</code> returning <em>all</em> heroes is fine with 50 rows and a disaster with 5 million — one curious client can flatten your database and your memory at once. Rule one of production lists: <strong>every list endpoint takes a limit, and the limit has a ceiling.</strong></p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">pagination_offset.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from typing import Annotated
+from fastapi import FastAPI, Query
+from pydantic import BaseModel
+from sqlmodel import select, func
+
+app = FastAPI()
+
+class HeroPage(BaseModel):
+    items: list[Hero]          # the page itself
+    total: int                 # how many exist overall
+    limit: int
+    offset: int
+
+@app.get("/heroes", response_model=HeroPage)
+def list_heroes(
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,   # ceiling: 100, no exceptions
+    offset: Annotated[int, Query(ge=0)] = 0,
+):
+    total = session.exec(select(func.count()).select_from(Hero)).one()
+    items = session.exec(select(Hero).offset(offset).limit(limit)).all()
+    return HeroPage(items=items, total=total, limit=limit, offset=offset)</code></pre></div>
+            </div>
+            <p>The envelope matters as much as the limit. Returning a bare array means clients can never tell "that's all of them" from "that's the first page" — wrapping it in <code>{items, total, limit, offset}</code> tells them exactly where they stand. And <code>Query(le=100)</code> means even <code>?limit=999999</code> gets a clean 422 instead of melting the server.</p>
+            <p>Offset pagination is the right starting point — but it has two quiet problems at depth. First, <code>OFFSET 100000</code> doesn't <em>skip</em> 100,000 rows; the database still walks past every one of them before returning yours, so page 5,000 is dramatically slower than page 1. Second, pages <strong>drift</strong>: if a row is inserted while a client is paging, everything shifts by one and they see a duplicate (or miss a row) on the next page.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A bookmark vs counting pages <span class="tag">analogy</span></div><p>Offset is "open the book and count 4,000 pages from the front" — slow, and if someone glued in a new page overnight, you land somewhere different. A cursor is a <strong>bookmark</strong>: "continue from exactly here." No counting, and new pages elsewhere in the book can't move your bookmark.</p></div></div>
+            <p>The fix is <strong>cursor (keyset) pagination</strong>: instead of "skip N rows," the client says "give me rows <em>after</em> this id." The database jumps straight there via the index.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">pagination_cursor.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">@app.get("/heroes")
+def list_heroes(
+    session: SessionDep,
+    cursor: Annotated[int, Query(ge=0)] = 0,            # "after this id"
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+):
+    items = session.exec(
+        select(Hero)
+        .where(Hero.id &gt; cursor)      # WHERE id &gt; :cursor — index jump, no scan
+        .order_by(Hero.id)
+        .limit(limit)
+    ).all()
+    next_cursor = items[-1].id if len(items) == limit else None
+    return {"items": items, "next_cursor": next_cursor}
+    # client: keep calling /heroes?cursor={next_cursor} until it's null</code></pre></div>
+            </div>
+            <p class="muted" style="font-size:14px;">Trade-off: cursors can't jump to "page 47" and need a unique, ordered column (an id or a <code>(created_at, id)</code> pair). Offset for small admin tables and page-number UIs; cursor for big or busy data and infinite scroll.</p>
+          </section>
+
+          <section class="section reveal" id="versioning">
+            <h2><span class="section-num">02</span> &nbsp;API versioning</h2>
+            <p>Once anyone you don't sit next to uses your API, its shape is a promise. Some changes keep the promise; some break it:</p>
+            <div class="kv">
+              <dt>Non-breaking</dt><dd>Adding a new <em>optional</em> field to a response, adding a new endpoint, adding an optional query param. Old clients ignore what they don't know. Ship freely.</dd>
+              <dt>Breaking</dt><dd>Renaming or removing a field, changing a type (<code>id: int</code> → <code>id: str</code>), making an optional param required, changing a status code. Old clients crash. This needs a version.</dd>
+            </div>
+            <p>The pragmatic pattern: put the version in the path, one router per version, both mounted on the same app. You already know everything required — it's just <code>include_router</code> with a prefix.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">main.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from fastapi import FastAPI
+from routers import heroes_v1, heroes_v2
+
+app = FastAPI()
+app.include_router(heroes_v1.router, prefix="/v1")   # GET /v1/heroes -> {"name": ...}
+app.include_router(heroes_v2.router, prefix="/v2")   # GET /v2/heroes -> {"full_name": ...}
+
+# routers/heroes_v2.py — same endpoint, the *new* response shape
+from fastapi import APIRouter
+from pydantic import BaseModel
+
+router = APIRouter(prefix="/heroes", tags=["heroes-v2"])
+
+class HeroV2(BaseModel):
+    id: int
+    full_name: str        # v1 called this "name" — that rename is the break
+
+@router.get("", response_model=list[HeroV2])
+def list_heroes(session: SessionDep):
+    ...</code></pre></div>
+            </div>
+            <p>Old clients keep calling <code>/v1</code> and nothing changes for them; new clients adopt <code>/v2</code> on their own schedule. When <code>/v1</code> traffic finally dries up, you announce a sunset date and delete a router — one line.</p>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Version when you must break — not before</div><p>A new version is a cost: two routers to maintain, two docs pages, clients to migrate. Additive changes never need one. Teams that bend over backwards to stay additive (add <code>full_name</code> <em>alongside</em> <code>name</code>, deprecate later) often live on <code>/v1</code> for years — that's a feature, not laziness.</p></div></div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Header-based versioning exists too</div><p>Some APIs (notably Stripe) version via a request header instead of the path, which keeps URLs stable. It's elegant but harder to test in a browser, cache, and document. Path versioning is the boring, visible, pragmatic default — start there.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="exceptions">
+            <h2><span class="section-num">03</span> &nbsp;Consistent errors with exception handlers</h2>
+            <p>By the time an app has thirty endpoints, "item missing" is handled thirty slightly different ways. The production move: <strong>raise a domain exception anywhere, shape it into JSON in exactly one place</strong> — an <code>@app.exception_handler</code>. The envelope below follows the RFC&nbsp;9457 "problem details" style: a <code>type</code> (machine-readable), a <code>title</code> (short human label), and a <code>detail</code> (the specifics).</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">errors.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+class ItemNotFound(Exception):
+    def __init__(self, item_id: int):
+        self.item_id = item_id
+
+app = FastAPI()
+
+@app.exception_handler(ItemNotFound)
+async def item_not_found_handler(request: Request, exc: ItemNotFound):
+    return JSONResponse(
+        status_code=404,
+        content={
+            "type": "https://api.example.com/errors/item-not-found",
+            "title": "Item not found",
+            "detail": f"No item with id {exc.item_id} exists.",
+        },
+    )
+
+@app.get("/items/{item_id}")
+def read_item(item_id: int, session: SessionDep):
+    item = session.get(Item, item_id)
+    if item is None:
+        raise ItemNotFound(item_id)   # raise from anywhere — handler shapes it
+    return item</code></pre></div>
+            </div>
+            <p>Endpoints stay clean — they raise and move on — and every 404 in your whole API now looks identical. Clients write their error handling once.</p>
+            <p>One error still won't match: FastAPI's built-in 422, whose default <code>{"detail": [...]}</code> shape you met on the Validation page. You can re-shape it into the same envelope by catching <code>RequestValidationError</code>:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">errors_422.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from fastapi.exceptions import RequestValidationError
+
+@app.exception_handler(RequestValidationError)
+async def validation_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "type": "https://api.example.com/errors/validation",
+            "title": "Validation failed",
+            "detail": [
+                {"field": ".".join(str(loc) for loc in err["loc"]),
+                 "message": err["msg"]}
+                for err in exc.errors()
+            ],
+        },
+    )</code></pre></div>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Never leak internals in error bodies</div><p>Stack traces, SQL fragments, file paths, library names — all of it is a gift to attackers and a confusing mess for clients. Your catch-all 500 handler should return a bland <code>{"title": "Internal error", "detail": "Something went wrong."}</code> and log the juicy traceback <em>server-side</em>, tagged with the request id from section 06.</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">Thirty endpoints can each hit a missing database row. What's the cleanest way for all of them to return the same 404 shape?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Copy the same <code>JSONResponse(status_code=404, ...)</code> into each endpoint</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Raise a custom exception in the endpoints and register one <code>@app.exception_handler</code> for it</button>
+                <button class="quiz-opt"><span class="mark"></span>Wrap every endpoint body in <code>try/except</code> and format the error there</button>
+              </div>
+              <div class="quiz-explain"><b>Correct.</b> Endpoints just <code>raise ItemNotFound(id)</code> and stay focused on their job; the single registered handler turns it into the one true 404 envelope. Change the shape later and you edit one function, not thirty.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="ratelimit">
+            <h2><span class="section-num">04</span> &nbsp;Rate limiting</h2>
+            <p>Three reasons your API needs a speed limit: <strong>abuse</strong> (someone brute-forcing your login endpoint), <strong>runaway clients</strong> (a bugged retry loop calling you 500 times a second — usually your own front-end), and <strong>cost</strong> (every request touches a database, and maybe a paid LLM API). A rate limit converts all three from outages into polite 429s.</p>
+            <p>The classic mental model is the <strong>token bucket</strong>. Each client has a bucket that refills at a steady drip — say 5 tokens per minute. Every request spends one token; a request that finds the bucket empty gets a <code>429 Too Many Requests</code>. Because the bucket can hold a few tokens, short bursts are fine — only <em>sustained</em> overuse gets throttled.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">ratelimit.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python"># pip install slowapi
+from fastapi import FastAPI, Request
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)   # bucket per client IP
+
+app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+@app.get("/search")
+@limiter.limit("5/minute")           # the 6th call within a minute -> 429
+def search(request: Request, q: str):
+    return {"results": do_expensive_search(q)}</code></pre></div>
+            </div>
+            <p>The rejection comes back as a 429 with a <code>Retry-After</code> header — the standard way of saying "not no, just not yet":</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">the 429</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="http">HTTP/1.1 429 Too Many Requests
+Retry-After: 42
+
+{"error": "Rate limit exceeded: 5 per 1 minute"}</code></pre></div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">In real deployments, the gateway often does this</div><p>At scale, rate limiting usually lives in front of your app — nginx, an API gateway, or a Redis-backed limiter shared across replicas (per-IP counters in one process don't see traffic hitting the other three replicas). The contract stays identical either way: clients get a clean <code>429</code> + <code>Retry-After</code>, and well-behaved ones back off.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="caching">
+            <h2><span class="section-num">05</span> &nbsp;Caching</h2>
+            <p>The cheapest request is the one you never have to compute. Reach for HTTP's built-in caching <em>first</em> — it's free, standardized, and the browser already speaks it. Two headers do most of the work: <code>Cache-Control: max-age=60</code> ("don't even ask me again for 60 seconds") and <code>ETag</code> ("here's a fingerprint of this response — next time, ask if it changed").</p>
+            <p>The ETag conversation looks like this:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">etag flow</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="http">GET /heroes/1 HTTP/1.1            # first visit
+
+HTTP/1.1 200 OK                   # full body + a fingerprint
+Cache-Control: max-age=60
+ETag: "v7"
+
+{"id": 1, "name": "Deadpond", ...}
+
+GET /heroes/1 HTTP/1.1            # later: "only if it changed"
+If-None-Match: "v7"
+
+HTTP/1.1 304 Not Modified         # empty body — "your copy is still good"
+ETag: "v7"</code></pre></div>
+            </div>
+            <p>Serving that from FastAPI is a handful of lines — compare the client's fingerprint, and skip the body if it matches:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">etag.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from fastapi import FastAPI, Request, Response
+
+@app.get("/heroes/{hero_id}")
+def read_hero(hero_id: int, request: Request, response: Response, session: SessionDep):
+    hero = session.get(Hero, hero_id)
+    etag = f'"{hero.updated_at.timestamp()}"'        # any value that changes when data does
+
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304)             # no body — client reuses its copy
+
+    response.headers["ETag"] = etag
+    response.headers["Cache-Control"] = "max-age=60"
+    return hero</code></pre></div>
+            </div>
+            <p>For responses that are expensive to <em>compute</em> rather than transfer — a dashboard aggregation, a report — cache server-side with a tiny dict-with-expiry:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">ttl_cache.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import time
+
+_cache: dict[str, tuple[float, dict]] = {}     # key -> (stored_at, value)
+
+def cached(key: str, ttl: float, compute):
+    hit = _cache.get(key)
+    if hit and time.monotonic() - hit[0] &lt; ttl:
+        return hit[1]                          # fresh enough — skip the work
+    value = compute()
+    _cache[key] = (time.monotonic(), value)
+    return value
+
+@app.get("/stats")
+def stats(session: SessionDep):
+    return cached("stats", ttl=30, compute=lambda: compute_stats(session))</code></pre></div>
+            </div>
+            <p>For values that load once and <em>never</em> change while the process runs — parsed config, a public key — <code>@functools.lru_cache</code> on a zero-argument function is perfect (it's the standard trick for caching the <code>Settings()</code> object). But <code>lru_cache</code> has <strong>no expiry</strong>: cache anything per-user or time-sensitive with it and you'll serve stale — or worse, someone else's — data forever.</p>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Never cache user-specific responses in a shared cache</div><p>If <code>/me</code> gets cached under the key <code>"me"</code>, the second user to call it receives the <em>first</em> user's profile. Every cache entry for authenticated data must include the user in its key (<code>f"me:{user.id}"</code>) — and HTTP responses that vary per user should send <code>Cache-Control: private</code> so shared proxies never store them. This exact bug has caused real-world data leaks at big companies.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="observability">
+            <h2><span class="section-num">06</span> &nbsp;Seeing your API in production</h2>
+            <p>In production you can't drop into a debugger — your only window into the running app is what it tells you. So make it tell you things a machine can search: <strong>structured (JSON) logs</strong>, one line per request, each carrying a <strong>request id</strong> you can follow through the whole story of a single call.</p>
+            <p>The pattern: accept an <code>X-Request-ID</code> header if the caller (or your load balancer) sent one, generate one otherwise, log it with every line, and return it in the response so a user can read you the id from their error screen:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">request_id.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import json, logging, time, uuid
+from fastapi import FastAPI, Request
+
+logger = logging.getLogger("api")
+app = FastAPI()
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    rid = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
+    start = time.perf_counter()
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = rid           # echo it back to the caller
+    logger.info(json.dumps({
+        "request_id": rid,
+        "method": request.method,
+        "path": request.url.path,
+        "status": response.status_code,
+        "duration_ms": round((time.perf_counter() - start) * 1000, 1),
+    }))
+    return response</code></pre></div>
+            </div>
+            <p>Now "the app feels slow" becomes a query: filter for <code>duration_ms &gt; 1000</code>, group by <code>path</code>, done. And when a user reports a failure, one grep for their request id shows you everything that request touched.</p>
+            <p>Next, give your platform a way to ask "are you alive?" — a health endpoint. Keep it <em>cheap</em>: it gets called every few seconds by load balancers and orchestrators, so it should not hit the database by default (or a slow DB makes the platform think your app is dead and restart it, making everything worse):</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">healthz.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">@app.get("/healthz", include_in_schema=False)   # hide it from /docs
+def healthz():
+    return {"status": "ok"}                     # process up + event loop responsive</code></pre></div>
+            </div>
+            <p>Logs and a health check are the floor. The next rungs are <strong>metrics</strong> (counters and latency histograms you can graph and alert on) and <strong>traces</strong> (the request-id idea, upgraded to follow a request <em>across services</em>) — usually via OpenTelemetry and Prometheus.</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">There's a whole guide for this</div><p>Logs, metrics, traces, OpenTelemetry, Prometheus + Grafana, SLOs — we built an entire field guide on observability. When you're ready to go deeper: <a href="../../observability-guide/index.html">the Observability guide</a> picks up exactly where this section stops.</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">A user emails: "something failed around 3pm." What makes finding their exact request in the logs trivial?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Logging every request body in full so you can search for their data</button>
+                <button class="quiz-opt"><span class="mark"></span>A <code>/healthz</code> endpoint — it would have caught the failure</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A request id generated per request, returned in <code>X-Request-ID</code>, and stamped on every log line</button>
+              </div>
+              <div class="quiz-explain"><b>Correct.</b> The user reads you the id from their error screen (your front-end shows it because the API returned it in <code>X-Request-ID</code>), and one search pulls up every log line for exactly that request. Logging full bodies is a privacy hazard, and <code>/healthz</code> only says the process is up — it knows nothing about individual requests.</div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Next stop: shipping it</div><p>Your API now paginates, versions, fails consistently, throttles, caches, and explains itself. One thing left: proving it works and getting it onto a server — <a href="../deploy/index.html">Testing &amp; deployment</a> closes the loop.</p></div></div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../fastapi/streaming.html"><span class="pn-k">‹ Back</span><span class="pn-t">WebSockets &amp; streaming</span></a>
+            <a class="next" href="../deploy/index.html"><span class="pn-k">Next ›</span><span class="pn-t">Testing &amp; deployment</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#pagination">Pagination</a>
+          <a href="#versioning">Versioning</a>
+          <a href="#exceptions">Consistent errors</a>
+          <a href="#ratelimit">Rate limiting</a>
+          <a href="#caching">Caching</a>
+          <a href="#observability">Observability</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">FastAPI · Production patterns</span>
+        <span class="fmono">FastAPI Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/runpad.js"></script>
+  <script src="../assets/js/playground.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

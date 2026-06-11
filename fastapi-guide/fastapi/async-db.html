@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FastAPI — Async DB &amp; migrations | FastAPI Field Guide</title>
+  <meta name="description" content="Go fully async with the database: create_async_engine, AsyncSession, awaited CRUD, the lazy-loading trap, and real schema migrations with Alembic." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13 2 4 14h6l-1 8 9-12h-6z' fill='%231ec9b0'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="db" data-page="fa-asyncdb" data-lesson="fastapi-async-db">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="FastAPI Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="#06140f" stroke="#06140f" stroke-width="1.2" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>
+        <span class="brand-text"><b>FastAPI Field Guide</b><span>Runnable visual guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here"><h4>Start here</h4><a class="nav-link" href="../index.html">Home</a></nav>
+      <nav class="nav-group is-py" aria-label="Python">
+        <h4><span class="dot"></span>Python</h4>
+        <a class="nav-link" href="../python/index.html">Setup &amp; tooling</a>
+        <a class="nav-link" href="../python/concepts.html">The refresher</a>
+        <a class="nav-link" href="../python/oop.html">Classes &amp; OOP</a>
+        <a class="nav-link" href="../python/decorators.html">Decorators &amp; closures</a>
+        <a class="nav-link" href="../python/errors.html">Errors &amp; exceptions</a>
+        <a class="nav-link" href="../python/generators.html">Generators &amp; context</a>
+        <a class="nav-link" href="../python/typing.html">Typing in depth</a>
+        <a class="nav-link" href="../python/async.html">Async in depth</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="FastAPI core">
+        <h4><span class="dot"></span>FastAPI core</h4>
+        <a class="nav-link" href="../fastapi/index.html">Overview</a>
+        <a class="nav-link" href="../fastapi/routing.html">Routing &amp; params</a>
+        <a class="nav-link" href="../fastapi/request-body.html">Request body &amp; models</a>
+        <a class="nav-link" href="../fastapi/validation.html">Validation &amp; errors</a>
+        <a class="nav-link" href="../fastapi/dependencies.html">Dependency injection</a>
+      </nav>
+      <nav class="nav-group is-db" aria-label="Databases">
+        <h4><span class="dot"></span>Databases</h4>
+        <a class="nav-link" href="../fastapi/databases.html">SQLModel &amp; CRUD</a>
+        <a class="nav-link" href="../fastapi/async-db.html">Async DB &amp; migrations</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#why">Why async DB</a>
+          <a class="nav-link" href="#engine">Async engine</a>
+          <a class="nav-link" href="#session-dep">Session dependency</a>
+          <a class="nav-link" href="#crud">CRUD, awaited</a>
+          <a class="nav-link" href="#lazy">Lazy-loading trap</a>
+          <a class="nav-link" href="#alembic">Alembic migrations</a>
+          <a class="nav-link" href="#choose">Sync or async?</a>
+        </div>
+      </nav>
+      <nav class="nav-group is-auth" aria-label="Auth"><h4><span class="dot"></span>Auth &amp; security</h4><a class="nav-link" href="../fastapi/auth.html">OAuth2 &amp; JWT</a></nav>
+      <nav class="nav-group is-adv" aria-label="Advanced"><h4><span class="dot"></span>Advanced</h4><a class="nav-link" href="../fastapi/advanced.html">Async &amp; structure</a>
+        <a class="nav-link" href="../fastapi/streaming.html">WebSockets &amp; streaming</a>
+        <a class="nav-link" href="../fastapi/production.html">Production patterns</a></nav>
+      <nav class="nav-group" aria-label="Ship it"><h4>Ship it</h4><a class="nav-link" href="../deploy/index.html">Testing &amp; deployment</a></nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../fastapi/index.html" style="color:var(--accent)">FastAPI</a><span class="sep">/</span><span class="current">Async DB &amp; migrations</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">Databases · async &amp; migrations</span>
+            <h1>One waiter, no standing around.</h1>
+            <p class="lead">The last lesson used plain <code>def</code> endpoints and let FastAPI's threadpool absorb the blocking database calls. That works. But there's a second, sharper option: an <strong>async driver</strong>, where one event loop juggles hundreds of in-flight queries without ever standing still. This lesson makes the database fully async — and then teaches the tool you'll need the moment your schema changes with real data in it: <strong>Alembic</strong>.</p>
+          </section>
+
+          <section class="section reveal" id="why">
+            <h2><span class="section-num">01</span> &nbsp;Why async DB access?</h2>
+            <p>Quick recap of the rule from the loop lab on the <a href="../fastapi/advanced.html">Async &amp; structure</a> page: a <strong>sync DB call inside <code>async def</code> blocks the entire event loop</strong>. While that one query waits on the database, <em>every</em> other request on your server waits too — the loop is a single waiter, and you've sent it to stand in the kitchen.</p>
+            <p>There are exactly two correct ways to talk to a database from FastAPI:</p>
+            <div class="kv">
+              <dt>Plain <code>def</code> + threadpool</dt><dd>What the <a href="../fastapi/databases.html">SQLModel lesson</a> did. FastAPI runs the endpoint in a worker thread, so blocking calls only occupy that thread. Simple, correct, and fine for most apps.</dd>
+              <dt><code>async def</code> + async driver</dt><dd>The endpoint <code>await</code>s every database call. While a query is in flight, the loop serves other requests. Scales to many concurrent, I/O-bound requests without burning a thread per request.</dd>
+            </div>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg></span><div class="co-body"><div class="co-title">The restaurant, again</div><p>The threadpool model hires one waiter per table — works, but waiters are expensive and there's a fixed number of them. The async model has <em>one</em> waiter who takes your order, hands it to the kitchen (the database), and immediately moves to the next table. They come back when the kitchen rings the bell (<code>await</code> resolves). Nobody ever just stands there. The catch: that waiter must <em>never</em> get stuck stirring a pot themselves — one blocking call and the whole restaurant freezes.</p></div></div>
+            <p>When does async actually pay off? When you have <strong>many concurrent requests that spend most of their time waiting on I/O</strong> — a chat backend, a dashboard polling endpoint, anything fronting a slow upstream. If your traffic is ten requests a second against a fast local database, the threadpool version is indistinguishable. We'll make that trade-off concrete in <a href="#choose">section 07</a>.</p>
+          </section>
+
+          <section class="section reveal" id="engine">
+            <h2><span class="section-num">02</span> &nbsp;The async engine &amp; session</h2>
+            <p>Going async means swapping three pieces, each the async twin of something you already know: the engine, the session class, and a session factory. The driver changes too — async needs a driver that speaks non-blocking I/O, and you name it right in the connection string.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="bash">pip install sqlmodel aiosqlite
+# for PostgreSQL later: pip install asyncpg</code></pre></div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">db.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlmodel import SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+#                         driver ↓ named in the URL
+engine = create_async_engine("sqlite+aiosqlite:///app.db")
+# PostgreSQL would be:  "postgresql+asyncpg://user:pass@localhost/app"
+
+async_session = async_sessionmaker(engine, class_=AsyncSession,
+                                   expire_on_commit=False)
+
+async def create_db_and_tables():
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)</code></pre></div>
+            </div>
+            <div class="kv">
+              <dt>create_async_engine</dt><dd>The async twin of <code>create_engine</code>. Still created once, still your pool of connections — but every conversation through it is awaitable.</dd>
+              <dt>AsyncSession</dt><dd>The async twin of <code>Session</code>. We import SQLModel's flavour (<code>sqlmodel.ext.asyncio.session</code>) so it keeps the nice <code>.exec()</code> API; plain SQLAlchemy's <code>AsyncSession</code> works with SQLModel models too and looks almost identical — you'd just write <code>.execute()</code> and unwrap <code>.scalars()</code>.</dd>
+              <dt>async_sessionmaker</dt><dd>A factory: call <code>async_session()</code> to get a fresh session. <code>expire_on_commit=False</code> keeps your objects readable after <code>commit()</code> instead of forcing a (now awkward, because async) reload on attribute access.</dd>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">SQLModel rides on SQLAlchemy 2.0</div><p>None of this async machinery is SQLModel magic — it's SQLAlchemy 2.0 underneath, with your SQLModel classes as the table definitions on top. That's good news: every SQLAlchemy async doc, blog post, and Stack Overflow answer applies directly.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="session-dep">
+            <h2><span class="section-num">03</span> &nbsp;The async session dependency</h2>
+            <p>In the sync lesson, a <code>yield</code> dependency opened a session per request and closed it afterwards. The async version is the same shape with two extra keywords — <code>async def</code> and <code>async with</code>:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">db.py (continued)</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from typing import Annotated
+from fastapi import Depends
+
+async def get_session():
+    async with async_session() as session:   # opens, then auto-closes
+        yield session
+
+SessionDep = Annotated[AsyncSession, Depends(get_session)]</code></pre></div>
+            </div>
+            <p>Put them side by side and the symmetry is the whole lesson:</p>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Sync (last lesson)</th><th>Async (this lesson)</th></tr></thead>
+              <tbody>
+                <tr><td><code>def get_session():</code></td><td><code>async def get_session():</code></td></tr>
+                <tr><td><code>with Session(engine) as session:</code></td><td><code>async with async_session() as session:</code></td></tr>
+                <tr><td><code>yield session</code></td><td><code>yield session</code></td></tr>
+                <tr><td><code>Annotated[Session, Depends(...)]</code></td><td><code>Annotated[AsyncSession, Depends(...)]</code></td></tr>
+              </tbody>
+            </table></div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Endpoints don't change their signature</div><p>Routes still just declare <code>session: SessionDep</code>. FastAPI handles async <code>yield</code> dependencies natively — the cleanup after <code>yield</code> runs on the loop, no threadpool involved. Your dependency tree can mix sync and async dependencies freely.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="crud">
+            <h2><span class="section-num">04</span> &nbsp;CRUD, awaited</h2>
+            <p>Same <code>Hero</code> models as the last lesson, same operations — but the endpoints are <code>async def</code> and everything that actually touches the database grows an <code>await</code>:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">routes.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from fastapi import FastAPI, HTTPException
+from sqlmodel import select
+
+app = FastAPI()
+
+@app.post("/heroes", response_model=HeroPublic, status_code=201)
+async def create_hero(hero: HeroCreate, session: SessionDep):
+    db_hero = Hero.model_validate(hero)
+    session.add(db_hero)              # no await — just bookkeeping in memory
+    await session.commit()            # await — actually talks to the DB
+    await session.refresh(db_hero)    # await — reloads to get the new id
+    return db_hero
+
+@app.get("/heroes", response_model=list[HeroPublic])
+async def list_heroes(session: SessionDep, offset: int = 0, limit: int = 20):
+    result = await session.exec(select(Hero).offset(offset).limit(limit))
+    return result.all()
+
+@app.get("/heroes/{hero_id}", response_model=HeroPublic)
+async def get_hero(hero_id: int, session: SessionDep):
+    hero = await session.get(Hero, hero_id)
+    if not hero:
+        raise HTTPException(404, "Hero not found")
+    return hero</code></pre></div>
+            </div>
+            <p>The mental model: <strong><code>await</code> anything that crosses the wire to the database</strong> — <code>exec</code>, <code>get</code>, <code>commit</code>, <code>refresh</code>, <code>delete</code>'s commit. <code>session.add()</code> stays plain because it only marks the object as pending in the session's in-memory notebook; nothing hits the database until commit (or a query that flushes first).</p>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">The silent killer: a forgotten <code>await</code></div><p>Write <code>session.commit()</code> without <code>await</code> and Python doesn't error — it just creates a coroutine object and throws it away. <strong>Nothing persists.</strong> Your endpoint returns 201, the data is gone after the request, and the only clue is a <code>RuntimeWarning: coroutine 'commit' was never awaited</code> buried in the logs. If async data "mysteriously disappears," grep your code for un-awaited session calls first.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="lazy">
+            <h2><span class="section-num">05</span> &nbsp;The async lazy-loading trap</h2>
+            <p>Here's the one place async is genuinely <em>harder</em>, not just differently spelled. In sync code, <code>hero.team</code> on a relationship quietly fires a second query the moment you touch the attribute — "lazy loading." In async code, an attribute access <strong>can't</strong> <code>await</code> anything (Python has no <code>await hero.team</code> for plain attributes), so when lazy loading would need the database, SQLAlchemy raises instead:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">the_trap.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">@app.get("/heroes/{hero_id}/team-name")
+async def team_name(hero_id: int, session: SessionDep):
+    hero = await session.get(Hero, hero_id)
+    return {"team": hero.team.name}     # 💥 sqlalchemy.exc.MissingGreenlet:
+                                        # greenlet_spawn has not been called;
+                                        # can't call await_only() here</code></pre></div>
+            </div>
+            <p>Two clean fixes. Either tell the query up front to fetch the relationship too (<strong>eager loading</strong>), or run an explicit second query yourself:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">the_fixes.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from sqlalchemy.orm import selectinload
+
+# Fix 1 — eager load: relationship arrives with the hero
+result = await session.exec(
+    select(Hero).where(Hero.id == hero_id)
+                .options(selectinload(Hero.team))
+)
+hero = result.one()
+hero.team          # ✅ already loaded, no hidden query
+
+# Fix 2 — just ask explicitly
+hero = await session.get(Hero, hero_id)
+team = await session.get(Team, hero.team_id)   # ✅ a visible, awaited query</code></pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Honestly? This trap is a feature</div><p>Lazy loading in sync code is how you accidentally ship the N+1 query problem — one query per hero in a list of 500. Async forces every database round-trip to be a visible <code>await</code>, so the cost is on the page where you can see it. <code>selectinload</code> fetches a whole list's relationships in one extra query, not 500.</p></div></div>
+            <div class="quiz" data-quiz>
+              <p class="q">Your async endpoint returns a hero fine, but accessing <code>hero.team</code> raises <code>MissingGreenlet</code>. What's going on?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>You forgot to install <code>greenlet</code> — <code>pip install greenlet</code> fixes it</button>
+                <button class="quiz-opt"><span class="mark"></span>The relationship is misconfigured; <code>back_populates</code> is missing</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Lazy loading would need a hidden DB query, which an attribute access can't <code>await</code> — eager-load with <code>selectinload</code> or query the relation explicitly</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> In async SQLAlchemy, implicit I/O is forbidden — an attribute access has no way to <code>await</code>. Load the relationship in the original query with <code>.options(selectinload(Hero.team))</code>, or fetch it yourself with a second awaited query.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="alembic">
+            <h2><span class="section-num">06</span> &nbsp;Migrations with Alembic</h2>
+            <p>The <a href="../fastapi/databases.html#migrations">SQLModel lesson</a> ended with a warning: <code>SQLModel.metadata.create_all()</code> only creates tables that don't exist. It will <em>never</em> add a column, rename one, or change a type on a table that's already there. The day you add <code>power: int</code> to <code>Hero</code> with real users in the database, you need a tool that says "here's how to get from schema version 3 to version 4 without losing a row." That tool is <strong>Alembic</strong> — think of each migration as a numbered git commit for your database schema.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="bash">pip install alembic
+alembic init -t async migrations    # -t async: scaffolding that works
+                                    # with create_async_engine</code></pre></div>
+            </div>
+            <p>That creates <code>alembic.ini</code> and a <code>migrations/</code> folder. Two edits wire it to your app — tell it where the database is, and which metadata describes "the schema my code wants":</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">migrations/env.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from sqlmodel import SQLModel
+import app.models                     # noqa — import so every table registers
+
+config.set_main_option("sqlalchemy.url", "sqlite+aiosqlite:///app.db")
+target_metadata = SQLModel.metadata   # replace the default `None`</code></pre></div>
+            </div>
+            <p>Now the loop you'll repeat for the rest of the project's life. Change a model — say, add <code>power: int = 0</code> to <code>Hero</code> — then:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="bash"># 1. compare models vs live DB, draft a migration script
+alembic revision --autogenerate -m "add hero.power"
+
+# 2. READ the generated file in migrations/versions/ (see below)
+
+# 3. apply every migration the DB hasn't seen yet
+alembic upgrade head</code></pre></div>
+            </div>
+            <p>Step 2 is not optional ceremony. Open the generated script and check it says what you meant:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">migrations/versions/a1b2c3_add_hero_power.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">def upgrade() -> None:
+    op.add_column("hero",
+        sa.Column("power", sa.Integer(), nullable=False,
+                  server_default="0"))
+
+def downgrade() -> None:
+    op.drop_column("hero", "power")</code></pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Autogenerate is a draft, not a verdict</div><p>Alembic diffs structures, not intent. It sees a rename as "drop column, add column" — which <strong>deletes the data</strong> — and it can't detect some changes (server defaults, some type tweaks) at all. Always read the script before <code>upgrade head</code>, the way you'd read a diff before committing.</p></div></div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Where migrations run in real life</div><p>In CI/deploy, run <code>alembic upgrade head</code> as a release step <em>before</em> the new app version starts — the code should never boot against a schema older than it expects. Once Alembic owns the schema, drop the <code>create_all()</code> call from your lifespan; one tool should be in charge.</p></div></div>
+          </section>
+
+          <section class="section reveal" id="choose">
+            <h2><span class="section-num">07</span> &nbsp;Sync or async? Choosing honestly</h2>
+            <p>Async is not a tier you graduate to — it's a trade. You gain concurrency on I/O waits; you pay with the lazy-loading rules, the silent un-awaited-coroutine failure mode, and a slightly smaller library ecosystem. Pick by situation:</p>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Your situation</th><th>Pick</th><th>Why</th></tr></thead>
+              <tbody>
+                <tr><td>Small app, modest traffic, fast queries</td><td><strong>Sync <code>def</code></strong></td><td>The threadpool absorbs the blocking calls; you keep the simpler programming model. The bottleneck is nowhere near the thread count.</td></tr>
+                <tr><td>High concurrency, I/O-bound (slow queries, slow upstreams, long-polling, thousands of simultaneous clients)</td><td><strong>Async</strong></td><td>This is exactly what the event loop is for — waiting on thousands of things at once costs almost nothing.</td></tr>
+                <tr><td>CPU-bound work (image processing, ML inference, heavy number-crunching)</td><td><strong>Neither helps</strong></td><td>The loop can't await arithmetic and threads fight over the interpreter. Scale with more worker processes, or push the job to a task queue.</td></tr>
+                <tr><td>Mixed-experience team, straightforward CRUD product</td><td><strong>Sync</strong></td><td>Correct sync code beats subtly-wrong async code every time. You can migrate later — section 03 showed how mechanical the change is.</td></tr>
+              </tbody>
+            </table></div>
+            <p>And whichever you choose: <strong>don't mix the failure modes</strong>. A sync DB call inside <code>async def</code> is the one combination that's always wrong.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">Your endpoint resizes uploaded images and is too slow under load. Will switching the database layer to async fix it?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Yes — async always increases throughput</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>No — image resizing is CPU-bound; <code>await</code> only helps while <em>waiting</em>. Use more worker processes or a task queue</button>
+                <button class="quiz-opt"><span class="mark"></span>Yes, but only if you also switch SQLite to PostgreSQL</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> Async shines when requests spend their time <em>waiting</em> on I/O. CPU work occupies the core no matter how you spell the function — the loop just sits hostage behind it. Scale CPU-bound work with worker processes (e.g. multiple uvicorn workers) or offload it to a background task queue.</div>
+            </div>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Next: who's allowed to touch this data?</div><p>Your data now survives restarts, scales under load, and evolves safely. The missing piece is that anyone can still call every endpoint. Next up: <a href="../fastapi/auth.html">Auth &amp; security</a> — OAuth2 password flow, JWTs, and protecting routes with (you guessed it) dependencies.</p></div></div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../fastapi/databases.html"><span class="pn-k">‹ Back</span><span class="pn-t">Databases (SQLModel)</span></a>
+            <a class="next" href="../fastapi/auth.html"><span class="pn-k">Next ›</span><span class="pn-t">Auth &amp; security</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#why">Why async DB</a>
+          <a href="#engine">Async engine &amp; session</a>
+          <a href="#session-dep">Session dependency</a>
+          <a href="#crud">CRUD, awaited</a>
+          <a href="#lazy">Lazy-loading trap</a>
+          <a href="#alembic">Alembic migrations</a>
+          <a href="#choose">Sync or async?</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">FastAPI · Async DB &amp; migrations</span>
+        <span class="fmono">FastAPI Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/runpad.js"></script>
+  <script src="../assets/js/playground.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>
