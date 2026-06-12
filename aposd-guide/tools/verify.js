@@ -20,6 +20,9 @@ const REQUIRED_SCRIPTS = ["lessons.js", "search-index.js", "main.js", "search.js
 const ENGINES = {
   refactor: "refactor.js",
   flashdeck: "flashcards.js",
+  flagspot: "flagspot.js",
+  decay: "decay.js",
+  depthgauge: "depthgauge.js",
 };
 
 function walk(dir) {

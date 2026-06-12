@@ -128,8 +128,73 @@
   <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">Keep it handy <span class="tag">reference</span></div><p>The printable one-pager lives at <a href="../reference/red-flags.html">Red-flags cheatsheet</a>, and you can drill them with <a href="../reference/flashcards.html">Flashcards</a>.</p></div></div>
 </section>
 
+<section class="section reveal" id="spot-them">
+  <h2><span class="section-num">04</span> Spot them live</h2>
+  <p>Reading the table is one thing; noticing the smell in real code mid-review is the skill. Three rounds — click the line where the red flag lives.</p>
+  <figure class="flagspot reveal" data-flagspot tabindex="0" aria-label="Red-flag spotter: find the smelly line in each snippet">
+    <script type="application/json" class="fs-config">{
+      "rounds": [
+        { "title": "Round 1 · a layer that earns nothing",
+          "code": [
+            "class TextDocument:",
+            "    def __init__(self, store):",
+            "        self._store = store",
+            "",
+            "    def insert(self, pos, text):",
+            "        self._store.insert(pos, text)",
+            "",
+            "    def delete(self, pos, n):",
+            "        self._store.delete(pos, n)"
+          ],
+          "hot": [5, 9],
+          "hint": "two methods do nothing but forward the call",
+          "flag": "Pass-through methods",
+          "why": "insert and delete forward to the store with the same signature and no new behaviour — this layer adds interface to learn without adding any power.",
+          "fix": "Collapse the layer, or make TextDocument speak a higher-level language (insert_paragraph, undo) that the store doesn't already speak." },
+        { "title": "Round 2 · one decision, two homes",
+          "code": [
+            "class LogReader:",
+            "    def parse(self, line):",
+            "        ts, level, msg = line.split(\"|\", 2)",
+            "        return Entry(ts, level, msg)",
+            "",
+            "class LogWriter:",
+            "    def format(self, e):",
+            "        return f\"{e.ts}|{e.level}|{e.msg}\""
+          ],
+          "hot": [6, 8],
+          "hint": "a piece of knowledge appears twice — click where it shows up AGAIN",
+          "flag": "Information leakage",
+          "why": "the pipe-separated layout lives in both classes. Change the format and reader + writer must move in lockstep — one design decision wearing two hats.",
+          "fix": "Give the format one owner: a single Log module with load/save and the separator defined exactly once." },
+        { "title": "Round 3 · the comment that isn't one",
+          "code": [
+            "def total_price(items, tax_rate):",
+            "    # multiply the subtotal by the tax rate and add it",
+            "    subtotal = sum(i.price for i in items)",
+            "    tax = subtotal * tax_rate",
+            "    return subtotal + tax"
+          ],
+          "hot": [2, 2],
+          "hint": "which line tells you nothing the code doesn't?",
+          "flag": "Comment repeats the code",
+          "why": "the comment restates lines 3–5 word for word. It adds reading time and zero information, and it will silently drift out of date the first time the code changes.",
+          "fix": "Comment what the code can't say — is tax_rate a fraction or a percent? why is tax not rounded here? — or delete the line." }
+      ]
+    }</script>
+    <div class="fs-stage"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reveal" type="button">Reveal</button>
+      <button class="fs-btn fs-next" type="button">Next round &rsaquo;</button>
+      <button class="fs-btn fs-reset" type="button">Reset</button>
+      <span class="fs-status"></span>
+    </div>
+    <figcaption class="viz-note">Click the smelly line &middot; &uarr;/&darr; + Enter works too &middot; &rarr; for the next round once solved.</figcaption>
+  </figure>
+</section>
+
 <section class="section reveal" id="check">
-  <h2><span class="section-num">04</span> Check yourself</h2>
+  <h2><span class="section-num">05</span> Check yourself</h2>
   <div class="quiz" data-quiz>
     <p class="q">You can't think of a good name for a method, and a short comment won't capture what it does. What's that telling you?</p>
     <div class="quiz-opts">
@@ -151,6 +216,7 @@
           <a href="#the-one-rule">The one rule under all the rules</a>
           <a href="#principles">The design principles</a>
           <a href="#red-flags">The red flags</a>
+          <a href="#spot-them">Spot them live</a>
           <a href="#check">Check yourself</a>
         </nav>
       </div>
@@ -165,6 +231,7 @@
   <script src="../assets/js/search-index.js"></script>
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/flagspot.js"></script>
   <script src="../assets/js/progress.js"></script>
 </body>
 </html>

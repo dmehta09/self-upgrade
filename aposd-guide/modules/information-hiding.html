@@ -95,6 +95,37 @@
   <p class="takeaway"><b>Leakage</b> is when one design decision is reflected in <b>multiple modules</b>, coupling them.</p>
   <p>The tell: you change one module and a “separate” one must change in lockstep. If two classes both know the on-disk layout of a file, the format has leaked across both — they're secretly one decision wearing two hats. Leakage is the single most common source of unnecessary dependencies.</p>
   <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Red flag — temporal decomposition <span class="tag">gotcha</span></div><p>Designing modules around the <b>order things happen</b> (“first read, then process, then write”) instead of around <b>knowledge</b>. It feels natural but it scatters the same decision across the read step and the write step — guaranteed leakage. Organise by <em>what a module knows</em>, not <em>when it runs</em>.</p></div></div>
+  <p>Try spotting it cold:</p>
+  <figure class="flagspot reveal" data-flagspot tabindex="0" aria-label="Red-flag spotter: find the temporal decomposition">
+    <script type="application/json" class="fs-config">{
+      "rounds": [
+        { "title": "Where did the knowledge leak?",
+          "code": [
+            "# \"read, then modify, then write\" — split by execution order",
+            "class FileReader:",
+            "    def read(self, path):",
+            "        text = open(path).read()",
+            "        return text.split(\"\\n\\n\")   # paragraph = blank line",
+            "",
+            "class FileWriter:",
+            "    def write(self, path, paras):",
+            "        open(path, \"w\").write(\"\\n\\n\".join(paras))"
+          ],
+          "hot": [7, 9],
+          "hint": "the paragraph-format decision lives at BOTH ends of the pipeline — click the second copy",
+          "flag": "Temporal decomposition",
+          "why": "the classes mirror when things happen (read → write), so the “paragraphs are separated by blank lines” decision is forced into both ends of the pipeline. They will change in lockstep forever.",
+          "fix": "Organise by knowledge, not by order: one Document module owns the format and exposes load/save." }
+      ]
+    }</script>
+    <div class="fs-stage"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reveal" type="button">Reveal</button>
+      <button class="fs-btn fs-reset" type="button">Reset</button>
+      <span class="fs-status"></span>
+    </div>
+    <figcaption class="viz-note">Click the smelly line &middot; &uarr;/&darr; + Enter works too.</figcaption>
+  </figure>
 </section>
 
 <section class="section reveal" id="refactor">
@@ -186,6 +217,7 @@ class Config:
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/refactor.js"></script>
+  <script src="../assets/js/flagspot.js"></script>
   <script src="../assets/js/progress.js"></script>
 </body>
 </html>

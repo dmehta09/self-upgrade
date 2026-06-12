@@ -22,11 +22,11 @@
 const MODULES = [
   { key: "complexity", label: "Complexity — the enemy", pages: [
     { slug: "what-is-complexity",    title: "What is complexity?",                nav: "What is complexity?",   id: "cx-complexity" },
-    { slug: "strategic-vs-tactical", title: "Strategic vs tactical programming",  nav: "Strategic vs tactical", id: "cx-tactical", widgets: ["refactor.js"] },
+    { slug: "strategic-vs-tactical", title: "Strategic vs tactical programming",  nav: "Strategic vs tactical", id: "cx-tactical", widgets: ["refactor.js", "decay.js"] },
   ]},
   { key: "modules", label: "Deep modules — the core move", pages: [
-    { slug: "deep-modules",                          title: "Deep modules",                          nav: "Deep modules",          id: "md-deep",    widgets: ["refactor.js"] },
-    { slug: "information-hiding",                     title: "Information hiding & leakage",          nav: "Information hiding",     id: "md-hiding",  widgets: ["refactor.js"] },
+    { slug: "deep-modules",                          title: "Deep modules",                          nav: "Deep modules",          id: "md-deep",    widgets: ["refactor.js", "depthgauge.js"] },
+    { slug: "information-hiding",                     title: "Information hiding & leakage",          nav: "Information hiding",     id: "md-hiding",  widgets: ["refactor.js", "flagspot.js"] },
     { slug: "general-purpose-modules",               title: "General-purpose modules are deeper",    nav: "General-purpose",        id: "md-general", widgets: ["refactor.js"] },
     { slug: "different-layer-different-abstraction", title: "Different layer, different abstraction", nav: "Layers & pass-through",  id: "md-layers",  widgets: ["refactor.js"] },
     { slug: "pull-complexity-down",                  title: "Pull complexity down · together or apart", nav: "Pull complexity down", id: "md-pull",   widgets: ["refactor.js"] },
@@ -34,11 +34,11 @@ const MODULES = [
   { key: "craft", label: "Everyday craft", pages: [
     { slug: "define-errors-out-of-existence", title: "Define errors out of existence",    nav: "Define errors away",   id: "cf-errors",   widgets: ["refactor.js"] },
     { slug: "comments-why-and-what",          title: "Comments: why & what",              nav: "Comments: why & what", id: "cf-comments", widgets: ["refactor.js"] },
-    { slug: "names-consistency-obvious",      title: "Names, consistency & obvious code", nav: "Names & obvious code", id: "cf-names",    widgets: ["refactor.js"] },
+    { slug: "names-consistency-obvious",      title: "Names, consistency & obvious code", nav: "Names & obvious code", id: "cf-names",    widgets: ["refactor.js", "flagspot.js"] },
   ]},
   { key: "judgment", label: "Judgment", pages: [
     { slug: "design-it-twice-and-trends", title: "Design it twice · trends · performance", nav: "Design twice & trends", id: "jd-twice" },
-    { slug: "red-flags-playbook",         title: "The red-flags playbook",                 nav: "Red-flags playbook",    id: "jd-redflags" },
+    { slug: "red-flags-playbook",         title: "The red-flags playbook",                 nav: "Red-flags playbook",    id: "jd-redflags", widgets: ["flagspot.js"] },
   ]},
 ];
 
