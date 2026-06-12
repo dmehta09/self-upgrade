@@ -23,6 +23,7 @@ const ENGINES = {
   flagspot: "flagspot.js",
   decay: "decay.js",
   depthgauge: "depthgauge.js",
+  trainer: "quizdrill.js",
 };
 
 function walk(dir) {

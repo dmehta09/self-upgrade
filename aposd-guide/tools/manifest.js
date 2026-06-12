@@ -46,8 +46,9 @@ const MODULES = [
 
 /* Reference surfaces — NOT lessons (no progress checkmark) */
 const REFERENCE = [
-  { dir: "reference", slug: "red-flags",  title: "Red-flags cheatsheet", nav: "Red-flags cheatsheet", tool: "reference", widgets: [] },
+  { dir: "reference", slug: "red-flags",  title: "Red-flags cheatsheet", nav: "Red-flags cheatsheet", tool: "reference", widgets: ["quizdrill.js"] },
   { dir: "reference", slug: "flashcards", title: "Flashcards",           nav: "Flashcards",           tool: "reference", widgets: ["flashcards.js"] },
+  { dir: "reference", slug: "drills",     title: "Timed APOSD drills",   nav: "Timed drills",         tool: "reference", widgets: ["quizdrill.js"] },
 ];
 
 /* ---- helpers ---- */
