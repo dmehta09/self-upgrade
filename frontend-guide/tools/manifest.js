@@ -72,7 +72,7 @@ const MODULES = [
 /* Interview prep (folder interview/, data-tool "interview", lesson-module "interview") */
 const INTERVIEW_PREP = [
   { dir: "interview", slug: "index",         title: "How frontend interviews work", nav: "How to interview", id: "iv-method" },
-  { dir: "interview", slug: "question-bank", title: "Frontend question bank",       nav: "Question bank",    id: "iv-bank" },
+  { dir: "interview", slug: "question-bank", title: "Frontend question bank",       nav: "Question bank",    id: "iv-bank",   widgets: ["quizdrill.js"] },
 ];
 /* Frontend design round (folder interview/design-scenarios/) */
 const DESIGN_SCENARIOS = [
@@ -86,6 +86,7 @@ const DESIGN_SCENARIOS = [
 const REFERENCE = [
   { dir: "interview", slug: "cheatsheets", title: "Frontend cheat-sheets", nav: "Cheat-sheets", tool: "interview", widgets: [] },
   { dir: "interview", slug: "flashcards",  title: "Frontend flashcards",   nav: "Flashcards",   tool: "interview", widgets: ["flashcards.js"] },
+  { dir: "interview", slug: "drills",      title: "Timed frontend drills", nav: "Timed drills", tool: "interview", widgets: ["quizdrill.js"] },
 ];
 
 /* ---- helpers ---- */

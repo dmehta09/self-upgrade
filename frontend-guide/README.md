@@ -17,9 +17,9 @@ Press `/` (or ⌘/Ctrl-K) anywhere to search. Toggle light/dark, top-right. Prog
 
 ## What's inside
 
-A roadmap home (Junior → Mid → Senior) + 8 modules + an interview hub (46 pages):
+A roadmap home (Junior → Mid → Senior) + 8 modules + an interview hub (47 pages):
 
-`foundations` (incl. advanced TypeScript) · `react` · `nextjs` · `styling` · `data` · `perf` · `testing` · `ship` (incl. frontend security: XSS, CSP & CSRF) · `interview` (question bank, cheat-sheets, flashcards, design-round scenarios incl. a realtime live feed).
+`foundations` (incl. advanced TypeScript) · `react` · `nextjs` · `styling` · `data` · `perf` · `testing` · `ship` (incl. frontend security: XSS, CSP & CSRF) · `interview` (question bank, cheat-sheets, flashcards, timed drills, design-round scenarios incl. a realtime live feed).
 
 Every topic page runs **fundamentals → pro** in one page: an analogy first, then the precise version, a visual, 2–3 worked examples, gotchas, a quiz, and inline "say it out loud" interview Q&A.
 
@@ -32,6 +32,7 @@ Every topic page runs **fundamentals → pro** in one page: an analogy first, th
 - **bugspot** — click the buggy line in a TSX snippet (stale closure, identity, effect races, XSS sinks); name the bug, see the fix.
 - **cachelab** — a TanStack Query cache entry from mount to garbage collection (`staleTime`/`gcTime`, background refetch).
 - **a11ylens** — toggle div-soup vs semantic markup and compare the computed accessibility trees.
+- **quizdrill** — timed chip-quiz drills (`interview/drills.html`): *server or client?*, *pick the tool*, *debug it* — 30–45 s per question, designed-in trap answers, misses link back to the owning lesson, best scores persist in `localStorage["fe-drill"]`.
 - Plus reused `flashcards.js`, the `.quiz`, search, and progress engines.
 
 ## Architecture

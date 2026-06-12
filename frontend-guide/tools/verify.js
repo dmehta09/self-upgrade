@@ -27,6 +27,7 @@ const ENGINES = {
   bugspot: "bugspot.js",
   cachelab: "cachelab.js",
   a11ylens: "a11ylens.js",
+  trainer: "quizdrill.js",
 };
 
 function walk(dir) {
