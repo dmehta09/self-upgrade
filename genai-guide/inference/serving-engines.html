@@ -210,6 +210,49 @@
               <p>Static batching is a tour bus that won't leave a stop until every passenger from the last stop has been dropped off — even if most got off early, the bus idles. Continuous batching is a shared taxi that, the instant a passenger reaches their destination, immediately picks up someone from the waiting line for that now-empty seat. Same vehicle, far less idle time, many more riders per hour.</p>
             </div>
           </div>
+          <p>Watch the taxi version run. One lane per request, one column per token step — note how a freed slot is refilled on the <em>very next</em> step:</p>
+          <figure class="servelab reveal" data-servelab aria-label="Continuous batching simulator">
+            <script type="application/json" class="sl-config">
+            { "lanes": [ { "id": "a", "label": "req A (40 tok)" },
+                         { "id": "b", "label": "req B (300 tok)" },
+                         { "id": "c", "label": "req C (8 tok)" },
+                         { "id": "d", "label": "req D" },
+                         { "id": "e", "label": "req E" } ],
+              "frames": [
+                { "marks": { "a": "prefill", "b": "prefill", "c": "prefill" },
+                  "caption": "Three requests arrive together and <b>prefill</b> — the whole prompt in one parallel, compute-bound pass." },
+                { "marks": { "a": "decode", "b": "decode", "c": "decode", "d": "queue" },
+                  "caption": "<b>Decode</b> begins: one token per step for everyone. Request D arrives, but all slots are busy — it queues." },
+                { "marks": { "a": "decode", "b": "decode", "c": "done", "d": "queue" },
+                  "caption": "C finishes its short answer. A <b>static</b> batch would now drag this empty seat along until <em>everyone</em> finished — including 300-token B." },
+                { "marks": { "a": "decode", "b": "decode", "c": "done", "d": "prefill" },
+                  "caption": "<b>Continuous batching:</b> on the very next token step, D is already prefilling in C's old slot. The scheduler re-forms the batch after every single step." },
+                { "marks": { "a": "done", "b": "decode", "c": "done", "d": "decode", "e": "queue" },
+                  "caption": "A finishes; E arrives and queues. Seats keep turning over." },
+                { "marks": { "b": "decode", "c": "done", "d": "decode", "e": "prefill" },
+                  "caption": "E is seated one step later. No slot ever cools down waiting for the batch to drain." },
+                { "marks": { "b": "decode", "d": "decode", "e": "decode" },
+                  "caption": "Three streams running again — the batch is a different set of requests than it started with, and that's the point." },
+                { "marks": { "b": "done", "d": "decode", "e": "decode" },
+                  "caption": "The 300-token request finally ends — and <b>nobody waited for it</b>. Under static batching, D and E would only be starting now. That gap is the 2–4× throughput win." } ] }
+            </script>
+            <div data-role="stage"><p>An animated batching simulator. Enable JavaScript to play it.</p></div>
+            <div class="sl-legend">
+              <span class="lg-queue"><i></i>queued</span>
+              <span class="lg-prefill"><i></i>prefill</span>
+              <span class="lg-decode"><i></i>decode</span>
+              <span class="lg-done"><i></i>done</span>
+            </div>
+            <div class="sl-caption" data-role="caption"></div>
+            <div class="sl-controls">
+              <button class="sl-btn sl-reset" aria-label="Restart">⏮</button>
+              <button class="sl-btn sl-prev" aria-label="Previous step">‹</button>
+              <button class="sl-btn sl-play" aria-label="Play">▶</button>
+              <button class="sl-btn sl-next" aria-label="Next step">›</button>
+              <span class="sl-step">1 / 8</span>
+            </div>
+            <figcaption class="muted">Step with ←/→ or the buttons · Space plays.</figcaption>
+          </figure>
         </section>
 
         <section class="section reveal" id="chunked-prefill">
@@ -327,6 +370,7 @@
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/visualizer.js"></script>
+  <script src="../assets/js/genai-servelab.js"></script>
   <script src="../assets/js/progress.js"></script>
 </body>
 </html>

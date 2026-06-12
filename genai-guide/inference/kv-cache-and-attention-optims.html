@@ -225,6 +225,48 @@
               <p>During decode the GPU is mostly <em>idle on compute</em> and bottlenecked on <strong>memory bandwidth</strong>: every step it must read the entire KV cache (plus the relevant weights) out of memory just to produce one token. That's why a bigger cache directly means slower per-token generation, and why shrinking the cache is one of the most effective speed-ups. "Add more FLOPs" rarely helps; "move fewer bytes" almost always does.</p>
             </div>
           </div>
+          <p>Watch the cache become the bottleneck. Three chats on one GPU; the meter tracks KV blocks (16 total):</p>
+          <figure class="servelab reveal" data-servelab aria-label="KV-cache pressure simulator">
+            <script type="application/json" class="sl-config">
+            { "lanes": [ { "id": "a", "label": "chat A (long)" },
+                         { "id": "b", "label": "chat B" },
+                         { "id": "c", "label": "chat C" } ],
+              "kv": { "label": "KV blocks", "max": 16 },
+              "frames": [
+                { "kv": 4, "marks": { "a": "prefill" },
+                  "caption": "Chat A's 4,000-token prompt prefills — its KV cache is born at 4 blocks, all at once." },
+                { "kv": 9, "marks": { "a": "decode", "b": "prefill" },
+                  "caption": "B joins; its prefill writes a whole prompt's worth of K and V in one go. The meter jumps." },
+                { "kv": 10, "marks": { "a": "decode", "b": "decode" },
+                  "caption": "Now both decode — and <b>every generated token appends</b> K and V. The meter creeps up every step and never comes down on its own." },
+                { "kv": 11, "marks": { "a": "decode", "b": "decode", "c": "queue" },
+                  "caption": "C arrives needing 4 blocks of its own. 5 are left — the scheduler does the math before admitting anyone." },
+                { "kv": 15, "marks": { "a": "decode", "b": "decode", "c": "prefill" },
+                  "caption": "C is admitted: 15 / 16. Notice the GPU's <b>memory</b>, not its arithmetic, has become the scarce resource." },
+                { "kv": 16, "marks": { "a": "decode", "b": "decode", "c": "decode" },
+                  "caption": "Full. The next token for <em>any</em> of these chats needs a block that doesn't exist." },
+                { "kv": 12, "marks": { "a": "evict", "b": "decode", "c": "decode" },
+                  "caption": "The scheduler <b>preempts chat A</b> — its blocks are freed (to be recomputed or swapped back later). This is KV pressure showing up as real user latency." },
+                { "kv": 13, "marks": { "a": "queue", "b": "decode", "c": "decode" },
+                  "caption": "A waits for re-admission while B and C stream on. Memory that grows with <b>tokens × users</b> is exactly why the next two sections — PagedAttention and prefix caching — exist." } ] }
+            </script>
+            <div data-role="stage"><p>An animated KV-cache simulator. Enable JavaScript to play it.</p></div>
+            <div class="sl-legend">
+              <span class="lg-queue"><i></i>queued</span>
+              <span class="lg-prefill"><i></i>prefill</span>
+              <span class="lg-decode"><i></i>decode</span>
+              <span class="lg-evict"><i></i>evicted</span>
+            </div>
+            <div class="sl-caption" data-role="caption"></div>
+            <div class="sl-controls">
+              <button class="sl-btn sl-reset" aria-label="Restart">⏮</button>
+              <button class="sl-btn sl-prev" aria-label="Previous step">‹</button>
+              <button class="sl-btn sl-play" aria-label="Play">▶</button>
+              <button class="sl-btn sl-next" aria-label="Next step">›</button>
+              <span class="sl-step">1 / 8</span>
+            </div>
+            <figcaption class="muted">Step with ←/→ or the buttons · Space plays · the meter turns red near capacity.</figcaption>
+          </figure>
         </section>
 
         <section class="section reveal" id="paged-attention">
@@ -343,6 +385,7 @@
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/visualizer.js"></script>
+  <script src="../assets/js/genai-servelab.js"></script>
   <script src="../assets/js/progress.js"></script>
 </body>
 </html>

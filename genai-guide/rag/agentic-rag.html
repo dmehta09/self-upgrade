@@ -230,6 +230,41 @@
               <p>CRAG is like cooking dinner: first you check the fridge (your vector store). If the ingredients are there, great. If they're missing or off, you don't just cook a bad meal — you order in (web search). Grading-then-falling-back keeps a weak local index from poisoning the answer.</p>
             </div>
           </div>
+          <p>Here's the loop in motion — watch the grader refuse to answer from half the evidence:</p>
+          <figure class="ragflow reveal" data-ragflow aria-label="Agentic RAG loop simulator">
+            <script type="application/json" class="rf-config">
+            { "stages": [ { "id": "q",     "label": "query",    "kind": "query" },
+                          { "id": "ret",   "label": "retrieve", "kind": "retrieve" },
+                          { "id": "grade", "label": "grade",    "kind": "verify" },
+                          { "id": "rw",    "label": "rewrite",  "kind": "query" },
+                          { "id": "gen",   "label": "generate", "kind": "generate" } ],
+              "frames": [
+                { "query": "Compare our Q1 vs Q2 churn", "at": "q", "detail": "needs evidence from TWO different docs",
+                  "caption": "A multi-part question. One-shot retrieval tends to satisfy only the loudest half of it." },
+                { "query": "Compare our Q1 vs Q2 churn", "at": "ret", "verdict": "run", "detail": "top-3: Q1-report.pdf chunks only",
+                  "caption": "First retrieval: all three chunks are about <b>Q1</b>. Naive RAG would happily answer anyway — and guess Q2." },
+                { "query": "Compare our Q1 vs Q2 churn", "at": "grade", "verdict": "miss", "badge": "✕ insufficient", "detail": "grader: no Q2 evidence in context",
+                  "caption": "The <b>grader</b> scores the chunks against the question and refuses: half the evidence is missing." },
+                { "query": "Q2 2026 churn rate", "at": "rw", "verdict": "loop", "detail": "agent writes a targeted follow-up query",
+                  "caption": "Instead of answering badly, the agent <b>rewrites the query</b> to hunt for exactly what's missing." },
+                { "query": "Q2 2026 churn rate", "at": "ret", "verdict": "pass", "detail": "top-1: board-deck-Q2.pdf §metrics",
+                  "caption": "Second pass finds the Q2 numbers. Both retrievals stay in the context." },
+                { "query": "Compare our Q1 vs Q2 churn", "at": "grade", "verdict": "pass", "detail": "both quarters now covered",
+                  "caption": "The grader is satisfied — the context can actually support a comparison." },
+                { "query": "Compare our Q1 vs Q2 churn", "at": "gen", "verdict": "return", "detail": "“Churn fell from 4.1% [1] to 3.2% [2]”",
+                  "caption": "A grounded comparison with one citation per quarter. The price of the loop: <b>extra LLM calls and latency</b> — which is why you reserve agentic RAG for questions that earn it." } ] }
+            </script>
+            <div data-role="stage"><p>An animated agentic-RAG simulator. Enable JavaScript to play it.</p></div>
+            <div class="rf-caption" data-role="caption"></div>
+            <div class="rf-controls">
+              <button class="rf-btn rf-reset" aria-label="Restart">⏮</button>
+              <button class="rf-btn rf-prev" aria-label="Previous step">‹</button>
+              <button class="rf-btn rf-play" aria-label="Play">▶</button>
+              <button class="rf-btn rf-next" aria-label="Next step">›</button>
+              <span class="rf-step">1 / 7</span>
+            </div>
+            <figcaption class="muted">Step with ←/→ or the buttons · Space plays · note the card looping back to retrieve.</figcaption>
+          </figure>
         </section>
 
         <section class="section reveal" id="routing">
@@ -323,6 +358,7 @@
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/visualizer.js"></script>
+  <script src="../assets/js/genai-ragflow.js"></script>
   <script src="../assets/js/progress.js"></script>
 </body>
 </html>

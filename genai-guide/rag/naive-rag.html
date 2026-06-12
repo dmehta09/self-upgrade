@@ -294,6 +294,46 @@ answer = llm(prompt)
               </tbody>
             </table>
           </div>
+          <p>Watch failure #1 happen. The same pipeline, two queries — one that embeddings love, one that they quietly butcher:</p>
+          <figure class="ragflow reveal" data-ragflow aria-label="Naive RAG pipeline simulator">
+            <script type="application/json" class="rf-config">
+            { "stages": [ { "id": "q",   "label": "query",         "kind": "query" },
+                          { "id": "emb", "label": "embed",         "kind": "query" },
+                          { "id": "vec", "label": "vector search", "kind": "retrieve" },
+                          { "id": "asm", "label": "assemble",      "kind": "assemble" },
+                          { "id": "gen", "label": "generate",      "kind": "generate" },
+                          { "id": "ver", "label": "cite check",    "kind": "verify" } ],
+              "frames": [
+                { "query": "What is the refund window for EU orders?", "at": "q", "detail": "a fact that lives in YOUR docs, not the model's weights",
+                  "caption": "A user asks something the model can't know from pretraining. Time to <b>retrieve</b>." },
+                { "query": "What is the refund window for EU orders?", "at": "emb", "verdict": "run", "detail": "→ one 1,536-dim query vector",
+                  "caption": "The query is embedded — it becomes a point in the same <b>meaning-space</b> as your chunks." },
+                { "query": "What is the refund window for EU orders?", "at": "vec", "verdict": "pass", "detail": "top-3 by cosine: refund-policy.md §EU …",
+                  "caption": "Nearest-neighbor search finds the right chunk — paraphrases like “refund window” vs “return period” are exactly what embeddings are good at." },
+                { "query": "What is the refund window for EU orders?", "at": "asm", "verdict": "run", "detail": "system + 3 chunks + question",
+                  "caption": "The chunks are pasted into the prompt with the instruction: <b>answer only from this context, and cite it</b>." },
+                { "query": "What is the refund window for EU orders?", "at": "gen", "verdict": "return", "detail": "“EU orders: 14 days from delivery [1]”",
+                  "caption": "The model writes a <b>grounded</b> answer with a citation." },
+                { "query": "What is the refund window for EU orders?", "at": "ver", "verdict": "pass", "detail": "[1] exists and contains the claim",
+                  "caption": "Citation verified. Happy path done — now the classic failure." },
+                { "query": "Checkout fails with error E-1234", "at": "vec", "verdict": "miss", "badge": "✕ wrong chunks", "detail": "neighbors: a blog post about “handling errors gracefully”",
+                  "caption": "<b>Bad retrieval.</b> “E-1234” is an exact keyword — embeddings blur it into generic “error-ness”, and the real troubleshooting chunk never makes top-k." },
+                { "query": "Checkout fails with error E-1234", "at": "gen", "verdict": "run", "detail": "context is useless → model improvises",
+                  "caption": "With the wrong context in the prompt, the model falls back on its own memory and <b>invents a plausible fix</b>." },
+                { "query": "Checkout fails with error E-1234", "at": "ver", "verdict": "miss", "badge": "✕ ungrounded", "detail": "claim not supported by any retrieved chunk",
+                  "caption": "The grounding check catches it — but the user already got a wrong answer. The fix is <b>keyword + vector</b> search: that's the next lesson." } ] }
+            </script>
+            <div data-role="stage"><p>An animated RAG-pipeline simulator. Enable JavaScript to play it.</p></div>
+            <div class="rf-caption" data-role="caption"></div>
+            <div class="rf-controls">
+              <button class="rf-btn rf-reset" aria-label="Restart">⏮</button>
+              <button class="rf-btn rf-prev" aria-label="Previous step">‹</button>
+              <button class="rf-btn rf-play" aria-label="Play">▶</button>
+              <button class="rf-btn rf-next" aria-label="Next step">›</button>
+              <span class="rf-step">1 / 9</span>
+            </div>
+            <figcaption class="muted">Step with ←/→ or the buttons · Space plays · the badge shows each stage's verdict.</figcaption>
+          </figure>
           <div class="callout gotcha">
             <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
             <div class="co-body">
@@ -365,6 +405,7 @@ answer = llm(prompt)
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/visualizer.js"></script>
+  <script src="../assets/js/genai-ragflow.js"></script>
   <script src="../assets/js/progress.js"></script>
 </body>
 </html>

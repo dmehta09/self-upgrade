@@ -249,6 +249,40 @@ fused  = rrf(dense, sparse)               # -> d1, d3, ... (agreed-on docs rise)
             <div class="cap">This two-stage shape — cheap recall then precise reranking — is the workhorse of modern RAG. Teams routinely report it as their biggest single quality jump.</div>
           </div>
           <p>Why does it help so much? Because the reranker sees the query and the document <em>together</em> and can judge true relevance, whereas first-stage embeddings were computed before anyone knew the query. That difference is the bi-encoder vs cross-encoder distinction — next.</p>
+          <p>Here's the full machine rescuing the query that pure vector search botched in the last lesson:</p>
+          <figure class="ragflow reveal" data-ragflow aria-label="Hybrid search and reranking simulator">
+            <script type="application/json" class="rf-config">
+            { "stages": [ { "id": "q",      "label": "query",        "kind": "query" },
+                          { "id": "bm25",   "label": "BM25 keyword", "kind": "retrieve" },
+                          { "id": "vec",    "label": "vector",       "kind": "retrieve" },
+                          { "id": "fuse",   "label": "RRF fuse",     "kind": "fuse" },
+                          { "id": "rerank", "label": "rerank",       "kind": "rerank" },
+                          { "id": "gen",    "label": "generate",     "kind": "generate" } ],
+              "frames": [
+                { "query": "Checkout fails with error E-1234", "at": "q", "detail": "the query that broke naive RAG",
+                  "caption": "Same query, better pipeline. This time it fans out to <b>two</b> retrievers in parallel." },
+                { "query": "Checkout fails with error E-1234", "at": "bm25", "verdict": "pass", "detail": "exact hit: troubleshooting.md §E-1234 (rank 1)",
+                  "caption": "The <b>keyword leg</b> treats “E-1234” as the rare, exact token it is — BM25 rewards exactly this." },
+                { "query": "Checkout fails with error E-1234", "at": "vec", "verdict": "run", "detail": "neighbors: checkout-flow.md, payment-errors.md",
+                  "caption": "The <b>vector leg</b> contributes semantically related chunks the keywords alone would never surface. Neither list is complete — together they cover each other's blind spots." },
+                { "query": "Checkout fails with error E-1234", "at": "fuse", "verdict": "run", "badge": "⊕ RRF", "detail": "score(d) = Σ 1 / (60 + rank)",
+                  "caption": "<b>Reciprocal Rank Fusion</b> merges the two ranked lists using only <em>ranks</em> — no need to make BM25 scores and cosine scores comparable." },
+                { "query": "Checkout fails with error E-1234", "at": "rerank", "verdict": "pass", "detail": "cross-encoder: §E-1234 → 0.98, blog post → 0.12",
+                  "caption": "The <b>cross-encoder</b> reads query and chunk together and re-scores the top ~50. The true fix chunk jumps to #1; the plausible-but-useless blog post sinks." },
+                { "query": "Checkout fails with error E-1234", "at": "gen", "verdict": "return", "detail": "“E-1234 means a stale payment token — clear it like so [1]”",
+                  "caption": "The model now generates from the <b>right</b> 3 chunks — grounded answer, real citation. Retrieve wide, rerank narrow." } ] }
+            </script>
+            <div data-role="stage"><p>An animated hybrid-retrieval simulator. Enable JavaScript to play it.</p></div>
+            <div class="rf-caption" data-role="caption"></div>
+            <div class="rf-controls">
+              <button class="rf-btn rf-reset" aria-label="Restart">⏮</button>
+              <button class="rf-btn rf-prev" aria-label="Previous step">‹</button>
+              <button class="rf-btn rf-play" aria-label="Play">▶</button>
+              <button class="rf-btn rf-next" aria-label="Next step">›</button>
+              <span class="rf-step">1 / 6</span>
+            </div>
+            <figcaption class="muted">Step with ←/→ or the buttons · Space plays.</figcaption>
+          </figure>
         </section>
 
         <section class="section reveal" id="bi-vs-cross">
@@ -365,6 +399,7 @@ fused  = rrf(dense, sparse)               # -> d1, d3, ... (agreed-on docs rise)
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/visualizer.js"></script>
+  <script src="../assets/js/genai-ragflow.js"></script>
   <script src="../assets/js/progress.js"></script>
 </body>
 </html>

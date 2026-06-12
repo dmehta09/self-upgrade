@@ -51,10 +51,10 @@ const MODULES = [
   ]},
   { key: "rag", label: "RAG", pages: [
     { slug: "index",                          title: "RAG — overview",                      nav: "Overview",          id: "rag-overview" },
-    { slug: "naive-rag",                      title: "RAG from scratch",                    nav: "Naive RAG",         id: "rag-naive" },
-    { slug: "hybrid-search-and-reranking",    title: "Hybrid search & reranking",           nav: "Hybrid search & rerank", id: "rag-hybrid" },
+    { slug: "naive-rag",                      title: "RAG from scratch",                    nav: "Naive RAG",         id: "rag-naive", widgets: ["genai-ragflow.js"] },
+    { slug: "hybrid-search-and-reranking",    title: "Hybrid search & reranking",           nav: "Hybrid search & rerank", id: "rag-hybrid", widgets: ["genai-ragflow.js"] },
     { slug: "advanced-retrieval",             title: "Late interaction, multi-vector & GraphRAG", nav: "Advanced retrieval", id: "rag-advanced" },
-    { slug: "agentic-rag",                    title: "Agentic RAG",                         nav: "Agentic RAG",       id: "rag-agentic" },
+    { slug: "agentic-rag",                    title: "Agentic RAG",                         nav: "Agentic RAG",       id: "rag-agentic", widgets: ["genai-ragflow.js"] },
     { slug: "rag-vs-finetuning-vs-longcontext", title: "RAG vs fine-tune vs long context", nav: "RAG vs fine-tune",  id: "rag-vs" },
   ]},
   { key: "agents", label: "Agents", pages: [
@@ -73,8 +73,8 @@ const MODULES = [
   ]},
   { key: "inference", label: "Inference & serving", pages: [
     { slug: "index",                       title: "Inference — overview",     nav: "Overview",            id: "if-overview" },
-    { slug: "kv-cache-and-attention-optims", title: "The KV cache",           nav: "KV cache",            id: "if-kv" },
-    { slug: "serving-engines",             title: "Serving engines",          nav: "Serving engines",     id: "if-serving" },
+    { slug: "kv-cache-and-attention-optims", title: "The KV cache",           nav: "KV cache",            id: "if-kv", widgets: ["genai-servelab.js"] },
+    { slug: "serving-engines",             title: "Serving engines",          nav: "Serving engines",     id: "if-serving", widgets: ["genai-servelab.js"] },
     { slug: "speculative-decoding",        title: "Speculative decoding",     nav: "Speculative decoding", id: "if-spec" },
     { slug: "quantization-for-inference",  title: "Quantization for inference", nav: "Quantization",      id: "if-quant" },
   ]},

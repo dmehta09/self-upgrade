@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-/* Static verification for the DSA Field Guide.
+/* Static verification for the GenAI Field Guide.
    Crawls every .html under the project root and checks:
      • every internal link (href) resolves to an existing file
      • every #anchor (in-page, page-nav, TOC, sidebar) resolves to an existing id
      • every <script src> and <link href> asset resolves
      • no raw "<" inside <code> blocks (would break the highlighter / HTML parse)
-     • each lesson page wires the 7 JS modules and sets SITE_BASE + data-lesson
+     • each lesson page wires the 6 core JS modules and sets SITE_BASE + data-lesson
      • every data-lesson id is registered in lessons.js, and every lesson url exists
+     • every page that hosts a widget loads that widget's script (ENGINES map)
    Usage:  node tools/verify.js
 */
 const fs = require("fs");
@@ -100,6 +101,21 @@ for (const f of files) {
     if (!/window\.SITE_BASE/.test(html)) problems.push(`${rel(f)}: lesson page missing window.SITE_BASE`);
     for (const js of ["lessons.js", "search-index.js", "main.js", "search.js", "visualizer.js", "progress.js"])
       if (!html.includes("assets/js/" + js)) problems.push(`${rel(f)}: missing <script> ${js}`);
+  }
+
+  // ---- widget wiring: a host element on the page requires its engine script ----
+  const ENGINES = [
+    [/class="genai-lab/, "genai-lab.js"],
+    [/class="genai-sampling/, "genai-sampling.js"],
+    [/class="genai-vectors/, "genai-vectors.js"],
+    [/class="flashdeck/, "flashcards.js"],
+    [/data-ragflow/, "genai-ragflow.js"],
+    [/data-servelab/, "genai-servelab.js"],
+    [/data-trainer/, "quizdrill.js"],
+  ];
+  for (const [hostRe, js] of ENGINES) {
+    if (hostRe.test(html) && !html.includes("assets/js/" + js))
+      problems.push(`${rel(f)}: hosts ${hostRe} but missing <script> ${js}`);
   }
 }
 
