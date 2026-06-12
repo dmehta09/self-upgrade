@@ -122,7 +122,9 @@ const MODULES = [
 /* Interview prep group (folder interview/, data-tool "interview", lesson-module "interview") */
 const INTERVIEW_PREP = [
   { dir: "interview", slug: "index",         title: "How to interview for GenAI roles", nav: "How to interview", id: "iv-method" },
-  { dir: "interview", slug: "question-bank", title: "GenAI question bank",              nav: "Question bank",    id: "iv-bank" },
+  { dir: "interview", slug: "question-bank", title: "GenAI question bank",              nav: "Question bank",    id: "iv-bank", widgets: ["quizdrill.js"] },
+  /* practice surface, NOT a lesson (no id) */
+  { dir: "interview", slug: "drills",        title: "Timed GenAI drills",               nav: "Timed drills",     widgets: ["quizdrill.js"] },
 ];
 /* GenAI system-design group (folder interview/system-design/, data-tool "interview", module "interview") */
 const SYSTEM_DESIGN = [

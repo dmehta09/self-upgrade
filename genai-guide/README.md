@@ -33,7 +33,7 @@ No build step, no framework, no dependencies. The only external resource is Goog
 - **Safety & security** — prompt injection, OWASP LLM Top 10, guardrails, governance
 - **Image & diffusion** · **Audio, video & VLMs** — diffusion, DiT/flow matching, STT/TTS, video, VLMs
 - **Productionization** — cost & latency, prompt caching & cost engineering, routing/gateways, reliable deployment
-- **Interview prep** — question bank, 7 system-design cases, cheat-sheets, flashcards
+- **Interview prep** — question bank, 7 system-design cases, timed drills, cheat-sheets, flashcards
 
 ## Features
 
@@ -41,6 +41,7 @@ No build step, no framework, no dependencies. The only external resource is Goog
 - Full-text **search** (press `/`) — works offline
 - **Progress tracking** — mark lessons learned; per-module dashboard on the home page
 - **Interactive widgets** (no API keys, no GPU, no network): tokenizer playground, sampling visualizer, vector/ANN explorer, attention heat-map, diffusion denoiser, flashcards, RAG-pipeline stepper (`genai-ragflow.js`), GPU-serving timeline (`genai-servelab.js`)
+- **Timed quiz drills** (`interview/drills.html`, `assets/js/quizdrill.js`) — three chip-quiz modes on a countdown: *pick the technique* (prompt vs RAG vs fine-tune vs agent…), *term sprint*, and *debug it* (symptom → cause). Misses link back to the lesson; best scores persist in `localStorage["genai-drill"]`
 - Analogy-first **ELI10 voice** with "how to say it out loud" interview phrasing, quizzes, hints/solutions
 - Concepts are framework-agnostic; the **Lang Stack guide** is cross-linked for LangChain/LangGraph/LangSmith specifics
 
