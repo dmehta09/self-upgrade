@@ -15,7 +15,9 @@ window.LESSONS = [
   { id: "cf-errors", title: "Define errors out of existence", url: "craft/define-errors-out-of-existence.html", module: "craft", tool: "craft" },
   { id: "cf-comments", title: "Comments: why & what", url: "craft/comments-why-and-what.html", module: "craft", tool: "craft" },
   { id: "cf-names", title: "Names, consistency & obvious code", url: "craft/names-consistency-obvious.html", module: "craft", tool: "craft" },
-  { id: "jd-twice", title: "Design it twice · trends · performance", url: "judgment/design-it-twice-and-trends.html", module: "judgment", tool: "judgment" },
+  { id: "cf-modify", title: "Modifying existing code", url: "craft/modifying-existing-code.html", module: "craft", tool: "craft" },
+  { id: "jd-twice", title: "Design it twice & software trends", url: "judgment/design-it-twice-and-trends.html", module: "judgment", tool: "judgment" },
+  { id: "jd-perf", title: "Performance & deciding what matters", url: "judgment/performance-and-what-matters.html", module: "judgment", tool: "judgment" },
   { id: "jd-redflags", title: "The red-flags playbook", url: "judgment/red-flags-playbook.html", module: "judgment", tool: "judgment" },
 ];
 

@@ -35,10 +35,12 @@ const MODULES = [
     { slug: "define-errors-out-of-existence", title: "Define errors out of existence",    nav: "Define errors away",   id: "cf-errors",   widgets: ["refactor.js"] },
     { slug: "comments-why-and-what",          title: "Comments: why & what",              nav: "Comments: why & what", id: "cf-comments", widgets: ["refactor.js"] },
     { slug: "names-consistency-obvious",      title: "Names, consistency & obvious code", nav: "Names & obvious code", id: "cf-names",    widgets: ["refactor.js", "flagspot.js"] },
+    { slug: "modifying-existing-code",        title: "Modifying existing code",           nav: "Modifying code",       id: "cf-modify",   widgets: ["refactor.js"] },
   ]},
   { key: "judgment", label: "Judgment", pages: [
-    { slug: "design-it-twice-and-trends", title: "Design it twice · trends · performance", nav: "Design twice & trends", id: "jd-twice" },
-    { slug: "red-flags-playbook",         title: "The red-flags playbook",                 nav: "Red-flags playbook",    id: "jd-redflags", widgets: ["flagspot.js"] },
+    { slug: "design-it-twice-and-trends",     title: "Design it twice & software trends",      nav: "Design twice & trends",       id: "jd-twice" },
+    { slug: "performance-and-what-matters",   title: "Performance & deciding what matters",    nav: "Performance & what matters",  id: "jd-perf", widgets: ["refactor.js"] },
+    { slug: "red-flags-playbook",             title: "The red-flags playbook",                 nav: "Red-flags playbook",          id: "jd-redflags", widgets: ["flagspot.js"] },
   ]},
 ];
 

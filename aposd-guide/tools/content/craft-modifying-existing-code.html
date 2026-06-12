@@ -1,0 +1,83 @@
+<section class="hero reveal">
+  <span class="eyebrow">Everyday craft</span>
+  <h1>Modifying existing code.</h1>
+  <p class="lead">Most design doesn't happen on green fields — it happens inside systems that already exist. Every change you make either improves the design or erodes it; there is no neutral edit. Chapter 16 is about making sure it's the former.</p>
+</section>
+
+<section class="section reveal" id="stay-strategic">
+  <h2><span class="section-num">01</span> Stay strategic when changing code</h2>
+  <p class="takeaway">The ideal: after each change, the system looks <b>as if it had been designed that way from the start</b>. If you're not making the design better, you're probably making it worse.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Home repairs. A leaky pipe joint can be <b>wrapped in tape</b> in two minutes, or the joint can be <b>fixed properly</b> in an hour. One taped joint is fine; ten taped joints later, nobody dares touch the plumbing — every repair now starts with “careful, don't disturb the tape.”</p></div></div>
+  <p>The trap is the <em>smallest possible change</em> mindset: “the safest edit is the tiniest one.” Each quick patch adds a special case, a dependency, or a flag — and because changes compound, a system maintained this way drifts into tactical mush one harmless edit at a time. The strategic move: ask <em>“is the current design still the best one, given this change?”</em> — and if not, redesign the part you're touching.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">complexity</span></div><p>This is the maintenance-time face of the investment mindset — the same 10–20% premium, paid on every change. See <a href="../complexity/strategic-vs-tactical.html">Strategic vs tactical</a>.</p></div></div>
+</section>
+
+<section class="section reveal" id="quick-patch-trap">
+  <h2><span class="section-num">02</span> The quick-patch trap</h2>
+  <p>Three bug tickets, three “minimal” fixes — and <code>notify_user</code> is now a museum of special cases. The strategic version redesigns just the touched function, so the <em>third</em> fix becomes data, not another branch.</p>
+  <div class="refactor" data-refactor>
+    <div class="rf-grid">
+      <div class="rf-pane rf-before"><div class="rf-h">Before · patched</div>
+        <div class="codeblock"><pre><code data-lang="python">def notify_user(user, msg, channel):
+    if channel == "sms":
+        if user.country == "IN":   # fix #3812
+            msg = msg[:140]
+        send_sms(user.phone, msg)
+    elif channel == "email":
+        if user.plan == "free":    # fix #4101
+            msg += AD_FOOTER
+        send_email(user.email, msg)
+    elif channel == "push":
+        if not user.push_token:    # fix #4216
+            send_email(user.email, msg)
+        else:
+            send_push(user.push_token, msg)</code></pre></div></div>
+      <div class="rf-pane rf-after"><div class="rf-h">After · redesigned</div>
+        <div class="codeblock"><pre><code data-lang="python">CHANNELS = {
+    "sms":   Channel(send_sms, lambda u: u.phone,
+                     prep=clip_to_country_limit),
+    "email": Channel(send_email, lambda u: u.email,
+                     prep=footer_for_free_plan),
+    "push":  Channel(send_push, lambda u: u.push_token,
+                     fallback="email"),
+}
+
+def notify_user(user, msg, channel):
+    ch = CHANNELS[channel]
+    if not ch.addr(user) and ch.fallback:
+        ch = CHANNELS[ch.fallback]
+    ch.send(ch.addr(user), ch.prep(msg, user))</code></pre></div></div>
+    </div>
+    <p class="rf-why"><b>Why it's better:</b> each fix is now one row in a table instead of one more branch in a minefield — the next channel quirk is data, and <code>notify_user</code> reads as if it were designed for per-channel rules from day one.</p>
+  </div>
+</section>
+
+<section class="section reveal" id="comments-live-with-the-code">
+  <h2><span class="section-num">03</span> Comments live with the code</h2>
+  <p class="takeaway">Documentation belongs <b>as close as possible to the code it describes</b>. The further away a comment lives, the faster it rots — and the less likely the next reader ever sees it.</p>
+  <p>The gradient is real: a comment on the line it explains almost always gets updated with it; a docstring usually does; a design doc sometimes; a commit message never. So when you change code, <b>updating its comments is part of the change</b> — not optional cleanup, not a follow-up ticket.</p>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Buried in the commit log</div><p><code>git commit -m "must flush before reorder, else replay corrupts"</code> — a subtle invariant, recorded exactly where the next reader will never look.</p></div>
+    <div class="vs-col vs-good"><div class="vs-h">Next to the code</div><p><code># flush BEFORE reordering: replay assumes on-disk order</code> — the same invariant, one line above the call it protects.</p></div>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Red flag — the commit-message trap <span class="tag">gotcha</span></div><p>Explaining a subtle invariant <em>only</em> in the commit message (or the PR description, or a chat thread). Developers read code, not logs — if the information matters for using or changing the code, it belongs <b>in</b> the code. Commit messages are for the change; comments are for the code.</p></div></div>
+</section>
+
+<section class="section reveal" id="keep-it-honest">
+  <h2><span class="section-num">04</span> Keep it honest</h2>
+  <p>Before pushing, review your own diff and ask two questions: <em>“does the design read as intended-from-the-start, or as patched?”</em> and <em>“did I update every comment my change invalidated?”</em> A stale comment you left behind is a landmine with your name on it.</p>
+  <p>One more smell: <b>duplicated comments</b>. If the same explanation appears in three places, two of them will rot. Keep one canonical copy where it's most natural, and have the other sites reference it — “see the comment on <code>flush()</code>” beats a drifting photocopy.</p>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You're fixing a bug in a gnarly function. The “smallest possible change” is one more <code>if</code>. What does chapter 16 say?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Make the minimal change — small diffs are safest and easiest to review.</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Ask whether the design is still right; if your fix is another special case, redesign the part you're touching so the result looks designed-in.</button>
+      <button class="quiz-opt"><span class="mark"></span>Ship the patch now and file a refactoring ticket for later.</button>
+    </div>
+    <div class="quiz-explain"><b>Redesign the touched part.</b> The smallest-change mindset adds a special case per fix, and patches compound into tactical mush. “Later” never comes — and if you're not making the design better, you're probably making it worse.</div>
+  </div>
+</section>
