@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inside vLLM: PagedAttention & continuous batching | GenAI Field Guide</title>
+  <meta name="description" content="GenAI Field Guide — Inside vLLM: PagedAttention &amp; continuous batching. A visual, interview-ready guide to generative AI (June 2026)." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='9' fill='none' stroke='%232dd4bf' stroke-width='2'/><circle cx='12' cy='12' r='3' fill='%232dd4bf'/><path d='M12 3v3M12 18v3M3 12h3M18 12h3' stroke='%232dd4bf' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/genai.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="inference" data-page="inference-inside-vllm" data-lesson="if-vllm">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="GenAI Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0b1020" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2" fill="#0b1020"/><path d="M12 4.5v3M12 16.5v3M4.5 12h3M16.5 12h3M6.7 6.7l2.1 2.1M15.2 15.2l2.1 2.1M17.3 6.7l-2.1 2.1M8.8 15.2l-2.1 2.1"/></svg></span>
+        <span class="brand-text"><b>GenAI Field Guide</b><span>Interview-ready generative AI</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Foundations">
+        <h4><span class="dot"></span>Foundations</h4>
+        <a class="nav-link" href="../foundations/index.html">How to use this guide</a>
+        <a class="nav-link" href="../foundations/what-is-genai.html">What is GenAI?</a>
+        <a class="nav-link" href="../foundations/model-landscape-2026.html">Model landscape 2026</a>
+        <a class="nav-link" href="../foundations/tokens-and-tokenization.html">Tokens & tokenization</a>
+      </nav>
+      <nav class="nav-group is-internals" aria-label="LLM internals">
+        <h4><span class="dot"></span>LLM internals</h4>
+        <a class="nav-link" href="../internals/index.html">Overview</a>
+        <a class="nav-link" href="../internals/embeddings-and-vectors.html">Embeddings & vectors</a>
+        <a class="nav-link" href="../internals/attention-mechanism.html">Attention</a>
+        <a class="nav-link" href="../internals/transformer-architecture.html">Transformer architecture</a>
+        <a class="nav-link" href="../internals/sampling-and-decoding.html">Sampling & decoding</a>
+        <a class="nav-link" href="../internals/reasoning-and-test-time-compute.html">Reasoning models</a>
+        <a class="nav-link" href="../internals/training-lifecycle.html">Training lifecycle</a>
+      </nav>
+      <nav class="nav-group is-prompting" aria-label="Prompting &amp; context">
+        <h4><span class="dot"></span>Prompting & context</h4>
+        <a class="nav-link" href="../prompting/index.html">Overview</a>
+        <a class="nav-link" href="../prompting/prompting-fundamentals.html">Prompting fundamentals</a>
+        <a class="nav-link" href="../prompting/advanced-prompting.html">Advanced prompting</a>
+        <a class="nav-link" href="../prompting/context-engineering.html">Context engineering</a>
+        <a class="nav-link" href="../prompting/structured-outputs.html">Structured outputs</a>
+      </nav>
+      <nav class="nav-group is-tool-use" aria-label="Tools &amp; MCP">
+        <h4><span class="dot"></span>Tools & MCP</h4>
+        <a class="nav-link" href="../tool-use/index.html">Overview</a>
+        <a class="nav-link" href="../tool-use/function-calling.html">Function calling</a>
+        <a class="nav-link" href="../tool-use/model-context-protocol.html">MCP</a>
+        <a class="nav-link" href="../tool-use/computer-use-and-code-execution.html">Computer use</a>
+      </nav>
+      <nav class="nav-group is-vectors" aria-label="Embeddings &amp; vectors">
+        <h4><span class="dot"></span>Embeddings & vectors</h4>
+        <a class="nav-link" href="../vectors/index.html">Overview</a>
+        <a class="nav-link" href="../vectors/embedding-models.html">Embedding models</a>
+        <a class="nav-link" href="../vectors/vector-databases.html">Vector databases</a>
+        <a class="nav-link" href="../vectors/quantization-and-scale.html">Quantization & scale</a>
+        <a class="nav-link" href="../vectors/chunking-strategies.html">Chunking strategies</a>
+      </nav>
+      <nav class="nav-group is-rag" aria-label="RAG">
+        <h4><span class="dot"></span>RAG</h4>
+        <a class="nav-link" href="../rag/index.html">Overview</a>
+        <a class="nav-link" href="../rag/naive-rag.html">Naive RAG</a>
+        <a class="nav-link" href="../rag/hybrid-search-and-reranking.html">Hybrid search & rerank</a>
+        <a class="nav-link" href="../rag/advanced-retrieval.html">Advanced retrieval</a>
+        <a class="nav-link" href="../rag/graphrag.html">GraphRAG</a>
+        <a class="nav-link" href="../rag/agentic-rag.html">Agentic RAG</a>
+        <a class="nav-link" href="../rag/rag-vs-finetuning-vs-longcontext.html">RAG vs fine-tune</a>
+      </nav>
+      <nav class="nav-group is-agents" aria-label="Agents">
+        <h4><span class="dot"></span>Agents</h4>
+        <a class="nav-link" href="../agents/index.html">Overview</a>
+        <a class="nav-link" href="../agents/agent-fundamentals.html">Agent fundamentals</a>
+        <a class="nav-link" href="../agents/agent-memory.html">Agent memory</a>
+        <a class="nav-link" href="../agents/multi-agent-patterns.html">Multi-agent patterns</a>
+        <a class="nav-link" href="../agents/agent-reliability-and-eval.html">Reliability & eval</a>
+      </nav>
+      <nav class="nav-group is-finetuning" aria-label="Fine-tuning">
+        <h4><span class="dot"></span>Fine-tuning</h4>
+        <a class="nav-link" href="../finetuning/index.html">Overview</a>
+        <a class="nav-link" href="../finetuning/sft-and-data.html">SFT & data</a>
+        <a class="nav-link" href="../finetuning/peft-lora-qlora.html">PEFT · LoRA/QLoRA</a>
+        <a class="nav-link" href="../finetuning/preference-optimization.html">Preference optimization</a>
+        <a class="nav-link" href="../finetuning/rl-for-reasoning.html">RL for reasoning</a>
+        <a class="nav-link" href="../finetuning/distillation-and-tooling.html">Distillation & tooling</a>
+      </nav>
+      <nav class="nav-group is-inference" aria-label="Inference &amp; serving">
+        <h4><span class="dot"></span>Inference & serving</h4>
+        <a class="nav-link" href="../inference/index.html">Overview</a>
+        <a class="nav-link" href="../inference/kv-cache-and-attention-optims.html">KV cache</a>
+        <a class="nav-link" href="../inference/serving-engines.html">Serving engines</a>
+        <a class="nav-link" href="../inference/inside-vllm.html">Inside vLLM</a>
+        <a class="nav-link" href="../inference/speculative-decoding.html">Speculative decoding</a>
+        <a class="nav-link" href="../inference/quantization-for-inference.html">Quantization</a>
+      </nav>
+      <nav class="nav-group is-evaluation" aria-label="Evaluation &amp; obs.">
+        <h4><span class="dot"></span>Evaluation & obs.</h4>
+        <a class="nav-link" href="../evaluation/index.html">Overview</a>
+        <a class="nav-link" href="../evaluation/eval-methods.html">Eval methods</a>
+        <a class="nav-link" href="../evaluation/llm-as-judge.html">LLM-as-judge</a>
+        <a class="nav-link" href="../evaluation/rag-and-agent-eval.html">RAG & agent eval</a>
+        <a class="nav-link" href="../evaluation/observability-and-tracing.html">Observability</a>
+        <a class="nav-link" href="../evaluation/benchmarks.html">Benchmarks</a>
+      </nav>
+      <nav class="nav-group is-safety" aria-label="Safety &amp; security">
+        <h4><span class="dot"></span>Safety & security</h4>
+        <a class="nav-link" href="../safety/index.html">Overview</a>
+        <a class="nav-link" href="../safety/prompt-injection-and-jailbreaks.html">Injection & jailbreaks</a>
+        <a class="nav-link" href="../safety/owasp-and-threats.html">OWASP & threats</a>
+        <a class="nav-link" href="../safety/guardrails-and-defenses.html">Guardrails</a>
+        <a class="nav-link" href="../safety/watermarking-and-governance.html">Watermarking & governance</a>
+      </nav>
+      <nav class="nav-group is-image" aria-label="Image &amp; diffusion">
+        <h4><span class="dot"></span>Image & diffusion</h4>
+        <a class="nav-link" href="../image/index.html">Overview</a>
+        <a class="nav-link" href="../image/gans-and-vaes.html">GANs & VAEs</a>
+        <a class="nav-link" href="../image/diffusion-models.html">Diffusion models</a>
+        <a class="nav-link" href="../image/dit-and-flow-matching.html">DiT & flow matching</a>
+        <a class="nav-link" href="../image/text-to-image-control.html">Text-to-image control</a>
+      </nav>
+      <nav class="nav-group is-multimodal" aria-label="Audio, video &amp; VLMs">
+        <h4><span class="dot"></span>Audio, video & VLMs</h4>
+        <a class="nav-link" href="../multimodal/index.html">Overview</a>
+        <a class="nav-link" href="../multimodal/vision-language-models.html">Vision-language models</a>
+        <a class="nav-link" href="../multimodal/speech-stt-tts.html">Speech (STT/TTS)</a>
+        <a class="nav-link" href="../multimodal/video-generation.html">Video generation</a>
+        <a class="nav-link" href="../multimodal/world-models-and-frontier.html">World models & frontier</a>
+      </nav>
+      <nav class="nav-group is-production" aria-label="Productionization">
+        <h4><span class="dot"></span>Productionization</h4>
+        <a class="nav-link" href="../production/index.html">Overview</a>
+        <a class="nav-link" href="../production/cost-and-latency.html">Cost & latency</a>
+        <a class="nav-link" href="../production/prompt-caching.html">Prompt caching</a>
+        <a class="nav-link" href="../production/routing-and-gateways.html">Routing & gateways</a>
+        <a class="nav-link" href="../production/reliability-and-deployment.html">Reliability & deployment</a>
+      </nav>
+      <nav class="nav-group is-interview" aria-label="Interview prep">
+        <h4><span class="dot"></span>Interview prep</h4>
+        <a class="nav-link" href="../interview/index.html">How to interview</a>
+        <a class="nav-link" href="../interview/question-bank.html">Question bank</a>
+      </nav>
+      <nav class="nav-group is-interview" aria-label="GenAI system design">
+        <h4><span class="dot"></span>GenAI system design</h4>
+        <a class="nav-link" href="../interview/system-design/index.html">The 6-step method</a>
+        <a class="nav-link" href="../interview/system-design/rag-chatbot.html">RAG chatbot</a>
+        <a class="nav-link" href="../interview/system-design/agentic-assistant.html">Agentic assistant</a>
+        <a class="nav-link" href="../interview/system-design/llm-gateway.html">LLM gateway</a>
+        <a class="nav-link" href="../interview/system-design/multimodal-search.html">Multimodal search</a>
+        <a class="nav-link" href="../interview/system-design/realtime-voice.html">Real-time voice</a>
+        <a class="nav-link" href="../interview/system-design/moderation-guardrails.html">Moderation & guardrails</a>
+        <a class="nav-link" href="../interview/system-design/finetune-eval-pipeline.html">Fine-tune & eval pipeline</a>
+      </nav>
+      <nav class="nav-group" aria-label="Reference">
+        <h4>Reference</h4>
+        <a class="nav-link" href="../interview/cheatsheets.html">Cheat-sheets</a>
+        <a class="nav-link" href="../interview/flashcards.html">Flashcards</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/model-table.html">Model table</a>
+        <a class="nav-link" href="../reference/further-reading.html">Further reading</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">Inside vLLM: PagedAttention & continuous batching</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <main class="content" id="main">
+        <section class="hero reveal">
+          <span class="eyebrow">Inference &amp; serving</span>
+          <h1>Inside vLLM: PagedAttention &amp; continuous batching <span class="badge">IV</span> <span class="badge gray">NEW</span></h1>
+          <p class="lead">The previous two lessons gave you the ideas — the <a href="kv-cache-and-attention-optims.html">KV cache</a> that eats memory, and the <a href="serving-engines.html">batching tricks</a> that keep a GPU busy. This page walks through how a real engine composes them, end to end: blocks, block tables, copy-on-write, and the scheduler loop that decides whose token gets made next. We use vLLM as the worked example because it made these mechanics famous, but every serious engine in 2026 plays some variant of this game.</p>
+        </section>
+
+        <section class="section reveal" id="two-phases">
+          <h2><span class="section-num">01</span> &nbsp;The asymmetry everything is built on</h2>
+          <p>Sharpen the two-phase picture before going inside. <strong>Prefill</strong> processes the whole prompt in one parallel pass — thousands of tokens' worth of matrix math at once — so it <em>saturates the GPU's FLOPs</em>: it is <strong>compute-bound</strong>. <strong>Decode</strong> produces one token per step, and to make that single token it must re-read the <em>entire</em> KV cache (plus weights) out of GPU memory — barely any math, mountains of byte traffic: it is <strong>memory-bandwidth-bound</strong>. Same model, same GPU, opposite bottlenecks.</p>
+          <p>This one asymmetry explains both neighbours of this page: the <a href="serving-engines.html">serving-engines lesson</a> is about its <em>scheduling</em> consequences (chunked prefill, disaggregation), and the <a href="kv-cache-and-attention-optims.html">KV-cache lesson</a> is about its <em>memory</em> consequences (the cache decode keeps re-reading). It also assigns an owner to every metric you'll be asked about:</p>
+          <div class="kv">
+            <dt>TTFT</dt><dd><em>Time to first token</em> — how long until the answer starts. Driven by <strong>prefill</strong> speed (and any queueing before it).</dd>
+            <dt>TPOT / ITL</dt><dd><em>Time per output token</em> / <em>inter-token latency</em> — the pace of the stream once it starts. Driven by <strong>decode</strong> speed, i.e. memory bandwidth and how much KV must be re-read per step.</dd>
+            <dt>Throughput / goodput</dt><dd>Total tokens per second across all users — and <em>goodput</em>, the stricter version: only requests that also met their latency targets count. Driven by <strong>how many requests share the GPU at once</strong>, which is exactly what KV-memory management decides.</dd>
+          </div>
+          <p class="muted">Keep that last line in mind: the rest of this page is one long answer to “how do we fit more concurrent requests into the same VRAM?”</p>
+        </section>
+
+        <section class="section reveal" id="blocks">
+          <h2><span class="section-num">02</span> &nbsp;Blocks &amp; block tables: PagedAttention, mechanically</h2>
+          <p>The <a href="kv-cache-and-attention-optims.html#paged-attention">KV lesson</a> gave you the concept — virtual memory for the cache. Here's the machinery. vLLM chops KV memory into fixed-size <strong>blocks</strong>, each holding the Keys and Values for a small run of tokens (<strong>~16 tokens per block</strong> by default). Every request owns a <strong>block table</strong>: a small array mapping its <em>logical</em> blocks (token 0–15 → logical block 0, tokens 16–31 → logical block 1, …) to whatever <em>physical</em> blocks happened to be free — exactly like an OS page table mapping virtual pages to physical frames. The physical blocks of one request can be scattered anywhere in VRAM; the attention kernel follows the table.</p>
+          <p>Generation becomes a tiny allocation protocol: appending a token means <strong>writing its K and V into the last, partially-filled block</strong> — and only when that block fills up does the engine grab one new block from the free list. No request ever holds memory for tokens it hasn't produced yet.</p>
+          <div class="diagram">
+            <div class="dg-title">The fragmentation math — why this is the whole ballgame</div>
+            <div class="kv">
+              <dt>Contiguous pre-reservation</dt><dd>Old engines allocated one contiguous slab per request, sized for the <em>maximum</em> possible length. A request capped at 2,048 tokens that stops at 250 strands ~1,800 tokens of reserved KV, and the leftover gap is the wrong shape for anyone else. Measured waste: <strong>60–80% of KV memory</strong> doing nothing.</dd>
+              <dt>Paged blocks</dt><dd>The only waste is the unused tail of each request's <em>last</em> block — at most 15 tokens' worth per request. Measured waste: <strong>under ~4%</strong>.</dd>
+            </div>
+            <div class="cap">Same GPU, same model — but now 2–4× more live requests fit in VRAM at once. Those extra requests are what <a href="serving-engines.html#static-vs-continuous">continuous batching</a> feeds on: more occupied slots per token step is the real throughput win. PagedAttention doesn't make any single request faster; it makes the <em>batch bigger</em>.</div>
+          </div>
+          <div class="callout analogy">
+            <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+            <div class="co-body">
+              <div class="co-title">Hotel rooms, not whole floors <span class="tag">analogy</span></div>
+              <p>Contiguous pre-reservation is a hotel that books an entire floor for every guest, because they <em>might</em> bring their extended family. Most rooms sit dark, and the hotel turns guests away while standing 70% empty. PagedAttention rents one room at a time as people actually show up, and the front desk's ledger — the block table — tracks which rooms belong to which party. The only vacancy left is the half-used last room of each party.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section reveal" id="sharing">
+          <h2><span class="section-num">03</span> &nbsp;Block sharing &amp; copy-on-write</h2>
+          <p>Once the cache is made of blocks behind a mapping table, a second trick falls out for free: <strong>two block tables can point at the same physical block</strong>. The engine keeps a <em>reference count</em> per physical block, and a block is only freed when its count hits zero.</p>
+          <p>Where this pays off first is <strong>parallel sampling</strong> (asking for <code>n&gt;1</code> completions of one prompt) and <strong>beam search</strong>: every branch shares the prompt's blocks instead of duplicating them — one physical copy, <em>n</em> references. Branches only differ once they start generating, and even then vLLM is lazy about it: when a branch is about to write into a block that another branch still shares (ref-count &gt; 1), it copies <strong>only that one block</strong>, redirects its own table entry to the copy, and writes there. That's <strong>copy-on-write</strong>, straight from the OS playbook — everything upstream of the divergence point stays shared forever.</p>
+          <p><strong>Prefix caching is the same machinery wearing a different hat.</strong> If a thousand requests start with the same system prompt, their block tables can all map those leading logical blocks to one set of physical blocks already computed — prefill skips straight past them. Nothing new had to be invented: ref-counted shared blocks across <em>branches of one request</em> generalize to shared blocks across <em>different requests</em> (see <a href="kv-cache-and-attention-optims.html#prefix-caching">prefix caching &amp; RadixAttention</a> for the workload-level view).</p>
+          <div class="callout gotcha">
+            <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+            <div class="co-body">
+              <div class="co-title">Sharing is block-granular <span class="tag">gotcha</span></div>
+              <p>Only <em>complete</em> blocks of identical leading tokens can be shared between requests. If your "shared" system prompt ends mid-block, that last partial block mixes prefix tokens with request-specific ones and can't be reused. It's a small effect (≤15 tokens), but it's why prefix-cache hit accounting is in block multiples — and a nice detail to drop in an interview.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section reveal" id="scheduler">
+          <h2><span class="section-num">04</span> &nbsp;One request's life inside the engine</h2>
+          <p>Now compose it. Every iteration of vLLM's core loop, the <strong>scheduler</strong> rebuilds the running batch in block-level terms:</p>
+          <div class="kv">
+            <dt>1 · Arrive</dt><dd>The request lands in the <strong>waiting queue</strong>. The scheduler computes how many blocks its prompt needs (minus any prefix-cache hits).</dd>
+            <dt>2 · Admit</dt><dd>When the free list has enough blocks, the request is admitted and <strong>prefilled</strong> — possibly <a href="serving-engines.html#chunked-prefill">chunked</a> so it doesn't stall the streams already running.</dd>
+            <dt>3 · Run</dt><dd>It joins the running batch: one decode step per iteration, each appended token written into its last partial block, a fresh block allocated only on overflow.</dd>
+            <dt>4 · Finish</dt><dd>On EOS or length cap, its private blocks return to the free list <strong>that same step</strong> — and continuous batching admits the next waiter immediately.</dd>
+          </div>
+          <p>Under memory pressure the loop has a release valve: <strong>preemption</strong>. If the free list runs dry mid-decode, the scheduler picks a victim (typically the most recently arrived, so the oldest requests finish first), frees its blocks, and parks it. Getting the victim back has two flavors: <strong>swap</strong> its KV blocks out to CPU RAM and copy them back later, or just throw them away and <strong>recompute</strong> the prefill on re-admission. Recompute often wins — prefill is fast, parallel compute, while shuttling gigabytes over PCIe is exactly the kind of byte-moving that decode taught us to fear.</p>
+          <p>Watch the whole story at block granularity — prefix sharing, a cold arrival, copy-on-write, and a preemption. The meter counts physical KV blocks (16 total):</p>
+          <figure class="servelab reveal" data-servelab aria-label="PagedAttention block-allocation simulator">
+            <script type="application/json" class="sl-config">
+            { "lanes": [ { "id": "a", "label": "req A (shared sys-prompt)" },
+                         { "id": "b", "label": "req B (shared sys-prompt)" },
+                         { "id": "c", "label": "req C (cold)" } ],
+              "kv": { "label": "KV blocks", "max": 16 },
+              "frames": [
+                { "kv": 4, "marks": { "a": "prefill" },
+                  "caption": "Req A admitted. Prefill writes <b>4 blocks</b>: 3 for the shared system prompt, 1 for A's own question. A's block table maps logical 0–3 to whichever physical blocks were free." },
+                { "kv": 6, "marks": { "a": "decode", "b": "prefill" },
+                  "caption": "Req B arrives with the <b>same system prompt</b>. Prefix hit: B's table points at A's 3 physical prompt blocks (ref-count 2) and prefill computes only B's 2 private blocks. The meter ticks <b>+2, not +5</b> — shared bytes are stored once." },
+                { "kv": 7, "marks": { "a": "decode", "b": "decode", "c": "queue" },
+                  "caption": "Both decode, appending tokens into their last partial block; A crosses a block boundary and only <em>then</em> allocates one more (+1). Cold req C arrives — no prefix match, needs 5 blocks — and waits while the scheduler checks the free list." },
+                { "kv": 12, "marks": { "a": "decode", "b": "decode", "c": "prefill" },
+                  "caption": "C is admitted and pays <b>full price</b>: 5 fresh blocks, every K and V computed from scratch. The meter jumps the way B's never did — that gap is the prefix-sharing win." },
+                { "kv": 13, "marks": { "a": "decode", "b": "decode", "c": "decode" },
+                  "caption": "A asked for two samples (<b>n=2</b>); until now both branches shared all of A's blocks. They diverge here — the second branch <b>copy-on-writes</b> only the single block it's about to write (+1). Everything upstream stays shared." },
+                { "kv": 15, "marks": { "a": "decode", "b": "decode", "c": "decode" },
+                  "caption": "Pressure builds: B and C each cross a block boundary (+2). 15 / 16 — the free list is almost empty." },
+                { "kv": 16, "marks": { "a": "decode", "b": "decode", "c": "decode" },
+                  "caption": "Full. Continuous batching wants all three streams running, but block accounting says no: someone's next token has nowhere to land." },
+                { "kv": 10, "marks": { "a": "decode", "b": "decode", "c": "evict" },
+                  "caption": "<b>Preemption.</b> The scheduler evicts the newest request, C: its 6 private blocks free instantly. The 3 shared prompt blocks survive untouched — A and B still hold references. C's KV will be <b>recomputed</b> on re-admission rather than swapped: redoing fast prefill compute usually beats shipping gigabytes to CPU and back." },
+                { "kv": 11, "marks": { "a": "done", "b": "decode", "c": "prefill" },
+                  "caption": "A finishes — its private blocks return to the free list <b>that same step</b> (the shared 3 drop to ref-count 1), and C is re-admitted to redo its prefill. Blocks freed → next request seated: that handoff, repeated every iteration, <em>is</em> vLLM's throughput." } ] }
+            </script>
+            <div data-role="stage"><p>An animated block-allocation simulator. Enable JavaScript to play it.</p></div>
+            <div class="sl-legend">
+              <span class="lg-queue"><i></i>queued</span>
+              <span class="lg-prefill"><i></i>prefill</span>
+              <span class="lg-decode"><i></i>decode</span>
+              <span class="lg-done"><i></i>done</span>
+              <span class="lg-evict"><i></i>evicted</span>
+            </div>
+            <div class="sl-caption" data-role="caption"></div>
+            <div class="sl-controls">
+              <button class="sl-btn sl-reset" aria-label="Restart">⏮</button>
+              <button class="sl-btn sl-prev" aria-label="Previous step">‹</button>
+              <button class="sl-btn sl-play" aria-label="Play">▶</button>
+              <button class="sl-btn sl-next" aria-label="Next step">›</button>
+              <span class="sl-step">1 / 9</span>
+            </div>
+            <figcaption class="muted">Step with ←/→ or the buttons · Space plays · the meter turns red near capacity.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section reveal" id="landscape">
+          <h2><span class="section-num">05</span> &nbsp;Where vLLM sits in 2026</h2>
+          <p>Every modern engine builds on the same block-managed-KV + continuous-batching core; they differ in what they layer on top. The positioning, in one sentence each (as of June 2026):</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Engine</th><th>Positioning</th></tr></thead>
+              <tbody>
+                <tr><td><strong>vLLM</strong></td><td>The engine that introduced PagedAttention and remains the default open choice — broadest model and hardware support, the mechanics on this page in their original home.</td></tr>
+                <tr><td><strong>SGLang</strong></td><td>RadixAttention generalizes prefix reuse from "one cached system prompt" to a whole <em>tree</em> of shared prefixes, matched automatically — strongest when chats branch and agents loop.</td></tr>
+                <tr><td><strong>TensorRT-LLM</strong></td><td>NVIDIA's own engine with hand-tuned kernels and aggressive low-precision paths — peak performance on NVIDIA hardware, at the cost of flexibility and build complexity.</td></tr>
+                <tr><td><strong>TGI</strong></td><td>Hugging Face's server, valued less for raw speed than for tight integration with the HF ecosystem — Hub models, tokenizers, and deployment tooling out of the box.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout tip">
+            <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span>
+            <div class="co-body">
+              <div class="co-title">How to say it out loud <span class="tag">say it</span></div>
+              <p>“vLLM's throughput comes from two ideas composed. PagedAttention chops the KV cache into fixed-size blocks with a per-request block table — like OS paging — which cuts KV memory waste from 60–80% down to under 4%, so far more concurrent requests fit in the same VRAM. Continuous batching then reschedules after every token step so those extra requests keep every slot busy, while ref-counted block sharing with copy-on-write makes shared prefixes and parallel sampling nearly free.”</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section reveal" id="check">
+          <h2><span class="section-num">06</span> &nbsp;Self-check</h2>
+          <div class="quiz">
+            <div class="quiz-q">PagedAttention doesn't make any single request decode faster. So where does its big throughput gain actually come from?</div>
+            <button class="quiz-opt" data-correct="false"><span class="mark"></span> Its attention kernel computes scores with fewer FLOPs than standard attention</button>
+            <button class="quiz-opt" data-correct="true"><span class="mark"></span> It cuts KV-memory waste from 60–80% to under ~4%, so many more requests fit in VRAM at once — and continuous batching turns those extra live requests into throughput</button>
+            <button class="quiz-opt" data-correct="false"><span class="mark"></span> It moves the KV cache to CPU RAM, freeing the GPU entirely for compute</button>
+            <div class="quiz-explain">Contiguous max-length reservations strand most of their memory (the request usually stops early, and the leftover gap is unusable). Block-granular allocation wastes only the tail of each request's last partial block. The freed memory admits more concurrent requests, and continuous batching keeps them all streaming — bigger batch, same hardware. The kernel itself does the same attention math; per-request speed is unchanged.</div>
+          </div>
+          <div class="quiz">
+            <div class="quiz-q">A beam-search branch sharing its prompt's KV blocks is about to diverge from its sibling. What does copy-on-write copy?</div>
+            <button class="quiz-opt" data-correct="false"><span class="mark"></span> The branch's entire KV cache, so the two beams are fully independent from then on</button>
+            <button class="quiz-opt" data-correct="false"><span class="mark"></span> Nothing — both branches keep writing into the shared blocks</button>
+            <button class="quiz-opt" data-correct="true"><span class="mark"></span> Only the single block it's about to write into; every block upstream of the divergence stays shared via reference counts</button>
+            <div class="quiz-explain">Sharing is per-block with reference counts. A write into a block whose ref-count is above 1 triggers a copy of just that one block; the writer's block-table entry is redirected to the copy. All earlier blocks — the whole shared prompt — remain one physical copy. Writing into shared blocks directly would corrupt the sibling's cache; copying everything would erase the memory savings.</div>
+          </div>
+          <div class="quiz">
+            <div class="quiz-q">vLLM preempts a request mid-decode and must restore it later. Why is <em>recompute</em> often preferred over <em>swapping</em> the KV blocks to CPU?</div>
+            <button class="quiz-opt" data-correct="true"><span class="mark"></span> Re-running prefill is fast, parallel, compute-bound work, while moving gigabytes of KV over PCIe and back is slow byte traffic</button>
+            <button class="quiz-opt" data-correct="false"><span class="mark"></span> Swapping is impossible — KV blocks only exist in GPU memory formats</button>
+            <button class="quiz-opt" data-correct="false"><span class="mark"></span> Recompute produces a more accurate KV cache than the swapped copy</button>
+            <div class="quiz-explain">Both produce an identical cache; swap is perfectly possible and engines support it. It's an economics call: prefill saturates the GPU's abundant FLOPs and finishes quickly, whereas a swap spends scarce interconnect bandwidth twice (out and back). When compute is cheap relative to moving bytes — the usual case — throwing the blocks away and recomputing wins.</div>
+          </div>
+        </section>
+
+        <nav class="page-nav reveal">
+          <a href="serving-engines.html"><span class="pn-k">‹ Inference &amp; serving</span><span class="pn-t">Serving engines</span></a>
+          <a class="next" href="speculative-decoding.html"><span class="pn-k">Next ›</span><span class="pn-t">Speculative decoding</span></a>
+        </nav>
+
+        <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+      </main>
+
+      <footer class="footer">
+        <span class="fmono">GenAI Field Guide · interview-ready generative AI</span>
+        <span class="fmono">Built to open offline · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/visualizer.js"></script>
+  <script src="../assets/js/genai-servelab.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

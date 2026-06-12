@@ -18,21 +18,21 @@ No build step, no framework, no dependencies. The only external resource is Goog
 
 ## What's inside
 
-14 content modules + an interview module, ~80 pages:
+14 content modules + an interview module, ~90 pages:
 
 - **Foundations** — what GenAI is, the 2026 model landscape, tokens & cost
 - **LLM internals** — embeddings, attention, transformers, sampling, reasoning models
 - **Prompting & context** — prompting, context engineering, structured outputs
 - **Tools & MCP** — function calling, the Model Context Protocol, computer use
 - **Embeddings & vectors** — embedding models, vector DBs & ANN, quantization, chunking
-- **RAG** — naive → hybrid/rerank → GraphRAG → agentic; RAG vs fine-tuning
+- **RAG** — naive → hybrid/rerank → GraphRAG deep-dive → agentic; RAG vs fine-tuning
 - **Agents** — ReAct, memory, multi-agent patterns, reliability
-- **Fine-tuning** — SFT, LoRA/QLoRA, DPO/RLHF, distillation
-- **Inference & serving** — KV cache, vLLM, speculative decoding, quantization
+- **Fine-tuning** — SFT, LoRA/QLoRA, DPO/RLHF, GRPO & RL for reasoning, distillation
+- **Inference & serving** — KV cache, serving engines, inside vLLM (PagedAttention, continuous batching), speculative decoding, quantization
 - **Evaluation & observability** — eval methods, LLM-as-judge, RAGAS, tracing, benchmarks
 - **Safety & security** — prompt injection, OWASP LLM Top 10, guardrails, governance
 - **Image & diffusion** · **Audio, video & VLMs** — diffusion, DiT/flow matching, STT/TTS, video, VLMs
-- **Productionization** — cost & latency, routing/gateways, reliable deployment
+- **Productionization** — cost & latency, prompt caching & cost engineering, routing/gateways, reliable deployment
 - **Interview prep** — question bank, 7 system-design cases, cheat-sheets, flashcards
 
 ## Features
@@ -40,7 +40,7 @@ No build step, no framework, no dependencies. The only external resource is Goog
 - Dark "ink" / light "paper" themes (toggle persists in `localStorage`)
 - Full-text **search** (press `/`) — works offline
 - **Progress tracking** — mark lessons learned; per-module dashboard on the home page
-- **Interactive widgets** (no API keys, no GPU, no network): tokenizer playground, sampling visualizer, vector/ANN explorer, attention heat-map, diffusion denoiser, flashcards
+- **Interactive widgets** (no API keys, no GPU, no network): tokenizer playground, sampling visualizer, vector/ANN explorer, attention heat-map, diffusion denoiser, flashcards, RAG-pipeline stepper (`genai-ragflow.js`), GPU-serving timeline (`genai-servelab.js`)
 - Analogy-first **ELI10 voice** with "how to say it out loud" interview phrasing, quizzes, hints/solutions
 - Concepts are framework-agnostic; the **Lang Stack guide** is cross-linked for LangChain/LangGraph/LangSmith specifics
 
