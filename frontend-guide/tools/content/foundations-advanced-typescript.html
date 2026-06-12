@@ -1,0 +1,216 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Foundations &middot; advanced TypeScript</span>
+            <h1>Advanced TypeScript for React</h1>
+            <p class="lead">Past props and <code>Partial</code> lives the TypeScript that wins senior loops: types computed from other types. Generic components, state-machine unions, mapped and conditional types, <code>satisfies</code> and brands &mdash; the tools that make invalid states fail at compile time instead of in production.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">The type system is a <b>small functional language that runs at compile time</b>. You can compute types from other types, so invalid states <b>don&rsquo;t compile</b>.</p>
+            <p>Junior TypeScript annotates values. Senior TypeScript derives them: one source of truth, and everything downstream &mdash; props, handlers, state arms &mdash; is calculated from it. Change the source and every dependent type updates or turns red.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p>A spreadsheet. Your core types are the source cells; mapped and conditional types are the formulas. You never retype a number into a formula cell &mdash; it recomputes. Rename a column in the source and every formula either updates instantly or flags <code>#REF!</code>. Copy-pasted types are hand-typed numbers: silently stale the moment the source changes.</p>
+              </div>
+            </div>
+
+            <div class="diagram">
+              <div class="dg-title">Types as a pipeline: derive, don&rsquo;t duplicate</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">source</div><div class="fn-t">One truth</div><div class="fn-d">User type, Zod schema, Button props</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">transform</div><div class="fn-t">Type-level fn</div><div class="fn-d">mapped &middot; conditional &middot; infer</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">derived</div><div class="fn-t">Computed types</div><div class="fn-d">props, handlers, state arms</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">payoff</div><div class="fn-t">Drift = red squiggle</div><div class="fn-d">not a runtime bug</div></div>
+              </div>
+            </div>
+
+            <dl class="kv">
+              <dt>Type-level programming</dt><dd>Writing functions whose inputs and outputs are <em>types</em>. They run during compilation and vanish from the bundle &mdash; zero runtime cost.</dd>
+              <dt>Derived type</dt><dd>A type computed from another (<code>ReturnType</code>, <code>ComponentProps</code>, <code>z.infer</code>, a mapped type) so there&rsquo;s exactly one place to change.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="generics">
+            <h2><span class="section-num">01</span> Generics where React actually needs them</h2>
+            <p>Three moves cover most real generic code in a React app: a component generic over its data, a hook generic over its payload, and inheriting another component&rsquo;s props with <code>ComponentProps</code>. Everything else is usually <code>&lt;T&gt;</code> for sport &mdash; don&rsquo;t make it generic until a second call site needs it.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">generics.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">// 1 — generic component: T flows from options into every callback
+function Select&lt;T&gt;(props: {
+  options: T[];
+  label: (o: T) =&gt; string;
+  onChange: (o: T) =&gt; void;
+}) { /* render options; each click calls props.onChange(o) */ }
+
+// 2 — generic hook: the caller picks T once at the call site
+const me = useFetch&lt;User&gt;("/api/me"); // me.data: User | null
+
+// 3 — inherit props instead of re-declaring them
+type IconButtonProps =
+  React.ComponentProps&lt;typeof Button&gt; &amp; { icon: React.ReactNode };</code></pre>
+            </div>
+            <p>Note what <code>T</code> buys you in each: <code>Select</code> infers <code>T</code> from <code>options</code>, so <code>label</code> and <code>onChange</code> are exactly typed at every call site with zero annotations. And <code>ComponentProps&lt;typeof Button&gt;</code> means when <code>Button</code> grows a prop, <code>IconButton</code> gets it for free &mdash; no copy-paste to rot.</p>
+
+            <div class="callout note">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Heads up <span class="tag">see also</span></div>
+                <p>Typing a custom hook is half the job &mdash; the other half is its <em>identity</em> rules: stable returns, dependency arrays, when its callbacks need to be referentially stable. That side lives in <a href="../react/hooks-deep-dive.html">Hooks deep dive</a>; pair the two.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="unions">
+            <h2><span class="section-num">02</span> Discriminated unions as state machines</h2>
+            <p class="takeaway">Model async React state as <b>one union of legal shapes</b>, not parallel booleans. Each arm carries <b>only the data that exists in that state</b>.</p>
+            <p>The classic trio &mdash; <code>isLoading</code>, <code>error</code>, <code>data</code> as three independent fields &mdash; encodes eight combinations when only four are real. What does <code>isLoading: true</code> with <code>data</code> present mean? Nobody knows, and someone will render it. A discriminated union deletes the question.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">FetchState.tsx</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="tsx">type FetchState&lt;T&gt; =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "success"; data: T }   // data exists ONLY here
+  | { status: "error"; error: Error };
+
+function View({ state }: { state: FetchState&lt;User[]&gt; }) {
+  switch (state.status) {
+    case "idle":    return &lt;Hint /&gt;;
+    case "loading": return &lt;Spinner /&gt;;
+    case "success": return &lt;UserList users={state.data} /&gt;;
+    case "error":   return &lt;ErrorBox error={state.error} /&gt;;
+    default: { const impossible: never = state; return impossible; }
+  }
+}</code></pre>
+            </div>
+            <p>This <em>is</em> a state machine: the tag names the state, the arm carries its payload, and the switch is the transition table&rsquo;s read side. Drive it with <code>useReducer</code> (or <code>useState&lt;FetchState&lt;T&gt;&gt;</code>) and the component can&rsquo;t touch <code>state.data</code> outside the <code>"success"</code> branch &mdash; the compiler narrows it away.</p>
+            <p>The <code>never</code> default is the senior signature. <code>never</code> is the type with no values, so the assignment only compiles if every arm above handled its case. Add a <code>"refreshing"</code> status next sprint and every switch in the codebase turns red &mdash; a to-do list generated by the compiler.</p>
+
+            <div class="quiz" data-quiz>
+              <p class="q">You add a fifth arm <code>{ status: "refreshing"; data: T }</code> to <code>FetchState</code>. What does the <code>never</code> default in existing switches do?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Fails to compile at each unhandled switch &mdash; <code>state</code> is now <code>{ status: "refreshing"; &hellip; }</code> there, which isn&rsquo;t assignable to <code>never</code>.</button>
+                <button class="quiz-opt"><span class="mark"></span>Throws at runtime the first time a refreshing state reaches the switch.</button>
+                <button class="quiz-opt"><span class="mark"></span>Nothing &mdash; <code>default</code> is unreachable code the compiler skips.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Exhaustiveness checking is compile-time: if any arm goes unhandled, the narrowed type in <code>default</code> is no longer <code>never</code>, so the assignment errors. Every stale switch becomes a build failure, not a silent fall-through.</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="type-math">
+            <h2><span class="section-num">03</span> Mapped, conditional &amp; <code>infer</code></h2>
+            <p>Mapped types loop over keys; template literal types compute new key names; conditional types with <code>infer</code> pattern-match a type and pull a piece out. Spreadsheet formulas, all three &mdash; they read from a source type and recompute.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">type-math.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">// Mapped + template literal: derive handler names from a record
+type Fields = { email: string; age: number };
+type Handlers = {
+  [K in keyof Fields as `on${Capitalize&lt;K&gt;}Change`]:
+    (value: Fields[K]) =&gt; void;
+};
+// =&gt; { onEmailChange(v: string): void; onAgeChange(v: number): void }
+
+// Conditional + infer: pattern-match a type, pull a piece out
+type UnwrapPromise&lt;T&gt; = T extends Promise&lt;infer U&gt; ? U : T;
+type User = UnwrapPromise&lt;ReturnType&lt;typeof fetchUser&gt;&gt;;</code></pre>
+            </div>
+            <p>Add a field to <code>Fields</code> and <code>Handlers</code> grows the matching <code>on&hellip;Change</code> automatically &mdash; forget to pass it and the compiler says so. (<code>UnwrapPromise</code> ships built-in as <code>Awaited&lt;T&gt;</code>; the interview point is being able to write it.)</p>
+            <p>Where this earns its keep day-to-day: you mostly <em>consume</em> these tools rather than write them. The everyday case is <code>z.infer&lt;typeof schema&gt;</code> &mdash; your form-values type computed from the runtime validator, one source of truth for both checking and types. The data module&rsquo;s forms lesson covers Zod itself; here, just know <code>z.infer</code> is a conditional type doing exactly this trick.</p>
+          </section>
+
+          <section class="section reveal" id="guardrails">
+            <h2><span class="section-num">04</span> <code>satisfies</code>, brands &amp; the <code>any</code> problem</h2>
+            <p>Three precision tools, then the one rule about escape hatches. Each solves a &ldquo;the compiler knows less than it should&rdquo; problem without lying to it.</p>
+            <dl class="kv">
+              <dt><code>satisfies</code></dt><dd>Checks a value against a type <em>without widening it</em>. <code>const routes = { home: "/", user: "/u/:id" } satisfies Record&lt;string, string&gt;</code> &mdash; validated as the record, but <code>routes.home</code> stays the literal <code>"/"</code>, so autocomplete and narrowing keep working. An annotation (<code>: Record&lt;&hellip;&gt;</code>) would throw the narrow types away. The go-to for config objects.</dd>
+              <dt><code>as const</code> for unions</dt><dd><code>const SIZES = ["sm", "md", "lg"] as const</code> then <code>type Size = (typeof SIZES)[number]</code> &mdash; one runtime array to map over, one compile-time union for props, never out of sync.</dd>
+              <dt>Branded types</dt><dd><code>type UserId = string &amp; { readonly __brand: "UserId" }</code>. At runtime it&rsquo;s a plain string; at compile time <code>getUser(postId)</code> refuses to build. Mint values with one audited cast at the boundary: <code>const toUserId = (s: string) =&gt; s as UserId</code>.</dd>
+            </dl>
+
+            <div class="versus">
+              <div class="vs-col vs-bad">
+                <div class="vs-h">any: the checker goes silent</div>
+                <div class="codeblock"><pre><code data-lang="ts">// ❌ any disables checking transitively
+function handle(msg: any) {
+  msg.payload.user.id.toUpperCase();
+  // compiles — even if msg is undefined,
+  // and everything msg touches is any too
+}</code></pre></div>
+              </div>
+              <div class="vs-col vs-good">
+                <div class="vs-h">unknown: prove the shape first</div>
+                <div class="codeblock"><pre><code data-lang="ts">// ✅ unknown forces narrowing before use
+function handle(msg: unknown) {
+  if (isChatMessage(msg)) {
+    msg.payload.text; // narrowed, safe
+  }
+}</code></pre></div>
+              </div>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+                <p><code>as</code> doesn&rsquo;t convert anything &mdash; it overrules the checker, and <code>as unknown as T</code> overrules it completely. The value at runtime is whatever it was; you&rsquo;ve just told the compiler to stop looking. Prefer narrowing, a type guard, or <code>satisfies</code>; reserve <code>as</code> for boundaries where you genuinely know more than the compiler &mdash; and back it with a runtime check (that&rsquo;s what Zod is for).</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you type async data in React state so impossible states can&rsquo;t compile?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>A discriminated union on a <code>status</code> tag, with each arm carrying only its own payload: <code>data</code> exists on <code>"success"</code>, <code>error</code> on <code>"error"</code>, nothing on <code>"idle"</code>/<code>"loading"</code>. The switch narrows per arm, and a <code>never</code> default makes it exhaustive &mdash; adding a status later breaks the build everywhere it&rsquo;s unhandled, instead of silently falling through.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;One union tagged by <code>status</code>, payload per arm, exhaustive switch with a <code>never</code> default &mdash; you can&rsquo;t read <code>data</code> outside the success branch, and new states become compile errors, not bugs.&rdquo;</p></div></div>
+                  <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>Why is <code>{ isLoading, error, data }</code> as three fields worse? (8 representable states, 4 legal.)</li><li>Would you hand-roll this or use TanStack Query&rsquo;s status union?</li></ul></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Where do conditional types and <code>infer</code> show up in everyday React work?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Mostly consumed, rarely written: <code>z.infer</code> computes form-value types from a Zod schema, <code>Awaited</code>/<code>ReturnType</code>/<code>Parameters</code> unwrap function and promise types, and <code>ComponentProps</code> extracts a component&rsquo;s props. I write my own when I need to pull a piece out of a library type that isn&rsquo;t exported &mdash; <code>T extends Promise&lt;infer U&gt; ? U : T</code> is the pattern-match.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Day to day it&rsquo;s <code>z.infer</code> and the built-ins like <code>Awaited</code> and <code>ComponentProps</code>; <code>infer</code> is the pattern-matching keyword underneath all of them.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What does <code>satisfies</code> give you that a type annotation doesn&rsquo;t?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>An annotation both checks <em>and widens</em>: declare <code>routes: Record&lt;string, string&gt;</code> and every value becomes plain <code>string</code> &mdash; literal keys and values are gone. <code>satisfies</code> runs the same check but keeps the inferred narrow type, so the object is validated against the contract while autocomplete, literal unions, and narrowing still work downstream. It&rsquo;s the right default for config maps, theme tokens, and route tables.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;An annotation checks and widens; <code>satisfies</code> checks and keeps inference &mdash; the config is validated but its literal types survive.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="typescript-for-react.html"><span class="pn-k">Previous</span><span class="pn-t">TypeScript for React</span></a>
+            <a class="next" href="vite-and-build-tools.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Vite &amp; the build toolchain</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#generics">Generics React needs</a>
+          <a href="#unions">Unions as state machines</a>
+          <a href="#type-math">Mapped, conditional &amp; infer</a>
+          <a href="#guardrails">satisfies, brands &amp; any</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

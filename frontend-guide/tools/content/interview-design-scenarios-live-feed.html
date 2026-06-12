@@ -1,0 +1,190 @@
+      <div class="content has-toc" id="main">
+        <div class="prose">
+
+          <section class="hero reveal">
+            <span class="eyebrow">Interview prep &middot; design round</span>
+            <h1>Design a live feed</h1>
+            <p class="lead">Chat, notifications, activity streams &mdash; every product has one, and it&rsquo;s THE realtime frontend interview. A strong answer is four decisions: which transport, what happens when the connection drops, where messages live, and how to render a stream without chaos. Most candidates only say &ldquo;WebSockets&rdquo; and stop.</p>
+          </section>
+
+          <section class="section reveal" id="idea">
+            <h2><span class="section-num">00</span> The idea</h2>
+            <p class="takeaway">The prompt: <b>&ldquo;Design the live feed for a team chat&rdquo;</b> (or a notifications panel). The senior answer is <b>transport choice + reconnection/catch-up + cache strategy + calm rendering</b> &mdash; &ldquo;use WebSockets&rdquo; is only a quarter of it.</p>
+            <p>Run the six-step method as usual, but the weight shifts: requirements decide the transport, and the data step splits in two &mdash; the live stream <em>and</em> the recovery path when the stream breaks. Plan the failure path first; the happy path is easy.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Think of it like&hellip; <span class="tag">analogy</span></div>
+                <p><b>Polling</b> is calling the post office every minute to ask if anything arrived &mdash; mostly wasted calls. <b>SSE</b> is the mail carrier&rsquo;s one-way delivery round: mail comes to you as it arrives, but you can&rsquo;t send anything back on that route. <b>WebSocket</b> is a phone line held open in both directions &mdash; powerful, but someone has to keep the line up and redial when it drops.</p>
+              </div>
+            </div>
+
+            <dl class="kv">
+              <dt>Transport</dt><dd>WebSocket, SSE, or polling &mdash; pick from the requirements, not from habit.</dd>
+              <dt>Resilience</dt><dd>Reconnect with backoff, catch up missed events via a cursor, heartbeat dead sockets.</dd>
+              <dt>State</dt><dd>One cache as the source of truth; optimistic sends that reconcile or visibly fail.</dd>
+              <dt>Rendering</dt><dd>Virtualize long histories, respect the reader&rsquo;s scroll, announce politely.</dd>
+            </dl>
+          </section>
+
+          <section class="section reveal" id="transport">
+            <h2><span class="section-num">01</span> Pick the transport</h2>
+            <p>Three real options. The interviewer wants to hear you <em>choose</em>, with reasons &mdash; not default to the fanciest one.</p>
+            <div class="table-wrap"><table>
+              <thead><tr><th></th><th>WebSocket</th><th>SSE</th><th>Polling</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Direction</strong></td><td>Bidirectional</td><td>Server &rarr; client only</td><td>Client pulls on a timer</td></tr>
+                <tr><td><strong>Reconnect</strong></td><td>DIY &mdash; you write backoff + catch-up</td><td>Native auto-retry; browser resends <code>Last-Event-ID</code> so the server can resume</td><td>Free &mdash; every poll is a fresh request</td></tr>
+                <tr><td><strong>Infra cost</strong></td><td>Stateful long-lived connections; load balancers and proxies need care</td><td>Plain HTTP &mdash; proxies, CDNs, and auth middleware just work</td><td>Cheapest &mdash; it&rsquo;s just an endpoint</td></tr>
+                <tr><td><strong>Wins when</strong></td><td>Chat, typing indicators, collaborative cursors &mdash; the client pushes too</td><td>Notifications, tickers, progress, AI token streams &mdash; one-way</td><td>Data changes every few minutes; freshness is non-critical</td></tr>
+              </tbody>
+            </table></div>
+            <p>The verdict to say out loud: <b>chat needs WebSocket</b> (messages and typing indicators flow both ways). A <b>notifications panel is server&rarr;client only, so SSE is the boring-and-right answer</b> &mdash; less infra, free reconnection. And for low-frequency data, <b>polling with TanStack Query&rsquo;s <code>refetchInterval</code> is legitimate</b>; saying so is a senior signal, not a cop-out.</p>
+
+            <div class="quiz" data-quiz>
+              <p class="q">You&rsquo;re building a read-only notifications panel &mdash; the client never sends, only receives. First-choice transport?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>WebSocket &mdash; bidirectional is strictly more capable, so it&rsquo;s always the safest pick.</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>SSE &mdash; it&rsquo;s one-way by design, rides plain HTTP, and reconnects natively with <code>Last-Event-ID</code>.</button>
+                <button class="quiz-opt"><span class="mark"></span>Polling every 500&nbsp;ms &mdash; simplest code wins.</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> You&rsquo;d pay WebSocket&rsquo;s stateful-infra and hand-rolled-reconnect tax for a direction you never use. SSE gives push, proxy-friendliness, and automatic resume for free. (Sub-second polling is just a self-inflicted DDoS.)</div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="resilience">
+            <h2><span class="section-num">02</span> Survive disconnects</h2>
+            <p class="takeaway">Connections <b>will</b> drop &mdash; laptop lids, flaky wifi, deploys, idle load-balancer timeouts. Plan for it or the feed silently goes stale.</p>
+            <dl class="kv">
+              <dt>Backoff + jitter</dt><dd>Reconnect at 1s, 2s, 4s&hellip; capped, with randomness &mdash; so ten thousand clients don&rsquo;t hammer the server in lockstep after a deploy.</dd>
+              <dt>Cursor catch-up</dt><dd>Track the last event/message id you saw. On reconnect, <b>fetch the gap over plain HTTP first</b>, then resume the stream. The socket is for <em>live</em>; history is just a GET.</dd>
+              <dt>Heartbeats</dt><dd>Ping/pong every ~30s. A dead socket can look open for minutes &mdash; TCP won&rsquo;t tell you promptly; silence will.</dd>
+            </dl>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">useFeedSocket.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">useEffect(() =&gt; {
+  let retry = 0, stop = false, ws: WebSocket;
+  function connect() {
+    ws = new WebSocket(WS_URL);
+    ws.onopen = () =&gt; { retry = 0; catchUp(cursor.current); }; // fetch the gap over HTTP first
+    ws.onmessage = (e) =&gt; { const m = JSON.parse(e.data); cursor.current = m.seq; apply(m); };
+    ws.onclose = () =&gt; {
+      if (stop) return;
+      const wait = Math.min(30_000, 1000 * 2 ** retry++) * (0.5 + Math.random()); // backoff + jitter
+      setTimeout(connect, wait);
+    };
+  }
+  connect();
+  return () =&gt; { stop = true; ws.close(); }; // effect cleanup IS the unsubscribe
+}, []);</code></pre>
+            </div>
+            <p>Note the shape: subscribe in the effect, <b>unsubscribe in the cleanup</b> &mdash; same contract as any external store. If you reach for SSE instead, the browser does the retry loop <em>and</em> the cursor (<code>Last-Event-ID</code>) for you; say that and you&rsquo;ve justified the choice twice.</p>
+          </section>
+
+          <section class="section reveal" id="state">
+            <h2><span class="section-num">03</span> Where messages live</h2>
+            <p class="takeaway">Don&rsquo;t invent a parallel store. Make the <b>TanStack Query cache the source of truth</b>: history loads via <code>useQuery</code>, and socket events <b>write into the same cache</b> with <code>queryClient.setQueryData</code>.</p>
+            <p>One list, one owner. Components just read the query; whether a message arrived by HTTP or by socket is invisible to them. Because pushes keep the cache fresh, you can set a long <code>staleTime</code> &mdash; the socket <em>is</em> your freshness mechanism.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">onMessage.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+              <pre><code data-lang="ts">socket.onmessage = (e) =&gt; {
+  const msg: Message = JSON.parse(e.data);
+  queryClient.setQueryData&lt;Message[]&gt;(["chat", roomId], (old = []) =&gt; {
+    if (old.some((m) =&gt; m.id === msg.id)) return old;   // dedupe: at-least-once delivery
+    return [...old, msg].sort((a, b) =&gt; a.seq - b.seq); // order by server sequence
+  });
+};</code></pre>
+            </div>
+            <p>Sending is the optimistic-update pattern: append immediately with a <b>temp id</b> and <code>status: "sending"</code>, reconcile to the server id on ack, and mark it <b>failed with a retry affordance</b> on timeout. Never silently drop a user&rsquo;s message &mdash; that&rsquo;s the one unforgivable bug in chat.</p>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap &mdash; trusting arrival order <span class="tag">gotcha</span></div>
+                <p>Events arrive <b>out of order</b> (catch-up fetch races the live stream) and <b>more than once</b> (at-least-once delivery means reconnects replay). If you render the raw arrival order, you get duplicated and shuffled messages. Always render from a <b>deduped-by-id, sorted-by-server-sequence</b> source &mdash; arrival order is a lie.</p>
+              </div>
+            </div>
+
+            <div class="callout note">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Heads up &mdash; see also <span class="tag">note</span></div>
+                <p>Cache writes, <code>staleTime</code>, and <code>refetchInterval</code> polling are covered in depth in <a href="../../data/tanstack-query.html">TanStack Query &mdash; server state done right</a>.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="render">
+            <h2><span class="section-num">04</span> Render the feed calm</h2>
+            <p>A stream that constantly mutates the screen is hostile. Three habits keep it calm:</p>
+            <dl class="kv">
+              <dt>Virtualize history</dt><dd>A months-old channel has tens of thousands of messages; window the list so only the visible slice mounts &mdash; same move as the <a href="data-table.html">data-table scenario</a>.</dd>
+              <dt>Smart auto-scroll</dt><dd>Auto-scroll on new messages <b>only if the user is already at the bottom</b>. If they&rsquo;ve scrolled up, hold position and show a <b>&ldquo;New messages &darr;&rdquo;</b> pill that jumps down on click.</dd>
+              <dt>Polite announcements</dt><dd>An <code>aria-live="polite"</code> region &mdash; but announce <b>batched summaries</b> (&ldquo;3 new messages&rdquo;), not every message. Screen-reader users shouldn&rsquo;t get machine-gunned by a busy channel.</dd>
+            </dl>
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Common trap &mdash; the auto-scroll yank <span class="tag">gotcha</span></div>
+                <p>Unconditional <code>scrollIntoView</code> on every message rips the page out from under someone reading history &mdash; the fastest way to make users hate a live feed. Track &ldquo;is the user pinned to the bottom?&rdquo; before the new message renders, and only auto-scroll when they are.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="interview">
+            <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+            <div class="qa-set">
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">WebSocket or SSE for a notifications feed?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>SSE. Notifications flow one way &mdash; server to client &mdash; so WebSocket&rsquo;s bidirectionality buys nothing while costing stateful infra and a hand-rolled reconnect loop. SSE rides plain HTTP through proxies and auth middleware, and the browser reconnects automatically, resuming from <code>Last-Event-ID</code>. I&rsquo;d reserve WebSocket for chat, typing indicators, or collaborative editing, where the client pushes too.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;It&rsquo;s server-to-client only, so SSE &mdash; plain HTTP, free auto-reconnect with Last-Event-ID. I&rsquo;d only pay the WebSocket tax once the client needs to push.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you not lose messages across a reconnect?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>Keep a cursor &mdash; the last server sequence id I&rsquo;ve applied. On reconnect, first fetch everything after that cursor over plain HTTP, then resume the live stream. Since catch-up and live can overlap, I dedupe by id and render sorted by server sequence, so replays and races are harmless.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;I track the last event id, fetch the gap over HTTP on reconnect, then resume the stream &mdash; and dedupe by id so the overlap can&rsquo;t double-render.&rdquo;</p></div></div>
+                </div>
+              </details>
+              <details class="qa">
+                <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">A user hits send and the request times out. What does the UI do?</span><span class="pm-chip diff-core">core</span></summary>
+                <div class="qa-body">
+                  <h5>Model answer</h5>
+                  <p>The message was appended optimistically with a temp id and a <code>sending</code> status, so it&rsquo;s already on screen. On ack I swap in the server id and sequence; on timeout I flip it to a visible <code>failed</code> state with a retry button. The one thing I never do is silently drop it.</p>
+                  <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Optimistic append with a temp id, reconcile to the server id on ack, and mark it failed-with-retry on timeout &mdash; never silently lose a user&rsquo;s message.&rdquo;</p></div></div>
+                </div>
+              </details>
+            </div>
+
+            <div class="callout note">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Heads up &mdash; the backend half <span class="tag">note</span></div>
+                <p>System-design rounds ask the same question from the other side &mdash; fan-out, presence, and delivery guarantees live in <a href="../../../sysdesign-guide/core/chat.html">Design a chat system</a> in the System Design guide.</p>
+              </div>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="make-it-fast.html"><span class="pn-k">Previous</span><span class="pn-t">Make this page fast</span></a>
+            <a class="next" href="../../index.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Home &mdash; the roadmap</span></a>
+          </nav>
+        </div>
+
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#idea">The idea</a>
+          <a href="#transport">Pick the transport</a>
+          <a href="#resilience">Survive disconnects</a>
+          <a href="#state">Where messages live</a>
+          <a href="#render">Render the feed calm</a>
+          <a href="#interview">Interview rapid-fire</a>
+        </nav>
+      </div>

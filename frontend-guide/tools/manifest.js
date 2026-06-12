@@ -18,6 +18,7 @@ const MODULES = [
   { key: "foundations", label: "Foundations", pages: [
     { slug: "index",                title: "Foundations — the pro baseline", nav: "Overview",             id: "fo-overview" },
     { slug: "typescript-for-react", title: "TypeScript for React",           nav: "TypeScript for React", id: "fo-ts" },
+    { slug: "advanced-typescript",  title: "Advanced TypeScript for React",  nav: "Advanced TypeScript",  id: "fo-ts-adv" },
     { slug: "vite-and-build-tools", title: "Vite & the build toolchain",     nav: "Vite & build tools",   id: "fo-vite" },
   ]},
   { key: "react", label: "React", pages: [
@@ -63,6 +64,7 @@ const MODULES = [
     { slug: "index",           title: "Ship it — tooling, a11y & deploy", nav: "Overview",       id: "sh-overview" },
     { slug: "lint-and-format", title: "ESLint, Biome & formatting",       nav: "Lint & format",  id: "sh-lint" },
     { slug: "accessibility",   title: "Accessibility interviewers test",  nav: "Accessibility",  id: "sh-a11y",  widgets: ["a11ylens.js"] },
+    { slug: "security",        title: "Frontend security: XSS, CSP & CSRF", nav: "Security",     id: "sh-security", widgets: ["bugspot.js"] },
     { slug: "deploy-and-ci",   title: "Deploy & CI",                      nav: "Deploy & CI",    id: "sh-deploy" },
   ]},
 ];
@@ -78,6 +80,7 @@ const DESIGN_SCENARIOS = [
   { dir: "interview/design-scenarios", slug: "autocomplete", title: "Design an autocomplete",      nav: "Autocomplete",        id: "iv-ds-autocomplete", widgets: ["a11ylens.js"] },
   { dir: "interview/design-scenarios", slug: "data-table",   title: "Design a data table",         nav: "Data table",          id: "iv-ds-table" },
   { dir: "interview/design-scenarios", slug: "make-it-fast", title: "Make this page fast",         nav: "Make it fast",        id: "iv-ds-fast" },
+  { dir: "interview/design-scenarios", slug: "live-feed",    title: "Design a live feed",          nav: "Live feed (realtime)", id: "iv-ds-realtime" },
 ];
 /* Reference / practice surfaces — NOT lessons */
 const REFERENCE = [

@@ -7,6 +7,7 @@
 window.LESSONS = [
   { id: "fo-overview", title: "Foundations — the pro baseline", url: "foundations/index.html", module: "foundations", tool: "foundations" },
   { id: "fo-ts", title: "TypeScript for React", url: "foundations/typescript-for-react.html", module: "foundations", tool: "foundations" },
+  { id: "fo-ts-adv", title: "Advanced TypeScript for React", url: "foundations/advanced-typescript.html", module: "foundations", tool: "foundations" },
   { id: "fo-vite", title: "Vite & the build toolchain", url: "foundations/vite-and-build-tools.html", module: "foundations", tool: "foundations" },
   { id: "re-overview", title: "React — the pro mental model", url: "react/index.html", module: "react", tool: "react" },
   { id: "re-render", title: "Render vs re-render", url: "react/render-and-rerender.html", module: "react", tool: "react" },
@@ -38,6 +39,7 @@ window.LESSONS = [
   { id: "sh-overview", title: "Ship it — tooling, a11y & deploy", url: "ship/index.html", module: "ship", tool: "ship" },
   { id: "sh-lint", title: "ESLint, Biome & formatting", url: "ship/lint-and-format.html", module: "ship", tool: "ship" },
   { id: "sh-a11y", title: "Accessibility interviewers test", url: "ship/accessibility.html", module: "ship", tool: "ship" },
+  { id: "sh-security", title: "Frontend security: XSS, CSP & CSRF", url: "ship/security.html", module: "ship", tool: "ship" },
   { id: "sh-deploy", title: "Deploy & CI", url: "ship/deploy-and-ci.html", module: "ship", tool: "ship" },
   { id: "iv-method", title: "How frontend interviews work", url: "interview/index.html", module: "interview", tool: "interview" },
   { id: "iv-bank", title: "Frontend question bank", url: "interview/question-bank.html", module: "interview", tool: "interview" },
@@ -45,6 +47,7 @@ window.LESSONS = [
   { id: "iv-ds-autocomplete", title: "Design an autocomplete", url: "interview/design-scenarios/autocomplete.html", module: "interview", tool: "interview" },
   { id: "iv-ds-table", title: "Design a data table", url: "interview/design-scenarios/data-table.html", module: "interview", tool: "interview" },
   { id: "iv-ds-fast", title: "Make this page fast", url: "interview/design-scenarios/make-it-fast.html", module: "interview", tool: "interview" },
+  { id: "iv-ds-realtime", title: "Design a live feed", url: "interview/design-scenarios/live-feed.html", module: "interview", tool: "interview" },
 ];
 
 window.LESSON_MODULES = [

@@ -17,9 +17,9 @@ Press `/` (or ⌘/Ctrl-K) anywhere to search. Toggle light/dark, top-right. Prog
 
 ## What's inside
 
-A roadmap home (Junior → Mid → Senior) + 8 modules + an interview hub (43 pages):
+A roadmap home (Junior → Mid → Senior) + 8 modules + an interview hub (46 pages):
 
-`foundations` · `react` · `nextjs` · `styling` · `data` · `perf` · `testing` · `ship` · `interview` (question bank, cheat-sheets, flashcards, design-round scenarios).
+`foundations` (incl. advanced TypeScript) · `react` · `nextjs` · `styling` · `data` · `perf` · `testing` · `ship` (incl. frontend security: XSS, CSP & CSRF) · `interview` (question bank, cheat-sheets, flashcards, design-round scenarios incl. a realtime live feed).
 
 Every topic page runs **fundamentals → pro** in one page: an analogy first, then the precise version, a visual, 2–3 worked examples, gotchas, a quiz, and inline "say it out loud" interview Q&A.
 
@@ -29,6 +29,9 @@ Every topic page runs **fundamentals → pro** in one page: an analogy first, th
 - **rsc-boundary** — toggle `"use client"`; watch the server/client split + JS-bundle meter.
 - **waterfall-viz** — CSR vs SSR vs streaming vs SSG/ISR request timelines.
 - **tw-playground** — type Tailwind utilities, see them apply (offline, curated subset).
+- **bugspot** — click the buggy line in a TSX snippet (stale closure, identity, effect races, XSS sinks); name the bug, see the fix.
+- **cachelab** — a TanStack Query cache entry from mount to garbage collection (`staleTime`/`gcTime`, background refetch).
+- **a11ylens** — toggle div-soup vs semantic markup and compare the computed accessibility trees.
 - Plus reused `flashcards.js`, the `.quiz`, search, and progress engines.
 
 ## Architecture
@@ -38,7 +41,7 @@ Pages are **assembled** by a tiny dev-time generator from a single manifest + pe
 ```
 index.html, <module>/*.html, interview/**/*.html   # generated pages (open these)
 assets/css/  styles.css · theme.css · frontend.css
-assets/js/   main, search, progress, visualizer, flashcards + the 5 engines + generated lessons.js, search-index.js
+assets/js/   main, search, progress, visualizer, flashcards + the 8 engines + generated lessons.js, search-index.js
 tools/       manifest.js · gen.js · build-search-index.js · verify.js · AUTHORING.md · content/ (source fragments)
 ```
 
