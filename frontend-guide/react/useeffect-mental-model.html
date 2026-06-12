@@ -238,8 +238,58 @@ useEffect(() =&gt; {
             </div>
           </section>
 
+          <section class="section reveal" id="spot-the-bug">
+            <h2><span class="section-num">04</span> Spot the bug</h2>
+            <p>Two effects that look fine in review and misbehave in production. Click the guilty line.</p>
+
+            <figure class="viz bugspot" data-bugspot>
+              <figcaption class="viz-title">Two effect bugs &mdash; find the line</figcaption>
+              <script type="application/json" class="bs-config">
+              {
+                "rounds": [
+                  {
+                    "title": "The effect that shouldn't exist",
+                    "code": [
+                      "function Cart({ items }: CartProps) {",
+                      "  const [total, setTotal] = useState(0);",
+                      "",
+                      "  useEffect(() => {",
+                      "    setTotal(items.reduce((s, i) => s + i.price, 0));",
+                      "  }, [items]);",
+                      "",
+                      "  return <p>Total: {total}</p>;",
+                      "}"
+                    ],
+                    "hot": [4, 6],
+                    "flag": "Derived state synced by an effect",
+                    "why": "total is computable from props, so this renders a stale total first, then the effect fires and renders again — two renders per change and a window where the UI lies.",
+                    "fix": "Delete the state and the effect: const total = items.reduce(...) during render. Memoize only if profiling says so.",
+                    "hint": "Does total need to be state at all, or can render compute it?"
+                  },
+                  {
+                    "title": "The fetch that loses the race",
+                    "code": [
+                      "useEffect(() => {",
+                      "  fetch('/api/user/' + id)",
+                      "    .then((r) => r.json())",
+                      "    .then((user) => setUser(user));",
+                      "}, [id]);"
+                    ],
+                    "hot": [4, 4],
+                    "flag": "No cleanup — response race",
+                    "why": "Switch id quickly and the slow first response can resolve last, calling setUser with stale data. Every async effect needs a way to ignore or abort the previous run.",
+                    "fix": "Return a cleanup that aborts (AbortController) or flips an ignore flag, so only the latest request may call setUser.",
+                    "hint": "What happens to the FIRST request when id changes before it resolves?"
+                  }
+                ]
+              }
+              </script>
+              <p class="viz-fallback">Round 1: syncing derived state with an effect &mdash; compute <code>total</code> during render instead. Round 2: a fetch effect with no cleanup lets an out-of-order response clobber state &mdash; abort or ignore stale responses.</p>
+            </figure>
+          </section>
+
           <section class="section reveal" id="interview">
-            <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+            <h2><span class="section-num">05</span> Interview rapid-fire</h2>
             <div class="qa-set">
               <details class="qa">
                 <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is useEffect actually for?</span><span class="pm-chip diff-core">core</span></summary>
@@ -282,6 +332,7 @@ useEffect(() =&gt; {
           <a href="#deps">Dependencies &amp; cleanup</a>
           <a href="#not-an-effect">When you don&rsquo;t need one</a>
           <a href="#strict-and-event">Strict Mode &amp; events</a>
+          <a href="#spot-the-bug">Spot the bug</a>
           <a href="#interview">Interview rapid-fire</a>
         </nav>
       </div>
@@ -297,6 +348,7 @@ useEffect(() =&gt; {
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/effect-timeline.js"></script>
+  <script src="../assets/js/bugspot.js"></script>
   <script src="../assets/js/progress.js"></script>
 </body>
 </html>

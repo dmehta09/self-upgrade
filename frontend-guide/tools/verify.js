@@ -24,6 +24,9 @@ const ENGINES = {
   waterfall: "waterfall-viz.js",
   twplay: "tw-playground.js",
   flashdeck: "flashcards.js",
+  bugspot: "bugspot.js",
+  cachelab: "cachelab.js",
+  a11ylens: "a11ylens.js",
 };
 
 function walk(dir) {

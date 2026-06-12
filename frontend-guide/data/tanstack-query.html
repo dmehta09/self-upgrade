@@ -186,8 +186,44 @@ if (error) return &lt;Error /&gt;;
             </div>
           </section>
 
+          <section class="section reveal" id="lifecycle">
+            <h2><span class="section-num">02</span> Watch a cache entry live &amp; die</h2>
+            <p>Everything Query does follows from two clocks: <code>staleTime</code> (how long data counts as fresh) and <code>gcTime</code> (how long an <em>unused</em> entry survives). Step one entry through its whole life:</p>
+
+            <figure class="viz cachelab" data-cachelab>
+              <figcaption class="viz-title">One query key, mount to garbage collection</figcaption>
+              <script type="application/json" class="cl-config">
+              {
+                "staleTime": "60s",
+                "gcTime": "5min",
+                "frames": [
+                  { "label": "mount", "state": "fetching", "observers": 1, "meter": 0, "meterKind": "stale",
+                    "caption": "First mount: nothing is cached for ['todos']. The query fetches; the component sees isPending." },
+                  { "label": "data arrives", "state": "fresh", "observers": 1, "meter": 4, "meterKind": "stale",
+                    "caption": "Response cached. For the next 60s the entry is fresh — readers get it instantly, and nothing refetches." },
+                  { "label": "2nd mount", "state": "fresh", "observers": 2, "meter": 40, "meterKind": "stale",
+                    "caption": "Another component mounts the same key. Fresh cache → instant data, zero network. Deduping for free." },
+                  { "label": "60s pass", "state": "stale", "observers": 2, "meter": 100, "meterKind": "stale",
+                    "caption": "staleTime elapsed. Nothing happens yet — stale only means 'worth revalidating when something triggers it'." },
+                  { "label": "window refocus", "state": "fetching", "observers": 2, "meter": 100, "meterKind": "stale",
+                    "caption": "A trigger (refocus, remount, reconnect) hits a stale query → background refetch. The UI keeps showing cached data; isFetching is true." },
+                  { "label": "fresh again", "state": "fresh", "observers": 2, "meter": 4, "meterKind": "stale",
+                    "caption": "The new response replaces the cache and the freshness clock restarts. No spinner was ever shown." },
+                  { "label": "both unmount", "state": "inactive", "observers": 0, "meter": 10, "meterKind": "gc",
+                    "caption": "No observers left. The entry goes inactive — kept in memory in case something remounts and wants instant data." },
+                  { "label": "5min pass", "state": "gone", "observers": 0, "meter": 100, "meterKind": "gc",
+                    "caption": "gcTime elapsed with zero observers → the entry is garbage-collected. The next mount starts from scratch with isPending." }
+                ]
+              }
+              </script>
+              <p class="viz-fallback">mount &rarr; fetch &rarr; fresh for <code>staleTime</code> &rarr; stale &rarr; a trigger (refocus/remount) causes a <em>background</em> refetch &rarr; on unmount the entry sits inactive for <code>gcTime</code>, then is garbage-collected.</p>
+            </figure>
+
+            <p class="viz-note">Interview sound-bite: &ldquo;stale&nbsp;&ne; refetch &mdash; stale + a <em>trigger</em> = background refetch. And gcTime only ticks while nobody is watching.&rdquo;</p>
+          </section>
+
           <section class="section reveal" id="mutations">
-            <h2><span class="section-num">02</span> Writes: mutate, then invalidate</h2>
+            <h2><span class="section-num">03</span> Writes: mutate, then invalidate</h2>
             <p>A <code>useMutation</code> sends the change; afterwards you <code>invalidateQueries</code> the affected keys so the cache refetches and the UI reflects the new truth. This is how you keep lists in sync after a create/update/delete.</p>
             <div class="codeblock">
               <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">useAddTodo.ts</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
@@ -231,7 +267,7 @@ addTodo.mutate('Ship it');</code></pre>
           </section>
 
           <section class="section reveal" id="interview">
-            <h2><span class="section-num">03</span> Interview rapid-fire</h2>
+            <h2><span class="section-num">04</span> Interview rapid-fire</h2>
             <div class="qa-set">
               <details class="qa">
                 <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Is TanStack Query a state manager like Redux?</span><span class="pm-chip diff-core">core</span></summary>
@@ -272,6 +308,7 @@ addTodo.mutate('Ship it');</code></pre>
           <h5>On this page</h5>
           <a href="#idea">The idea</a>
           <a href="#usequery">Reading data with useQuery</a>
+          <a href="#lifecycle">Cache lifecycle</a>
           <a href="#mutations">Writes: mutate, then invalidate</a>
           <a href="#interview">Interview rapid-fire</a>
         </nav>
@@ -287,6 +324,7 @@ addTodo.mutate('Ship it');</code></pre>
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/visualizer.js"></script>
+  <script src="../assets/js/cachelab.js"></script>
   <script src="../assets/js/progress.js"></script>
 </body>
 </html>

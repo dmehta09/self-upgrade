@@ -117,8 +117,69 @@ timer.current = window.setInterval(tick, 1000);
             </div>
           </section>
 
+          <section class="section reveal" id="spot-the-bug">
+            <h2><span class="section-num">05</span> Spot the bug</h2>
+            <p>Both of these ship to production every week. Click the line that causes the bug &mdash; each one is a hook-identity failure you just learned.</p>
+
+            <figure class="viz bugspot" data-bugspot>
+              <figcaption class="viz-title">Two classic hook bugs &mdash; find the line</figcaption>
+              <script type="application/json" class="bs-config">
+              {
+                "rounds": [
+                  {
+                    "title": "The timer that stops at 1",
+                    "code": [
+                      "function Timer() {",
+                      "  const [count, setCount] = useState(0);",
+                      "",
+                      "  useEffect(() => {",
+                      "    const id = setInterval(() => {",
+                      "      setCount(count + 1);",
+                      "    }, 1000);",
+                      "    return () => clearInterval(id);",
+                      "  }, []);",
+                      "",
+                      "  return <p>{count}</p>;",
+                      "}"
+                    ],
+                    "hot": [6, 6],
+                    "flag": "Stale closure",
+                    "why": "The effect ran once, so the interval callback closed over the first render's count — 0 — forever. Every tick computes 0 + 1: the timer climbs to 1 and freezes there.",
+                    "fix": "Use a functional update — setCount(c => c + 1) — so the callback never needs the closed-over value (or add count to the deps and recreate the interval each change).",
+                    "hint": "Which value inside the interval callback was captured on the very first render?"
+                  },
+                  {
+                    "title": "memo that never skips",
+                    "code": [
+                      "const Row = memo(function Row({ item, style }: RowProps) {",
+                      "  return <li style={style}>{item.name}</li>;",
+                      "});",
+                      "",
+                      "function List({ items }: ListProps) {",
+                      "  return (",
+                      "    <ul>",
+                      "      {items.map((item) => (",
+                      "        <Row key={item.id} item={item} style={{ padding: 8 }} />",
+                      "      ))}",
+                      "    </ul>",
+                      "  );",
+                      "}"
+                    ],
+                    "hot": [9, 9],
+                    "flag": "New identity every render",
+                    "why": "{ padding: 8 } is a brand-new object each time List renders. memo compares props by Object.is, sees a 'changed' style, and re-renders every Row — the memo buys nothing.",
+                    "fix": "Hoist the object to module scope (it never changes) or memoize it — stable identity is what makes memo's shallow compare succeed.",
+                    "hint": "memo compares by reference. Which prop gets a fresh reference on every parent render?"
+                  }
+                ]
+              }
+              </script>
+              <p class="viz-fallback">Round 1: <code>setCount(count + 1)</code> inside a once-mounted interval is a stale closure &mdash; use <code>setCount(c =&gt; c + 1)</code>. Round 2: the inline <code>style={{ padding: 8 }}</code> object gets a new identity every render, defeating <code>memo</code>.</p>
+            </figure>
+          </section>
+
           <section class="section reveal" id="interview">
-            <h2><span class="section-num">05</span> Interview rapid-fire</h2>
+            <h2><span class="section-num">06</span> Interview rapid-fire</h2>
             <div class="qa-set">
               <details class="qa">
                 <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What are the rules of hooks, and why do they exist?</span><span class="pm-chip diff-core">core</span></summary>
@@ -162,6 +223,7 @@ timer.current = window.setInterval(tick, 1000);
           <a href="#ref">useRef</a>
           <a href="#identity">Identity &amp; memoization</a>
           <a href="#rules">Rules &amp; custom hooks</a>
+          <a href="#spot-the-bug">Spot the bug</a>
           <a href="#interview">Interview rapid-fire</a>
         </nav>
       </div>

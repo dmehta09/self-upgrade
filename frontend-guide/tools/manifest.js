@@ -23,8 +23,8 @@ const MODULES = [
   { key: "react", label: "React", pages: [
     { slug: "index",                  title: "React — the pro mental model",        nav: "Overview",              id: "re-overview" },
     { slug: "render-and-rerender",    title: "Render vs re-render",                 nav: "Render & re-render",    id: "re-render",      widgets: ["render-viz.js"] },
-    { slug: "hooks-deep-dive",        title: "Hooks, identity & memoization",       nav: "Hooks deep-dive",       id: "re-hooks" },
-    { slug: "useeffect-mental-model", title: "useEffect — the right mental model",  nav: "useEffect mental model", id: "re-effect",     widgets: ["effect-timeline.js"] },
+    { slug: "hooks-deep-dive",        title: "Hooks, identity & memoization",       nav: "Hooks deep-dive",       id: "re-hooks",       widgets: ["bugspot.js"] },
+    { slug: "useeffect-mental-model", title: "useEffect — the right mental model",  nav: "useEffect mental model", id: "re-effect",     widgets: ["effect-timeline.js", "bugspot.js"] },
     { slug: "composition-and-context", title: "Composition & context",             nav: "Composition & context", id: "re-composition" },
     { slug: "react-19",               title: "React 19: Actions, use(), compiler",  nav: "React 19 features",     id: "re-19" },
   ]},
@@ -43,7 +43,7 @@ const MODULES = [
   ]},
   { key: "data", label: "Data & state", pages: [
     { slug: "index",                title: "Data & state — three buckets",      nav: "Overview",            id: "da-overview" },
-    { slug: "tanstack-query",       title: "TanStack Query: server-state",      nav: "TanStack Query",      id: "da-query" },
+    { slug: "tanstack-query",       title: "TanStack Query: server-state",      nav: "TanStack Query",      id: "da-query",  widgets: ["cachelab.js"] },
     { slug: "zustand",              title: "Zustand for client state",          nav: "Zustand",             id: "da-zustand" },
     { slug: "forms-rhf-zod",        title: "Forms: react-hook-form + Zod",      nav: "Forms (RHF + Zod)",   id: "da-forms" },
     { slug: "state-decision-guide", title: "Where should this state live?",     nav: "State decision guide", id: "da-decision" },
@@ -62,7 +62,7 @@ const MODULES = [
   { key: "ship", label: "Ship it", pages: [
     { slug: "index",           title: "Ship it — tooling, a11y & deploy", nav: "Overview",       id: "sh-overview" },
     { slug: "lint-and-format", title: "ESLint, Biome & formatting",       nav: "Lint & format",  id: "sh-lint" },
-    { slug: "accessibility",   title: "Accessibility interviewers test",  nav: "Accessibility",  id: "sh-a11y" },
+    { slug: "accessibility",   title: "Accessibility interviewers test",  nav: "Accessibility",  id: "sh-a11y",  widgets: ["a11ylens.js"] },
     { slug: "deploy-and-ci",   title: "Deploy & CI",                      nav: "Deploy & CI",    id: "sh-deploy" },
   ]},
 ];
@@ -75,7 +75,7 @@ const INTERVIEW_PREP = [
 /* Frontend design round (folder interview/design-scenarios/) */
 const DESIGN_SCENARIOS = [
   { dir: "interview/design-scenarios", slug: "index",        title: "The frontend design round",   nav: "Design round method", id: "iv-ds-method" },
-  { dir: "interview/design-scenarios", slug: "autocomplete", title: "Design an autocomplete",      nav: "Autocomplete",        id: "iv-ds-autocomplete" },
+  { dir: "interview/design-scenarios", slug: "autocomplete", title: "Design an autocomplete",      nav: "Autocomplete",        id: "iv-ds-autocomplete", widgets: ["a11ylens.js"] },
   { dir: "interview/design-scenarios", slug: "data-table",   title: "Design a data table",         nav: "Data table",          id: "iv-ds-table" },
   { dir: "interview/design-scenarios", slug: "make-it-fast", title: "Make this page fast",         nav: "Make it fast",        id: "iv-ds-fast" },
 ];
