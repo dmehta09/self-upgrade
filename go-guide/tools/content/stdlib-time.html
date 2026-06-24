@@ -1,0 +1,122 @@
+<section class="hero reveal">
+  <span class="eyebrow">The standard library · time</span>
+  <h1>time: durations, timers &amp; the monotonic clock.</h1>
+  <p class="lead">Time in Go is a typed thing, not a loose number of seconds. A <code>Duration</code> carries its unit, a <code>Time</code> secretly carries <em>two</em> clocks, and formatting uses a reference date so odd you'll never forget it once it clicks.</p>
+</section>
+
+<section class="section reveal" id="duration">
+  <h2><span class="section-num">01</span> Duration is typed nanoseconds</h2>
+  <p class="takeaway">A <code>time.Duration</code> is an <code>int64</code> count of <b>nanoseconds</b> with a type. Build durations by multiplying a count by a unit — <code>2 * time.Second</code>, <code>500 * time.Millisecond</code> — so the unit is always explicit in the code.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A bare number like <code>5</code> is ambiguous — five what? Seconds? Milliseconds? A <code>Duration</code> is that number with a unit tattooed on it, like writing "5 km" instead of "5". You can't accidentally pass "5 milliseconds" where "5 seconds" was meant, because the constant <code>time.Second</code> bakes the scale right into the value.</p></div></div>
+  <p>Because units are constants (<code>time.Second == 1e9</code> nanoseconds), arithmetic just works: <code>time.Minute + 30*time.Second</code> is a 90-second duration. Printing a <code>Duration</code> gives a human string like <code>1m30s</code>.</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	d := 2*time.Minute + 30*time.Second
+	fmt.Println(d)            // human form
+	fmt.Println(d.Seconds())  // as float seconds
+	fmt.Println(90 * time.Second) // unit baked in
+}</script>
+    <script type="text/plain" class="gp-output">2m30s
+150
+1m30s</script>
+  </div>
+</section>
+
+<section class="section reveal" id="format-parse">
+  <h2><span class="section-num">02</span> Formatting: the reference-time layout</h2>
+  <p class="takeaway">Go has <b>no</b> <code>%Y-%m-%d</code> strftime codes. You write the layout by <b>spelling out one specific reference time</b>: <code>Mon Jan 2 15:04:05 MST 2006</code> — i.e. <code>01/02 03:04:05PM '06 -0700</code>. The digits 1-2-3-4-5-6-7 are the mnemonic.</p>
+  <dl class="kv">
+    <dt>Year</dt><dd><code>2006</code> (4-digit) or <code>06</code> (2-digit)</dd>
+    <dt>Month</dt><dd><code>01</code> (zero-padded), <code>1</code>, <code>Jan</code>, or <code>January</code></dd>
+    <dt>Day</dt><dd><code>02</code> (zero-padded) or <code>2</code></dd>
+    <dt>Hour</dt><dd><code>15</code> (24h) or <code>03</code> (12h, with <code>PM</code>)</dd>
+    <dt>Minute / Second</dt><dd><code>04</code> / <code>05</code></dd>
+  </dl>
+  <p>So the common ISO-ish layout <code>"2006-01-02 15:04:05"</code> reads as "year-month-day hour:minute:second." <code>t.Format(layout)</code> renders, <code>time.Parse(layout, s)</code> reads back.</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	// A fixed instant so the output is deterministic.
+	t := time.Date(2026, time.June, 24, 9, 5, 3, 0, time.UTC)
+	fmt.Println(t.Format("2006-01-02 15:04:05"))
+	fmt.Println(t.Format("Mon Jan 2, 2006"))
+	fmt.Println(t.Format("3:04 PM"))
+}</script>
+    <script type="text/plain" class="gp-output">2026-06-24 09:05:03
+Wed Jun 24, 2026
+9:05 AM</script>
+  </div>
+</section>
+
+<section class="section reveal" id="add-sub">
+  <h2><span class="section-num">03</span> Add, Sub &amp; the monotonic clock</h2>
+  <p class="takeaway"><code>t.Add(d)</code> shifts a <code>Time</code> by a <code>Duration</code>; <code>t2.Sub(t1)</code> returns the <code>Duration</code> between two times. Crucially, every <code>Time</code> from <code>time.Now()</code> carries <b>two readings</b>: a <b>wall clock</b> (for display) and a <b>monotonic clock</b> (for measuring elapsed time).</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>The wall clock is the clock on your kitchen wall — someone might move its hands forward an hour for daylight saving, or NTP might nudge it. The monotonic clock is a stopwatch that only ever ticks forward and nobody can reset. To tell <em>what time it is</em> you read the wall; to measure <em>how long something took</em> you read the stopwatch.</p></div></div>
+  <p>When you subtract two <code>Time</code> values that both have a monotonic reading, Go uses the <b>monotonic</b> part — so a backward wall-clock jump (DST, NTP) can't make your measured elapsed time go negative.</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	start := time.Date(2026, 6, 24, 8, 0, 0, 0, time.UTC)
+	end := start.Add(90 * time.Minute)
+	fmt.Println(end.Format("15:04"))
+	fmt.Println(end.Sub(start))   // a Duration
+	fmt.Println(start.Before(end))
+}</script>
+    <script type="text/plain" class="gp-output">09:30
+1h30m0s
+true</script>
+  </div>
+</section>
+
+<section class="section reveal" id="timer-ticker">
+  <h2><span class="section-num">04</span> Timer &amp; Ticker — and always Stop</h2>
+  <p class="takeaway">A <code>time.Timer</code> fires <b>once</b> after a duration; a <code>time.Ticker</code> fires <b>repeatedly</b> on an interval. Both deliver on a channel. <code>defer ticker.Stop()</code> is mandatory — a Ticker you never stop keeps its goroutine and channel alive forever.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">ticker.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">ticker := time.NewTicker(time.Second)
+defer ticker.Stop()              // &lt;- without this, the ticker leaks
+
+for i := 0; i &lt; 3; i++ {
+    &lt;-ticker.C                    // blocks ~1s each loop
+    fmt.Println("tick", i)
+}
+
+// One-shot: time.After returns a channel that fires once.
+select {
+case &lt;-time.After(5 * time.Second):
+    fmt.Println("timed out")
+}</code></pre></div>
+  <p>For simple "do X after N" use <code>time.AfterFunc(d, fn)</code> or <code>&lt;-time.After(d)</code>. For a periodic loop, a <code>Ticker</code> is steadier than sleeping in a loop because it accounts for the time your work took.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Three time traps: <b>(1)</b> the layout string is a <em>reference time</em> (<code>2006-01-02</code>), <b>not</b> strftime — passing <code>"YYYY-MM-DD"</code> just prints those literal letters. <b>(2)</b> A <code>Ticker</code> you never <code>Stop()</code> <b>leaks</b> its goroutine and channel. <b>(3)</b> Subtracting two times you <em>built</em> (via <code>Parse</code>/<code>Date</code>) has <b>no monotonic reading</b>, so a wall-clock/DST shift between them can yield a wrong or negative duration — for elapsed time, always subtract values from <code>time.Now()</code>.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You write <code>t.Format("YYYY-MM-DD")</code> expecting <code>2026-06-24</code>. What do you actually get?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The literal text <code>YYYY-MM-DD</code> (with maybe a stray digit) — those aren't Go's layout tokens.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>2026-06-24</code> — Go understands strftime-style codes.</button>
+      <button class="quiz-opt"><span class="mark"></span>A compile error — the layout is invalid.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Go's <code>Format</code> doesn't use <code>%Y</code>/<code>YYYY</code> codes. It matches the components of one reference instant — <code>Mon Jan 2 15:04:05 MST 2006</code>. Anything that isn't a recognized reference component (like the letters <code>YYYY</code>) is copied through verbatim. The correct layout is <code>"2006-01-02"</code>.</div>
+  </div>
+</section>

@@ -1,0 +1,125 @@
+<section class="hero reveal">
+  <span class="eyebrow">Standard library · logging</span>
+  <h1>Structured logging with <code>log/slog</code>.</h1>
+  <p class="lead">The old <code>log</code> package writes lines of prose; <code>log/slog</code> (Go 1.21) writes <em>structured</em> records — message plus typed key/value attributes — that machines can parse, filter, and aggregate. It's the standard-library answer to "why can't I grep my logs by <code>user_id</code>?"</p>
+</section>
+
+<section class="section reveal" id="why-structured">
+  <h2><span class="section-num">01</span> From prose lines to structured records</h2>
+  <p class="takeaway">A <code>slog</code> call is <b>a message plus key/value pairs</b>: <code>slog.Info("order placed", "id", 42, "total", 19.95)</code>. The handler turns that one record into text or JSON — your code never builds the string.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>The old <code>log</code> package mails a postcard with one handwritten sentence — to find anything you re-read every card. <code>slog</code> mails a filled-in form: <em>name</em>, <em>order id</em>, <em>amount</em>, each in its own labelled box. A machine can instantly sort the whole mailbox by "order id &gt; 1000" because the boxes are named, not buried in a sentence.</p></div></div>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Old <code>log</code> — string interpolation</div>
+      <div class="codeblock"><pre><code data-lang="go">log.Printf("order %d placed, total %.2f",
+    id, total)
+// "order 42 placed, total 19.95"
+// → to filter by id you must REGEX the line</code></pre></div></div>
+    <div class="vs-col vs-good"><div class="vs-h"><code>slog</code> — typed attributes</div>
+      <div class="codeblock"><pre><code data-lang="go">slog.Info("order placed",
+    "id", id, "total", total)
+// level=INFO msg="order placed" id=42 total=19.95
+// → filter id&gt;1000 with a field query, no regex</code></pre></div></div>
+  </div>
+</section>
+
+<section class="section reveal" id="levels-handlers">
+  <h2><span class="section-num">02</span> Levels &amp; handlers</h2>
+  <p class="takeaway">There are four built-in levels — <b>Debug, Info, Warn, Error</b> — and two built-in handlers: <b><code>NewTextHandler</code></b> (human-ish <code>key=value</code>) and <b><code>NewJSONHandler</code></b> (one JSON object per line, for log pipelines).</p>
+  <div class="kv-wrap"><dl class="kv">
+    <dt><code>slog.Debug/Info/Warn/Error(msg, kv...)</code></dt><dd>Log at a level using the <em>default</em> logger. Records below the handler's minimum level are dropped cheaply.</dd>
+    <dt><code>slog.NewTextHandler(w, opts)</code></dt><dd>Emits <code>time=… level=… msg=… key=value</code>. Good for local dev / terminals.</dd>
+    <dt><code>slog.NewJSONHandler(w, opts)</code></dt><dd>Emits <code>{"time":…,"level":…,"msg":…,…}</code>. Feed it to Loki, ELK, CloudWatch, etc.</dd>
+    <dt><code>slog.SetDefault(logger)</code></dt><dd>Makes your configured logger the one the package-level <code>slog.Info(…)</code> calls use.</dd>
+  </dl></div>
+  <p>A real <code>slog</code> line carries a wall-clock <code>time=…</code>, so its exact text changes every run. Conceptually a JSON record looks like this (the <code>time</code> field is omitted here only because it's non-deterministic):</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">record.json</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="json">{"time":"2026-06-24T10:00:00Z","level":"INFO","msg":"order placed","id":42,"total":19.95}</code></pre></div>
+</section>
+
+<section class="section reveal" id="deterministic-text">
+  <h2><span class="section-num">03</span> A deterministic text record (time stripped)</h2>
+  <p>To prove the shape <em>and</em> keep output stable, we hand the handler a <code>ReplaceAttr</code> that drops the time attribute. Now the text is identical every run:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"bytes"
+	"fmt"
+	"log/slog"
+)
+
+func main() {
+	var buf bytes.Buffer
+	// ReplaceAttr lets us rewrite or drop attributes before they're emitted.
+	// Dropping the time key makes the output deterministic for this demo.
+	opts := &slog.HandlerOptions{
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.Attr{} // empty Attr → omitted
+			}
+			return a
+		},
+	}
+	logger := slog.New(slog.NewTextHandler(&buf, opts))
+	logger.Info("order placed", "id", 42, "total", 19.95)
+	fmt.Print(buf.String())
+}</script>
+    <script type="text/plain" class="gp-output">level=INFO msg="order placed" id=42 total=19.95</script>
+  </div>
+  <p>In production you'd <em>keep</em> the time. <code>ReplaceAttr</code> is also how you redact: return <code>slog.String(a.Key, "***")</code> for keys like <code>password</code> or <code>token</code>.</p>
+</section>
+
+<section class="section reveal" id="with-context">
+  <h2><span class="section-num">04</span> <code>With</code> for context fields &amp; groups</h2>
+  <p class="takeaway"><b><code>logger.With("request_id", id)</code></b> returns a child logger that stamps those fields onto <em>every</em> later record — so you set request/trace context once, not on every call.</p>
+  <p>Here a child logger carries <code>request_id</code> into a JSON record (time dropped for determinism):</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"bytes"
+	"fmt"
+	"log/slog"
+)
+
+func dropTime(groups []string, a slog.Attr) slog.Attr {
+	if a.Key == slog.TimeKey {
+		return slog.Attr{}
+	}
+	return a
+}
+
+func main() {
+	var buf bytes.Buffer
+	h := slog.NewJSONHandler(&buf, &slog.HandlerOptions{ReplaceAttr: dropTime})
+	base := slog.New(h)
+
+	// With() attaches context fields to the child and all its records.
+	reqLog := base.With("request_id", "abc123")
+	reqLog.Warn("slow query", slog.Int("ms", 1200))
+
+	fmt.Print(buf.String())
+}</script>
+    <script type="text/plain" class="gp-output">{"level":"WARN","msg":"slow query","request_id":"abc123","ms":1200}</script>
+  </div>
+  <p>To nest related fields, wrap them in a <code>slog.Group("db", …)</code> — in JSON that becomes a sub-object <code>"db":{…}</code>. And to thread a logger through call layers, stash it on the request <code>context</code> and pull it back with <code>slog.With</code>; <code>logger.InfoContext(ctx, …)</code> also lets handlers read trace IDs off the <code>ctx</code>.</p>
+</section>
+
+<section class="section reveal" id="gotchas">
+  <h2><span class="section-num">05</span> The balanced-pairs trap</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>The variadic args are <b>alternating key, value, key, value…</b> — they must come in <em>balanced pairs</em>. An odd count (e.g. <code>slog.Info("done", "id")</code> with no value) doesn't panic; <code>slog</code> emits a <code>!BADKEY</code> attribute and your log is quietly wrong. Two fixes: use the typed constructors <code>slog.Int("id", 42)</code>, <code>slog.String("user", u)</code> (the compiler enforces a value), and turn on <code>go vet</code> — its <code>slog</code> check flags mismatched/odd pairs at build time. <b>And never log secrets</b> (passwords, tokens, full card numbers): structured logs are shipped and retained, so redact in <code>ReplaceAttr</code>.</p></div></div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">observability</span></div><p>Structured logging is one of the three pillars of observability. For the platform side — log levels in production, correlation with traces, and shipping JSON logs through a pipeline — see <a href="../../observability-guide/logs/structured-logging.html">Observability · Structured logging</a>.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">What does <code>slog.Info("login", "user", "ada", "ip")</code> produce?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A record with <code>user=ada</code> plus a <code>!BADKEY</code> attribute, because <code>"ip"</code> has no matching value — the pairs are unbalanced.</button>
+      <button class="quiz-opt"><span class="mark"></span>A compile error — odd argument counts are rejected by the compiler.</button>
+      <button class="quiz-opt"><span class="mark"></span>A record where <code>ip</code> is logged with an empty string value.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> The args are alternating key/value pairs; a dangling <code>"ip"</code> has no value, so <code>slog</code> records it as <code>!BADKEY=ip</code> at <em>runtime</em> rather than failing the build. Use the typed helpers (<code>slog.String("ip", addr)</code>) so the compiler forces a value, and run <code>go vet</code> to catch these before they ship.</div>
+  </div>
+</section>

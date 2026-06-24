@@ -1,0 +1,115 @@
+<section class="hero reveal">
+  <span class="eyebrow">The language core · slices</span>
+  <h1>Arrays vs slices: the len/cap model.</h1>
+  <p class="lead">Slices are the workhorse of Go — and the source of its most famous bugs. Once you can <em>see</em> the slice header sitting over a backing array, aliasing and the surprising <code>append</code> stop being mysterious.</p>
+</section>
+
+<section class="section reveal" id="values-vs-views">
+  <h2><span class="section-num">01</span> Arrays are values, slices are views</h2>
+  <p class="takeaway">An <b>array</b> <code>[4]int</code> has a fixed size and is <b>copied</b> when assigned. A <b>slice</b> <code>[]int</code> is a tiny header — <b>pointer, length, capacity</b> — that <b>views</b> a backing array.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>The backing array is a row of numbered lockers. A slice is a sticky note that says “lockers 1–3, and I'm allowed to grow into 4.” Copy the note and both notes point at the <em>same</em> lockers — change a locker through one, the other sees it too.</p></div></div>
+  <p>The header is three machine words. That's why passing a slice to a function is cheap (it copies 24 bytes, not the data) — but also why the callee can mutate your elements.</p>
+</section>
+
+<section class="section reveal" id="header">
+  <h2><span class="section-num">02</span> The slice header, visualized</h2>
+  <p>Step through <code>make</code> → <code>append</code> → re-slice → write → grow. Watch <b>len</b> (used, solid) vs <b>cap</b> (spare, dashed), and the moment a grow <b>copies into a new array</b>:</p>
+  <figure class="slicelab reveal" data-slicelab aria-label="A slice header over its backing array, through append and re-slice">
+    <script type="application/json" class="sl-config">
+    { "frames": [
+      { "caption": "<code>s := make([]int, 0, 4)</code> — a header over a 4-cell array. <b>len 0, cap 4</b>: all spare.",
+        "arrays":  [ { "id": "A0", "cells": [0,0,0,0] } ],
+        "headers": [ { "name": "s", "array": "A0", "start": 0, "len": 0, "cap": 4 } ] },
+      { "caption": "<code>s = append(s, 1, 2, 3)</code> — writes in place; <b>len 3</b>, still cap 4.",
+        "arrays":  [ { "id": "A0", "cells": [1,2,3,0] } ],
+        "headers": [ { "name": "s", "array": "A0", "start": 0, "len": 3, "cap": 4 } ],
+        "changed": { "A0": [0,1,2] } },
+      { "caption": "<code>t := s[1:3]</code> — a SECOND header over the <b>same array</b>. t aliases s.",
+        "arrays":  [ { "id": "A0", "cells": [1,2,3,0] } ],
+        "headers": [ { "name": "s", "array": "A0", "start": 0, "len": 3, "cap": 4 },
+                     { "name": "t", "array": "A0", "start": 1, "len": 2, "cap": 3 } ],
+        "alias": ["s","t"] },
+      { "caption": "<code>t[0] = 99</code> — writes locker 1. <b>s[1] is now 99 too</b> — same memory!",
+        "arrays":  [ { "id": "A0", "cells": [1,99,3,0] } ],
+        "headers": [ { "name": "s", "array": "A0", "start": 0, "len": 3, "cap": 4 },
+                     { "name": "t", "array": "A0", "start": 1, "len": 2, "cap": 3 } ],
+        "alias": ["s","t"],
+        "changed": { "A0": [1] } },
+      { "caption": "<code>s = append(s, 4)</code> — fits in cap 4, so it's written in place. len 4.",
+        "arrays":  [ { "id": "A0", "cells": [1,99,3,4] } ],
+        "headers": [ { "name": "s", "array": "A0", "start": 0, "len": 4, "cap": 4 },
+                     { "name": "t", "array": "A0", "start": 1, "len": 2, "cap": 3 } ],
+        "alias": ["s","t"],
+        "changed": { "A0": [3] } },
+      { "caption": "<code>s = append(s, 5)</code> — over cap! Go allocates a <b>NEW array</b> (cap 8) and copies. s and t now point at <b>different memory</b>.",
+        "arrays":  [ { "id": "A0", "cells": [1,99,3,4] }, { "id": "A1", "cells": [1,99,3,4,5,0,0,0] } ],
+        "headers": [ { "name": "s", "array": "A1", "start": 0, "len": 5, "cap": 8 },
+                     { "name": "t", "array": "A0", "start": 1, "len": 2, "cap": 3 } ],
+        "realloc": { "to": "A1" },
+        "changed": { "A1": [4] } }
+    ] }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="append-growth">
+  <h2><span class="section-num">03</span> append &amp; growth</h2>
+  <p class="takeaway"><code>append</code> writes into spare capacity if there is any; otherwise it <b>allocates a bigger array and copies</b>, returning a header that points at the new array. <b>Always assign the result back.</b></p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    s := make([]int, 0, 2)
+    for i := 1; i <= 5; i++ {
+        s = append(s, i)
+        fmt.Printf("len=%d cap=%d %v\n", len(s), cap(s), s)
+    }
+}</script>
+    <script type="text/plain" class="gp-output">len=1 cap=2 [1]
+len=2 cap=2 [1 2]
+len=3 cap=4 [1 2 3]
+len=4 cap=4 [1 2 3 4]
+len=5 cap=8 [1 2 3 4 5]</script>
+  </div>
+  <p>Capacity jumps 2 → 4 → 8: each grow roughly doubles for small slices, so <code>append</code> in a loop is amortised O(1). If you know the size, <code>make([]T, 0, n)</code> avoids the regrows entirely.</p>
+</section>
+
+<section class="section reveal" id="aliasing">
+  <h2><span class="section-num">04</span> The aliasing gotcha</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>A re-slice <b>shares the backing array</b>. Mutating the sub-slice mutates the original — and an <code>append</code> that still fits in cap will <b>overwrite</b> the parent's data. This is the #1 Go slice bug.</p></div></div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    s := []int{1, 2, 3, 4}
+    t := s[:2]               // len 2, cap 4 — shares s's array
+    t = append(t, 99)        // fits in cap → overwrites s[2]!
+    fmt.Println("s =", s)
+    fmt.Println("t =", t)
+}</script>
+    <script type="text/plain" class="gp-output">s = [1 2 99 4]
+t = [1 2 99]</script>
+  </div>
+  <p>The fix when you need an independent slice: cap the re-slice with a <b>3-index slice</b> <code>s[:2:2]</code> (len 2, cap 2 — the next append must reallocate), or <code>copy</code> into a fresh slice.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">fix.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">t := s[:2:2]            // cap 2 — append is forced to copy, leaving s alone
+u := make([]int, len(s))
+copy(u, s)              // u is fully independent</code></pre></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A function takes a <code>[]int</code>, does <code>s[0] = 0</code>, and also <code>s = append(s, 9)</code> where the slice has spare cap. After it returns, what did the caller's slice see?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The <code>s[0] = 0</code> is visible; the appended <code>9</code> is not (the caller's len didn't change).</button>
+      <button class="quiz-opt"><span class="mark"></span>Both changes are visible.</button>
+      <button class="quiz-opt"><span class="mark"></span>Neither change is visible — slices are copied by value.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> The header is copied, so element writes go through the <em>shared</em> array (visible), but the callee's new <code>len</code> stays local — the caller never sees the appended element (it may even have been written into the backing array past the caller's len). Return the slice to make growth visible.</div>
+  </div>
+</section>

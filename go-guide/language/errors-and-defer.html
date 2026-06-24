@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Errors, defer, panic & recover | Go — a visual guide</title>
+  <meta name="description" content="Go — a visual guide — Errors, defer, panic &amp; recover. A sharp, diagram-first guide to Go for backend engineers and interviews: the language, slices &amp; interfaces, generics, and concurrency (goroutines, channels, the scheduler) — each idea in plain English then precise, with runnable Go examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ADD8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z'/><path d='M2.5 9.5h2.5M19 9.5h2.5'/><circle cx='9.6' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/><circle cx='14.4' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/go.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="language" data-page="language-errors-and-defer" data-lesson="lang-defer">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Go — a visual guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z"/><path d="M2.5 9.5h2.5M19 9.5h2.5"/><circle cx="9.6" cy="10.6" r="1.1" fill="#06121a" stroke="none"/><circle cx="14.4" cy="10.6" r="1.1" fill="#06121a" stroke="none"/></svg></span>
+        <span class="brand-text"><b>Go — a visual guide</b><span>the language &amp; runtime, distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home · the map</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Getting started">
+        <h4><span class="dot"></span>Getting started</h4>
+        <a class="nav-link" href="../foundations/why-go.html">Why Go</a>
+        <a class="nav-link" href="../foundations/toolchain.html">Toolchain & modules</a>
+        <a class="nav-link" href="../foundations/hello-program.html">Anatomy of a program</a>
+        <a class="nav-link" href="../foundations/vars-and-types.html">Vars, constants & zero values</a>
+        <a class="nav-link" href="../foundations/control-flow.html">Control flow & functions</a>
+      </nav>
+      <nav class="nav-group is-language" aria-label="The language core">
+        <h4><span class="dot"></span>The language core</h4>
+        <a class="nav-link" href="../language/arrays-slices.html">Arrays & slices</a>
+        <a class="nav-link" href="../language/maps.html">Maps</a>
+        <a class="nav-link" href="../language/strings-runes-bytes.html">Strings, runes & bytes</a>
+        <a class="nav-link" href="../language/structs.html">Structs & embedding</a>
+        <a class="nav-link" href="../language/pointers.html">Pointers</a>
+        <a class="nav-link" href="../language/errors-and-defer.html">Errors, defer & panic</a>
+        <a class="nav-link" href="../language/error-handling-patterns.html">Error handling patterns</a>
+      </nav>
+      <nav class="nav-group is-types" aria-label="Types &amp; interfaces">
+        <h4><span class="dot"></span>Types & interfaces</h4>
+        <a class="nav-link" href="../types/methods.html">Methods & receivers</a>
+        <a class="nav-link" href="../types/interfaces.html">Interfaces</a>
+        <a class="nav-link" href="../types/nil-interfaces.html">The nil interface trap</a>
+        <a class="nav-link" href="../types/type-assertions-switch.html">Assertions & switches</a>
+        <a class="nav-link" href="../types/error-interface-design.html">Interfaces in practice</a>
+        <a class="nav-link" href="../types/reflection.html">Reflection & tags</a>
+      </nav>
+      <nav class="nav-group is-generics" aria-label="Generics &amp; modern Go">
+        <h4><span class="dot"></span>Generics & modern Go</h4>
+        <a class="nav-link" href="../generics/type-parameters.html">Type parameters</a>
+        <a class="nav-link" href="../generics/generic-stdlib.html">Generic stdlib</a>
+        <a class="nav-link" href="../generics/iterators.html">Iterators (range-func)</a>
+        <a class="nav-link" href="../generics/generics-pitfalls.html">Generics pitfalls</a>
+      </nav>
+      <nav class="nav-group is-concurrency" aria-label="Concurrency">
+        <h4><span class="dot"></span>Concurrency</h4>
+        <a class="nav-link" href="../concurrency/index.html">The big picture</a>
+        <a class="nav-link" href="../concurrency/goroutines.html">Goroutines</a>
+        <a class="nav-link" href="../concurrency/scheduler.html">The G-M-P scheduler</a>
+        <a class="nav-link" href="../concurrency/channels.html">Channels</a>
+        <a class="nav-link" href="../concurrency/select.html">select & multiplexing</a>
+        <a class="nav-link" href="../concurrency/sync-primitives.html">sync primitives</a>
+        <a class="nav-link" href="../concurrency/atomics-memory-model.html">Atomics & memory model</a>
+        <a class="nav-link" href="../concurrency/context.html">context</a>
+        <a class="nav-link" href="../concurrency/patterns.html">Concurrency patterns</a>
+        <a class="nav-link" href="../concurrency/errgroup.html">errgroup</a>
+        <a class="nav-link" href="../concurrency/leaks-deadlocks-races.html">Leaks, deadlocks & races</a>
+      </nav>
+      <nav class="nav-group is-stdlib" aria-label="Standard library">
+        <h4><span class="dot"></span>Standard library</h4>
+        <a class="nav-link" href="../stdlib/encoding-json.html">encoding/json</a>
+        <a class="nav-link" href="../stdlib/time.html">time</a>
+        <a class="nav-link" href="../stdlib/io-bufio.html">io & bufio</a>
+        <a class="nav-link" href="../stdlib/files-os.html">Files & os</a>
+        <a class="nav-link" href="../stdlib/slog.html">log/slog</a>
+        <a class="nav-link" href="../stdlib/stdlib-tour.html">Stdlib tour</a>
+      </nav>
+      <nav class="nav-group is-webservices" aria-label="HTTP services">
+        <h4><span class="dot"></span>HTTP services</h4>
+        <a class="nav-link" href="../webservices/net-http.html">net/http</a>
+        <a class="nav-link" href="../webservices/middleware-routing.html">Middleware & routing</a>
+        <a class="nav-link" href="../webservices/http-clients.html">HTTP clients</a>
+        <a class="nav-link" href="../webservices/json-apis.html">JSON APIs</a>
+        <a class="nav-link" href="../webservices/production-services.html">Production services</a>
+      </nav>
+      <nav class="nav-group is-testing" aria-label="Testing &amp; tooling">
+        <h4><span class="dot"></span>Testing & tooling</h4>
+        <a class="nav-link" href="../testing/testing-basics.html">Tests & table tests</a>
+        <a class="nav-link" href="../testing/mocking-interfaces.html">Mocking & seams</a>
+        <a class="nav-link" href="../testing/benchmarks.html">Benchmarks</a>
+        <a class="nav-link" href="../testing/fuzzing-coverage.html">Fuzzing & coverage</a>
+        <a class="nav-link" href="../testing/tooling.html">The tooling belt</a>
+      </nav>
+      <nav class="nav-group is-runtime" aria-label="Runtime &amp; performance">
+        <h4><span class="dot"></span>Runtime & performance</h4>
+        <a class="nav-link" href="../runtime/memory-model-stack-heap.html">Stack, heap & escape</a>
+        <a class="nav-link" href="../runtime/garbage-collector.html">The garbage collector</a>
+        <a class="nav-link" href="../runtime/pprof-profiling.html">pprof profiling</a>
+        <a class="nav-link" href="../runtime/performance-patterns.html">Performance patterns</a>
+        <a class="nav-link" href="../runtime/cgo-unsafe-build.html">cgo, unsafe & builds</a>
+      </nav>
+      <nav class="nav-group is-interview" aria-label="Interview prep">
+        <h4><span class="dot"></span>Interview prep</h4>
+        <a class="nav-link" href="../interview/question-bank.html">Question bank</a>
+        <a class="nav-link" href="../interview/machine-coding.html">Machine-coding</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheatsheet</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+        <a class="nav-link" href="../reference/drills.html">Timed drills</a>
+        <a class="nav-link" href="../reference/gotchas.html">Gotchas index</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">Errors, defer, panic &amp; recover</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">The language core · errors &amp; defer</span>
+  <h1>Errors, defer, panic &amp; recover.</h1>
+  <p class="lead">Go has no exceptions for ordinary failure. Errors are plain values you return and check; <code>defer</code> guarantees cleanup; <code>panic</code>/<code>recover</code> are the rare escape hatch. Here's how they fit together.</p>
+</section>
+
+<section class="section reveal" id="errors-are-values">
+  <h2><span class="section-num">01</span> Errors are values</h2>
+  <p class="takeaway">A function that can fail returns an <b><code>error</code></b> as its last result. You check it with <b><code>if err != nil</code></b> — no try/catch, no hidden control flow.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>An exception is a fire alarm that yanks you out of the building from anywhere. A Go error is a note handed back at each step: “here's your result, and here's whether it went wrong.” You read the note before moving on — the failure path is right there in the code, not teleporting up the stack.</p></div></div>
+  <p>Wrap errors with <code>%w</code> to add context while preserving the original, then test the chain with <code>errors.Is</code> (sentinel match) or <code>errors.As</code> (typed match).</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "errors"
+    "fmt"
+)
+
+var ErrNotFound = errors.New("not found")
+
+func find(id int) (string, error) {
+    if id == 0 {
+        return "", fmt.Errorf("find %d: %w", id, ErrNotFound) // wrap
+    }
+    return "ada", nil
+}
+
+func main() {
+    _, err := find(0)
+    fmt.Println(err)
+    fmt.Println(errors.Is(err, ErrNotFound)) // unwraps the chain
+}</script>
+    <script type="text/plain" class="gp-output">find 0: not found
+true</script>
+  </div>
+</section>
+
+<section class="section reveal" id="defer">
+  <h2><span class="section-num">02</span> defer: cleanup you can't forget</h2>
+  <p class="takeaway"><code>defer</code> schedules a call to run when the surrounding function returns — in <b>LIFO order</b>. It's how Go does “close this no matter how we leave.”</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    defer fmt.Println("A")
+    defer fmt.Println("B")
+    defer fmt.Println("C")
+    fmt.Println("body runs first")
+}</script>
+    <script type="text/plain" class="gp-output">body runs first
+C
+B
+A</script>
+  </div>
+  <p>The classic use is pairing acquire/release on adjacent lines, so the release can't be lost down some early-return path:</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">read.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">f, err := os.Open(name)
+if err != nil {
+    return err
+}
+defer f.Close()        // runs on every return path below
+// … use f, return early if you like …</code></pre></div>
+</section>
+
+<section class="section reveal" id="defer-args">
+  <h2><span class="section-num">03</span> defer evaluates its arguments now</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>A deferred call's <b>arguments are evaluated when <code>defer</code> runs</b>, not when the call fires. So <code>defer fmt.Println(i)</code> captures <code>i</code>'s value <em>now</em>. (To capture the final value, defer a closure: <code>defer func(){ fmt.Println(i) }()</code>.) Also beware <code>defer</code> in a loop — they all stack up until the function returns.</p></div></div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    i := 0
+    defer fmt.Println("deferred sees:", i) // i is read NOW → 0
+    i = 99
+    fmt.Println("now:", i)
+}</script>
+    <script type="text/plain" class="gp-output">now: 99
+deferred sees: 0</script>
+  </div>
+</section>
+
+<section class="section reveal" id="panic-recover">
+  <h2><span class="section-num">04</span> panic &amp; recover</h2>
+  <p class="takeaway"><code>panic</code> unwinds the stack, running deferred calls as it goes; a <code>recover()</code> <b>inside a deferred function</b> stops the unwind and lets the function return normally. Use it sparingly — at process boundaries, not for ordinary errors.</p>
+  <p>Step through a panic being recovered. Watch the defers run LIFO during unwinding, and <code>recover()</code> halt it:</p>
+  <figure class="deferstack reveal" data-deferstack aria-label="A panic unwinding the stack, stopped by a deferred recover">
+    <script type="application/json" class="ds-config">
+    { "frames": [
+      { "caption": "<code>main()</code> calls <code>f()</code>. f registers two defers (LIFO): cleanup, then a recoverer.",
+        "stack": [ { "name": "main()" },
+                   { "name": "f()", "state": "active", "defers": ["cleanup()", "recoverer() // has recover()"] } ],
+        "output": "" },
+      { "caption": "<code>f</code> hits <code>panic(\"boom\")</code> — normal flow stops; the stack starts unwinding.",
+        "stack": [ { "name": "main()" },
+                   { "name": "f()", "state": "panicking", "defers": ["cleanup()", "recoverer() // has recover()"] } ],
+        "output": "" },
+      { "caption": "Unwinding runs defers <b>LIFO</b> — the recoverer (registered last) runs first.",
+        "stack": [ { "name": "main()" },
+                   { "name": "f()", "state": "panicking", "running": 1, "defers": ["cleanup()", "recoverer() // has recover()"] } ],
+        "output": "" },
+      { "caption": "<code>recover()</code> returns <code>\"boom\"</code> → the panic is <b>stopped</b>. f will now return normally.",
+        "stack": [ { "name": "main()" },
+                   { "name": "f()", "state": "recovered", "running": 1, "defers": ["cleanup()", "recoverer() // has recover()"] } ],
+        "output": "recovered: boom" },
+      { "caption": "The remaining defer runs: <code>cleanup()</code>.",
+        "stack": [ { "name": "main()" },
+                   { "name": "f()", "state": "recovered", "running": 0, "defers": ["cleanup()", "recoverer() // has recover()"] } ],
+        "output": "recovered: boom\ncleanup done" },
+      { "caption": "<code>f</code> returns normally — <code>main</code> never saw a panic.",
+        "stack": [ { "name": "main()" } ],
+        "output": "recovered: boom\ncleanup done\nback in main" }
+    ] }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Where must <code>recover()</code> be called to actually stop a panic?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Inside a <b>deferred</b> function in the panicking goroutine.</button>
+      <button class="quiz-opt"><span class="mark"></span>Anywhere after the <code>panic</code> statement.</button>
+      <button class="quiz-opt"><span class="mark"></span>In any goroutine — it catches panics process-wide.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> <code>recover</code> only does something when called <em>directly by a deferred function</em> during unwinding, in the <em>same</em> goroutine that panicked. Called anywhere else it returns <code>nil</code> and does nothing — which is why an unrecovered panic in another goroutine still crashes the program.</div>
+  </div>
+</section>
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../language/pointers.html"><span class="pn-k">Previous</span><span class="pn-t">Pointers &amp; memory semantics</span></a>
+            <a class="next" href="../language/error-handling-patterns.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Error handling, the senior way</span></a>
+          </nav>
+        </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#errors-are-values">Errors are values</a>
+          <a href="#defer">defer: cleanup you can't forget</a>
+          <a href="#defer-args">defer evaluates its arguments now</a>
+          <a href="#panic-recover">panic recover</a>
+          <a href="#check">Check yourself</a>
+        </nav>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Go — a visual guide &middot; goroutines &middot; channels &middot; interfaces &middot; generics &middot; the runtime</span>
+        <span class="fmono">Built to open offline &middot; Go 1.26 era &middot; Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/deferstack.js"></script>
+  <script src="../assets/js/gopad.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

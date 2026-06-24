@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Atomics & the Go memory model | Go — a visual guide</title>
+  <meta name="description" content="Go — a visual guide — Atomics &amp; the Go memory model. A sharp, diagram-first guide to Go for backend engineers and interviews: the language, slices &amp; interfaces, generics, and concurrency (goroutines, channels, the scheduler) — each idea in plain English then precise, with runnable Go examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ADD8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z'/><path d='M2.5 9.5h2.5M19 9.5h2.5'/><circle cx='9.6' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/><circle cx='14.4' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/go.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="concurrency" data-page="concurrency-atomics-memory-model" data-lesson="co-memory">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Go — a visual guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z"/><path d="M2.5 9.5h2.5M19 9.5h2.5"/><circle cx="9.6" cy="10.6" r="1.1" fill="#06121a" stroke="none"/><circle cx="14.4" cy="10.6" r="1.1" fill="#06121a" stroke="none"/></svg></span>
+        <span class="brand-text"><b>Go — a visual guide</b><span>the language &amp; runtime, distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home · the map</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Getting started">
+        <h4><span class="dot"></span>Getting started</h4>
+        <a class="nav-link" href="../foundations/why-go.html">Why Go</a>
+        <a class="nav-link" href="../foundations/toolchain.html">Toolchain & modules</a>
+        <a class="nav-link" href="../foundations/hello-program.html">Anatomy of a program</a>
+        <a class="nav-link" href="../foundations/vars-and-types.html">Vars, constants & zero values</a>
+        <a class="nav-link" href="../foundations/control-flow.html">Control flow & functions</a>
+      </nav>
+      <nav class="nav-group is-language" aria-label="The language core">
+        <h4><span class="dot"></span>The language core</h4>
+        <a class="nav-link" href="../language/arrays-slices.html">Arrays & slices</a>
+        <a class="nav-link" href="../language/maps.html">Maps</a>
+        <a class="nav-link" href="../language/strings-runes-bytes.html">Strings, runes & bytes</a>
+        <a class="nav-link" href="../language/structs.html">Structs & embedding</a>
+        <a class="nav-link" href="../language/pointers.html">Pointers</a>
+        <a class="nav-link" href="../language/errors-and-defer.html">Errors, defer & panic</a>
+        <a class="nav-link" href="../language/error-handling-patterns.html">Error handling patterns</a>
+      </nav>
+      <nav class="nav-group is-types" aria-label="Types &amp; interfaces">
+        <h4><span class="dot"></span>Types & interfaces</h4>
+        <a class="nav-link" href="../types/methods.html">Methods & receivers</a>
+        <a class="nav-link" href="../types/interfaces.html">Interfaces</a>
+        <a class="nav-link" href="../types/nil-interfaces.html">The nil interface trap</a>
+        <a class="nav-link" href="../types/type-assertions-switch.html">Assertions & switches</a>
+        <a class="nav-link" href="../types/error-interface-design.html">Interfaces in practice</a>
+        <a class="nav-link" href="../types/reflection.html">Reflection & tags</a>
+      </nav>
+      <nav class="nav-group is-generics" aria-label="Generics &amp; modern Go">
+        <h4><span class="dot"></span>Generics & modern Go</h4>
+        <a class="nav-link" href="../generics/type-parameters.html">Type parameters</a>
+        <a class="nav-link" href="../generics/generic-stdlib.html">Generic stdlib</a>
+        <a class="nav-link" href="../generics/iterators.html">Iterators (range-func)</a>
+        <a class="nav-link" href="../generics/generics-pitfalls.html">Generics pitfalls</a>
+      </nav>
+      <nav class="nav-group is-concurrency" aria-label="Concurrency">
+        <h4><span class="dot"></span>Concurrency</h4>
+        <a class="nav-link" href="../concurrency/index.html">The big picture</a>
+        <a class="nav-link" href="../concurrency/goroutines.html">Goroutines</a>
+        <a class="nav-link" href="../concurrency/scheduler.html">The G-M-P scheduler</a>
+        <a class="nav-link" href="../concurrency/channels.html">Channels</a>
+        <a class="nav-link" href="../concurrency/select.html">select & multiplexing</a>
+        <a class="nav-link" href="../concurrency/sync-primitives.html">sync primitives</a>
+        <a class="nav-link" href="../concurrency/atomics-memory-model.html">Atomics & memory model</a>
+        <a class="nav-link" href="../concurrency/context.html">context</a>
+        <a class="nav-link" href="../concurrency/patterns.html">Concurrency patterns</a>
+        <a class="nav-link" href="../concurrency/errgroup.html">errgroup</a>
+        <a class="nav-link" href="../concurrency/leaks-deadlocks-races.html">Leaks, deadlocks & races</a>
+      </nav>
+      <nav class="nav-group is-stdlib" aria-label="Standard library">
+        <h4><span class="dot"></span>Standard library</h4>
+        <a class="nav-link" href="../stdlib/encoding-json.html">encoding/json</a>
+        <a class="nav-link" href="../stdlib/time.html">time</a>
+        <a class="nav-link" href="../stdlib/io-bufio.html">io & bufio</a>
+        <a class="nav-link" href="../stdlib/files-os.html">Files & os</a>
+        <a class="nav-link" href="../stdlib/slog.html">log/slog</a>
+        <a class="nav-link" href="../stdlib/stdlib-tour.html">Stdlib tour</a>
+      </nav>
+      <nav class="nav-group is-webservices" aria-label="HTTP services">
+        <h4><span class="dot"></span>HTTP services</h4>
+        <a class="nav-link" href="../webservices/net-http.html">net/http</a>
+        <a class="nav-link" href="../webservices/middleware-routing.html">Middleware & routing</a>
+        <a class="nav-link" href="../webservices/http-clients.html">HTTP clients</a>
+        <a class="nav-link" href="../webservices/json-apis.html">JSON APIs</a>
+        <a class="nav-link" href="../webservices/production-services.html">Production services</a>
+      </nav>
+      <nav class="nav-group is-testing" aria-label="Testing &amp; tooling">
+        <h4><span class="dot"></span>Testing & tooling</h4>
+        <a class="nav-link" href="../testing/testing-basics.html">Tests & table tests</a>
+        <a class="nav-link" href="../testing/mocking-interfaces.html">Mocking & seams</a>
+        <a class="nav-link" href="../testing/benchmarks.html">Benchmarks</a>
+        <a class="nav-link" href="../testing/fuzzing-coverage.html">Fuzzing & coverage</a>
+        <a class="nav-link" href="../testing/tooling.html">The tooling belt</a>
+      </nav>
+      <nav class="nav-group is-runtime" aria-label="Runtime &amp; performance">
+        <h4><span class="dot"></span>Runtime & performance</h4>
+        <a class="nav-link" href="../runtime/memory-model-stack-heap.html">Stack, heap & escape</a>
+        <a class="nav-link" href="../runtime/garbage-collector.html">The garbage collector</a>
+        <a class="nav-link" href="../runtime/pprof-profiling.html">pprof profiling</a>
+        <a class="nav-link" href="../runtime/performance-patterns.html">Performance patterns</a>
+        <a class="nav-link" href="../runtime/cgo-unsafe-build.html">cgo, unsafe & builds</a>
+      </nav>
+      <nav class="nav-group is-interview" aria-label="Interview prep">
+        <h4><span class="dot"></span>Interview prep</h4>
+        <a class="nav-link" href="../interview/question-bank.html">Question bank</a>
+        <a class="nav-link" href="../interview/machine-coding.html">Machine-coding</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheatsheet</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+        <a class="nav-link" href="../reference/drills.html">Timed drills</a>
+        <a class="nav-link" href="../reference/gotchas.html">Gotchas index</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">Atomics &amp; the Go memory model</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Concurrency · atomics &amp; the memory model</span>
+  <h1>Atomics &amp; the Go memory model.</h1>
+  <p class="lead">A mutex guards a <em>region</em> of code; <code>sync/atomic</code> guards a <em>single word</em> — a counter or a flag — with no lock at all. But the deeper lesson is the one that bites in interviews: without a synchronizing operation, one goroutine's write may <b>never</b> become visible to another. That's the Go memory model, and it's why a plain shared flag is a bug.</p>
+</section>
+
+<section class="section reveal" id="atomics">
+  <h2><span class="section-num">01</span> sync/atomic: lock-free single-word ops</h2>
+  <p class="takeaway"><code>sync/atomic</code> does one indivisible read-modify-write on <b>one machine word</b> — no <code>Lock</code>/<code>Unlock</code>. Reach for it for <b>counters and flags</b>, nothing more.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A mutex is a meeting room you book, walk into, do several things, then leave. An atomic is a <em>turnstile</em>: one person clicks through and the counter ticks up by exactly one, indivisibly — no booking, no room. It's blisteringly fast, but it only does the <b>one click</b>. The moment you need to update two things together, you're back to booking a room.</p></div></div>
+  <p>The classic free functions take a pointer to the word you're mutating:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">atomic.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="go">var n int64
+atomic.AddInt64(&amp;n, 1)              // n += 1, indivisibly
+v := atomic.LoadInt64(&amp;n)           // read the current value safely
+atomic.StoreInt64(&amp;n, 42)           // write 42 safely
+old := atomic.SwapInt64(&amp;n, 7)      // set 7, return the previous value
+ok := atomic.CompareAndSwapInt64(&amp;n, 7, 8) // if n==7 set 8; report success</code></pre>
+  </div>
+  <p>Since Go 1.19 there are <b>typed wrappers</b> — treat these as the standard, idiomatic form today. They carry their own value (no stray pointer), and <code>go vet</code> can't catch a missing <code>atomic.*</code> on a plain field, so wrapping it is self-documenting:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">typed.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="go">var hits atomic.Int64           // methods: Add, Load, Store, Swap, CompareAndSwap
+hits.Add(1)
+fmt.Println(hits.Load())
+
+var ready atomic.Bool           // a correct shared flag
+ready.Store(true)
+if ready.Load() { /* ... */ }
+
+var cfg atomic.Pointer[Config]  // swap a whole *Config atomically (hot-reload)
+cfg.Store(&amp;Config{Region: "eu"})
+c := cfg.Load()
+
+var v atomic.Value              // holds any value — but see the gotcha
+v.Store("hello")</code></pre>
+  </div>
+  <div class="kv-wrap"><dl class="kv">
+    <dt><code>atomic.Int64</code> / <code>Int32</code> / <code>Uint64</code></dt><dd>Lock-free counters. <code>Add</code> returns the <b>new</b> value; <code>Swap</code> returns the old.</dd>
+    <dt><code>atomic.Bool</code></dt><dd>A correct one-bit flag — the right fix for the broken <code>done</code> pattern below.</dd>
+    <dt><code>atomic.Pointer[T]</code></dt><dd>Atomically swap a <code>*T</code> — config hot-reload, copy-on-write snapshots. Type-safe (1.19+).</dd>
+    <dt><code>atomic.Value</code></dt><dd>The pre-generics box for "store any value". Prefer <code>atomic.Pointer[T]</code> in new code.</dd>
+  </dl></div>
+</section>
+
+<section class="section reveal" id="memory-model">
+  <h2><span class="section-num">02</span> The memory model &amp; happens-before</h2>
+  <p class="takeaway">The Go memory model defines exactly when a read is <b>guaranteed</b> to observe a write. The rule: a write is visible to a read only if a <b>happens-before</b> edge connects them — and that edge comes <em>only</em> from a synchronizing op (channel, mutex, atomic). No edge, <b>no guarantee</b>, ever.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Each goroutine writes in its own private notebook. There is no shared whiteboard. Goroutine&nbsp;B sees what goroutine&nbsp;A wrote <em>only</em> if A hands B a note through an official channel — a mailbox (channel), a signed-out key (mutex), or an atomic stamp. Without that handoff, B is reading a notebook it was never given, and what it sees is undefined — possibly forever stale.</p></div></div>
+  <p>"Happens-before" is just an <em>ordering of memory events that the runtime promises to honor</em>. Within a single goroutine, statements happen-before in program order. <b>Across</b> goroutines, the only way to create an edge is a synchronizing operation:</p>
+  <ul>
+    <li>A send on a channel <b>happens-before</b> the corresponding receive completes.</li>
+    <li>A <code>mu.Unlock()</code> <b>happens-before</b> the next <code>mu.Lock()</code> that returns.</li>
+    <li>An <code>atomic.Store</code> <b>happens-before</b> an <code>atomic.Load</code> that reads the stored value.</li>
+  </ul>
+  <p>Each edge also drags along everything written <em>before</em> it. So when B receives from a channel, B is guaranteed to see <b>all</b> the writes A made before A's send — not just the message. That's how a channel "publishes" data safely.</p>
+</section>
+
+<section class="section reveal" id="broken-flag">
+  <h2><span class="section-num">03</span> The broken flag, made visible</h2>
+  <p>Here's the canonical trap. One goroutine sets a plain <code>bool done</code>; another spins reading it, expecting to see <code>true</code>. With <b>no synchronizing op</b> between them, there is no happens-before edge — so the compiler may hoist the read out of the loop, or the CPU may keep a stale cached copy. The reader can spin <b>forever</b>:</p>
+  <figure class="conviz reveal" data-conviz aria-label="An unsynchronized bool flag: the writer sets it true, but with no happens-before edge the reader never observes the change">
+    <script type="application/json" class="cv-config">
+    { "frames": [
+      { "caption": "The setup: a plain <code>var done bool</code> (false). The writer will set it <code>true</code>; the reader spins in <code>for !done {}</code>. There is <b>no</b> channel, mutex, or atomic between them — so no happens-before edge.",
+        "shared": { "name":"done", "val":"false" },
+        "goroutines": [ { "id":"g1", "label":"writer", "reg":null, "op":"about to set done = true", "state":"running" },
+                        { "id":"g2", "label":"reader", "reg":0, "op":"for !done { } — reads false", "state":"running" } ] },
+      { "caption": "The writer executes <code>done = true</code> — but only in <b>its own</b> view of memory. Nothing has published this write to the reader; no edge was created.",
+        "shared": { "name":"done", "val":"true" },
+        "goroutines": [ { "id":"g1", "label":"writer", "reg":1, "op":"done = true (local view)", "state":"done" },
+                        { "id":"g2", "label":"reader", "reg":0, "op":"still sees stale false…", "state":"running" } ] },
+      { "caption": "The reader keeps looping. The compiler was free to read <code>done</code> <b>once</b> and cache it in a register; with no edge, it never re-fetches. The reader's view is frozen at false.",
+        "shared": { "name":"done", "val":"true" },
+        "goroutines": [ { "id":"g1", "label":"writer", "reg":1, "op":"done; long gone", "state":"done" },
+                        { "id":"g2", "label":"reader", "reg":0, "op":"cached false in register", "state":"running" } ] },
+      { "caption": "Nothing will ever change the reader's view. The write happened, but it was never <b>observed</b> — the program hangs. A data race, and undefined behavior.",
+        "shared": { "name":"done", "val":"true" },
+        "goroutines": [ { "id":"g1", "label":"writer", "reg":1, "op":"done", "state":"done" },
+                        { "id":"g2", "label":"reader", "reg":0, "op":"spins forever", "state":"running" } ],
+        "verdict": { "got":"never observed", "want":"observes true", "ok":false } }
+    ] }
+    </script>
+  </figure>
+  <p>The fix is to add an edge. Any one of these makes the write visible: an <code>atomic.Bool</code> (<code>done.Store(true)</code> / <code>done.Load()</code>), a <b>channel</b> (close a <code>done chan struct{}</code> and the reader's <code>&lt;-done</code> unblocks), or a <b>mutex</b> around both accesses. The channel version is the most idiomatic Go: signal completion by closing a channel, not by polling a flag.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Atomics protect <b>one word, not an invariant</b>. Three points bite people: <b>(1)</b> An atomic counter is safe, but <code>if x.Load() &gt; 0 { x.Add(-1) }</code> is a race — the check and the decrement aren't one operation; use <code>CompareAndSwap</code> or a mutex. <b>(2)</b> Mixing atomic and <em>plain</em> access to the same variable is still a data race; once a variable is atomic, <b>every</b> access must be atomic. <b>(3)</b> <code>atomic.Value</code> panics if you <code>Store</code> two different concrete types into it — keep the type consistent (or use <code>atomic.Pointer[T]</code>, which can't).</p></div></div>
+</section>
+
+<section class="section reveal" id="atomic-vs-mutex">
+  <h2><span class="section-num">04</span> Atomic or Mutex? Don't get clever</h2>
+  <p class="takeaway">Reach for an <b>atomic</b> when you mutate exactly <b>one word</b> — a counter, a flag, a swappable pointer. Reach for a <b>Mutex</b> the instant correctness spans <b>two or more fields</b> or a multi-step invariant.</p>
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Atomic fits</div>
+      <ul>
+        <li>A hit/error <b>counter</b> incremented from many goroutines.</li>
+        <li>A one-shot <b>flag</b> (<code>shuttingDown</code>, <code>ready</code>).</li>
+        <li>Swapping a whole immutable snapshot via <code>atomic.Pointer[T]</code> (config hot-reload).</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-bad"><div class="vs-h">Use a Mutex instead</div>
+      <ul>
+        <li>Two fields that must agree (e.g. <code>balance</code> and a <code>txns</code> log).</li>
+        <li>Read-then-decide-then-write where the steps must be one unit.</li>
+        <li>Anything that touches a map, slice, or several variables together.</li>
+      </ul>
+    </div>
+  </div>
+  <p>Now the safe, deterministic examples. First, 100 goroutines each call <code>Add(1)</code> under a <code>WaitGroup</code> — the result is exactly <b>100</b>, every run, because each <code>Add</code> is indivisible:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"fmt"
+	"sync"
+	"sync/atomic"
+)
+
+func main() {
+	var hits atomic.Int64
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			hits.Add(1) // indivisible — no lost updates
+		}()
+	}
+	wg.Wait()
+	fmt.Println("hits:", hits.Load())
+}</script>
+    <script type="text/plain" class="gp-output">hits: 100</script>
+  </div>
+  <p>Second, a deterministic <code>CompareAndSwap</code> walk in a single goroutine — CAS sets the new value only if the current value matches the expected one, and reports whether it did:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"fmt"
+	"sync/atomic"
+)
+
+func main() {
+	var n atomic.Int64
+	n.Store(7)
+
+	// Expect 7, swap to 8 — succeeds.
+	ok1 := n.CompareAndSwap(7, 8)
+	fmt.Println("CAS(7->8):", ok1, "now", n.Load())
+
+	// Expect 7 again, but n is 8 now — fails, value unchanged.
+	ok2 := n.CompareAndSwap(7, 99)
+	fmt.Println("CAS(7->99):", ok2, "now", n.Load())
+
+	// Swap returns the OLD value.
+	old := n.Swap(42)
+	fmt.Println("Swap(42): old", old, "now", n.Load())
+}</script>
+    <script type="text/plain" class="gp-output">CAS(7->8): true now 8
+CAS(7->99): false now 8
+Swap(42): old 8 now 42</script>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also</div><p>This same "when is a write visible to a reader?" question scales up to distributed systems, where it's called <b>consistency</b> and <b>ordering</b>. The strongest guarantee — every operation appears to happen instantly in a single global order — is <b>linearizability</b>. See <a href="../../ddia-guide/distributed/consistency-consensus.html#linearizability">DDIA · consistency &amp; consensus</a>.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A goroutine writes a plain <code>var done bool = true</code>, then another goroutine spins in <code>for !done {}</code>. There is no channel, mutex, or atomic anywhere. What does the memory model guarantee about whether the loop ends?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Nothing — with no happens-before edge the write may never be observed, so the loop can spin forever. It's a data race and undefined behavior.</button>
+      <button class="quiz-opt"><span class="mark"></span>The loop always ends; writes to a <code>bool</code> are atomic and instantly visible on modern CPUs.</button>
+      <button class="quiz-opt"><span class="mark"></span>The loop ends as soon as the scheduler runs the writer goroutine at least once.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Visibility in Go comes from <b>happens-before</b>, not from real-time or scheduling. With no synchronizing operation between the write and the read, the compiler may cache <code>done</code> in a register and the CPU may never propagate the write — the reader can be frozen at <code>false</code> indefinitely. Fix it with an <code>atomic.Bool</code>, a closed channel, or a mutex, all of which establish the edge that publishes the write.</div>
+  </div>
+</section>
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../concurrency/sync-primitives.html"><span class="pn-k">Previous</span><span class="pn-t">sync: Mutex, RWMutex, WaitGroup, Once, Cond</span></a>
+            <a class="next" href="../concurrency/context.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">context: cancellation, deadlines &amp; values</span></a>
+          </nav>
+        </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#atomics">sync/atomic: lock-free single-word ops</a>
+          <a href="#memory-model">The memory model happens-before</a>
+          <a href="#broken-flag">The broken flag, made visible</a>
+          <a href="#atomic-vs-mutex">Atomic or Mutex? Don't get clever</a>
+          <a href="#check">Check yourself</a>
+        </nav>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Go — a visual guide &middot; goroutines &middot; channels &middot; interfaces &middot; generics &middot; the runtime</span>
+        <span class="fmono">Built to open offline &middot; Go 1.26 era &middot; Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/conviz.js"></script>
+  <script src="../assets/js/gopad.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

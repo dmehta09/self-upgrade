@@ -1,0 +1,172 @@
+<section class="hero reveal">
+  <span class="eyebrow">Getting started · control flow</span>
+  <h1>Control flow &amp; functions.</h1>
+  <p class="lead">Go's control flow is deliberately spare: one loop keyword, a <code>switch</code> with no surprise fall-through, and functions that can hand back several values at once. Fewer constructs, fewer ways to trip.</p>
+</section>
+
+<section class="section reveal" id="if-for">
+  <h2><span class="section-num">01</span> if and for — the only loop</h2>
+  <p class="takeaway">Go has <b>one loop keyword: <code>for</code></b>. Drop the clauses and it's a <code>while</code>; drop them all and it's an infinite loop. <code>if</code> can carry an <b>init statement</b> whose variable is scoped to the <code>if</code>.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Most languages give you three loop words (<code>for</code>, <code>while</code>, <code>do-while</code>) that mostly overlap. Go gives you one dial with three clauses — init, condition, post — and you leave blank whichever you don't need. Same dial, every loop; nothing new to learn for "loop while" vs "loop N times."</p></div></div>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">loops.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="go">for i := 0; i &lt; 3; i++ { }   // classic three-clause loop
+
+for x &lt; 100 { x *= 2 }        // condition only — a "while"
+
+for { /* … */ break }         // no clauses — infinite, exit with break
+
+for i := range 3 { }          // range-over-int (Go 1.22): i = 0,1,2
+
+// if with an init statement — err is scoped to the if/else
+if v, err := strconv.Atoi(s); err == nil {
+    use(v)
+} else {
+    log.Println(err)
+}</code></pre>
+  </div>
+  <p>The <code>if v, err := …; cond</code> form is everywhere in Go: it keeps the temporary (here <code>v</code> and <code>err</code>) tightly scoped to the branch that uses it, instead of leaking into the function body.</p>
+</section>
+
+<section class="section reveal" id="switch">
+  <h2><span class="section-num">02</span> switch — no implicit fall-through</h2>
+  <p class="takeaway">A Go <code>switch</code> <b>does not fall through</b> by default — the matching case runs and the switch ends, no <code>break</code> needed. Omit the value and it becomes <b><code>switch true</code></b>: a clean ladder of conditions.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>In C-family languages a <code>switch</code> is a slide: land on a case and you keep sliding into the next one unless you jam a <code>break</code> in. Go flips the default — each case is its own room with the door closed. You only slide on if you explicitly say <code>fallthrough</code>, which almost nobody does.</p></div></div>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">switch.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="go">switch day {
+case "sat", "sun":          // one case, multiple values
+    fmt.Println("weekend")
+default:
+    fmt.Println("weekday")
+}                            // no break needed — cases don't fall through
+
+switch {                    // "switch true" — a condition ladder
+case score &gt;= 90:
+    grade = "A"
+case score &gt;= 80:
+    grade = "B"
+default:
+    grade = "C"
+}</code></pre>
+  </div>
+  <p>The <code>switch { case cond: … }</code> form replaces a long <code>if/else if</code> chain and reads top-to-bottom like a decision table. Cases are tested in order; the first true one wins.</p>
+</section>
+
+<section class="section reveal" id="functions">
+  <h2><span class="section-num">03</span> Functions: multiple &amp; named returns</h2>
+  <p class="takeaway">Functions can return <b>several values</b> — the idiom is <code>(result, error)</code>. Returns can be <b>named</b> (pre-declared, zero-valued, returned by a bare <code>return</code>), and a trailing <code>...T</code> parameter makes a function <b>variadic</b>.</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "errors"
+    "fmt"
+)
+
+// Multiple returns: the classic (value, error) pair.
+func divide(a, b int) (int, error) {
+    if b == 0 {
+        return 0, errors.New("divide by zero")
+    }
+    return a / b, nil
+}
+
+// Named returns: q and r are declared (and zero) up front; bare return ships them.
+func divmod(a, b int) (q, r int) {
+    q = a / b
+    r = a % b
+    return
+}
+
+// Variadic: nums is a []int inside the function.
+func sum(nums ...int) (total int) {
+    for _, n := range nums {
+        total += n
+    }
+    return
+}
+
+func main() {
+    if v, err := divide(7, 2); err == nil {
+        fmt.Println("7/2 =", v)
+    }
+    q, r := divmod(17, 5)
+    fmt.Println("17/5 ->", q, "rem", r)
+    fmt.Println("sum:", sum(1, 2, 3, 4))
+}</script>
+    <script type="text/plain" class="gp-output">7/2 = 3
+17/5 -> 3 rem 2
+sum: 10</script>
+  </div>
+  <p>Multiple returns are why Go needs no exceptions for ordinary failure: the failure travels back as an explicit second value you check, right where it happened.</p>
+</section>
+
+<section class="section reveal" id="closures">
+  <h2><span class="section-num">04</span> Closures: functions are values</h2>
+  <p class="takeaway">Functions are <b>first-class values</b> — assign them, pass them, return them. A <b>closure</b> captures the variables of its surrounding scope <em>by reference</em>, so it can carry private, mutable state between calls.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A closure is a function with a backpack. When you create it inside another function, it quietly packs the local variables it mentions into a backpack it carries everywhere. Call it later — even after the outer function has long returned — and it still reaches into that backpack. Two closures made from the same loop can share a backpack, or each get their own; <em>which</em> is exactly the trap below.</p></div></div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+// counter returns a closure that captures n and increments it each call.
+func counter() func() int {
+    n := 0
+    return func() int {
+        n++
+        return n
+    }
+}
+
+func main() {
+    c := counter()
+    fmt.Println(c(), c(), c()) // 1 2 3 — same backpack (n)
+
+    d := counter()             // a fresh closure with its own n
+    fmt.Println(d())           // 1 — independent state
+    fmt.Println(c())           // 4 — c's n kept counting
+}</script>
+    <script type="text/plain" class="gp-output">1 2 3
+1
+4</script>
+  </div>
+</section>
+
+<section class="section reveal" id="gotcha">
+  <h2><span class="section-num">05</span> The loop-variable capture gotcha</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Closures capture the loop variable, not a snapshot. <b>Before Go 1.22</b>, a <code>for</code> loop had <b>one shared loop variable</b> for the whole loop — so every closure created in the body captured the <em>same</em> variable and saw its <b>final value</b> (a goroutine/closure-in-a-loop classic). <b>Go 1.22 fixed this</b>: the loop variable is now <b>per-iteration</b>, so each closure captures its own copy. Code that needed the old <code>i := i</code> shadow trick no longer does.</p></div></div>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Pre-1.22 behaviour (one shared <code>i</code>)</div>
+      <div class="codeblock"><pre><code data-lang="go">var fns []func()
+for i := 0; i &lt; 3; i++ {
+    fns = append(fns, func() { fmt.Print(i) })
+}
+for _, f := range fns { f() }
+// prints 333 — all closures share the one i, now == 3</code></pre></div>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Go 1.22+ (a fresh <code>i</code> per iteration)</div>
+      <div class="codeblock"><pre><code data-lang="go">var fns []func()
+for i := 0; i &lt; 3; i++ {
+    fns = append(fns, func() { fmt.Print(i) })
+}
+for _, f := range fns { f() }
+// prints 012 — each closure captured its own i</code></pre></div>
+    </div>
+  </div>
+  <p>The pre-1.22 workaround was to shadow the variable at the top of the body — <code>i := i</code> — making a new per-iteration binding by hand. On Go 1.26 that's unnecessary, but you'll still see it in older code; it's now a harmless no-op.</p>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You build three closures in a <code>for i := 0; i &lt; 3; i++</code> loop, each printing <code>i</code>, then call them all afterward. On <b>Go 1.22+</b>, what prints?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>012</code> — since 1.22 the loop variable is per-iteration, so each closure captured its own <code>i</code>.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>333</code> — closures always share one loop variable that ends at 3.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>123</code> — the loop variable starts counting at 1.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Go 1.22 made <code>for</code>-loop variables per-iteration, so each closure closes over its <em>own</em> copy and prints <code>0</code>, <code>1</code>, <code>2</code>. On Go 1.21 and earlier the same code prints <code>333</code> (one shared variable left at its final value) — which is exactly the bug the change was made to kill.</div>
+  </div>
+</section>

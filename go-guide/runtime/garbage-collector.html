@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The garbage collector | Go — a visual guide</title>
+  <meta name="description" content="Go — a visual guide — The garbage collector. A sharp, diagram-first guide to Go for backend engineers and interviews: the language, slices &amp; interfaces, generics, and concurrency (goroutines, channels, the scheduler) — each idea in plain English then precise, with runnable Go examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ADD8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z'/><path d='M2.5 9.5h2.5M19 9.5h2.5'/><circle cx='9.6' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/><circle cx='14.4' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/go.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="runtime" data-page="runtime-garbage-collector" data-lesson="rt-gc">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Go — a visual guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z"/><path d="M2.5 9.5h2.5M19 9.5h2.5"/><circle cx="9.6" cy="10.6" r="1.1" fill="#06121a" stroke="none"/><circle cx="14.4" cy="10.6" r="1.1" fill="#06121a" stroke="none"/></svg></span>
+        <span class="brand-text"><b>Go — a visual guide</b><span>the language &amp; runtime, distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home · the map</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Getting started">
+        <h4><span class="dot"></span>Getting started</h4>
+        <a class="nav-link" href="../foundations/why-go.html">Why Go</a>
+        <a class="nav-link" href="../foundations/toolchain.html">Toolchain & modules</a>
+        <a class="nav-link" href="../foundations/hello-program.html">Anatomy of a program</a>
+        <a class="nav-link" href="../foundations/vars-and-types.html">Vars, constants & zero values</a>
+        <a class="nav-link" href="../foundations/control-flow.html">Control flow & functions</a>
+      </nav>
+      <nav class="nav-group is-language" aria-label="The language core">
+        <h4><span class="dot"></span>The language core</h4>
+        <a class="nav-link" href="../language/arrays-slices.html">Arrays & slices</a>
+        <a class="nav-link" href="../language/maps.html">Maps</a>
+        <a class="nav-link" href="../language/strings-runes-bytes.html">Strings, runes & bytes</a>
+        <a class="nav-link" href="../language/structs.html">Structs & embedding</a>
+        <a class="nav-link" href="../language/pointers.html">Pointers</a>
+        <a class="nav-link" href="../language/errors-and-defer.html">Errors, defer & panic</a>
+        <a class="nav-link" href="../language/error-handling-patterns.html">Error handling patterns</a>
+      </nav>
+      <nav class="nav-group is-types" aria-label="Types &amp; interfaces">
+        <h4><span class="dot"></span>Types & interfaces</h4>
+        <a class="nav-link" href="../types/methods.html">Methods & receivers</a>
+        <a class="nav-link" href="../types/interfaces.html">Interfaces</a>
+        <a class="nav-link" href="../types/nil-interfaces.html">The nil interface trap</a>
+        <a class="nav-link" href="../types/type-assertions-switch.html">Assertions & switches</a>
+        <a class="nav-link" href="../types/error-interface-design.html">Interfaces in practice</a>
+        <a class="nav-link" href="../types/reflection.html">Reflection & tags</a>
+      </nav>
+      <nav class="nav-group is-generics" aria-label="Generics &amp; modern Go">
+        <h4><span class="dot"></span>Generics & modern Go</h4>
+        <a class="nav-link" href="../generics/type-parameters.html">Type parameters</a>
+        <a class="nav-link" href="../generics/generic-stdlib.html">Generic stdlib</a>
+        <a class="nav-link" href="../generics/iterators.html">Iterators (range-func)</a>
+        <a class="nav-link" href="../generics/generics-pitfalls.html">Generics pitfalls</a>
+      </nav>
+      <nav class="nav-group is-concurrency" aria-label="Concurrency">
+        <h4><span class="dot"></span>Concurrency</h4>
+        <a class="nav-link" href="../concurrency/index.html">The big picture</a>
+        <a class="nav-link" href="../concurrency/goroutines.html">Goroutines</a>
+        <a class="nav-link" href="../concurrency/scheduler.html">The G-M-P scheduler</a>
+        <a class="nav-link" href="../concurrency/channels.html">Channels</a>
+        <a class="nav-link" href="../concurrency/select.html">select & multiplexing</a>
+        <a class="nav-link" href="../concurrency/sync-primitives.html">sync primitives</a>
+        <a class="nav-link" href="../concurrency/atomics-memory-model.html">Atomics & memory model</a>
+        <a class="nav-link" href="../concurrency/context.html">context</a>
+        <a class="nav-link" href="../concurrency/patterns.html">Concurrency patterns</a>
+        <a class="nav-link" href="../concurrency/errgroup.html">errgroup</a>
+        <a class="nav-link" href="../concurrency/leaks-deadlocks-races.html">Leaks, deadlocks & races</a>
+      </nav>
+      <nav class="nav-group is-stdlib" aria-label="Standard library">
+        <h4><span class="dot"></span>Standard library</h4>
+        <a class="nav-link" href="../stdlib/encoding-json.html">encoding/json</a>
+        <a class="nav-link" href="../stdlib/time.html">time</a>
+        <a class="nav-link" href="../stdlib/io-bufio.html">io & bufio</a>
+        <a class="nav-link" href="../stdlib/files-os.html">Files & os</a>
+        <a class="nav-link" href="../stdlib/slog.html">log/slog</a>
+        <a class="nav-link" href="../stdlib/stdlib-tour.html">Stdlib tour</a>
+      </nav>
+      <nav class="nav-group is-webservices" aria-label="HTTP services">
+        <h4><span class="dot"></span>HTTP services</h4>
+        <a class="nav-link" href="../webservices/net-http.html">net/http</a>
+        <a class="nav-link" href="../webservices/middleware-routing.html">Middleware & routing</a>
+        <a class="nav-link" href="../webservices/http-clients.html">HTTP clients</a>
+        <a class="nav-link" href="../webservices/json-apis.html">JSON APIs</a>
+        <a class="nav-link" href="../webservices/production-services.html">Production services</a>
+      </nav>
+      <nav class="nav-group is-testing" aria-label="Testing &amp; tooling">
+        <h4><span class="dot"></span>Testing & tooling</h4>
+        <a class="nav-link" href="../testing/testing-basics.html">Tests & table tests</a>
+        <a class="nav-link" href="../testing/mocking-interfaces.html">Mocking & seams</a>
+        <a class="nav-link" href="../testing/benchmarks.html">Benchmarks</a>
+        <a class="nav-link" href="../testing/fuzzing-coverage.html">Fuzzing & coverage</a>
+        <a class="nav-link" href="../testing/tooling.html">The tooling belt</a>
+      </nav>
+      <nav class="nav-group is-runtime" aria-label="Runtime &amp; performance">
+        <h4><span class="dot"></span>Runtime & performance</h4>
+        <a class="nav-link" href="../runtime/memory-model-stack-heap.html">Stack, heap & escape</a>
+        <a class="nav-link" href="../runtime/garbage-collector.html">The garbage collector</a>
+        <a class="nav-link" href="../runtime/pprof-profiling.html">pprof profiling</a>
+        <a class="nav-link" href="../runtime/performance-patterns.html">Performance patterns</a>
+        <a class="nav-link" href="../runtime/cgo-unsafe-build.html">cgo, unsafe & builds</a>
+      </nav>
+      <nav class="nav-group is-interview" aria-label="Interview prep">
+        <h4><span class="dot"></span>Interview prep</h4>
+        <a class="nav-link" href="../interview/question-bank.html">Question bank</a>
+        <a class="nav-link" href="../interview/machine-coding.html">Machine-coding</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheatsheet</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+        <a class="nav-link" href="../reference/drills.html">Timed drills</a>
+        <a class="nav-link" href="../reference/gotchas.html">Gotchas index</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">The garbage collector</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Runtime &amp; performance · the GC</span>
+  <h1>The garbage collector.</h1>
+  <p class="lead">Go's collector is a <b>concurrent, tricolor mark-and-sweep</b> that runs <em>alongside</em> your program, keeping pauses well under a millisecond. You rarely tune it — but knowing how it decides what to keep, and what makes it run more often, turns mysterious latency into something you can reason about.</p>
+</section>
+
+<section class="section reveal" id="job">
+  <h2><span class="section-num">01</span> The collector's one job</h2>
+  <p class="takeaway">The GC finds heap objects your program can <b>still reach</b> (from stacks, globals, registers — the <em>roots</em>) and frees everything else. It trades a little CPU and memory for never having to call <code>free</code> yourself.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Imagine a warehouse where you tie a string from the front door to every box you still care about, following the strings box-to-box. Anything with no string leading to it from the door is unreachable — nobody can ask for it again — so it's junk and gets cleared out. The GC is the worker walking those strings.</p></div></div>
+</section>
+
+<section class="section reveal" id="tricolor">
+  <h2><span class="section-num">02</span> Tricolor mark &amp; sweep, visualized</h2>
+  <p>Every object is <b>white</b> (assumed garbage), <b>grey</b> (reachable, not yet scanned), or <b>black</b> (reachable and fully scanned). Marking greys the roots' targets, then blackens them as it follows their pointers. Step through it:</p>
+  <figure class="gclab reveal" data-gclab aria-label="Tricolor mark-and-sweep coloring an object graph white, grey, black, then sweeping the white">
+    <script type="application/json" class="gc-config">
+    { "w": 400, "h": 280,
+      "nodes": [ { "id": "root", "cx": 70,  "cy": 120, "label": "roots", "root": true },
+                 { "id": "a",    "cx": 200, "cy": 60,  "label": "a" },
+                 { "id": "b",    "cx": 200, "cy": 180, "label": "b" },
+                 { "id": "c",    "cx": 330, "cy": 60,  "label": "c" },
+                 { "id": "x",    "cx": 200, "cy": 250, "label": "x" },
+                 { "id": "y",    "cx": 330, "cy": 250, "label": "y" } ],
+      "edges": [ ["root","a"], ["root","b"], ["a","c"], ["x","y"] ],
+      "frames": [
+        { "caption": "GC starts. Every heap object is <b>white</b> — assumed dead until proven reachable. The roots (stacks &amp; globals) are the starting points.",
+          "colors": { "root":"black", "a":"white", "b":"white", "c":"white", "x":"white", "y":"white" }, "phase": "mark" },
+        { "caption": "Mark begins: the objects the roots point at directly — <code>a</code> and <code>b</code> — turn <b>grey</b> (reachable, not yet scanned).",
+          "colors": { "root":"black", "a":"grey", "b":"grey", "c":"white", "x":"white", "y":"white" }, "phase": "mark" },
+        { "caption": "Scan a grey object: blacken <code>a</code>, and grey everything it points to — so <code>c</code> goes grey.",
+          "colors": { "root":"black", "a":"black", "b":"grey", "c":"grey", "x":"white", "y":"white" }, "phase": "mark" },
+        { "caption": "Keep going until no grey remains: <code>b</code> and <code>c</code> have nothing new to reach, so they blacken. Everything reachable is now <b>black</b>.",
+          "colors": { "root":"black", "a":"black", "b":"black", "c":"black", "x":"white", "y":"white" }, "phase": "mark" },
+        { "caption": "<b>Sweep:</b> <code>x</code> and <code>y</code> are still white — nothing reaches them, so they're unreachable. Their memory is reclaimed.",
+          "colors": { "root":"black", "a":"black", "b":"black", "c":"black", "x":"white", "y":"white" }, "phase": "sweep", "collected": ["x","y"] },
+        { "caption": "Done. The heap holds only the reachable (black) objects; the white memory is freed for reuse. No <code>free</code> calls, no dangling pointers.",
+          "colors": { "root":"black", "a":"black", "b":"black", "c":"black", "x":"white", "y":"white" }, "phase": "done", "collected": ["x","y"] }
+      ] }
+    </script>
+  </figure>
+  <p>The clever part: this runs <b>concurrently</b> with your goroutines. A <b>write barrier</b> catches the case where running code rewires a pointer mid-scan, so nothing reachable is ever collected by mistake.</p>
+</section>
+
+<section class="section reveal" id="pacing">
+  <h2><span class="section-num">03</span> When does it run? GOGC &amp; the memory limit</h2>
+  <p class="takeaway">The GC is <b>paced</b> by how fast you allocate. By default (<code>GOGC=100</code>) it aims to run when the heap has grown ~100% since the last collection — so a program that allocates more, collects more often.</p>
+  <dl class="kv">
+    <dt><code>GOGC</code></dt><dd>The growth target. Higher (e.g. <code>GOGC=200</code>) = fewer collections, more memory used; lower = more frequent, less memory. Default 100.</dd>
+    <dt><code>GOMEMLIMIT</code></dt><dd>A soft memory ceiling (Go 1.19+). The GC works harder as the heap approaches it — invaluable in containers to avoid OOM kills. Pair it with <code>GOGC</code>.</dd>
+    <dt>The pauses</dt><dd>Two brief stop-the-world points (start &amp; end of mark) — typically well under a millisecond; the bulk of marking is concurrent.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="pressure">
+  <h2><span class="section-num">04</span> Reducing GC pressure</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>The GC's cost scales with the <b>number of live objects and allocations</b>, not bytes alone. The fix for GC-bound latency is almost never "tune <code>GOGC</code>" — it's <b>allocate less</b>: reuse buffers (<code>sync.Pool</code>), preallocate slices/maps with a capacity, avoid needless pointers (keep values on the stack — see <a href="memory-model-stack-heap.html">escape analysis</a>), and don't box into <code>any</code> on hot paths. Measure with <code>-benchmem</code> and the heap profile first.</p></div></div>
+  <p>Tactics that actually move the needle, in order: cut allocations in the hot path; set <code>GOMEMLIMIT</code> in memory-constrained deployments; only then consider raising <code>GOGC</code> to trade memory for fewer cycles.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">sibling guide</span></div><p>GC trade-offs echo the storage-engine compaction trade-offs in <a href="../../ddia-guide/foundations/storage-engines.html">Designing Data-Intensive Applications</a> — reclaiming space without stalling the system is the same tension at a different layer.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">During concurrent marking, a running goroutine stores a pointer to a <em>white</em> object into an already-<em>black</em> object. What stops the white object from being wrongly swept?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The write barrier — it greys the object on such a write, so it's rescanned and kept.</button>
+      <button class="quiz-opt"><span class="mark"></span>Nothing; Go stops the world for the entire mark phase.</button>
+      <button class="quiz-opt"><span class="mark"></span>The object is copied to a survivor space like in a generational GC.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> The <b>write barrier</b> intercepts pointer writes during marking and shades the target grey, preserving the tricolor invariant (no black object points to a white one). That's what lets marking run concurrently with your program. Go's collector is not generational and does not move objects.</div>
+  </div>
+</section>
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../runtime/memory-model-stack-heap.html"><span class="pn-k">Previous</span><span class="pn-t">Stack, heap &amp; escape analysis</span></a>
+            <a class="next" href="../runtime/pprof-profiling.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Profiling &amp; diagnosing with pprof</span></a>
+          </nav>
+        </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#job">The collector's one job</a>
+          <a href="#tricolor">Tricolor mark sweep, visualized</a>
+          <a href="#pacing">When does it run? GOGC the memory limit</a>
+          <a href="#pressure">Reducing GC pressure</a>
+          <a href="#check">Check yourself</a>
+        </nav>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Go — a visual guide &middot; goroutines &middot; channels &middot; interfaces &middot; generics &middot; the runtime</span>
+        <span class="fmono">Built to open offline &middot; Go 1.26 era &middot; Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/gclab.js"></script>
+  <script src="../assets/js/gopad.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

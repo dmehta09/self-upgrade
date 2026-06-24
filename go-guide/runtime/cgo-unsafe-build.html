@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cgo, unsafe & build internals | Go — a visual guide</title>
+  <meta name="description" content="Go — a visual guide — cgo, unsafe &amp; build internals. A sharp, diagram-first guide to Go for backend engineers and interviews: the language, slices &amp; interfaces, generics, and concurrency (goroutines, channels, the scheduler) — each idea in plain English then precise, with runnable Go examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ADD8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z'/><path d='M2.5 9.5h2.5M19 9.5h2.5'/><circle cx='9.6' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/><circle cx='14.4' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/go.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="runtime" data-page="runtime-cgo-unsafe-build" data-lesson="rt-cgo">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Go — a visual guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z"/><path d="M2.5 9.5h2.5M19 9.5h2.5"/><circle cx="9.6" cy="10.6" r="1.1" fill="#06121a" stroke="none"/><circle cx="14.4" cy="10.6" r="1.1" fill="#06121a" stroke="none"/></svg></span>
+        <span class="brand-text"><b>Go — a visual guide</b><span>the language &amp; runtime, distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home · the map</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Getting started">
+        <h4><span class="dot"></span>Getting started</h4>
+        <a class="nav-link" href="../foundations/why-go.html">Why Go</a>
+        <a class="nav-link" href="../foundations/toolchain.html">Toolchain & modules</a>
+        <a class="nav-link" href="../foundations/hello-program.html">Anatomy of a program</a>
+        <a class="nav-link" href="../foundations/vars-and-types.html">Vars, constants & zero values</a>
+        <a class="nav-link" href="../foundations/control-flow.html">Control flow & functions</a>
+      </nav>
+      <nav class="nav-group is-language" aria-label="The language core">
+        <h4><span class="dot"></span>The language core</h4>
+        <a class="nav-link" href="../language/arrays-slices.html">Arrays & slices</a>
+        <a class="nav-link" href="../language/maps.html">Maps</a>
+        <a class="nav-link" href="../language/strings-runes-bytes.html">Strings, runes & bytes</a>
+        <a class="nav-link" href="../language/structs.html">Structs & embedding</a>
+        <a class="nav-link" href="../language/pointers.html">Pointers</a>
+        <a class="nav-link" href="../language/errors-and-defer.html">Errors, defer & panic</a>
+        <a class="nav-link" href="../language/error-handling-patterns.html">Error handling patterns</a>
+      </nav>
+      <nav class="nav-group is-types" aria-label="Types &amp; interfaces">
+        <h4><span class="dot"></span>Types & interfaces</h4>
+        <a class="nav-link" href="../types/methods.html">Methods & receivers</a>
+        <a class="nav-link" href="../types/interfaces.html">Interfaces</a>
+        <a class="nav-link" href="../types/nil-interfaces.html">The nil interface trap</a>
+        <a class="nav-link" href="../types/type-assertions-switch.html">Assertions & switches</a>
+        <a class="nav-link" href="../types/error-interface-design.html">Interfaces in practice</a>
+        <a class="nav-link" href="../types/reflection.html">Reflection & tags</a>
+      </nav>
+      <nav class="nav-group is-generics" aria-label="Generics &amp; modern Go">
+        <h4><span class="dot"></span>Generics & modern Go</h4>
+        <a class="nav-link" href="../generics/type-parameters.html">Type parameters</a>
+        <a class="nav-link" href="../generics/generic-stdlib.html">Generic stdlib</a>
+        <a class="nav-link" href="../generics/iterators.html">Iterators (range-func)</a>
+        <a class="nav-link" href="../generics/generics-pitfalls.html">Generics pitfalls</a>
+      </nav>
+      <nav class="nav-group is-concurrency" aria-label="Concurrency">
+        <h4><span class="dot"></span>Concurrency</h4>
+        <a class="nav-link" href="../concurrency/index.html">The big picture</a>
+        <a class="nav-link" href="../concurrency/goroutines.html">Goroutines</a>
+        <a class="nav-link" href="../concurrency/scheduler.html">The G-M-P scheduler</a>
+        <a class="nav-link" href="../concurrency/channels.html">Channels</a>
+        <a class="nav-link" href="../concurrency/select.html">select & multiplexing</a>
+        <a class="nav-link" href="../concurrency/sync-primitives.html">sync primitives</a>
+        <a class="nav-link" href="../concurrency/atomics-memory-model.html">Atomics & memory model</a>
+        <a class="nav-link" href="../concurrency/context.html">context</a>
+        <a class="nav-link" href="../concurrency/patterns.html">Concurrency patterns</a>
+        <a class="nav-link" href="../concurrency/errgroup.html">errgroup</a>
+        <a class="nav-link" href="../concurrency/leaks-deadlocks-races.html">Leaks, deadlocks & races</a>
+      </nav>
+      <nav class="nav-group is-stdlib" aria-label="Standard library">
+        <h4><span class="dot"></span>Standard library</h4>
+        <a class="nav-link" href="../stdlib/encoding-json.html">encoding/json</a>
+        <a class="nav-link" href="../stdlib/time.html">time</a>
+        <a class="nav-link" href="../stdlib/io-bufio.html">io & bufio</a>
+        <a class="nav-link" href="../stdlib/files-os.html">Files & os</a>
+        <a class="nav-link" href="../stdlib/slog.html">log/slog</a>
+        <a class="nav-link" href="../stdlib/stdlib-tour.html">Stdlib tour</a>
+      </nav>
+      <nav class="nav-group is-webservices" aria-label="HTTP services">
+        <h4><span class="dot"></span>HTTP services</h4>
+        <a class="nav-link" href="../webservices/net-http.html">net/http</a>
+        <a class="nav-link" href="../webservices/middleware-routing.html">Middleware & routing</a>
+        <a class="nav-link" href="../webservices/http-clients.html">HTTP clients</a>
+        <a class="nav-link" href="../webservices/json-apis.html">JSON APIs</a>
+        <a class="nav-link" href="../webservices/production-services.html">Production services</a>
+      </nav>
+      <nav class="nav-group is-testing" aria-label="Testing &amp; tooling">
+        <h4><span class="dot"></span>Testing & tooling</h4>
+        <a class="nav-link" href="../testing/testing-basics.html">Tests & table tests</a>
+        <a class="nav-link" href="../testing/mocking-interfaces.html">Mocking & seams</a>
+        <a class="nav-link" href="../testing/benchmarks.html">Benchmarks</a>
+        <a class="nav-link" href="../testing/fuzzing-coverage.html">Fuzzing & coverage</a>
+        <a class="nav-link" href="../testing/tooling.html">The tooling belt</a>
+      </nav>
+      <nav class="nav-group is-runtime" aria-label="Runtime &amp; performance">
+        <h4><span class="dot"></span>Runtime & performance</h4>
+        <a class="nav-link" href="../runtime/memory-model-stack-heap.html">Stack, heap & escape</a>
+        <a class="nav-link" href="../runtime/garbage-collector.html">The garbage collector</a>
+        <a class="nav-link" href="../runtime/pprof-profiling.html">pprof profiling</a>
+        <a class="nav-link" href="../runtime/performance-patterns.html">Performance patterns</a>
+        <a class="nav-link" href="../runtime/cgo-unsafe-build.html">cgo, unsafe & builds</a>
+      </nav>
+      <nav class="nav-group is-interview" aria-label="Interview prep">
+        <h4><span class="dot"></span>Interview prep</h4>
+        <a class="nav-link" href="../interview/question-bank.html">Question bank</a>
+        <a class="nav-link" href="../interview/machine-coding.html">Machine-coding</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheatsheet</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+        <a class="nav-link" href="../reference/drills.html">Timed drills</a>
+        <a class="nav-link" href="../reference/gotchas.html">Gotchas index</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">cgo, unsafe &amp; build internals</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Runtime &amp; performance · the edges</span>
+  <h1>cgo, unsafe &amp; build internals.</h1>
+  <p class="lead">Go's superpower is a single static binary that cross-compiles to any platform from any platform. Two escape hatches — <code>cgo</code> (call C) and <code>unsafe</code> (bypass the type system) — let you reach outside that safe, portable world. Both are sometimes necessary and almost always a mistake to reach for first.</p>
+</section>
+
+<section class="section reveal" id="the-binary">
+  <h2><span class="section-num">01</span> The build pipeline: one static binary</h2>
+  <p class="takeaway">A normal Go build runs <b>compile → link → one self-contained binary</b> with no external runtime, no shared libraries, no interpreter. You copy the file to a server and run it.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A pure-Go binary is a flat-pack box that ships with every screw, panel, and the Allen key glued inside — set it on the floor and it stands up anywhere. The moment you add <code>cgo</code>, you're shipping IKEA furniture that needs <em>a specific drill the customer must already own</em> (a C toolchain on the build machine). The box no longer travels freely.</p></div></div>
+  <p>That self-contained binary is why Go dominates containers and CLIs: a <code>FROM scratch</code> image with just the binary, and nothing to install at the destination.</p>
+</section>
+
+<section class="section reveal" id="cross-compile">
+  <h2><span class="section-num">02</span> Cross-compilation: GOOS &amp; GOARCH</h2>
+  <p>Because the toolchain knows every target, you build for another OS/CPU by setting two environment variables — no emulator, no remote machine:</p>
+  <div class="codeblock shell">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="bash"># from a Mac, build a Linux arm64 binary for a container
+GOOS=linux GOARCH=arm64 go build -o app ./cmd/app
+
+# a Windows amd64 build, same machine
+GOOS=windows GOARCH=amd64 go build -o app.exe ./cmd/app
+
+# see every supported pair
+go tool dist list</code></pre>
+  </div>
+  <p class="takeaway"><code>GOOS</code> picks the operating system, <code>GOARCH</code> the CPU architecture. This <b>just works</b> for pure Go — and is one of the language's biggest practical strengths.</p>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">reproducible builds</span></div><p>Add <code>CGO_ENABLED=0</code> to <em>guarantee</em> a static pure-Go binary even when a dependency could pull in cgo — the standard recipe for tiny, portable container images.</p></div></div>
+</section>
+
+<section class="section reveal" id="build-tags">
+  <h2><span class="section-num">03</span> Build tags &amp; <code>//go:</code> directives</h2>
+  <p>Build constraints compile a file only for certain targets. The modern form is a <code>//go:build</code> line at the very top of the file (above <code>package</code>), and a filename suffix is an implicit constraint:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">cache_linux.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="go">//go:build linux &amp;&amp; amd64
+// +build linux,amd64
+
+package cache
+
+// Compiled ONLY for linux/amd64. A file named *_linux.go is
+// constrained to GOOS=linux automatically, no tag needed.</code></pre>
+  </div>
+  <p>Other <code>//go:</code> directives instruct the compiler. The common ones:</p>
+  <dl class="kv">
+    <dt><code>//go:build</code></dt><dd>Conditional compilation per OS/arch/custom tag (e.g. build with <code>-tags=debug</code>).</dd>
+    <dt><code>//go:embed</code></dt><dd>Bake a file into the binary at build time (templates, assets) — keeps the single-file deploy.</dd>
+    <dt><code>//go:generate</code></dt><dd>A command <code>go generate</code> runs (codegen, mocks). Not part of <code>go build</code>.</dd>
+    <dt><code>//go:noinline</code></dt><dd>A compiler hint — rare, mostly for benchmarks/diagnostics.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="cgo">
+  <h2><span class="section-num">04</span> cgo: calling C, and what it costs</h2>
+  <p>The pseudo-package <code>"C"</code> lets you call C code. The C lives in a comment directly above <code>import "C"</code>:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">hash.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="go">/*
+#include &lt;stdlib.h&gt;
+int add(int a, int b) { return a + b; }
+*/
+import "C"
+import "fmt"
+
+func main() {
+    sum := C.add(C.int(2), C.int(3)) // a call across the Go↔C boundary
+    fmt.Println(int(sum))
+}</code></pre>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><code>cgo</code> looks convenient but the costs are steep: it <b>breaks easy cross-compilation</b> (you now need a C cross-toolchain for every target), adds a <b>C toolchain build dependency</b>, makes each Go↔C call <b>far slower than a Go call</b> (the runtime must hand the goroutine off a managed stack), and forfeits memory safety on the C side. <b>Rule of thumb: avoid cgo unless you genuinely must</b> — wrapping an irreplaceable C library (SQLite, a vendor SDK). For "I want it faster," pure Go is almost always the right answer.</p></div></div>
+</section>
+
+<section class="section reveal" id="unsafe">
+  <h2><span class="section-num">05</span> unsafe: bypassing the type system</h2>
+  <p><code>unsafe.Pointer</code> is the one pointer that can be converted to and from any other pointer type, letting you reinterpret memory — used for <b>zero-copy</b> conversions and talking to syscalls. Since Go 1.20, <code>unsafe.Slice</code> and <code>unsafe.String</code> make a couple of these patterns less error-prone:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">zerocopy.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="go">import "unsafe"
+
+// zero-copy []byte -&gt; string (NO allocation/copy).
+// Caller MUST never mutate b afterward, or the string changes too.
+func bytesToString(b []byte) string {
+    if len(b) == 0 {
+        return ""
+    }
+    return unsafe.String(&amp;b[0], len(b)) // Go 1.20+
+}</code></pre>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>The package is named <code>unsafe</code> as a warning, not a brand. It <b>voids Go's memory-safety guarantees</b> — a wrong conversion is undefined behavior, a crash, or silent corruption, and the race detector/GC assumptions no longer protect you. Worse, its rules are <b>not covered by the Go 1 compatibility promise</b>: code relying on a struct's layout or the <code>reflect.SliceHeader</code> shape can <b>break across Go versions</b>. Use it only with extreme care, isolate it behind a tested function, and never reach for it where a normal copy would do.</p></div></div>
+  <p><code>unsafe.Sizeof</code> is the one harmless corner — it's a compile-time constant reporting a type's size in bytes (no pointer tricks). On a 64-bit build, the sizes are well-defined:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "unsafe"
+)
+
+func main() {
+    // Sizes on a 64-bit platform (amd64/arm64).
+    var i8 int8
+    var i32 int32
+    var i64 int64
+    var f64 float64
+    var p *int
+    var b bool
+
+    fmt.Println("int8   :", unsafe.Sizeof(i8))
+    fmt.Println("int32  :", unsafe.Sizeof(i32))
+    fmt.Println("int64  :", unsafe.Sizeof(i64))
+    fmt.Println("float64:", unsafe.Sizeof(f64))
+    fmt.Println("pointer:", unsafe.Sizeof(p))
+    fmt.Println("bool   :", unsafe.Sizeof(b))
+}</script>
+    <script type="text/plain" class="gp-output">int8   : 1
+int32  : 4
+int64  : 8
+float64: 8
+pointer: 8
+bool   : 1</script>
+  </div>
+  <p>These are exact on any 64-bit target: <code>int8</code> is 1 byte, <code>int32</code> 4, <code>int64</code>/<code>float64</code>/pointer 8. (On a 32-bit build a pointer would be 4, which is why layout-dependent <code>unsafe</code> code isn't portable.)</p>
+  <p>Struct size is <em>not</em> just the sum of its fields — the compiler inserts <b>padding</b> so each field is aligned. Field order therefore changes the size, which is exactly the kind of layout assumption <code>unsafe</code> code (wrongly) bakes in. On a 64-bit build this is deterministic:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "unsafe"
+)
+
+// Poorly ordered: bool, int64, bool -> padding wastes space.
+type Bad struct {
+    a bool  // 1 byte + 7 padding (to align b)
+    b int64 // 8 bytes
+    c bool  // 1 byte + 7 trailing padding
+}
+
+// Well ordered: pack the small fields together.
+type Good struct {
+    b int64 // 8 bytes
+    a bool  // 1 byte
+    c bool  // 1 byte + 6 trailing padding
+}
+
+func main() {
+    fmt.Println("Bad :", unsafe.Sizeof(Bad{}))  // 24, not 10
+    fmt.Println("Good:", unsafe.Sizeof(Good{})) // 16
+    fmt.Println("a@Bad offset:", unsafe.Offsetof(Bad{}.b))
+}</script>
+    <script type="text/plain" class="gp-output">Bad : 24
+Good: 16
+a@Bad offset: 8</script>
+  </div>
+  <p>Same three fields, two different sizes — reorder small fields together to cut padding. And because this layout is implementation detail, code that hard-codes offsets is precisely what <code>unsafe</code> can break across Go versions or architectures.</p>
+</section>
+
+<section class="section reveal" id="when">
+  <h2><span class="section-num">06</span> When to reach for each</h2>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Default: stay pure Go</div>
+      <ul>
+        <li>Single static binary, trivial cross-compile.</li>
+        <li>Memory safety + the race detector hold.</li>
+        <li>Stable across Go versions (Go 1 promise).</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Escape hatch: only if forced</div>
+      <ul>
+        <li><b>cgo</b>: an irreplaceable C library you must bind.</li>
+        <li><b>unsafe</b>: a measured zero-copy hot path or syscall plumbing.</li>
+        <li>Both: isolate, test hard, document the cost.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="takeaway">Reach for the escape hatch <b>last, not first</b>: prove with a profile that pure Go can't do the job before you trade away portability or safety.</p>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">07</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Your team's Go service builds and cross-compiles cleanly to <code>linux/arm64</code> from a Mac with one command. A new PR adds <code>import "C"</code> to bind a C library. What breaks?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Easy cross-compilation — cgo needs a C cross-toolchain for each target, so <code>GOOS=linux GOARCH=arm64 go build</code> no longer "just works," and you've added a C build dependency.</button>
+      <button class="quiz-opt"><span class="mark"></span>Nothing — cgo has no effect on the build, only on runtime speed.</button>
+      <button class="quiz-opt"><span class="mark"></span>The binary still cross-compiles, but it stops being statically linkable on any platform.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> The instant a build uses cgo, cross-compilation requires a matching C toolchain for the target OS/arch — the seamless <code>GOOS</code>/<code>GOARCH</code> workflow is gone, and the build now depends on a C compiler being present. That portability loss (plus slower C calls and the C-toolchain dependency) is exactly why cgo is a last resort. Setting <code>CGO_ENABLED=0</code> keeps you in the easy, pure-Go world.</div>
+  </div>
+</section>
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../runtime/performance-patterns.html"><span class="pn-k">Previous</span><span class="pn-t">Performance patterns &amp; allocation control</span></a>
+            <a class="next" href="../reference/cheatsheet.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">The Go cheatsheet</span></a>
+          </nav>
+        </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#the-binary">The build pipeline: one static binary</a>
+          <a href="#cross-compile">Cross-compilation: GOOS GOARCH</a>
+          <a href="#build-tags">Build tags //go: directives</a>
+          <a href="#cgo">cgo: calling C, and what it costs</a>
+          <a href="#unsafe">unsafe: bypassing the type system</a>
+          <a href="#when">When to reach for each</a>
+          <a href="#check">Check yourself</a>
+        </nav>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Go — a visual guide &middot; goroutines &middot; channels &middot; interfaces &middot; generics &middot; the runtime</span>
+        <span class="fmono">Built to open offline &middot; Go 1.26 era &middot; Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/gopad.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

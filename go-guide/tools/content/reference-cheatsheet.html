@@ -1,0 +1,211 @@
+<section class="hero reveal">
+  <span class="eyebrow">Reference &middot; cheatsheet</span>
+  <h1>The Go cheatsheet.</h1>
+  <p class="lead">Everything you reach for mid-interview or mid-review, on one page: the declarations, the slice/map idioms, the error and concurrency patterns, generics, the Go 1.21+ stdlib one-liners, and the <code>go</code> command belt. Terse on purpose &mdash; each row is the thing you forget under pressure. June 2026, Go 1.26 era.</p>
+</section>
+
+<section class="section reveal" id="language">
+  <h2><span class="section-num">01</span> The language</h2>
+  <p>Declarations, the collection idioms, and the byte/rune/string trio &mdash; the bread and butter.</p>
+  <div class="sheet-grid">
+
+    <div class="sheet">
+      <h3>Declarations &amp; zero values</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Form</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>x := 5</code></td><td>Short decl, infers type (functions only).</td></tr>
+          <tr><td><code>var x int</code></td><td>Zero value <code>0</code>. Package or function scope.</td></tr>
+          <tr><td><code>const c = 3</code></td><td>Compile-time; untyped constants are flexible.</td></tr>
+          <tr><td><code>a, b = b, a</code></td><td>Multi-assign &amp; swap, no temp.</td></tr>
+          <tr><td><b>Zero values</b></td><td><code>0</code> · <code>0.0</code> · <code>false</code> · <code>""</code> · <code>nil</code> (ptr/slice/map/chan/func/iface).</td></tr>
+          <tr><td><code>_ = f()</code></td><td>Blank identifier discards a value.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sheet">
+      <h3>Slices</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Idiom</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>make([]T, n, cap)</code></td><td>len <code>n</code>, capacity <code>cap</code>.</td></tr>
+          <tr><td><code>s = append(s, x)</code></td><td>Grows; <b>may realloc</b> &mdash; reassign the result.</td></tr>
+          <tr><td><code>copy(dst, src)</code></td><td>Copies <code>min(len)</code> elements; returns count.</td></tr>
+          <tr><td><code>s[lo:hi:max]</code></td><td>3-index: caps <code>cap</code> at <code>max-lo</code> &mdash; stops append clobbering the parent.</td></tr>
+          <tr><td><code>s[:0]</code></td><td>Truncate, keep backing array (reuse).</td></tr>
+          <tr><td><code>s = slices.Delete(s, i, i+1)</code></td><td>Remove index <code>i</code>, preserving order.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sheet">
+      <h3>Maps</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Idiom</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>make(map[K]V)</code></td><td>Required before first write &mdash; nil-map write <b>panics</b>.</td></tr>
+          <tr><td><code>v, ok := m[k]</code></td><td>Comma-ok: <code>ok</code> false means absent (not zero).</td></tr>
+          <tr><td><code>delete(m, k)</code></td><td>No-op if absent; never panics.</td></tr>
+          <tr><td><code>for k := range m</code></td><td>Iteration order is <b>randomized</b> &mdash; sort keys to be stable.</td></tr>
+          <tr><td><code>map[K]struct{}</code></td><td>A set: zero-width value. Add <code>m[k]=struct{}{}</code>.</td></tr>
+          <tr><td><code>clear(m)</code></td><td>Empties the map in place (1.21).</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sheet">
+      <h3>Strings, runes &amp; bytes</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Idiom</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>len(s)</code></td><td><b>Bytes</b>, not characters.</td></tr>
+          <tr><td><code>s[i]</code></td><td>The <code>i</code>th <b>byte</b> (<code>uint8</code>).</td></tr>
+          <tr><td><code>for i, r := range s</code></td><td>Decodes <b>runes</b>; <code>i</code> is the byte offset.</td></tr>
+          <tr><td><code>[]rune(s)</code></td><td>Per-character slice; <code>len</code> = rune count.</td></tr>
+          <tr><td><code>[]byte(s)</code> / <code>string(b)</code></td><td>Convert (copies). Mutate via <code>[]byte</code>.</td></tr>
+          <tr><td><code>utf8.RuneCountInString(s)</code></td><td>Count characters without allocating.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">deeper</span></div><p>Every trap hiding behind these rows lives in the <a href="gotchas.html">Go gotchas index</a> &mdash; symptom, cause, one-line fix &mdash; and you can drill them under the clock in the <a href="drills.html">timed drills</a>.</p></div></div>
+</section>
+
+<section class="section reveal" id="errors-concurrency">
+  <h2><span class="section-num">02</span> Errors &amp; concurrency</h2>
+  <p>The two areas interviews probe hardest: idiomatic error handling and the concurrency belt.</p>
+  <div class="sheet-grid">
+
+    <div class="sheet">
+      <h3>Error handling</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Idiom</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>if err != nil { return err }</code></td><td>The default. Handle or return &mdash; never ignore.</td></tr>
+          <tr><td><code>fmt.Errorf("ctx: %w", err)</code></td><td>Wrap, preserving the chain (<code>%w</code>, not <code>%v</code>).</td></tr>
+          <tr><td><code>errors.Is(err, ErrNotFound)</code></td><td>Match a <b>sentinel</b> anywhere in the chain.</td></tr>
+          <tr><td><code>errors.As(err, &amp;target)</code></td><td>Extract a concrete error <b>type</b> from the chain.</td></tr>
+          <tr><td><code>var ErrX = errors.New("x")</code></td><td>Declare a sentinel for callers to test.</td></tr>
+          <tr><td><code>defer f.Close()</code></td><td>Cleanup; runs LIFO. Args evaluated <b>now</b>.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sheet">
+      <h3>Concurrency cheats</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Idiom</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>go f()</code></td><td>Start a goroutine. Returns immediately.</td></tr>
+          <tr><td><code>ch &lt;- v</code> / <code>v := &lt;-ch</code></td><td>Send / receive. Block until the peer is ready (unbuffered).</td></tr>
+          <tr><td><code>v, ok := &lt;-ch</code></td><td><code>ok</code> false &amp; <code>v</code> zero ⇒ channel closed and drained.</td></tr>
+          <tr><td><code>close(ch)</code></td><td>Only the <b>sender</b> closes, <b>once</b>. Send-on-closed panics.</td></tr>
+          <tr><td><code>for v := range ch</code></td><td>Receive until closed. The clean shutdown signal.</td></tr>
+          <tr><td><code>select { case … }</code></td><td>Wait on many channels; <code>default</code> = non-blocking.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sheet">
+      <h3>sync &amp; context</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Idiom</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>wg.Add(1)</code> … <code>go</code> … <code>wg.Done()</code></td><td>Wait for N goroutines. <code>Add</code> <b>before</b> the <code>go</code>.</td></tr>
+          <tr><td><code>wg.Go(func(){…})</code></td><td>Add+go in one call (1.25).</td></tr>
+          <tr><td><code>mu.Lock(); defer mu.Unlock()</code></td><td>Guard shared state. Never <b>copy</b> a Mutex.</td></tr>
+          <tr><td><code>ctx, cancel := WithTimeout(…)</code></td><td><code>defer cancel()</code> &mdash; always, even on success.</td></tr>
+          <tr><td><code>&lt;-ctx.Done()</code></td><td>Cancellation/timeout signal; <code>ctx.Err()</code> says which.</td></tr>
+          <tr><td><code>g, ctx := errgroup.WithContext(ctx)</code></td><td><code>g.Go(...)</code>; <code>g.Wait()</code> returns the first error.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+  </div>
+</section>
+
+<section class="section reveal" id="generics-stdlib">
+  <h2><span class="section-num">03</span> Generics &amp; stdlib one-liners</h2>
+  <p>Type parameters since 1.18, and the batteries that landed in 1.21.</p>
+  <div class="sheet-grid">
+
+    <div class="sheet">
+      <h3>Generics</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Form</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>func F[T any](x T) T</code></td><td>Type parameter <code>T</code>; <code>any</code> = no constraint.</td></tr>
+          <tr><td><code>[T comparable]</code></td><td>Allows <code>==</code> / map keys.</td></tr>
+          <tr><td><code>[T cmp.Ordered]</code></td><td>Allows <code>&lt; &lt;= &gt; &gt;=</code> (1.21).</td></tr>
+          <tr><td><code>[K comparable, V any]</code></td><td>Multiple params, e.g. a generic map helper.</td></tr>
+          <tr><td><code>type Set[T comparable] map[T]struct{}</code></td><td>Generic type. Methods can't add new type params.</td></tr>
+          <tr><td><code>interface { ~int | ~string }</code></td><td>Union constraint; <code>~</code> = underlying type.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sheet">
+      <h3><code>slices</code> / <code>maps</code> / <code>cmp</code></h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Call</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>slices.Sort(s)</code></td><td>In-place sort of any ordered slice.</td></tr>
+          <tr><td><code>slices.SortFunc(s, cmp)</code></td><td>Custom comparator returning <code>-1/0/1</code>.</td></tr>
+          <tr><td><code>slices.Contains / Index</code></td><td>Linear membership / position.</td></tr>
+          <tr><td><code>maps.Keys(m)</code> / <code>maps.Values(m)</code></td><td>Iterators over keys/values (1.23 <code>iter.Seq</code>).</td></tr>
+          <tr><td><code>cmp.Compare(a, b)</code></td><td><code>-1/0/1</code> for ordered types.</td></tr>
+          <tr><td><code>cmp.Or(a, b)</code></td><td>First non-zero argument.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sheet">
+      <h3>Builtins &amp; misc</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Call</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>min(a, b)</code> / <code>max(a, b)</code></td><td>Variadic builtins, any ordered type (1.21).</td></tr>
+          <tr><td><code>clear(m)</code> / <code>clear(s)</code></td><td>Empty a map / zero a slice (1.21).</td></tr>
+          <tr><td><code>len</code> / <code>cap</code></td><td>Length / capacity of slice/array/chan/map.</td></tr>
+          <tr><td><code>new(T)</code></td><td><code>*T</code> pointing at a zero <code>T</code>.</td></tr>
+          <tr><td><code>for i := range 5</code></td><td>Range over an int, <code>0..4</code> (1.22).</td></tr>
+          <tr><td><code>for v := range seq</code></td><td>Range over an <code>iter.Seq</code> function (1.23).</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+  </div>
+</section>
+
+<section class="section reveal" id="go-command">
+  <h2><span class="section-num">04</span> The <code>go</code> command belt</h2>
+  <p>The commands you type every day, plus the flags that matter in interviews and CI.</p>
+  <div class="sheet-grid">
+
+    <div class="sheet">
+      <h3>Build, run &amp; test</h3>
+      <div class="codeblock shell"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">shell</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+      <pre><code data-lang="bash">go run .            # compile + run this package
+go build ./...      # build everything, no output binary kept for ./...
+go test ./...       # run every test in the module
+go test -run TestX  # run tests matching a regexp
+go test -v -cover   # verbose + coverage percentage
+go test -bench=. -benchmem  # benchmarks + alloc stats</code></pre></div>
+    </div>
+
+    <div class="sheet">
+      <h3>Correctness &amp; modules</h3>
+      <div class="codeblock shell"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">shell</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+      <pre><code data-lang="bash">go vet ./...        # catch suspicious code (copied locks, bad Printf)
+go test -race ./... # the data-race detector — run in CI
+go fmt ./...        # canonical formatting (gofmt)
+go mod init mod     # start a module
+go mod tidy         # add missing / drop unused deps
+go mod download     # fetch deps into the cache</code></pre></div>
+    </div>
+
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">interview</span></div><p>If you say one flag in an interview, say <code>-race</code>. "I'd run the test suite under <code>go test -race</code> in CI" signals you respect the memory model. Pair it with <code>go vet</code> for the copied-lock and <code>Printf</code> checks.</p></div></div>
+</section>

@@ -1,0 +1,155 @@
+<section class="hero reveal">
+  <span class="eyebrow">Concurrency · goroutines</span>
+  <h1>Goroutines: concurrency for the price of a function call.</h1>
+  <p class="lead">A goroutine is just a function the Go runtime runs <em>alongside</em> the rest of your program. You start one by writing <code>go f(x)</code> — and because each costs only a couple of kilobytes, a single Go program can hold hundreds of thousands of them. The whole art is starting them; the trap is making sure you wait for them.</p>
+</section>
+
+<section class="section reveal" id="the-idea">
+  <h2><span class="section-num">01</span> The idea: one keyword, a new line of execution</h2>
+  <p class="takeaway">A goroutine is a function <b>scheduled by the Go runtime</b>, started with <code>go f(x)</code>. The call returns <em>immediately</em>; <code>f</code> runs concurrently, and your code carries on without waiting.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Calling a function normally is like asking a colleague to run an errand and standing at the door until they're back — you can't do anything else meanwhile. Writing <code>go errand()</code> is like handing the errand off and turning straight back to your own desk: the colleague goes off and does it on their own, and you keep working. The word <code>go</code> is "you handle that — I'm not waiting."</p></div></div>
+  <p>Mechanically, <code>go f(x)</code> evaluates <code>f</code> and its arguments in the current goroutine, then schedules the call to run independently. There's no handle, no thread object, no return value — control returns to the next statement at once. The <code>main</code> function is itself the first goroutine.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">spawn.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">func work(id int) {
+    fmt.Println("working", id)
+}
+
+func main() {
+    go work(1)   // schedules work(1); returns immediately
+    go work(2)   // and again — both run concurrently with main
+    // ... main keeps going right here, NOT after work() finishes
+}</code></pre></div>
+</section>
+
+<section class="section reveal" id="cheap">
+  <h2><span class="section-num">02</span> Why they're cheap: tiny stacks, multiplexed onto threads</h2>
+  <p class="takeaway">A goroutine starts with a <b>~2&nbsp;KB stack</b> that <b>grows and shrinks on demand</b>, and the runtime <b>multiplexes</b> many goroutines onto a handful of OS threads. So 100,000 goroutines is routine, not reckless.</p>
+  <p>An OS thread reserves a large fixed stack (often ~1&nbsp;MB) and is scheduled by the kernel — heavyweight enough that you pool them. A goroutine is a user-space object: its stack is allocated small and copied to a bigger region only if it actually needs more. That's why you create goroutines freely instead of guarding a thread pool.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th></th><th>Goroutine</th><th>OS thread</th></tr></thead>
+    <tbody>
+      <tr><td><b>Initial stack</b></td><td>~2&nbsp;KB, grows/shrinks on demand</td><td>~1&nbsp;MB, fixed at creation</td></tr>
+      <tr><td><b>Scheduled by</b></td><td>the Go runtime (user space)</td><td>the OS kernel</td></tr>
+      <tr><td><b>Cost to create</b></td><td>cheap — a few hundred nanoseconds</td><td>expensive — a syscall</td></tr>
+      <tr><td><b>How many?</b></td><td>hundreds of thousands, easily</td><td>thousands at most</td></tr>
+      <tr><td><b>Switch cost</b></td><td>cheap, no kernel crossing</td><td>a kernel context switch</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">forward-ref</span></div><p>Who actually puts a goroutine on a core, balances them across CPUs, and parks one that blocks? That's the <b>G-M-P scheduler</b>. We'll dissect it next in <a href="scheduler.html">The G-M-P scheduler</a> — the engine below is a first taste.</p></div></div>
+</section>
+
+<section class="section reveal" id="watch">
+  <h2><span class="section-num">03</span> Watch a spawn: <code>go work()</code> becomes a running G</h2>
+  <p>Step through what one <code>go</code> statement does. <code>main</code> is goroutine <b>g1</b> on processor P0; a second core P1 sits idle until there's work to steal:</p>
+  <figure class="goroutinelab reveal" data-goroutinelab aria-label="One go statement creates a new goroutine, which the runtime places on an idle core">
+    <script type="application/json" class="gl-config">
+    { "frames": [
+      { "caption": "<code>main</code> runs as goroutine <b>g1</b> on processor <b>P0</b> (thread <b>M0</b>). Both run queues are empty, and the second core <b>P1</b> is idle.",
+        "ps": [ { "id":"P0", "m":"M0", "run":"g1", "local":[] },
+                { "id":"P1", "m":"M1", "local":[] } ] },
+      { "caption": "<code>main</code> executes <code>go work()</code>. The runtime creates a new goroutine <b>g2</b> and drops it into <b>P0's local run queue</b> — ready to run, waiting its turn.",
+        "ps": [ { "id":"P0", "m":"M0", "run":"g1", "local":["g2"] },
+                { "id":"P1", "m":"M1", "local":[] } ] },
+      { "caption": "Idle <b>P1</b> doesn't wait around — it <b>steals</b> the ready <b>g2</b> from P0's queue. Work-stealing is how a new goroutine reaches a free core.",
+        "ps": [ { "id":"P0", "m":"M0", "run":"g1", "local":[] },
+                { "id":"P1", "m":"M1", "local":["g2"] } ],
+        "steal": { "from":"P0", "to":"P1", "g":"g2" } },
+      { "caption": "Now both cores are busy: P0 runs <code>main</code> (<b>g1</b>) and P1 runs <code>work</code> (<b>g2</b>) — truly in parallel. One <code>go</code> statement, one new G, placed on a core by the runtime.",
+        "ps": [ { "id":"P0", "m":"M0", "run":"g1", "local":[] },
+                { "id":"P1", "m":"M1", "run":"g2", "local":[] } ] }
+    ] }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="synchronize">
+  <h2><span class="section-num">04</span> The classic trap: <code>main</code> exits and the lights go out</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>When <code>main</code> returns, the program exits immediately</b> — and any goroutines still running are killed mid-flight, no cleanup. So <code>go fmt.Println("hi")</code> followed by a return often prints <em>nothing</em>: <code>main</code> reaches the end before the goroutine is scheduled. The fix is to <b>synchronize</b> (a <code>sync.WaitGroup</code> or a channel), never <code>time.Sleep</code> — sleep is a guess, and a guess is a race.</p></div></div>
+  <p>Below: the buggy version on the left races <code>main</code>'s exit against the goroutine and usually loses; the right version makes <code>main</code> <em>wait</em> for the goroutine to signal it's done. Press <b>Run</b> on each.</p>
+  <div class="grid grid-2">
+    <div>
+      <p><b>Buggy</b> — no synchronization:</p>
+      <div class="gopad" data-gopad data-file="bug.go">
+        <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    go fmt.Println("hi from goroutine")
+    fmt.Println("main returns")
+    // main ends here — program exits at once,
+    // so the goroutine usually never gets to run.
+}</script>
+        <script type="text/plain" class="gp-output">main returns</script>
+      </div>
+    </div>
+    <div>
+      <p><b>Fixed</b> — wait with a channel:</p>
+      <div class="gopad" data-gopad data-file="fixed.go">
+        <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    done := make(chan struct{})
+    go func() {
+        fmt.Println("hi from goroutine")
+        close(done) // signal: I'm finished
+    }()
+    fmt.Println("main waits")
+    <-done // block until the goroutine closes done
+}</script>
+        <script type="text/plain" class="gp-output">main waits
+hi from goroutine</script>
+      </div>
+    </div>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">forward-ref</span></div><p>The opposite failure is just as common: a goroutine that <em>never</em> finishes because it blocks forever on a channel nobody feeds. That goroutine <b>leaks</b> — it holds memory until the process dies. We cover leaks, deadlocks, and data races in <a href="leaks-deadlocks-races.html">Leaks, deadlocks &amp; races</a>.</p></div></div>
+</section>
+
+<section class="section reveal" id="waitgroup">
+  <h2><span class="section-num">05</span> Waiting for many: <code>sync.WaitGroup</code> done right</h2>
+  <p class="takeaway">A <code>sync.WaitGroup</code> is a counter: <code>Add(n)</code> before you spawn, <code>Done()</code> when each goroutine finishes, and <code>Wait()</code> blocks <code>main</code> until the count hits zero. Each goroutine writing to <b>its own slice index</b> needs no lock, and reading the slice <em>after</em> <code>Wait()</code> is deterministic.</p>
+  <p>This is the safe pattern: hand each goroutine a slot it alone owns, wait for all of them, then read. No shared write collides, and the order of the printed result never depends on which goroutine finished first.</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "sync"
+)
+
+func main() {
+    const n = 3
+    results := make([]int, n) // each goroutine owns exactly one index
+    var wg sync.WaitGroup
+
+    for i := 0; i < n; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            results[i] = (i + 1) * (i + 1) // write ONLY results[i]
+        }()
+    }
+
+    wg.Wait() // block until all three call Done()
+    fmt.Println(results) // safe & ordered: read after Wait
+}</script>
+    <script type="text/plain" class="gp-output">[1 4 9]</script>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">1.22 / 1.25</span></div><p>This works because <b>Go 1.22 made the loop variable per-iteration</b>: each goroutine's <code>i</code> is its own. Before 1.22, every closure captured the <em>same</em> <code>i</code> and you'd see <code>[9 9 9]</code> or a panic — the infamous loop-var capture trap; the old fix was <code>i := i</code> inside the loop. Newer still, <b>Go 1.25's <code>wg.Go(func(){...})</code></b> folds the <code>Add(1)</code>/<code>defer Done()</code> into one call.</p></div></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Call <code>wg.Add(1)</code> <b>before</b> the <code>go</code>, never inside the goroutine — otherwise <code>Wait()</code> can run before <code>Add</code> does and return too early. And if two goroutines wrote the <em>same</em> index (or appended to one shared slice without a lock), that's a <b>data race</b> — undefined behaviour, not just wrong output.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A program does <code>go fmt.Println("done")</code> as the very last thing in <code>main</code>, then returns. What's the most likely output?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Usually nothing — <code>main</code> returns and the program exits before the goroutine is scheduled.</button>
+      <button class="quiz-opt"><span class="mark"></span>Always <code>done</code> — Go waits for every goroutine before exiting.</button>
+      <button class="quiz-opt"><span class="mark"></span>A deadlock panic, because the goroutine never gets to run.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> When <code>main</code> returns the whole process exits immediately, killing any unfinished goroutines — so the print usually never happens. Go does <em>not</em> wait for stray goroutines, and there's no panic (a leaked goroutine just dies with the process). To guarantee the line prints, synchronize with a <code>WaitGroup</code> or a channel — not <code>time.Sleep</code>, which only hides the race.</div>
+  </div>
+</section>

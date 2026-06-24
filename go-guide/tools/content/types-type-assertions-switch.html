@@ -1,0 +1,126 @@
+<section class="hero reveal">
+  <span class="eyebrow">Types &amp; interfaces · assertions</span>
+  <h1>Type assertions &amp; type switches.</h1>
+  <p class="lead">An interface hides the concrete type inside it. When you need it back — to handle an <code>any</code>, or to test whether an error implements something — you use a <b>type assertion</b> or a <b>type switch</b>. One form is safe; the other panics. Know which.</p>
+</section>
+
+<section class="section reveal" id="comma-ok">
+  <h2><span class="section-num">01</span> The comma-ok assertion</h2>
+  <p class="takeaway">The two-result form <code>v, ok := x.(T)</code> asks "is the value in <code>x</code> really a <code>T</code>?" — <code>ok</code> is the yes/no and <code>v</code> is the unwrapped value (or <code>T</code>'s zero value if not).</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Opening a sealed box, you can either <b>peek and ask</b> ("is this a wrench? yes/no") or <b>grab blindly</b> ("hand me the wrench — and if it's not there, throw a fit"). The comma-ok assertion is the polite peek: it never crashes; it just tells you whether the type matched.</p></div></div>
+  <p>It reads the interface's hidden <em>type slot</em> and compares it to <code>T</code>. Always prefer this form when the value's type is genuinely uncertain:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    var x any = "hello"
+
+    s, ok := x.(string)        // peek: is x a string?
+    fmt.Println(s, ok)         // hello true
+
+    n, ok := x.(int)           // is x an int? no
+    fmt.Println(n, ok)         // 0 false  (zero value, no panic)
+}</script>
+    <script type="text/plain" class="gp-output">hello true
+0 false</script>
+  </div>
+</section>
+
+<section class="section reveal" id="bare-panics">
+  <h2><span class="section-num">02</span> A bare assertion panics on mismatch</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>The <b>single-result</b> form <code>v := x.(T)</code> <b>panics</b> if the dynamic type isn't exactly <code>T</code> — <code>panic: interface conversion: interface {} is string, not int</code>. Use the bare form only when you're <em>certain</em> of the type (or want the crash). When in doubt, use <b>comma-ok</b> and handle the <code>false</code>.</p></div></div>
+  <p>Same value, the unsafe form — and the program dies:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    var x any = "hello"
+    n := x.(int)        // bare assertion, wrong type -> panic
+    fmt.Println(n)
+}</script>
+    <script type="text/plain" class="gp-output">panic: interface conversion: interface {} is string, not int
+
+goroutine 1 [running]:
+main.main()
+	/main.go:7
+exit status 2</script>
+  </div>
+</section>
+
+<section class="section reveal" id="type-switch">
+  <h2><span class="section-num">03</span> The type switch</h2>
+  <p class="takeaway">A <b>type switch</b> — <code>switch v := x.(type) { case int: …; case string: … }</code> — branches on the dynamic type and binds <code>v</code> to that concrete type <em>inside each case</em>. It's the clean way to handle several possible types.</p>
+  <p>The special form <code>x.(type)</code> is legal only in a <code>switch</code> head. In each <code>case</code>, <code>v</code> has that case's type (in a multi-type case it stays the interface type). A <code>default</code> catches the rest:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func kind(x any) string {
+    switch v := x.(type) {
+    case int:
+        return fmt.Sprintf("int doubled: %d", v*2)
+    case string:
+        return fmt.Sprintf("string len: %d", len(v))
+    case bool:
+        return fmt.Sprintf("bool: %t", v)
+    default:
+        return fmt.Sprintf("unknown %T", v)
+    }
+}
+
+func main() {
+    fmt.Println(kind(21))
+    fmt.Println(kind("gopher"))
+    fmt.Println(kind(true))
+    fmt.Println(kind(3.14))
+}</script>
+    <script type="text/plain" class="gp-output">int doubled: 42
+string len: 6
+bool: true
+unknown float64</script>
+  </div>
+</section>
+
+<section class="section reveal" id="use-sparingly">
+  <h2><span class="section-num">04</span> Use sparingly — prefer polymorphism</h2>
+  <p class="takeaway">A type switch is a code smell when it's faking method dispatch. If you find yourself switching on type to call different behaviour, that behaviour usually belongs in a <b>method on an interface</b>.</p>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Switching to dispatch behaviour</div>
+      <div class="codeblock"><pre><code data-lang="go">func area(s any) float64 {
+    switch v := s.(type) {
+    case Circle: return 3.14 * v.r * v.r
+    case Square: return v.side * v.side
+    }
+    return 0
+}</code></pre></div>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Let the interface dispatch</div>
+      <div class="codeblock"><pre><code data-lang="go">type Shape interface{ Area() float64 }
+
+func (c Circle) Area() float64 { return 3.14 * c.r * c.r }
+func (s Square) Area() float64 { return s.side * s.side }
+
+func area(s Shape) float64 { return s.Area() }</code></pre></div>
+    </div>
+  </div>
+  <p>Where type switches <em>do</em> earn their keep: decoding an <code>any</code> from JSON, handling errors with <code>errors.As</code>-style branching, and reflective/serialization code at the edge of the program. Inside your own domain logic, reach for an interface method first.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">interfaces</span></div><p>The comma-ok assertion is exactly how <code>errors.As</code> recovers a concrete error type from the chain — see <a href="error-interface-design.html">interfaces in practice</a>.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q"><code>var x any = 3.14</code>. You write <code>n := x.(int)</code>. What happens?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A <b>runtime panic</b> — the dynamic type is <code>float64</code>, not <code>int</code>, and the bare form panics on mismatch.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>n</code> becomes <code>3</code> — Go truncates the float.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>n</code> becomes <code>0</code> and execution continues.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> A single-result assertion <code>x.(T)</code> panics if the stored type isn't exactly <code>T</code> — it does not convert. <code>0</code> with no panic is the <em>comma-ok</em> form (<code>n, ok := x.(int)</code>). And asserting never numeric-converts; the type must match.</div>
+  </div>
+</section>

@@ -1,0 +1,178 @@
+<section class="hero reveal">
+  <span class="eyebrow">Testing &amp; tooling · testing</span>
+  <h1>Tests, table tests &amp; subtests.</h1>
+  <p class="lead">Go's testing story is deliberately small: a <code>_test.go</code> file, a <code>func TestXxx(t *testing.T)</code>, and the standard library's <code>testing</code> package. No assertion DSL, no annotations — just <b>got vs want</b> and plain Go. Master the table-driven pattern and you can test almost anything.</p>
+</section>
+
+<section class="section reveal" id="anatomy">
+  <h2><span class="section-num">01</span> The anatomy of a Go test</h2>
+  <p class="takeaway">A test is a function named <code>TestXxx</code> taking <code>*testing.T</code>, living in a file ending <code>_test.go</code>. You compare <b>got</b> to <b>want</b> and call <code>t.Errorf</code> when they differ — the package <i>is</i> the framework.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Other ecosystems hand you a whole laboratory of assertion gadgets — <code>expect(x).to.equal(y)</code>, matchers, fluent chains. Go hands you a notepad and a pen: "run the code, look at what you got, compare it to what you wanted, write down what's wrong." The discipline is in <em>you</em>, not in a framework — and a Go test reads like the rest of your Go.</p></div></div>
+  <p>Run with <code>go test ./...</code>. The tooling discovers every <code>TestXxx</code>, runs them, and reports PASS/FAIL. A test "fails" the moment you call a failing method on <code>t</code> — there is no return value to inspect.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">abs_test.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">package math
+
+import "testing"
+
+func TestAbs(t *testing.T) {
+    got := Abs(-3)
+    want := 3
+    if got != want {
+        t.Errorf("Abs(-3) = %d, want %d", got, want)
+    }
+}</code></pre></div>
+</section>
+
+<section class="section reveal" id="t-methods">
+  <h2><span class="section-num">02</span> <code>Errorf</code> vs <code>Fatalf</code>, and <code>t.Helper</code></h2>
+  <p class="takeaway"><code>t.Errorf</code> records a failure but <b>keeps going</b>; <code>t.Fatalf</code> records it and <b>stops this test immediately</b>. Use <code>Fatalf</code> when continuing is pointless (a nil you'd dereference); use <code>Errorf</code> to report several independent problems in one run.</p>
+  <dl class="kv">
+    <dt><code>t.Errorf(...)</code></dt><dd>Mark failed, <b>continue</b> the function. Best for "check many fields."</dd>
+    <dt><code>t.Fatalf(...)</code></dt><dd>Mark failed, call <code>runtime.Goexit</code> — <b>this test stops here</b>. Best after setup that must succeed.</dd>
+    <dt><code>t.Helper()</code></dt><dd>Marks a function as a helper, so failures report the <b>caller's</b> line, not the helper's.</dd>
+    <dt><code>t.Cleanup(fn)</code></dt><dd>Registers <code>fn</code> to run when the test (or subtest) finishes — LIFO, like <code>defer</code> but test-aware.</dd>
+    <dt><code>t.TempDir()</code></dt><dd>A fresh directory auto-removed at test end. Perfect for filesystem tests.</dd>
+  </dl>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><code>t.Fatalf</code> only stops the goroutine it runs on. Calling it from a <b>goroutine you spawned inside the test</b> (not the test's own goroutine) won't stop the test — it just kills that goroutine, and the test may pass anyway. Always <code>Fatal</code> from the test goroutine; report failures from spawned goroutines via <code>t.Errorf</code> after a <code>sync.WaitGroup</code> join.</p></div></div>
+</section>
+
+<section class="section reveal" id="table-tests">
+  <h2><span class="section-num">03</span> Table-driven tests: a slice of cases</h2>
+  <p class="takeaway">The dominant Go pattern: define a <b>slice of case structs</b> (name, inputs, want), then loop and assert. Adding a case is one line; the logic stays in one place. This is how the standard library tests itself.</p>
+  <p>The gopad below <em>replicates</em> the mechanics so you can see it run: a function under test, a table of cases, and a loop that prints a PASS/FAIL line per case exactly as <code>go test -v</code> would summarise. (A real <code>_test.go</code> can't be executed here — so we emulate the runner.)</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+// Function under test.
+func Abs(n int) int {
+    if n < 0 {
+        return -n
+    }
+    return n
+}
+
+func main() {
+    // The "table": a slice of case structs.
+    cases := []struct {
+        name string
+        in   int
+        want int
+    }{
+        {"negative", -3, 3},
+        {"zero", 0, 0},
+        {"positive", 5, 5},
+    }
+
+    fail := 0
+    for _, c := range cases {
+        got := Abs(c.in)
+        if got != c.want {
+            fmt.Printf("FAIL %-9s Abs(%d) = %d, want %d\n", c.name, c.in, got, c.want)
+            fail++
+        } else {
+            fmt.Printf("PASS %-9s Abs(%d) = %d\n", c.name, c.in, got)
+        }
+    }
+    fmt.Printf("--- %d passed, %d failed\n", len(cases)-fail, fail)
+}</script>
+    <script type="text/plain" class="gp-output">PASS negative  Abs(-3) = 3
+PASS zero      Abs(0) = 0
+PASS positive  Abs(5) = 5
+--- 3 passed, 0 failed</script>
+  </div>
+</section>
+
+<section class="section reveal" id="subtests">
+  <h2><span class="section-num">04</span> <code>t.Run</code> subtests &amp; <code>t.Parallel</code></h2>
+  <p class="takeaway">Wrap each table case in <code>t.Run(c.name, func(t *testing.T){ ... })</code> to get a <b>named subtest</b>. Subtests can be filtered (<code>-run TestAbs/zero</code>), isolated, and made parallel with <code>t.Parallel()</code>.</p>
+  <p>Here we emulate the same table, now run as named subtests. Each prints under its own <code>=== RUN</code>/<code>--- PASS</code> header, the way <code>go test -v</code> groups them. The output stays deterministic because we drive the order ourselves:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func Sign(n int) string {
+    switch {
+    case n < 0:
+        return "neg"
+    case n > 0:
+        return "pos"
+    default:
+        return "zero"
+    }
+}
+
+// run emulates t.Run: print a header, run, print the verdict.
+func run(name, got, want string) bool {
+    fmt.Printf("=== RUN   TestSign/%s\n", name)
+    if got != want {
+        fmt.Printf("--- FAIL: TestSign/%s (got %q, want %q)\n", name, got, want)
+        return false
+    }
+    fmt.Printf("--- PASS: TestSign/%s\n", name)
+    return true
+}
+
+func main() {
+    cases := []struct{ name string; in int; want string }{
+        {"minus", -7, "neg"},
+        {"zero", 0, "zero"},
+        {"plus", 4, "pos"},
+    }
+    ok := true
+    for _, c := range cases {
+        if !run(c.name, Sign(c.in), c.want) {
+            ok = false
+        }
+    }
+    if ok {
+        fmt.Println("PASS")
+    } else {
+        fmt.Println("FAIL")
+    }
+}</script>
+    <script type="text/plain" class="gp-output">=== RUN   TestSign/minus
+--- PASS: TestSign/minus
+=== RUN   TestSign/zero
+--- PASS: TestSign/zero
+=== RUN   TestSign/plus
+--- PASS: TestSign/plus
+PASS</script>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">loop-var capture · trap</span></div><p>The classic table-test bug: a parallel subtest that closes over the loop variable. <b>Before Go 1.22</b> every iteration shared one <code>c</code>, so by the time the parallel subtests ran, they all saw the <em>last</em> case. The old fix was <code>c := c</code> inside the loop. <b>Since Go 1.22</b> the loop variable is <b>per-iteration</b>, so <code>for _, c := range cases { t.Run(c.name, func(t *testing.T){ t.Parallel(); ... }) }</code> is finally safe without the shadow. Also beware <b>shared mutable state</b> across parallel subtests — a map or counter written by several parallel subtests is a data race; give each its own state or guard it.</p></div></div>
+</section>
+
+<section class="section reveal" id="cleanup-tempdir">
+  <h2><span class="section-num">05</span> <code>t.Cleanup</code> &amp; <code>t.TempDir</code> — tidy by construction</h2>
+  <p class="takeaway">Resources opened in a test should be torn down with <code>t.Cleanup</code> (runs even on <code>Fatal</code>), and any files should live under <code>t.TempDir()</code> so the OS scratch space is wiped automatically. No manual <code>os.RemoveAll</code>, no leaks between runs.</p>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Manual, leaky on Fatal</div>
+      <div class="codeblock"><pre><code data-lang="go">dir, _ := os.MkdirTemp("", "t")
+defer os.RemoveAll(dir)   // skipped if Fatal jumps out early?
+db := open(dir)
+// if a later t.Fatalf fires, db is never closed</code></pre></div>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Test-aware</div>
+      <div class="codeblock"><pre><code data-lang="go">dir := t.TempDir()        // auto-removed at test end
+db := open(dir)
+t.Cleanup(func() { db.Close() })  // always runs
+// every subtest gets its own fresh dir, too</code></pre></div>
+    </div>
+  </div>
+  <p>Each subtest's <code>t.TempDir()</code> is distinct, so parallel subtests never collide on the filesystem. <code>t.Cleanup</code> functions run in <b>reverse order of registration</b>, mirroring <code>defer</code>.</p>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">In a table-driven test you write <code>got := f(c.in); if got != c.want { t.Fatalf(...) }</code> inside the loop (no subtests). The first case fails. What happens to the remaining cases?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>They never run — <code>Fatalf</code> stops the whole test function at the first failure.</button>
+      <button class="quiz-opt"><span class="mark"></span>They all still run; <code>Fatalf</code> only marks the case failed.</button>
+      <button class="quiz-opt"><span class="mark"></span>Go automatically isolates each loop iteration, so the rest run.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Without <code>t.Run</code>, the loop body is one test function, and <code>t.Fatalf</code> aborts it (via <code>runtime.Goexit</code>) — you lose visibility into every later case. Use <code>t.Errorf</code> in a plain loop to see <em>all</em> failures, or wrap each case in <code>t.Run</code> so a <code>Fatalf</code> only kills that one subtest.</div>
+  </div>
+</section>

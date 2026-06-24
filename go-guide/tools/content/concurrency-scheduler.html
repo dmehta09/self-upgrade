@@ -1,0 +1,87 @@
+<section class="hero reveal">
+  <span class="eyebrow">Concurrency · the runtime scheduler</span>
+  <h1>The G-M-P scheduler.</h1>
+  <p class="lead">A Go program can have a million goroutines and still run on a handful of OS threads. The trick is a small, elegant scheduler with three moving parts — <b>G</b>, <b>M</b>, and <b>P</b> — that keeps every CPU busy and never blocks a whole thread waiting on one goroutine.</p>
+</section>
+
+<section class="section reveal" id="problem">
+  <h2><span class="section-num">01</span> A million workers, a handful of desks</h2>
+  <p class="takeaway">Goroutines are <b>cheap</b> (a few KB of stack, grown on demand) and managed entirely in user space. The runtime <b>multiplexes</b> many goroutines onto a few OS threads — so creating 100,000 of them is normal, not reckless.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Imagine an office with thousands of tasks but only as many desks as you have CPU cores. A desk (a <b>P</b>) holds one worker (an <b>M</b>, an OS thread) doing one task (a <b>G</b>, a goroutine) at a time. When a task stops to wait — say, for a phone call — the worker doesn't sit idle at the desk; the task steps aside and the next task takes the desk. That hand-off, done thousands of times a second, is the scheduler.</p></div></div>
+</section>
+
+<section class="section reveal" id="gmp">
+  <h2><span class="section-num">02</span> G, M, P — the three letters</h2>
+  <p>The whole model is three structures and the rules connecting them:</p>
+  <dl class="kv">
+    <dt><b>G</b> — goroutine</dt><dd>A unit of work: its stack, instruction pointer, and state. Cheap to create; there can be millions.</dd>
+    <dt><b>M</b> — machine</dt><dd>An OS thread. The thing the kernel actually schedules onto a core. Expensive; there are few.</dd>
+    <dt><b>P</b> — processor</dt><dd>A scheduling context — the right to run Go code. Each P has a <b>local run queue</b> of ready Gs. <code>GOMAXPROCS</code> sets how many Ps exist (default = CPU cores).</dd>
+  </dl>
+  <p class="takeaway">To run Go code you need the triple <b>G on M holding P</b>. The number of <b>P</b>s caps how many goroutines run <em>truly in parallel</em>; the number of <b>M</b>s can briefly exceed it (e.g. threads stuck in syscalls).</p>
+  <p>Ready goroutines wait in queues: each P has a fast <b>local run queue</b>, and there's one shared <b>global run queue</b> for overflow and freshly-woken Gs. When a P's local queue runs dry, it doesn't idle — it goes looking for work.</p>
+</section>
+
+<section class="section reveal" id="watch">
+  <h2><span class="section-num">03</span> Watch it run: queues, work-stealing &amp; parking</h2>
+  <p>Step through a two-core run. Watch an idle P <b>steal</b> work from a busy one, and a goroutine <b>park</b> off-CPU when it blocks on a channel — freeing its P instantly, no thread wasted:</p>
+  <figure class="goroutinelab reveal" data-goroutinelab aria-label="The G-M-P scheduler: run queues, work-stealing, and a goroutine parking on a channel">
+    <script type="application/json" class="gl-config">
+    { "frames": [
+      { "caption": "Two <b>P</b>s, each on its own thread (<b>M</b>), each running a goroutine. P0 still has two Gs queued locally; two more wait in the global queue.",
+        "global": ["g5","g6"],
+        "ps": [ { "id":"P0", "m":"M0", "run":"g1", "local":["g3","g4"] },
+                { "id":"P1", "m":"M1", "run":"g2", "local":[] } ] },
+      { "caption": "<code>g2</code> finishes. P1's run slot and local queue are both empty — an idle P looking for something to do.",
+        "global": ["g5","g6"],
+        "ps": [ { "id":"P0", "m":"M0", "run":"g1", "local":["g3","g4"] },
+                { "id":"P1", "m":"M1", "local":[] } ] },
+      { "caption": "Rather than sit idle, P1 <b>steals</b> half of P0's local queue — <b>work-stealing</b> keeps every core busy without a central bottleneck.",
+        "global": ["g5","g6"],
+        "ps": [ { "id":"P0", "m":"M0", "run":"g1", "local":["g3"] },
+                { "id":"P1", "m":"M1", "local":["g4"] } ],
+        "steal": { "from":"P0", "to":"P1", "g":"g4" } },
+      { "caption": "P1 runs the stolen <code>g4</code>; P0 keeps running <code>g1</code>. Both cores busy again.",
+        "global": ["g5","g6"],
+        "ps": [ { "id":"P0", "m":"M0", "run":"g1", "local":["g3"] },
+                { "id":"P1", "m":"M1", "run":"g4", "local":[] } ] },
+      { "caption": "<code>g1</code> blocks on a channel receive — it <b>parks off-CPU</b>. Its P is free immediately (no thread wasted), so P0 pulls <code>g5</code> from the global queue and runs it.",
+        "global": ["g6"],
+        "ps": [ { "id":"P0", "m":"M0", "run":"g5", "local":["g3"] },
+                { "id":"P1", "m":"M1", "run":"g4", "local":[] } ],
+        "blocked": ["g1"] },
+      { "caption": "The value arrives; <code>g1</code> is runnable again and rejoins a run queue. This park/unpark dance is why a program can hold a million goroutines on just a few threads.",
+        "global": ["g6"],
+        "ps": [ { "id":"P0", "m":"M0", "run":"g5", "local":["g3","g1"] },
+                { "id":"P1", "m":"M1", "run":"g4", "local":[] } ] }
+    ] }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="syscall">
+  <h2><span class="section-num">04</span> Blocking syscalls: handing off the P</h2>
+  <p class="takeaway">When a goroutine makes a <b>blocking syscall</b> (a disk read, a DNS lookup), its thread <b>M</b> blocks in the kernel with it. The runtime <b>detaches the P</b> and gives it to another thread, so the other queued goroutines keep running.</p>
+  <p>This is the key difference from a naive thread pool: one goroutine doing slow I/O can't stall the others, because the P (the right to run Go code) is handed to a fresh M while the old M waits in the kernel. When the syscall returns, its goroutine needs a P again — grabbing one if free, otherwise going to the global queue.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">Preemption <span class="tag">since 1.14</span></div><p>A goroutine that never blocks (a tight CPU loop) used to be able to hog its P. Since Go 1.14 the scheduler is <b>asynchronously preemptible</b> — the runtime can interrupt a long-running G at almost any instruction, so one busy goroutine can't starve the rest.</p></div></div>
+</section>
+
+<section class="section reveal" id="gomaxprocs">
+  <h2><span class="section-num">05</span> GOMAXPROCS &amp; fairness</h2>
+  <p><code>runtime.GOMAXPROCS(n)</code> (or the <code>GOMAXPROCS</code> env var) sets the number of Ps — the ceiling on parallelism. The default is the number of CPUs the process can use.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">containers</span></div><p>In a container with a CPU <em>limit</em> (say 2 cores) on a 64-core host, older Go versions set <code>GOMAXPROCS</code> to 64 — spawning far too many Ps, causing throttling and latency spikes. <b>Go 1.25 made the runtime container-aware</b>: it reads the cgroup CPU quota and sizes <code>GOMAXPROCS</code> to the limit automatically. On older versions, set it yourself (or use <code>automaxprocs</code>).</p></div></div>
+  <p>More goroutines than Ps is fine and normal — they take turns. More Ps than you have cores rarely helps and often hurts (context-switch and cache thrash). Leave it at the default unless a benchmark says otherwise.</p>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A goroutine calls a blocking syscall that takes 50&nbsp;ms. What happens to the other ready goroutines that were queued on the same P?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The runtime detaches the P to another thread, so they keep running; only the blocked goroutine's thread waits.</button>
+      <button class="quiz-opt"><span class="mark"></span>They all stall for 50&nbsp;ms until the syscall returns.</button>
+      <button class="quiz-opt"><span class="mark"></span>They migrate to a brand-new goroutine each.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> The blocking <code>M</code> stays in the kernel with its goroutine, but its <code>P</code> is handed to another (possibly new) <code>M</code> so the remaining ready goroutines run without delay. That P-handoff is exactly why slow I/O in one goroutine doesn't freeze the others.</div>
+  </div>
+</section>

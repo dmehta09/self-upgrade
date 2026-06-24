@@ -1,0 +1,155 @@
+<section class="hero reveal">
+  <span class="eyebrow">Testing &amp; tooling · the toolchain</span>
+  <h1>The tooling belt: vet, staticcheck, modules.</h1>
+  <p class="lead">Go ships a batteries-included command-line belt. <code>go vet</code> flags suspicious code the compiler allows; <code>gofmt</code> ends every formatting argument before it starts; <code>go mod</code> manages dependencies and versions. Knowing the belt is what separates "writes Go" from "ships Go."</p>
+</section>
+
+<section class="section reveal" id="vet">
+  <h2><span class="section-num">01</span> <code>go vet</code>: the compiler's stricter sibling</h2>
+  <p class="takeaway"><code>go vet</code> reports code that <b>compiles but is almost certainly a bug</b>: <code>Printf</code> format/argument mismatches, copied locks, unreachable code, struct tags that don't parse, loops that misuse goroutines.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>The compiler is a spell-checker: it rejects words that aren't words. <code>go vet</code> is a grammar-checker: every word is valid, but "your going to love this" is still wrong. It reads <em>intent</em> — your <code>Printf</code> says <code>%d</code> but you handed it a string — and flags the mismatch the compiler happily waved through.</p></div></div>
+  <p>The most common catch is a format-verb mismatch. The bug below compiles and runs; it just prints garbage. <code>go vet</code> would refuse it with <code>arg name is a string, not an int (for %d)</code>:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    name, age := "Ada", 36
+
+    // BUG vet would catch: %d with a string, %s with an int.
+    // Printf doesn't crash — it prints %!d(string=...) garbage.
+    fmt.Printf("buggy:   %d is %s\n", name, age)
+
+    // CORRECT: verbs match the arguments.
+    fmt.Printf("correct: %s is %d\n", name, age)
+}</script>
+    <script type="text/plain" class="gp-output">buggy:   %!d(string=Ada) is %!s(int=36)
+correct: Ada is 36</script>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">built-in</span></div><p><code>go test</code> runs a subset of <code>go vet</code> automatically before your tests, so format bugs often surface during a normal test run. Run the full <code>go vet ./...</code> separately in CI to catch the rest.</p></div></div>
+</section>
+
+<section class="section reveal" id="linters-fmt">
+  <h2><span class="section-num">02</span> staticcheck, golangci-lint &amp; the non-negotiable: <code>gofmt</code></h2>
+  <p class="takeaway"><code>vet</code> is the floor. <b>staticcheck</b> adds hundreds of deeper checks; <b>golangci-lint</b> bundles many linters behind one command. And <code>gofmt</code>/<code>goimports</code> mean Go has <b>one</b> canonical format — formatting is not a debate.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Tool</th><th>What it does</th><th>Typical invocation</th></tr></thead>
+    <tbody>
+      <tr><td><code>gofmt</code></td><td>Canonical formatting (tabs, spacing, alignment). Mandatory in Go culture.</td><td><code>gofmt -w .</code></td></tr>
+      <tr><td><code>goimports</code></td><td><code>gofmt</code> plus auto-add/remove &amp; group imports.</td><td><code>goimports -w .</code></td></tr>
+      <tr><td><code>go vet</code></td><td>Built-in correctness checks (printf, locks, tags…).</td><td><code>go vet ./...</code></td></tr>
+      <tr><td><code>staticcheck</code></td><td>Deep static analysis: dead code, bad APIs, bugs vet misses.</td><td><code>staticcheck ./...</code></td></tr>
+      <tr><td><code>golangci-lint</code></td><td>Runs many linters (incl. the above) fast, in one pass.</td><td><code>golangci-lint run</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Bikeshedding (other languages)</div>
+      <p>Tabs vs spaces, brace placement, import order — endless PR threads, a 40-page style guide, and a linter config nobody agrees on.</p>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Go</div>
+      <p><code>gofmt</code> decides. Your editor runs it on save; CI fails if a file isn't formatted. The argument simply <b>does not exist</b> — all idiomatic Go looks the same.</p>
+    </div>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Three rookie tells: <b>ignoring <code>vet</code>/staticcheck findings</b> ("it works, ship it" — until the printf bug hits prod logs); <b>committing unformatted code</b> (a reviewer instantly knows you skipped <code>gofmt</code>); and treating linters as optional. In real Go shops, <code>gofmt -l .</code> returning <em>any</em> filename fails the build. Wire all three into CI and a pre-commit hook.</p></div></div>
+</section>
+
+<section class="section reveal" id="modules">
+  <h2><span class="section-num">03</span> Modules: <code>go.mod</code>, <code>go.sum</code> &amp; semantic import versioning</h2>
+  <p class="takeaway">A <b>module</b> is a versioned unit of code rooted at a <code>go.mod</code> file. <code>go.mod</code> lists your dependencies and their versions; <code>go.sum</code> pins cryptographic <b>checksums</b> so builds are reproducible and tamper-evident.</p>
+  <dl class="kv">
+    <dt><code>go mod init example/app</code></dt><dd>Create <code>go.mod</code>, naming the module's import path.</dd>
+    <dt><code>go get pkg@v1.5.0</code></dt><dd>Add/upgrade a dependency at a chosen version.</dd>
+    <dt><code>go mod tidy</code></dt><dd>Add what's imported, remove what isn't, sync <code>go.sum</code>.</dd>
+    <dt><code>go.work</code></dt><dd>A <b>workspace</b> stitching several local modules together for cross-repo dev.</dd>
+  </dl>
+  <p><b>Semantic import versioning</b> is the rule that surprises newcomers: a <b>v2+</b> major version puts the major in the <em>import path</em> itself. So v1 and v2 of a library are different import paths and can coexist in one build — no "dependency hell" where two packages need incompatible majors:</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">go.mod</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">module example/app
+
+go 1.26
+
+require (
+    github.com/go-chi/chi/v5 v5.1.0   // v2+ → /vN in the import path
+    golang.org/x/sync v0.10.0
+)</code></pre></div>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">main.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">// the /v5 is part of the path, not just the go.mod version
+import "github.com/go-chi/chi/v5"</code></pre></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Forgetting <code>go mod tidy</code></b> is the classic. You delete an import but leave the <code>require</code> line; or add one and never record it. CI then fails on a clean checkout, or ships unused dependencies. Run <code>go mod tidy</code> before every commit and let CI verify <code>go.mod</code>/<code>go.sum</code> are unchanged afterward — a diff means you forgot.</p></div></div>
+</section>
+
+<section class="section reveal" id="build-commands">
+  <h2><span class="section-num">04</span> The everyday verbs &amp; tool directives</h2>
+  <p class="takeaway"><code>go build</code> compiles, <code>go run</code> compiles-and-runs, <code>go test</code> tests. Since 1.24, <b>tool dependencies live in <code>go.mod</code></b> via <code>tool</code> directives, so your linters and codegen tools are versioned with the project.</p>
+  <div class="grid grid-2">
+    <div class="card"><b><code>go run .</code></b><p>Compile to a temp binary and run it — for quick iteration, not for shipping.</p></div>
+    <div class="card"><b><code>go build ./...</code></b><p>Compile every package; produce a binary for <code>main</code> packages. Fast, cached.</p></div>
+    <div class="card"><b><code>go test ./...</code></b><p>Run all tests (and a vet subset) across the module.</p></div>
+    <div class="card"><b><code>go tool</code></b><p>Run a tool tracked in <code>go.mod</code> (e.g. <code>go tool staticcheck</code>) at the pinned version.</p></div>
+  </div>
+  <p>Pin a tool so every contributor and CI runs the <em>same</em> version — no "works on my machine" from a globally-installed linter that drifted:</p>
+  <div class="codeblock shell"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="bash"># Go 1.24+: record a tool dependency in go.mod
+$ go get -tool honnef.co/go/tools/cmd/staticcheck
+
+# now everyone runs the pinned version, no global install
+$ go tool staticcheck ./...</code></pre></div>
+  <p><b>Build tags</b> let one file compile only on certain platforms or build modes — the <code>//go:build</code> line gates the whole file. Below, the file is included only on Linux:</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">net_linux.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">//go:build linux
+
+package net
+
+// compiled only when GOOS=linux; ignored elsewhere</code></pre></div>
+</section>
+
+<section class="section reveal" id="vet-live">
+  <h2><span class="section-num">05</span> Prove it: the bug vet warns about</h2>
+  <p>One more <code>vet</code> classic — <b>copying a struct that contains a <code>sync.Mutex</code></b>. Passing a lock by value duplicates it, so two copies guard nothing in common. <code>go vet</code> reports <code>passes lock by value</code>; the fix is to pass a pointer. Both versions compile, but only the pointer version is correct:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "sync"
+)
+
+type Counter struct {
+    mu sync.Mutex
+    n  int
+}
+
+// CORRECT: pointer receiver — the lock is shared, not copied.
+// (A value receiver `func (c Counter)` would copy the Mutex and
+// `go vet` flags it: "passes lock by value".)
+func (c *Counter) Inc() {
+    c.mu.Lock()
+    c.n++
+    c.mu.Unlock()
+}
+
+func main() {
+    c := &Counter{}
+    for i := 0; i < 5; i++ {
+        c.Inc()
+    }
+    fmt.Println("n =", c.n)
+}</script>
+    <script type="text/plain" class="gp-output">n = 5</script>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">CI recipe</span></div><p>A solid Go CI step: <code>gofmt -l .</code> (must be empty), <code>go vet ./...</code>, <code>go tool staticcheck ./...</code>, <code>go test -race ./...</code>, and a <code>go mod tidy</code> + git-diff check. Five commands, zero third-party platform — the toolchain does the heavy lifting.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You depend on <code>github.com/foo/bar</code> at <b>v2.3.0</b>. What does the import line in your Go source look like?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>import "github.com/foo/bar/v2"</code> — semantic import versioning puts the major version (v2+) in the import path itself.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>import "github.com/foo/bar@v2.3.0"</code> — the full version goes in the import string.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>import "github.com/foo/bar"</code> — the version only ever lives in <code>go.mod</code>, never the import path.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> For <b>v2 and above</b>, the major version is part of the import path (<code>/v2</code>), and <code>go.mod</code> reads <code>require github.com/foo/bar/v2 v2.3.0</code>. This is what lets v1 and v2 of the same library coexist in one build. (v0/v1 keep the bare path — no suffix.) The full <code>@version</code> form is for <code>go get</code> on the command line, not for source imports.</div>
+  </div>
+</section>

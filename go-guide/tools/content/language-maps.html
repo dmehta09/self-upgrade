@@ -1,0 +1,137 @@
+<section class="hero reveal">
+  <span class="eyebrow">The language core · maps</span>
+  <h1>Maps.</h1>
+  <p class="lead">A map is Go's hash table — fast key→value lookup with a built-in literal and the <code>v, ok</code> idiom. The two things that bite people: iteration order is deliberately random, and writing to a <code>nil</code> map panics.</p>
+</section>
+
+<section class="section reveal" id="the-idea">
+  <h2><span class="section-num">01</span> The idea: <code>map[K]V</code></h2>
+  <p class="takeaway">A <b><code>map[K]V</code></b> maps comparable keys to values. Create one with <b><code>make(map[K]V)</code></b> or a <b>composite literal</b>; missing keys read back as the value's <b>zero value</b>.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A map is a coat-check. You hand over a ticket (the key) and get back your coat (the value). Hand over a ticket nobody checked a coat for, and instead of an error you get an <em>empty hanger</em> — the zero value. There's no inherent order to the racks, and the attendant rearranges them between visits.</p></div></div>
+  <p>The key type must be <b>comparable</b> (usable with <code>==</code>): strings, numbers, bools, pointers, and structs of those all work; slices, maps, and funcs do <b>not</b>. The value can be anything.</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    // composite literal
+    age := map[string]int{"ada": 36, "alan": 41}
+
+    // make + assign
+    seen := make(map[string]bool)
+    seen["ada"] = true
+
+    age["grace"] = 85
+    fmt.Println(age["ada"])   // present
+    fmt.Println(age["nobody"]) // absent → zero value (0)
+    fmt.Println(len(age))     // number of entries
+}</script>
+    <script type="text/plain" class="gp-output">36
+0
+3</script>
+  </div>
+</section>
+
+<section class="section reveal" id="comma-ok">
+  <h2><span class="section-num">02</span> The comma-ok idiom</h2>
+  <p class="takeaway">A plain read <code>m[k]</code> can't tell "absent" from "present but zero". The two-value form <b><code>v, ok := m[k]</code></b> reports presence in <code>ok</code> — the canonical way to check membership.</p>
+  <p>Use <code>delete(m, k)</code> to remove a key (a no-op if it's absent, never a panic). Pair it with comma-ok and you have the full membership toolkit:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    score := map[string]int{"ada": 0} // present, but value is 0
+
+    v, ok := score["ada"]
+    fmt.Println(v, ok) // 0 true  — present, just zero
+
+    v, ok = score["bob"]
+    fmt.Println(v, ok) // 0 false — absent
+
+    delete(score, "ada")
+    delete(score, "ghost") // absent key: no-op, no panic
+    fmt.Println(len(score))
+}</script>
+    <script type="text/plain" class="gp-output">0 true
+0 false
+0</script>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">idiom</span></div><p>A set is just <code>map[T]struct{}</code> — <code>struct{}</code> is zero-width, so it stores no value bytes. Membership is <code>_, ok := set[x]</code>; add with <code>set[x] = struct{}{}</code>.</p></div></div>
+</section>
+
+<section class="section reveal" id="iteration-order">
+  <h2><span class="section-num">03</span> Iteration order is randomized</h2>
+  <p class="takeaway"><code>range</code> over a map visits keys in a <b>deliberately randomized order</b> — it differs run to run. The runtime does this on purpose so you can't accidentally depend on an order that the hash table never promised.</p>
+  <p>If you need a stable order, collect the keys, <b>sort them</b>, then range over the sorted slice. The gopad below does exactly that — its output is deterministic <em>because</em> we sorted; a bare <code>range m</code> would print the same pairs in an unpredictable order each run.</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "sort"
+)
+
+func main() {
+    m := map[string]int{"banana": 3, "apple": 1, "cherry": 2}
+
+    // raw `for k := range m` would be in RANDOM order each run.
+    // Sort the keys for a stable, reproducible walk:
+    keys := make([]string, 0, len(m))
+    for k := range m {
+        keys = append(keys, k)
+    }
+    sort.Strings(keys)
+
+    for _, k := range keys {
+        fmt.Printf("%s=%d\n", k, m[k])
+    }
+}</script>
+    <script type="text/plain" class="gp-output">apple=1
+banana=3
+cherry=2</script>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">stdlib</span></div><p>In Go 1.21+ you can skip the make/append boilerplate: <code>slices.Sorted(maps.Keys(m))</code> returns a sorted slice of the keys in one call (<code>maps.Keys</code> yields an iterator; <code>slices.Sorted</code> drains and sorts it).</p></div></div>
+</section>
+
+<section class="section reveal" id="nil-maps">
+  <h2><span class="section-num">04</span> Reading vs writing a nil map</h2>
+  <p class="takeaway">A <code>nil</code> map (the zero value of a map type, or <code>var m map[K]V</code>) is a <b>readable empty map</b> — but it has no storage, so <b>writing to it panics</b>.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Writing to a <code>nil</code> map panics</b> (<code>assignment to entry in nil map</code>). Reading is fine — a lookup returns the zero value and <code>ok</code> is <code>false</code>; <code>len</code> is 0; <code>range</code> does nothing; <code>delete</code> is a no-op. The fix is to <code>make</code> the map (or use a literal) before the first write. This bites most often with a struct field of map type you forgot to initialize.</p></div></div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    var m map[string]int // nil map — no backing storage
+
+    // Reads are safe:
+    fmt.Println(m["x"], len(m)) // 0 0
+
+    // Guard the write: a nil map must be made first.
+    if m == nil {
+        m = make(map[string]int)
+    }
+    m["x"] = 1
+    fmt.Println(m["x"]) // 1
+}</script>
+    <script type="text/plain" class="gp-output">0 0
+1</script>
+  </div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You have <code>var counts map[string]int</code> and run <code>counts["a"]++</code>. What happens?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>It <b>panics</b> — <code>counts</code> is a nil map and <code>++</code> is a write.</button>
+      <button class="quiz-opt"><span class="mark"></span>It sets <code>counts["a"]</code> to 1; the map auto-initializes on first write.</button>
+      <button class="quiz-opt"><span class="mark"></span>It's a no-op; <code>counts["a"]</code> stays at the zero value 0.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> <code>counts["a"]++</code> reads the zero value (0) <em>and writes back</em> 1 — and the write is to a <code>nil</code> map, so it panics with "assignment to entry in nil map". Maps never auto-allocate; you must <code>make</code> or use a literal first. (Reading <code>counts["a"]</code> alone would have been safe, returning 0.)</div>
+  </div>
+</section>

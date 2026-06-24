@@ -1,0 +1,130 @@
+<section class="hero reveal">
+  <span class="eyebrow">Standard library · files &amp; os</span>
+  <h1>Files, <code>os</code> &amp; <code>io/fs</code>.</h1>
+  <p class="lead">Reading and writing files in Go is two function calls for the simple case and a deferred <code>Close</code> for the streaming one. The newer <code>io/fs</code> abstraction lets the same code walk a real directory, a zip, or files <em>baked into your binary</em> with <code>//go:embed</code>.</p>
+</section>
+
+<section class="section reveal" id="open-vs-readfile">
+  <h2><span class="section-num">01</span> Two ways to read: whole-file vs streaming</h2>
+  <p class="takeaway">For small files reach for <b><code>os.ReadFile</code></b> (one call → all bytes) and <b><code>os.WriteFile</code></b>. For large files or streaming, <b><code>os.Open</code></b> gives you an <code>*os.File</code> you read from — and must <code>Close</code>.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p><code>ReadFile</code> is photocopying a whole document at once — easy, but you need a desk big enough for every page. <code>Open</code> is borrowing the original from the library: you read it page by page (cheap memory), but you <em>must return it</em> when you're done, or the librarian runs out of copies. That "return it" is <code>f.Close()</code>.</p></div></div>
+  <div class="kv-wrap"><dl class="kv">
+    <dt><code>os.ReadFile(name)</code></dt><dd>Reads the entire file into a <code>[]byte</code>. Returns <code>(data, err)</code>. No <code>Close</code> needed.</dd>
+    <dt><code>os.WriteFile(name, data, perm)</code></dt><dd>Creates/truncates and writes all bytes with the given mode. No <code>Close</code> needed.</dd>
+    <dt><code>os.Open(name)</code></dt><dd>Opens read-only → <code>(*os.File, error)</code>. You stream from it and <code>defer f.Close()</code>.</dd>
+    <dt><code>os.Create(name)</code></dt><dd>Creates/truncates for writing (mode <code>0666</code>) → <code>(*os.File, error)</code>. Also <code>Close</code>.</dd>
+  </dl></div>
+</section>
+
+<section class="section reveal" id="write-read-roundtrip">
+  <h2><span class="section-num">02</span> A write → read round-trip</h2>
+  <p>This writes a temp file, reads it back, and prints the byte count — using <code>filepath.Join</code> so the path is correct on any OS. Note <code>os.Remove</code> to clean up afterwards.</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+func main() {
+	path := filepath.Join(os.TempDir(), "greeting.txt")
+	if err := os.WriteFile(path, []byte("hello from go"), 0o644); err != nil {
+		panic(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%d bytes: %s\n", len(data), data)
+	os.Remove(path)
+}</script>
+    <script type="text/plain" class="gp-output">13 bytes: hello from go</script>
+  </div>
+  <p>The mode <code>0o644</code> is an octal literal: owner read+write, group/other read-only. <code>WriteFile</code> only applies <code>perm</code> when it <em>creates</em> the file; an existing file keeps its mode.</p>
+</section>
+
+<section class="section reveal" id="defer-close">
+  <h2><span class="section-num">03</span> Streaming with <code>os.Open</code> and <code>defer f.Close()</code></h2>
+  <p class="takeaway">Pair <b><code>os.Open</code></b> with <b><code>defer f.Close()</code></b> on the very next line, so the file is released on <em>every</em> return path — no leaked descriptors.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">stream.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">f, err := os.Open(name)
+if err != nil {
+    return err
+}
+defer f.Close()                 // released on every return below
+
+sc := bufio.NewScanner(f)
+for sc.Scan() {
+    process(sc.Text())          // one line at a time — constant memory
+}
+return sc.Err()</code></pre></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Two classic file traps. <b>(1)</b> Forgetting <code>Close</code> on a long-running process leaks descriptors until you hit the OS limit (<code>too many open files</code>). <b>(2)</b> When <em>writing</em>, a bare <code>defer f.Close()</code> can swallow the error from a final flush — for writers, also check the explicit <code>err := f.Close()</code> on the success path, since a failed close can mean lost data.</p></div></div>
+</section>
+
+<section class="section reveal" id="os-args-env-exit">
+  <h2><span class="section-num">04</span> Args, env &amp; exit — and why <code>os.Exit</code> is dangerous</h2>
+  <p class="takeaway"><code>os.Args</code> is the command line (<code>Args[0]</code> is the program), <code>os.Getenv</code> reads environment variables, and <code>os.Exit(code)</code> ends the process <b>immediately</b>.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">cli.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">name := "world"
+if len(os.Args) &gt; 1 {
+    name = os.Args[1]              // ./greet ada  → "ada"
+}
+level := os.Getenv("LOG_LEVEL")   // "" if unset; use os.LookupEnv to tell unset from empty
+fmt.Printf("hello %s (level=%q)\n", name, level)</code></pre></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b><code>os.Exit</code> does NOT run deferred functions.</b> Any <code>defer f.Close()</code>, buffered-writer flush, or unlock above it is silently skipped. Idiomatic pattern: keep <code>main</code> thin — do the work in a <code>run() error</code>, then <code>if err := run(); err != nil { log.Fatal(err) }</code>. (And note <code>log.Fatal</code> itself calls <code>os.Exit(1)</code>, so it skips defers too — only put it in <code>main</code>.)</p></div></div>
+</section>
+
+<section class="section reveal" id="io-fs-embed">
+  <h2><span class="section-num">05</span> <code>io/fs</code>, <code>embed.FS</code> &amp; walking directories</h2>
+  <p class="takeaway"><b><code>fs.FS</code></b> is an interface for "a filesystem." The real disk (<code>os.DirFS</code>), a zip archive, and files baked into your binary all satisfy it — so code written against <code>fs.FS</code> works on any of them.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p><code>fs.FS</code> is a power socket shape. Your code is the plug. As long as the source — disk, zip, embedded bytes — exposes that socket, your plug fits without rewiring. <code>//go:embed</code> is the trick that ships the files <em>inside the executable</em>: one binary, no "where did the templates go?" at deploy time.</p></div></div>
+  <p>The <code>//go:embed</code> directive (Go 1.16) reads a file at <b>build time</b> into a variable. A single file can land in a <code>string</code> or <code>[]byte</code>; a tree goes into an <code>embed.FS</code>:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	_ "embed"
+	"fmt"
+)
+
+//go:embed version.txt
+var version string // contents of version.txt, baked in at build time
+
+func main() {
+	fmt.Println("embedded:", version)
+}
+
+// version.txt (next to main.go) contains exactly: Go 1.26</script>
+    <script type="text/plain" class="gp-output">embedded: Go 1.26</script>
+  </div>
+  <p>For a whole tree, <code>fs.WalkDir</code> visits every entry depth-first. It works identically over an <code>embed.FS</code> or the live disk:</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">walk.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">//go:embed templates
+var assets embed.FS              // an fs.FS over the embedded tree
+
+fs.WalkDir(assets, ".", func(path string, d fs.DirEntry, err error) error {
+    if err != nil {
+        return err
+    }
+    if !d.IsDir() {
+        fmt.Println(path)       // e.g. templates/home.html
+    }
+    return nil
+})</code></pre></div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">recent Go</span></div><p>Go 1.24 added <b><code>os.Root</code></b> — open a directory as a sandbox (<code>root, _ := os.OpenRoot(dir)</code>) and all <code>root.Open</code>/<code>root.Create</code> calls are confined inside it, with <code>..</code> and absolute paths and symlink escapes rejected. Reach for it when a path comes from user input and a traversal out of the directory would be a security hole. Also: build OS-correct paths with <b><code>path/filepath</code></b> (separator-aware), and use <code>path</code> only for slash-separated things like URLs and <code>fs.FS</code> keys.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You open a file with <code>os.Open</code>, <code>defer f.Close()</code>, do some work, and at the end call <code>os.Exit(0)</code>. What happens to the file descriptor?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The <code>defer</code> never runs — <code>os.Exit</code> skips all deferred calls — so <code>Close</code> is not called by your code.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>Close</code> runs first because deferred calls always run before the process exits.</button>
+      <button class="quiz-opt"><span class="mark"></span>It's a compile error to call <code>os.Exit</code> after a <code>defer</code>.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> <code>os.Exit</code> terminates immediately and <em>does not</em> run deferred functions. (The OS does reclaim descriptors on process death, so a leaked <code>Close</code> at the very end of a program is usually harmless — but a skipped buffered-writer <em>flush</em> means lost data, which is why you keep <code>main</code> thin and return errors instead of exiting mid-work.)</div>
+  </div>
+</section>

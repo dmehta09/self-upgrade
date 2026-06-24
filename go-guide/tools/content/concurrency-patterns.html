@@ -1,0 +1,244 @@
+<section class="hero reveal">
+  <span class="eyebrow">Concurrency · patterns</span>
+  <h1>Patterns: pool, fan-in/out, pipeline, semaphore.</h1>
+  <p class="lead">Channels and goroutines are the primitives; these four patterns are how real Go programs use them. Once you can recognize a <b>worker pool</b>, a <b>fan-out/fan-in</b>, a <b>pipeline</b>, and a <b>semaphore</b>, most concurrent Go reads like prose — and most interview questions become "pick the pattern, then wire the channels."</p>
+</section>
+
+<section class="section reveal" id="worker-pool">
+  <h2><span class="section-num">01</span> Worker pool: N goroutines on one jobs channel</h2>
+  <p class="takeaway">A <b>worker pool</b> is one <code>jobs</code> channel feeding a <b>fixed number</b> of worker goroutines, plus a <code>results</code> channel coming back. You cap concurrency by choosing how many workers to start — not by how much work arrives.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Picture a bank with <b>one queue of tickets</b> and a <b>fixed line of three clerks</b>. Customers (jobs) take a numbered ticket and wait; whichever clerk is free calls the next ticket. You never have more than three customers being served at once, no matter how long the queue gets — that's your concurrency cap. When the "now serving" sign goes dark (the jobs channel closes), each clerk finishes their current customer, then goes home.</p></div></div>
+  <p>Every worker runs the same loop: <code>for job := range jobs</code>. Closing <code>jobs</code> ends all of those loops cleanly. A <code>sync.WaitGroup</code> lets a coordinator know when the last worker has returned, so it can safely close <code>results</code>.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">pool.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">func worker(jobs &lt;-chan int, results chan&lt;- int, wg *sync.WaitGroup) {
+    defer wg.Done()
+    for j := range jobs {        // ends when jobs is closed &amp; drained
+        results &lt;- j * j
+    }
+}
+
+func main() {
+    jobs := make(chan int, 6)
+    results := make(chan int, 6)
+    var wg sync.WaitGroup
+
+    for w := 0; w &lt; 3; w++ {      // start a FIXED 3 workers
+        wg.Add(1)
+        go worker(jobs, results, &amp;wg)
+    }
+    for j := 1; j &lt;= 6; j++ {     // feed the queue
+        jobs &lt;- j
+    }
+    close(jobs)                  // tells every worker "no more work"
+
+    go func() { wg.Wait(); close(results) }() // coordinator closes results
+    for r := range results {     // drain until results is closed
+        _ = r
+    }
+}</code></pre></div>
+  <p>Note the two distinct closes and <b>who owns each</b>: the producer closes <code>jobs</code> (it is the sole sender); a small coordinator goroutine closes <code>results</code> after <code>wg.Wait()</code>, because no single worker knows it is the last one done.</p>
+</section>
+
+<section class="section reveal" id="fan-out-fan-in">
+  <h2><span class="section-num">02</span> Fan-out / fan-in: spread work, then merge</h2>
+  <p class="takeaway"><b>Fan-out</b> = many goroutines receiving from <b>one</b> channel (several workers share the same <code>jobs</code> source). <b>Fan-in</b> = one goroutine merging <b>many</b> result channels into one. They are mirror images, and you usually use them together.</p>
+  <p>Multiple receivers on one channel is automatic load-balancing: whichever worker is idle grabs the next value. The runtime hands each sent value to exactly one receiver, so no two workers process the same job.</p>
+  <figure class="chanlab reveal" data-chanlab aria-label="Fan-out: one jobs channel with three blocked worker receivers; jobs arrive and each is taken by one worker; then the producer closes and workers finish">
+    <script type="application/json" class="cl-config">
+    { "frames": [
+      { "caption": "Fan-out setup: an empty <code>jobs</code> channel (cap 2) with <b>three workers blocked on receive</b> — the pool is waiting for work.",
+        "channels": [ { "id":"jobs", "cap":2, "buf":[], "closed":false, "senders":[], "receivers":[{"g":"w1"},{"g":"w2"},{"g":"w3"}] } ],
+        "output": "" },
+      { "caption": "The producer sends jobs <b>1</b> and <b>2</b>. The two values are handed straight to two waiting workers — <code>w1</code> and <code>w2</code> take them and leave the wait list.",
+        "channels": [ { "id":"jobs", "cap":2, "buf":[], "closed":false, "senders":[], "receivers":[{"g":"w3"}] } ],
+        "output": "" },
+      { "caption": "The producer sends <b>3</b>, <b>4</b>, <b>5</b>. Only <code>w3</code> is still waiting, so it takes one; the rest fill the buffer (cap 2) until a worker comes back for more.",
+        "channels": [ { "id":"jobs", "cap":2, "buf":[4,5], "closed":false, "senders":[], "receivers":[] } ],
+        "output": "" },
+      { "caption": "Workers finish their first jobs and come back to receive — they <b>drain the queue</b>: one takes <b>4</b>, another takes <b>5</b>. The buffer empties.",
+        "channels": [ { "id":"jobs", "cap":2, "buf":[], "closed":false, "senders":[], "receivers":[{"g":"w1"}] } ],
+        "output": "" },
+      { "caption": "The producer <code>close(jobs)</code>s. Each idle worker's <code>range</code> sees the closed, drained channel and <b>returns</b> — the pool shuts down cleanly.",
+        "channels": [ { "id":"jobs", "cap":2, "buf":[], "closed":true, "senders":[], "receivers":[] } ],
+        "output": "all workers done" }
+    ] }
+    </script>
+  </figure>
+  <p>For <b>fan-in</b>, give each worker its own output channel (or share one — sharing is simpler), then a merge goroutine reads them all into a single channel. With a shared output channel the merge is implicit; with per-worker channels you spin up a goroutine per input and a <code>WaitGroup</code> to close the merged channel once:</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">fanin.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">// merge fans IN: many &lt;-chan int into one.
+func merge(ins ...&lt;-chan int) &lt;-chan int {
+    out := make(chan int)
+    var wg sync.WaitGroup
+    for _, in := range ins {     // per-iteration loop var (Go 1.22) — safe to capture
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for v := range in {  // copy this input into the merged stream
+                out &lt;- v
+            }
+        }()
+    }
+    go func() { wg.Wait(); close(out) }() // close ONCE, after all inputs drain
+    return out
+}</code></pre></div>
+</section>
+
+<section class="section reveal" id="pipeline">
+  <h2><span class="section-num">03</span> Pipeline: stages joined by channels</h2>
+  <p class="takeaway">A <b>pipeline</b> is a chain of stages where each stage is <code>func(in &lt;-chan T) &lt;-chan U</code>: it <code>range</code>s its input, sends transformed values to its own output channel, and <code>close</code>s that output when the input is exhausted.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Think of an <b>assembly line</b>: one station washes, the next paints, the next packs. Each station takes a part off the belt coming in, does its one job, and puts the result on the belt going out. When the incoming belt stops (channel closed), the station turns off its own outgoing belt and clocks out. Every stage is its own goroutine, so all stations run <b>at the same time</b> on different parts.</p></div></div>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">pipeline.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">func gen(nums ...int) &lt;-chan int {        // source stage
+    out := make(chan int)
+    go func() {
+        defer close(out)
+        for _, n := range nums {
+            out &lt;- n
+        }
+    }()
+    return out
+}
+
+func square(in &lt;-chan int) &lt;-chan int {   // transform stage
+    out := make(chan int)
+    go func() {
+        defer close(out)                  // close MY output when MY input ends
+        for n := range in {
+            out &lt;- n * n
+        }
+    }()
+    return out
+}
+
+// wire stages: gen -> square -> consume
+for v := range square(gen(2, 3, 4)) { fmt.Println(v) } // 4, 9, 16</code></pre></div>
+  <p>Each stage owns exactly one channel — its <b>output</b> — and is the sole closer of it. Closing cascades naturally: when <code>gen</code> closes its output, <code>square</code>'s <code>range</code> ends, so <code>square</code> closes its output, so the consumer's <code>range</code> ends. The <code>&lt;-chan int</code> return type makes outputs <b>receive-only</b>, so the compiler stops a downstream stage from accidentally sending or closing upstream's channel.</p>
+</section>
+
+<section class="section reveal" id="semaphore">
+  <h2><span class="section-num">04</span> Semaphore: a buffered channel as a token bucket</h2>
+  <p class="takeaway">When you <b>can't</b> use a fixed pool — say you must launch one goroutine per item but still cap how many run at once — use a <b>buffered channel of size N as a semaphore</b>: <b>acquire</b> a token (send) before the work, <b>release</b> it (receive) after. At most N tokens exist, so at most N goroutines run.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>It's a <b>parking lot with N spaces and a gate</b>. To enter you must grab a parking pass; if all N passes are out, you wait at the gate. When you leave, you drop your pass back and the next car can take it. The lot never holds more than N cars — that's your concurrency cap, enforced by a bucket of exactly N passes.</p></div></div>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">sem.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">sem := make(chan struct{}, 3)   // bucket of 3 tokens (zero-size = free)
+var wg sync.WaitGroup
+for _, url := range urls {
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        sem &lt;- struct{}{}        // ACQUIRE: blocks if 3 are already running
+        defer func() { &lt;-sem }() // RELEASE on the way out
+        fetch(url)              // at most 3 of these run at once
+    }()
+}
+wg.Wait()</code></pre></div>
+  <p>The token type is <code>struct{}</code> — an empty struct costs <b>zero bytes</b>, so a semaphore channel carries no real payload, only the count. (For a richer version with context cancellation, the <code>golang.org/x/sync/semaphore</code> package offers a weighted semaphore.)</p>
+</section>
+
+<section class="section reveal" id="gotchas">
+  <h2><span class="section-num">05</span> The traps: who closes, leaked workers, unbounded fan-out</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Who closes a channel with multiple senders?</b> In fan-out, many workers send on the shared <code>results</code> channel — so <b>no worker may close it</b> (a second close, or a send after close, panics). The rule: <em>only the coordinator closes, exactly once, after a <code>WaitGroup</code> confirms every sender is done</em> (<code>go func(){ wg.Wait(); close(results) }()</code>). Receivers never close.</p></div></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Leaked workers.</b> Two classic leaks: (1) you <b>never <code>close(jobs)</code></b>, so every worker's <code>for range jobs</code> blocks forever waiting for a value that never comes — goroutines pile up. (2) You <b>stop draining <code>results</code></b> early (e.g. you <code>break</code> on the first answer), so workers block forever on <code>results &lt;- v</code>. Fix: always close the source, and either drain fully or give workers a cancellable exit (a <code>ctx.Done()</code> case in a <code>select</code>).</p></div></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Unbounded fan-out.</b> <code>for _, x := range millions { go work(x) }</code> launches a goroutine per item with <b>no cap</b> — exhausting memory, file descriptors, or the remote service you're hammering. A worker pool (fixed N) or a semaphore (token bucket of N) bounds it. "<code>go</code> in a loop with no limit" is the single most common production concurrency bug.</p></div></div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">sibling guide</span></div><p>Fan-out across goroutines is the in-process version of <b>scatter-gather</b> and <b>load balancing</b> across servers. See <a href="../../sysdesign-guide/blocks/load-balancing.html">Load balancing</a> in the System Design guide for how the same "spread work to N workers, then merge" idea plays out at the network tier.</p></div></div>
+</section>
+
+<section class="section reveal" id="run-it">
+  <h2><span class="section-num">06</span> Run it: a worker pool and a pipeline</h2>
+  <p>A pool of <b>3 workers</b> squaring <code>1..6</code>. Because any worker can finish any job in any order, we <b>collect all results then sort</b> — so the output is deterministic no matter who did what:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"fmt"
+	"sort"
+	"sync"
+)
+
+func main() {
+	jobs := make(chan int, 6)
+	results := make(chan int, 6)
+	var wg sync.WaitGroup
+
+	for w := 0; w < 3; w++ { // fixed pool of 3 workers
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobs { // ends when jobs is closed & drained
+				results <- j * j
+			}
+		}()
+	}
+
+	for j := 1; j <= 6; j++ {
+		jobs <- j
+	}
+	close(jobs) // producer is sole sender of jobs -> producer closes
+
+	go func() { wg.Wait(); close(results) }() // coordinator closes results
+
+	var got []int
+	for r := range results { // drain everything
+		got = append(got, r)
+	}
+	sort.Ints(got) // sort -> order no longer depends on scheduling
+	fmt.Println("results:", got)
+}</script>
+    <script type="text/plain" class="gp-output">results: [1 4 9 16 25 36]</script>
+  </div>
+  <p>A <b>2-stage pipeline</b> — <code>generate</code> then <code>square</code> — printed in input order. The single consumer <code>range</code>s the final stage, so values come out exactly as they went in:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+// stage 1: source
+func generate(nums ...int) <-chan int {
+	out := make(chan int)
+	go func() {
+		defer close(out)
+		for _, n := range nums {
+			out <- n
+		}
+	}()
+	return out
+}
+
+// stage 2: transform
+func square(in <-chan int) <-chan int {
+	out := make(chan int)
+	go func() {
+		defer close(out) // close my output when my input ends
+		for n := range in {
+			out <- n * n
+		}
+	}()
+	return out
+}
+
+func main() {
+	// generate -> square -> print, in order
+	for v := range square(generate(1, 2, 3, 4)) {
+		fmt.Println(v)
+	}
+}</script>
+    <script type="text/plain" class="gp-output">1
+4
+9
+16</script>
+  </div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">07</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">In a fan-out, five workers each send results on a shared <code>results</code> channel. To close <code>results</code> safely, who closes it and when?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Each worker calls <code>close(results)</code> right before it returns.</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A single coordinator closes it once, after a <code>WaitGroup</code> confirms all five workers have finished sending.</button>
+      <button class="quiz-opt"><span class="mark"></span>The consumer closes <code>results</code> after it has read enough values.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> With multiple senders, no worker owns the close — the first worker to close would make the others panic on their next send (send-on-closed), and a second <code>close</code> panics too. The fix is the standard idiom: <code>go func(){ wg.Wait(); close(results) }()</code>. And never the consumer (a receiver) — closing is the sender's job.</div>
+  </div>
+</section>

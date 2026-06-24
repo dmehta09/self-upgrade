@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>select & multiplexing | Go — a visual guide</title>
+  <meta name="description" content="Go — a visual guide — select &amp; multiplexing. A sharp, diagram-first guide to Go for backend engineers and interviews: the language, slices &amp; interfaces, generics, and concurrency (goroutines, channels, the scheduler) — each idea in plain English then precise, with runnable Go examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ADD8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z'/><path d='M2.5 9.5h2.5M19 9.5h2.5'/><circle cx='9.6' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/><circle cx='14.4' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/go.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="concurrency" data-page="concurrency-select" data-lesson="co-select">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Go — a visual guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z"/><path d="M2.5 9.5h2.5M19 9.5h2.5"/><circle cx="9.6" cy="10.6" r="1.1" fill="#06121a" stroke="none"/><circle cx="14.4" cy="10.6" r="1.1" fill="#06121a" stroke="none"/></svg></span>
+        <span class="brand-text"><b>Go — a visual guide</b><span>the language &amp; runtime, distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home · the map</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Getting started">
+        <h4><span class="dot"></span>Getting started</h4>
+        <a class="nav-link" href="../foundations/why-go.html">Why Go</a>
+        <a class="nav-link" href="../foundations/toolchain.html">Toolchain & modules</a>
+        <a class="nav-link" href="../foundations/hello-program.html">Anatomy of a program</a>
+        <a class="nav-link" href="../foundations/vars-and-types.html">Vars, constants & zero values</a>
+        <a class="nav-link" href="../foundations/control-flow.html">Control flow & functions</a>
+      </nav>
+      <nav class="nav-group is-language" aria-label="The language core">
+        <h4><span class="dot"></span>The language core</h4>
+        <a class="nav-link" href="../language/arrays-slices.html">Arrays & slices</a>
+        <a class="nav-link" href="../language/maps.html">Maps</a>
+        <a class="nav-link" href="../language/strings-runes-bytes.html">Strings, runes & bytes</a>
+        <a class="nav-link" href="../language/structs.html">Structs & embedding</a>
+        <a class="nav-link" href="../language/pointers.html">Pointers</a>
+        <a class="nav-link" href="../language/errors-and-defer.html">Errors, defer & panic</a>
+        <a class="nav-link" href="../language/error-handling-patterns.html">Error handling patterns</a>
+      </nav>
+      <nav class="nav-group is-types" aria-label="Types &amp; interfaces">
+        <h4><span class="dot"></span>Types & interfaces</h4>
+        <a class="nav-link" href="../types/methods.html">Methods & receivers</a>
+        <a class="nav-link" href="../types/interfaces.html">Interfaces</a>
+        <a class="nav-link" href="../types/nil-interfaces.html">The nil interface trap</a>
+        <a class="nav-link" href="../types/type-assertions-switch.html">Assertions & switches</a>
+        <a class="nav-link" href="../types/error-interface-design.html">Interfaces in practice</a>
+        <a class="nav-link" href="../types/reflection.html">Reflection & tags</a>
+      </nav>
+      <nav class="nav-group is-generics" aria-label="Generics &amp; modern Go">
+        <h4><span class="dot"></span>Generics & modern Go</h4>
+        <a class="nav-link" href="../generics/type-parameters.html">Type parameters</a>
+        <a class="nav-link" href="../generics/generic-stdlib.html">Generic stdlib</a>
+        <a class="nav-link" href="../generics/iterators.html">Iterators (range-func)</a>
+        <a class="nav-link" href="../generics/generics-pitfalls.html">Generics pitfalls</a>
+      </nav>
+      <nav class="nav-group is-concurrency" aria-label="Concurrency">
+        <h4><span class="dot"></span>Concurrency</h4>
+        <a class="nav-link" href="../concurrency/index.html">The big picture</a>
+        <a class="nav-link" href="../concurrency/goroutines.html">Goroutines</a>
+        <a class="nav-link" href="../concurrency/scheduler.html">The G-M-P scheduler</a>
+        <a class="nav-link" href="../concurrency/channels.html">Channels</a>
+        <a class="nav-link" href="../concurrency/select.html">select & multiplexing</a>
+        <a class="nav-link" href="../concurrency/sync-primitives.html">sync primitives</a>
+        <a class="nav-link" href="../concurrency/atomics-memory-model.html">Atomics & memory model</a>
+        <a class="nav-link" href="../concurrency/context.html">context</a>
+        <a class="nav-link" href="../concurrency/patterns.html">Concurrency patterns</a>
+        <a class="nav-link" href="../concurrency/errgroup.html">errgroup</a>
+        <a class="nav-link" href="../concurrency/leaks-deadlocks-races.html">Leaks, deadlocks & races</a>
+      </nav>
+      <nav class="nav-group is-stdlib" aria-label="Standard library">
+        <h4><span class="dot"></span>Standard library</h4>
+        <a class="nav-link" href="../stdlib/encoding-json.html">encoding/json</a>
+        <a class="nav-link" href="../stdlib/time.html">time</a>
+        <a class="nav-link" href="../stdlib/io-bufio.html">io & bufio</a>
+        <a class="nav-link" href="../stdlib/files-os.html">Files & os</a>
+        <a class="nav-link" href="../stdlib/slog.html">log/slog</a>
+        <a class="nav-link" href="../stdlib/stdlib-tour.html">Stdlib tour</a>
+      </nav>
+      <nav class="nav-group is-webservices" aria-label="HTTP services">
+        <h4><span class="dot"></span>HTTP services</h4>
+        <a class="nav-link" href="../webservices/net-http.html">net/http</a>
+        <a class="nav-link" href="../webservices/middleware-routing.html">Middleware & routing</a>
+        <a class="nav-link" href="../webservices/http-clients.html">HTTP clients</a>
+        <a class="nav-link" href="../webservices/json-apis.html">JSON APIs</a>
+        <a class="nav-link" href="../webservices/production-services.html">Production services</a>
+      </nav>
+      <nav class="nav-group is-testing" aria-label="Testing &amp; tooling">
+        <h4><span class="dot"></span>Testing & tooling</h4>
+        <a class="nav-link" href="../testing/testing-basics.html">Tests & table tests</a>
+        <a class="nav-link" href="../testing/mocking-interfaces.html">Mocking & seams</a>
+        <a class="nav-link" href="../testing/benchmarks.html">Benchmarks</a>
+        <a class="nav-link" href="../testing/fuzzing-coverage.html">Fuzzing & coverage</a>
+        <a class="nav-link" href="../testing/tooling.html">The tooling belt</a>
+      </nav>
+      <nav class="nav-group is-runtime" aria-label="Runtime &amp; performance">
+        <h4><span class="dot"></span>Runtime & performance</h4>
+        <a class="nav-link" href="../runtime/memory-model-stack-heap.html">Stack, heap & escape</a>
+        <a class="nav-link" href="../runtime/garbage-collector.html">The garbage collector</a>
+        <a class="nav-link" href="../runtime/pprof-profiling.html">pprof profiling</a>
+        <a class="nav-link" href="../runtime/performance-patterns.html">Performance patterns</a>
+        <a class="nav-link" href="../runtime/cgo-unsafe-build.html">cgo, unsafe & builds</a>
+      </nav>
+      <nav class="nav-group is-interview" aria-label="Interview prep">
+        <h4><span class="dot"></span>Interview prep</h4>
+        <a class="nav-link" href="../interview/question-bank.html">Question bank</a>
+        <a class="nav-link" href="../interview/machine-coding.html">Machine-coding</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheatsheet</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+        <a class="nav-link" href="../reference/drills.html">Timed drills</a>
+        <a class="nav-link" href="../reference/gotchas.html">Gotchas index</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">select &amp; multiplexing</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Concurrency · select</span>
+  <h1><code>select</code>: wait on many channels at once.</h1>
+  <p class="lead">A single channel handles one conversation. Real programs juggle several — work arriving, a timeout ticking, a cancellation request, a result coming back. <code>select</code> is Go's way to block on <em>all of them together</em> and wake up on whichever fires first. It's the heart of every timeout, every cancel, every multiplexer you'll write.</p>
+</section>
+
+<section class="section reveal" id="the-idea">
+  <h2><span class="section-num">01</span> One statement, many channels</h2>
+  <p class="takeaway">A <code>select</code> blocks until <b>one</b> of its <code>case</code> channel operations can proceed, runs that one case, and ignores the rest. It's a <code>switch</code> whose conditions are <b>channel readiness</b>, not boolean expressions.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A <code>select</code> is a <b>receptionist watching several phone lines</b>. They sit still while every line is silent — doing nothing, blocked. The moment a line rings they pick up <em>that</em> line and handle the call. They don't poll each phone in turn; they wait on all of them at once and respond to whichever rings first. When the call's done, they loop back and wait again.</p></div></div>
+  <p>Each <code>case</code> is a send (<code>case ch &lt;- v:</code>) or a receive (<code>case v := &lt;-ch:</code>). The runtime parks the goroutine until exactly one of those operations becomes possible, then commits to it. No busy-waiting, no CPU spin — the scheduler wakes you precisely when there's something to do.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">multiplex.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">for {
+    select {
+    case job := &lt;-jobs:        // a job is ready to receive
+        process(job)
+    case res := &lt;-results:     // OR a result came back
+        report(res)
+    case &lt;-quit:               // OR someone asked us to stop
+        return
+    }
+}</code></pre></div>
+</section>
+
+<section class="section reveal" id="random-choice">
+  <h2><span class="section-num">02</span> If several are ready, Go picks at random</h2>
+  <p>Block until <em>one</em> case is ready, sure — but what if two or three are ready at the same instant? Go does <b>not</b> prefer the first case listed. It chooses <b>uniformly at random</b> among the ready cases.</p>
+  <p class="takeaway">When multiple cases are ready, <code>select</code> picks one <b>pseudo-randomly</b> — a deliberate fairness rule that <b>prevents starvation</b>. A hot channel listed first can never permanently crowd out the others.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Do not assume <b>case order encodes priority</b>. Both of these read identically to the runtime — a fast producer on <code>a</code> will <em>not</em> block <code>b</code>, and you cannot make it by listing <code>a</code> first. If you genuinely need priority (drain <code>high</code> before <code>low</code>), you must build it: a nested <code>select</code> where the inner one has a <code>default</code>, checked before the outer blocking <code>select</code>.</p></div></div>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Myth: order = priority</div><div class="codeblock"><pre><code data-lang="go">select {
+case v := &lt;-a:   // NOT "checked first"
+    use(v)
+case v := &lt;-b:   // both equally likely
+    use(v)
+}
+// if a AND b ready → 50/50, every time</code></pre></div></div>
+    <div class="vs-col vs-good"><div class="vs-h">Real priority: try high first</div><div class="codeblock"><pre><code data-lang="go">select {
+case v := &lt;-high:   // prefer high…
+    use(v)
+default:            // …only if it's ready right now
+    select {        // else block on either
+    case v := &lt;-high:
+        use(v)
+    case v := &lt;-low:
+        use(v)
+    }
+}</code></pre></div></div>
+  </div>
+</section>
+
+<section class="section reveal" id="watch-it">
+  <h2><span class="section-num">03</span> Watch a <code>select</code> choose the ready case</h2>
+  <p>Two channels, <code>a</code> and <code>b</code>; <code>main</code> sits in a <code>select</code> waiting on <code>&lt;-a</code> and <code>&lt;-b</code>. Step through: nobody's ready, then a sender appears on <code>a</code>, and the <code>&lt;-a</code> case wins. The chosen case lights up:</p>
+  <figure class="chanlab reveal" data-chanlab aria-label="A select on two channels: neither ready, then a sender appears on a and the receive-from-a case is chosen">
+    <script type="application/json" class="cl-config">
+    { "frames": [
+      { "caption": "<code>main</code> enters <code>select</code> with two receive cases. Both <code>a</code> and <code>b</code> are <b>empty</b> — no value to receive, no sender waiting. With <b>no <code>default</code></b>, the select <b>blocks</b>: the goroutine parks.",
+        "channels": [ { "id":"a", "cap":0, "buf":[], "senders":[], "receivers":[{"g":"main"}] },
+                      { "id":"b", "cap":0, "buf":[], "senders":[], "receivers":[{"g":"main"}] } ],
+        "select": { "g":"main", "cases":["&lt;-a","&lt;-b"] },
+        "output": "" },
+      { "caption": "Still parked. The scheduler runs other goroutines; <code>main</code> consumes <b>zero CPU</b> while it waits. Neither channel can proceed yet.",
+        "channels": [ { "id":"a", "cap":0, "buf":[], "senders":[], "receivers":[{"g":"main"}] },
+                      { "id":"b", "cap":0, "buf":[], "senders":[], "receivers":[{"g":"main"}] } ],
+        "select": { "g":"main", "cases":["&lt;-a","&lt;-b"] },
+        "output": "" },
+      { "caption": "A goroutine <code>g1</code> arrives to <b>send 7 on <code>a</code></b>. Now the <code>&lt;-a</code> operation <b>can proceed</b> — that case is ready. <code>&lt;-b</code> still cannot.",
+        "channels": [ { "id":"a", "cap":0, "buf":[], "senders":[{"g":"g1","val":7}], "receivers":[{"g":"main"}] },
+                      { "id":"b", "cap":0, "buf":[], "senders":[], "receivers":[{"g":"main"}] } ],
+        "select": { "g":"main", "cases":["&lt;-a","&lt;-b"] },
+        "output": "" },
+      { "caption": "Exactly <b>one</b> case is ready, so <code>select</code> commits to it: <code>g1</code> and <code>main</code> <b>rendezvous on <code>a</code></b>. The <code>&lt;-a</code> case fires (highlighted) and binds <code>v = 7</code>.",
+        "channels": [ { "id":"a", "cap":0, "buf":[], "senders":[], "receivers":[] },
+                      { "id":"b", "cap":0, "buf":[], "senders":[], "receivers":[] } ],
+        "select": { "g":"main", "cases":["&lt;-a","&lt;-b"], "ready":0 },
+        "output": "got 7 from a" },
+      { "caption": "The <code>&lt;-b</code> case was never taken — its channel simply wasn't ready. <code>select</code> ran the <b>one ready case</b> and moved on; the others are abandoned this round.",
+        "channels": [ { "id":"a", "cap":0, "buf":[], "senders":[], "receivers":[] },
+                      { "id":"b", "cap":0, "buf":[], "senders":[], "receivers":[] } ],
+        "select": { "g":"main", "cases":["&lt;-a","&lt;-b"], "ready":0 },
+        "output": "got 7 from a" }
+    ] }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="default-timeout">
+  <h2><span class="section-num">04</span> <code>default</code>, timeouts, and cancellation</h2>
+  <p>Three patterns turn <code>select</code> from "block on channels" into the everyday tool you'll reach for constantly.</p>
+
+  <p><b>① <code>default</code> makes it non-blocking.</b> If no case is ready, a <code>default</code> runs <em>immediately</em> instead of parking — a try-send / try-receive that never waits:</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">trysend.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">select {
+case ch &lt;- v:
+    // sent
+default:
+    // buffer full / no receiver — drop or handle, don't block
+}</code></pre></div>
+
+  <p><b>② Timeouts</b> with <code>time.After</code> — a channel that delivers one value after the duration, so it becomes "ready" only once time is up:</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">timeout.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">select {
+case res := &lt;-work:
+    return res, nil
+case &lt;-time.After(2 * time.Second):
+    return zero, errors.New("timed out")
+}</code></pre></div>
+
+  <p><b>③ Cancellation</b> — the idiomatic <code>case &lt;-ctx.Done():</code>. <code>ctx.Done()</code> is a channel that closes when the context is cancelled or its deadline passes; a closed channel is always ready, so the case fires the instant cancellation happens:</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">cancel.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">select {
+case res := &lt;-work:
+    return res, nil
+case &lt;-ctx.Done():
+    return zero, ctx.Err()   // context.Canceled or DeadlineExceeded
+}</code></pre></div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">cancellation</span></div><p>Prefer <code>&lt;-ctx.Done()</code> over a bare <code>time.After</code> when the deadline belongs to the whole request: it cancels the <em>entire</em> goroutine tree, not just this one wait, and a stale <code>time.After</code> timer leaks until it fires. Full story in <a href="context.html"><code>context</code>: cancellation, deadlines &amp; values</a>.</p></div></div>
+</section>
+
+<section class="section reveal" id="nil-trick">
+  <h2><span class="section-num">05</span> The nil-channel trick: switching cases on and off</h2>
+  <p class="takeaway">A <b>nil channel blocks forever</b> on both send and receive — so a <code>case</code> whose channel is <code>nil</code> is <b>permanently not ready</b> and effectively <b>disabled</b>. Set a channel variable to <code>nil</code> to switch its case off; restore it to switch it back on.</p>
+  <p>This is the clean way to drive a state machine inside <code>for { select { … } }</code>. The classic use: a merge that should stop selecting on an input once that input closes, without spinning.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">merge.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">for a != nil || b != nil {        // loop until BOTH are disabled
+    select {
+    case v, ok := &lt;-a:
+        if !ok {
+            a = nil               // a is drained → disable its case
+            continue
+        }
+        out &lt;- v
+    case v, ok := &lt;-b:
+        if !ok {
+            b = nil               // disable b's case the same way
+            continue
+        }
+        out &lt;- v
+    }
+}</code></pre></div>
+  <p>Without the trick, a closed channel is <em>always</em> ready and yields the zero value instantly — so a naive merge would <b>busy-spin</b>, slamming the CPU as it receives <code>0, false</code> millions of times. Nilling the variable parks that case for good.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Two opposite ways to wedge a <code>select</code>. <b>(1)</b> A <code>select</code> whose every case channel is <code>nil</code> and that has <b>no <code>default</code></b> blocks <b>forever</b> — an instant deadlock (the runtime even reports <em>"all goroutines are asleep"</em> if nothing else runs). <b>(2)</b> Putting a <code>default</code> inside a tight <code>for { select { … } }</code> turns a blocking wait into a <b>busy-spin</b>: with nothing ready, <code>default</code> fires every iteration and burns 100% of a core. Use <code>default</code> for a genuine one-shot try, almost never inside a spin loop.</p></div></div>
+</section>
+
+<section class="section reveal" id="run-it">
+  <h2><span class="section-num">06</span> Run it: non-blocking and deterministic</h2>
+  <p><b>Example 1 — non-blocking receive.</b> The channel is empty and there's no sender, so the receive can't proceed; <code>default</code> runs immediately instead of blocking:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    ch := make(chan int) // empty, no sender
+    select {
+    case v := <-ch:
+        fmt.Println("received", v)
+    default:
+        fmt.Println("no message yet")
+    }
+}</script>
+    <script type="text/plain" class="gp-output">no message yet</script>
+  </div>
+
+  <p><b>Example 2 — value beats the timeout, deterministically.</b> We pre-load a buffered channel <em>before</em> the <code>select</code>, so its receive case is already ready. <code>time.After(time.Hour)</code> won't fire for an hour, so the value always wins — no timing race:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "time"
+)
+
+func main() {
+    work := make(chan string, 1)
+    work <- "result" // pre-loaded: this case is ready NOW
+
+    select {
+    case v := <-work:
+        fmt.Println("got:", v)
+    case <-time.After(time.Hour):
+        fmt.Println("timed out") // never reached
+    }
+}</script>
+    <script type="text/plain" class="gp-output">got: result</script>
+  </div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">07</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Inside a <code>for</code> loop, you write <code>select { case v := &lt;-in: use(v); default: }</code>. Channel <code>in</code> receives a value about once a second. What's the behavior?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>It busy-spins — the empty <code>default</code> fires on nearly every iteration, pinning a CPU core while it waits.</button>
+      <button class="quiz-opt"><span class="mark"></span>It blocks efficiently and wakes once per second when a value arrives.</button>
+      <button class="quiz-opt"><span class="mark"></span>It deadlocks, because <code>default</code> with nothing ready panics.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> The <code>default</code> makes the <code>select</code> non-blocking, so when <code>in</code> is empty (almost always, between the one-per-second arrivals) the loop spins flat-out and burns CPU. Drop the <code>default</code> to let the <code>select</code> <em>block</em> until <code>in</code> is ready — that's the whole point of <code>select</code>. Reserve <code>default</code> for a true one-shot "try, then move on", not a tight loop.</div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">Both <code>a</code> and <code>b</code> have a value ready when <code>main</code> reaches <code>select { case &lt;-a: …; case &lt;-b: … }</code>. Which case runs?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>One is chosen pseudo-randomly — roughly 50/50 across many runs.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>&lt;-a</code> always, because it's listed first.</button>
+      <button class="quiz-opt"><span class="mark"></span>Both run, in source order.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> When several cases are ready, Go picks one uniformly at random — this fairness rule prevents a perpetually-ready channel from starving the others. Case order is <em>not</em> priority, and a <code>select</code> only ever runs <b>one</b> case per execution.</div>
+  </div>
+</section>
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../concurrency/channels.html"><span class="pn-k">Previous</span><span class="pn-t">Channels</span></a>
+            <a class="next" href="../concurrency/sync-primitives.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">sync: Mutex, RWMutex, WaitGroup, Once, Cond</span></a>
+          </nav>
+        </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#the-idea">One statement, many channels</a>
+          <a href="#random-choice">If several are ready, Go picks at random</a>
+          <a href="#watch-it">Watch a select choose the ready case</a>
+          <a href="#default-timeout">default , timeouts, and cancellation</a>
+          <a href="#nil-trick">The nil-channel trick: switching cases on and off</a>
+          <a href="#run-it">Run it: non-blocking and deterministic</a>
+          <a href="#check">Check yourself</a>
+        </nav>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Go — a visual guide &middot; goroutines &middot; channels &middot; interfaces &middot; generics &middot; the runtime</span>
+        <span class="fmono">Built to open offline &middot; Go 1.26 era &middot; Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/chanlab.js"></script>
+  <script src="../assets/js/gopad.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

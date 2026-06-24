@@ -1,0 +1,141 @@
+<section class="hero reveal">
+  <span class="eyebrow">Testing &amp; tooling · seams</span>
+  <h1>Test doubles, interfaces &amp; dependency seams.</h1>
+  <p class="lead">Go has no built-in mocking magic and rarely needs a library. You test by depending on <b>small interfaces</b> and injecting <b>hand-written fakes</b> at the seam. The same design that makes code testable — narrow interfaces, dependencies passed in — is the design that makes it good.</p>
+</section>
+
+<section class="section reveal" id="seam">
+  <h2><span class="section-num">01</span> A seam is a place you can substitute</h2>
+  <p class="takeaway">A <b>seam</b> is a point where you can swap the real collaborator for a test one <b>without editing the code under test</b>. In Go the seam is almost always a <b>small interface accepted as a parameter or struct field</b>.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Think of a wall socket. Your lamp doesn't care whether the other end is the city grid or a battery in your test bench — it just needs the <em>shape</em> of the plug. An interface is that socket: your code asks for "something that can <code>Save(user)</code>," and in production you plug in Postgres, in tests you plug in a tiny in-memory map. The lamp never changes.</p></div></div>
+  <p>Because Go interfaces are <a href="../types/interfaces.html">implicit and structural</a>, a fake satisfies the interface just by having the methods — no base class, no <code>@Mock</code>, no codegen required.</p>
+</section>
+
+<section class="section reveal" id="hand-written-fakes">
+  <h2><span class="section-num">02</span> Hand-written fakes are idiomatic</h2>
+  <p class="takeaway">Define the interface <b>at the consumer</b>, then write a fake struct in your <code>_test.go</code> that implements it. A fake is usually <b>10 lines</b> — a struct holding canned answers or an in-memory map. Inject it; assert on the outcome.</p>
+  <p>Below, <code>Greeter</code> depends on a small <code>Store</code> interface. The gopad defines a <code>fakeStore</code>, injects it, and prints the result — exactly the move you'd make in a real test, just printed instead of asserted:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+// Small interface defined where it's USED (the consumer).
+type Store interface {
+    Name(id int) (string, bool)
+}
+
+// Code under test depends on the interface, not a concrete DB.
+type Greeter struct{ store Store }
+
+func (g Greeter) Greet(id int) string {
+    if name, ok := g.store.Name(id); ok {
+        return "Hello, " + name + "!"
+    }
+    return "Hello, stranger!"
+}
+
+// A hand-written fake — the whole "mocking framework" we need.
+type fakeStore struct{ names map[int]string }
+
+func (f fakeStore) Name(id int) (string, bool) {
+    n, ok := f.names[id]
+    return n, ok
+}
+
+func main() {
+    g := Greeter{store: fakeStore{names: map[int]string{7: "Ada"}}}
+    fmt.Println(g.Greet(7)) // known id
+    fmt.Println(g.Greet(9)) // unknown id -> fallback
+}</script>
+    <script type="text/plain" class="gp-output">Hello, Ada!
+Hello, stranger!</script>
+  </div>
+</section>
+
+<section class="section reveal" id="fake-clock">
+  <h2><span class="section-num">03</span> Fake clocks &amp; IO behind interfaces</h2>
+  <p class="takeaway">Anything nondeterministic — the wall clock, the network, random, the filesystem — becomes testable once it sits behind an interface. A <b>fake clock</b> returns a fixed time, so time-dependent logic is suddenly deterministic.</p>
+  <p>Instead of calling <code>time.Now()</code> directly, the code takes a <code>Clock</code>. Tests inject a frozen clock; production injects the real one. The gopad freezes time so the greeting is reproducible:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "time"
+)
+
+// Seam: instead of calling time.Now() inline, depend on a Clock.
+type Clock interface{ Now() time.Time }
+
+type fakeClock struct{ t time.Time }
+
+func (f fakeClock) Now() time.Time { return f.t }
+
+func partOfDay(c Clock) string {
+    h := c.Now().Hour()
+    switch {
+    case h < 12:
+        return "morning"
+    case h < 18:
+        return "afternoon"
+    default:
+        return "evening"
+    }
+}
+
+func main() {
+    // Freeze time at 09:00 — fully deterministic.
+    frozen := fakeClock{t: time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC)}
+    fmt.Println("It is the", partOfDay(frozen))
+
+    evening := fakeClock{t: time.Date(2026, 6, 24, 20, 0, 0, 0, time.UTC)}
+    fmt.Println("It is the", partOfDay(evening))
+}</script>
+    <script type="text/plain" class="gp-output">It is the morning
+It is the evening</script>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">synctest</span></div><p>For code that actually <em>sleeps</em> or waits on timers, Go 1.25 promoted <code>testing/synctest</code> to stable: it runs your goroutines on a <b>fake clock</b> that fast-forwards when everything is blocked, so a test of a one-hour timeout finishes instantly and deterministically — no real waiting, no flakiness.</p></div></div>
+</section>
+
+<section class="section reveal" id="httptest">
+  <h2><span class="section-num">04</span> <code>httptest.Server</code> for HTTP dependencies</h2>
+  <p class="takeaway">When the dependency is an HTTP API, you often don't even need an interface: <code>httptest.NewServer</code> spins up a <b>real local server</b> with a handler you control, hands you its URL, and your client talks to it over the loopback — no internet, fully deterministic.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">client_test.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">func TestFetchName(t *testing.T) {
+    srv := httptest.NewServer(http.HandlerFunc(
+        func(w http.ResponseWriter, r *http.Request) {
+            w.Write([]byte(`{"name":"Ada"}`))
+        }))
+    defer srv.Close()
+
+    got, err := FetchName(srv.Client(), srv.URL) // talk to the fake
+    if err != nil {
+        t.Fatalf("FetchName: %v", err)
+    }
+    if got != "Ada" {
+        t.Errorf("got %q, want %q", got, "Ada")
+    }
+}</code></pre></div>
+  <p>This tests the <b>real HTTP round-trip</b> — headers, status codes, JSON decoding — against a server you script, which catches far more than a stubbed-out client method would.</p>
+</section>
+
+<section class="section reveal" id="over-mocking">
+  <h2><span class="section-num">05</span> Don't over-mock; keep seams small</h2>
+  <p class="takeaway">Mock the <b>edges you don't own</b> (DB, network, clock) — not your own logic. And keep interfaces <b>tiny</b>: a fat interface is miserable to fake and couples the test to every method. "Accept interfaces, return structs," and define those interfaces at the consumer, as small as the job needs.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">over-mocking · trap</span></div><p>The trap is <b>testing the calls, not the behaviour</b>. A test that asserts "<code>store.Save</code> was called exactly once with these args" passes even when the saved data is wrong, and shatters the moment you refactor the internals — it's coupled to <em>how</em> the code works, not <em>what</em> it produces. Prefer a <b>state-based fake</b> (an in-memory store you read back from) over a <b>call-recording mock</b>. Likewise, a 12-method interface is a smell: nobody wants to write a fake for all 12, and most callers use two. Split it. <i>The bigger the interface, the weaker the abstraction.</i></p></div></div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">design</span></div><p>Small, deep modules behind narrow interfaces are exactly what makes code both testable and maintainable — see <a href="../../aposd-guide/modules/information-hiding.html">Information hiding</a> in the <i>Philosophy of Software Design</i> guide.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You need to test a service that depends on a payment gateway. Which is the most idiomatic Go approach?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Define a small <code>Gateway</code> interface the service accepts, and inject a hand-written fake (or <code>httptest.Server</code>) in the test.</button>
+      <button class="quiz-opt"><span class="mark"></span>Pull in a heavy mocking library and generate a mock for the whole concrete <code>StripeClient</code> struct.</button>
+      <button class="quiz-opt"><span class="mark"></span>Hit the real payment gateway's sandbox so the test is as realistic as possible.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Depend on a narrow interface defined at the consumer and inject a fake — that's the Go grain: no codegen, no framework, a fake you can read in one screen. Mock libraries that record calls couple you to internals; live sandboxes make tests slow and flaky. Mock the edges you don't own, keep the seam small, and assert on the <em>result</em>.</div>
+  </div>
+</section>

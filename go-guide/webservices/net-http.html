@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>net/http: servers, handlers & the 1.22 router | Go — a visual guide</title>
+  <meta name="description" content="Go — a visual guide — net/http: servers, handlers &amp; the 1.22 router. A sharp, diagram-first guide to Go for backend engineers and interviews: the language, slices &amp; interfaces, generics, and concurrency (goroutines, channels, the scheduler) — each idea in plain English then precise, with runnable Go examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ADD8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z'/><path d='M2.5 9.5h2.5M19 9.5h2.5'/><circle cx='9.6' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/><circle cx='14.4' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/go.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="webservices" data-page="webservices-net-http" data-lesson="web-http">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Go — a visual guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z"/><path d="M2.5 9.5h2.5M19 9.5h2.5"/><circle cx="9.6" cy="10.6" r="1.1" fill="#06121a" stroke="none"/><circle cx="14.4" cy="10.6" r="1.1" fill="#06121a" stroke="none"/></svg></span>
+        <span class="brand-text"><b>Go — a visual guide</b><span>the language &amp; runtime, distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home · the map</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Getting started">
+        <h4><span class="dot"></span>Getting started</h4>
+        <a class="nav-link" href="../foundations/why-go.html">Why Go</a>
+        <a class="nav-link" href="../foundations/toolchain.html">Toolchain & modules</a>
+        <a class="nav-link" href="../foundations/hello-program.html">Anatomy of a program</a>
+        <a class="nav-link" href="../foundations/vars-and-types.html">Vars, constants & zero values</a>
+        <a class="nav-link" href="../foundations/control-flow.html">Control flow & functions</a>
+      </nav>
+      <nav class="nav-group is-language" aria-label="The language core">
+        <h4><span class="dot"></span>The language core</h4>
+        <a class="nav-link" href="../language/arrays-slices.html">Arrays & slices</a>
+        <a class="nav-link" href="../language/maps.html">Maps</a>
+        <a class="nav-link" href="../language/strings-runes-bytes.html">Strings, runes & bytes</a>
+        <a class="nav-link" href="../language/structs.html">Structs & embedding</a>
+        <a class="nav-link" href="../language/pointers.html">Pointers</a>
+        <a class="nav-link" href="../language/errors-and-defer.html">Errors, defer & panic</a>
+        <a class="nav-link" href="../language/error-handling-patterns.html">Error handling patterns</a>
+      </nav>
+      <nav class="nav-group is-types" aria-label="Types &amp; interfaces">
+        <h4><span class="dot"></span>Types & interfaces</h4>
+        <a class="nav-link" href="../types/methods.html">Methods & receivers</a>
+        <a class="nav-link" href="../types/interfaces.html">Interfaces</a>
+        <a class="nav-link" href="../types/nil-interfaces.html">The nil interface trap</a>
+        <a class="nav-link" href="../types/type-assertions-switch.html">Assertions & switches</a>
+        <a class="nav-link" href="../types/error-interface-design.html">Interfaces in practice</a>
+        <a class="nav-link" href="../types/reflection.html">Reflection & tags</a>
+      </nav>
+      <nav class="nav-group is-generics" aria-label="Generics &amp; modern Go">
+        <h4><span class="dot"></span>Generics & modern Go</h4>
+        <a class="nav-link" href="../generics/type-parameters.html">Type parameters</a>
+        <a class="nav-link" href="../generics/generic-stdlib.html">Generic stdlib</a>
+        <a class="nav-link" href="../generics/iterators.html">Iterators (range-func)</a>
+        <a class="nav-link" href="../generics/generics-pitfalls.html">Generics pitfalls</a>
+      </nav>
+      <nav class="nav-group is-concurrency" aria-label="Concurrency">
+        <h4><span class="dot"></span>Concurrency</h4>
+        <a class="nav-link" href="../concurrency/index.html">The big picture</a>
+        <a class="nav-link" href="../concurrency/goroutines.html">Goroutines</a>
+        <a class="nav-link" href="../concurrency/scheduler.html">The G-M-P scheduler</a>
+        <a class="nav-link" href="../concurrency/channels.html">Channels</a>
+        <a class="nav-link" href="../concurrency/select.html">select & multiplexing</a>
+        <a class="nav-link" href="../concurrency/sync-primitives.html">sync primitives</a>
+        <a class="nav-link" href="../concurrency/atomics-memory-model.html">Atomics & memory model</a>
+        <a class="nav-link" href="../concurrency/context.html">context</a>
+        <a class="nav-link" href="../concurrency/patterns.html">Concurrency patterns</a>
+        <a class="nav-link" href="../concurrency/errgroup.html">errgroup</a>
+        <a class="nav-link" href="../concurrency/leaks-deadlocks-races.html">Leaks, deadlocks & races</a>
+      </nav>
+      <nav class="nav-group is-stdlib" aria-label="Standard library">
+        <h4><span class="dot"></span>Standard library</h4>
+        <a class="nav-link" href="../stdlib/encoding-json.html">encoding/json</a>
+        <a class="nav-link" href="../stdlib/time.html">time</a>
+        <a class="nav-link" href="../stdlib/io-bufio.html">io & bufio</a>
+        <a class="nav-link" href="../stdlib/files-os.html">Files & os</a>
+        <a class="nav-link" href="../stdlib/slog.html">log/slog</a>
+        <a class="nav-link" href="../stdlib/stdlib-tour.html">Stdlib tour</a>
+      </nav>
+      <nav class="nav-group is-webservices" aria-label="HTTP services">
+        <h4><span class="dot"></span>HTTP services</h4>
+        <a class="nav-link" href="../webservices/net-http.html">net/http</a>
+        <a class="nav-link" href="../webservices/middleware-routing.html">Middleware & routing</a>
+        <a class="nav-link" href="../webservices/http-clients.html">HTTP clients</a>
+        <a class="nav-link" href="../webservices/json-apis.html">JSON APIs</a>
+        <a class="nav-link" href="../webservices/production-services.html">Production services</a>
+      </nav>
+      <nav class="nav-group is-testing" aria-label="Testing &amp; tooling">
+        <h4><span class="dot"></span>Testing & tooling</h4>
+        <a class="nav-link" href="../testing/testing-basics.html">Tests & table tests</a>
+        <a class="nav-link" href="../testing/mocking-interfaces.html">Mocking & seams</a>
+        <a class="nav-link" href="../testing/benchmarks.html">Benchmarks</a>
+        <a class="nav-link" href="../testing/fuzzing-coverage.html">Fuzzing & coverage</a>
+        <a class="nav-link" href="../testing/tooling.html">The tooling belt</a>
+      </nav>
+      <nav class="nav-group is-runtime" aria-label="Runtime &amp; performance">
+        <h4><span class="dot"></span>Runtime & performance</h4>
+        <a class="nav-link" href="../runtime/memory-model-stack-heap.html">Stack, heap & escape</a>
+        <a class="nav-link" href="../runtime/garbage-collector.html">The garbage collector</a>
+        <a class="nav-link" href="../runtime/pprof-profiling.html">pprof profiling</a>
+        <a class="nav-link" href="../runtime/performance-patterns.html">Performance patterns</a>
+        <a class="nav-link" href="../runtime/cgo-unsafe-build.html">cgo, unsafe & builds</a>
+      </nav>
+      <nav class="nav-group is-interview" aria-label="Interview prep">
+        <h4><span class="dot"></span>Interview prep</h4>
+        <a class="nav-link" href="../interview/question-bank.html">Question bank</a>
+        <a class="nav-link" href="../interview/machine-coding.html">Machine-coding</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheatsheet</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+        <a class="nav-link" href="../reference/drills.html">Timed drills</a>
+        <a class="nav-link" href="../reference/gotchas.html">Gotchas index</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">net/http: servers, handlers &amp; the 1.22 router</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Web services · net/http</span>
+  <h1>net/http: servers, handlers &amp; the 1.22 router.</h1>
+  <p class="lead">Go ships a production-grade HTTP server in the standard library — no framework required. Since Go 1.22 the built-in <code>ServeMux</code> understands <b>methods, path variables and wildcards</b>, so the routing you used to import a third-party package for now lives in <code>net/http</code> itself.</p>
+</section>
+
+<section class="section reveal" id="handler">
+  <h2><span class="section-num">01</span> Everything is an <code>http.Handler</code></h2>
+  <p class="takeaway">The whole server is built on one tiny interface: <code>Handler</code> has a single method, <code>ServeHTTP(w ResponseWriter, r *Request)</code>. A plain function becomes one via <code>http.HandlerFunc</code>.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A handler is a clerk at a service window. The request <code>r</code> is the customer's filled-in form (URL, headers, body); the <code>ResponseWriter</code> <code>w</code> is the blank reply slip the clerk writes back on. The server's only job is to match each customer to the right window and hand the clerk both papers.</p></div></div>
+  <p><code>http.HandlerFunc</code> is an adapter: it's a function type whose own <code>ServeHTTP</code> just calls itself. That's the trick that lets <code>func(w, r)</code> satisfy the <code>Handler</code> interface with zero ceremony.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">handler.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">// The interface — one method.
+type Handler interface {
+    ServeHTTP(w http.ResponseWriter, r *http.Request)
+}
+
+// HandlerFunc adapts an ordinary function to that interface.
+func hello(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("hello"))
+}
+var h http.Handler = http.HandlerFunc(hello) // a func is now a Handler</code></pre></div>
+</section>
+
+<section class="section reveal" id="mux-router">
+  <h2><span class="section-num">02</span> The 1.22 router: method + path patterns</h2>
+  <p class="takeaway">Since <b>Go 1.22</b>, <code>http.ServeMux</code> patterns can include an <b>HTTP method</b> and <b>path variables</b>: <code>"GET /users/{id}"</code>. Pull a variable out with <code>r.PathValue("id")</code>.</p>
+  <p>Before 1.22 the mux only matched path prefixes — you wrote your own method check and parsed IDs by hand, or reached for <code>chi</code>/<code>gorilla</code>. Now the standard mux does it. A pattern is <code>[METHOD ]/path</code>; omit the method to match any method.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">routes.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">mux := http.NewServeMux()
+mux.HandleFunc("GET /users/{id}", getUser)     // {id} is a path variable
+mux.HandleFunc("POST /users", createUser)      // method is matched too
+mux.HandleFunc("GET /files/{path...}", serve)  // {path...} = trailing wildcard
+mux.HandleFunc("GET /users/{id}/", subtree)    // trailing slash = subtree match
+
+func getUser(w http.ResponseWriter, r *http.Request) {
+    id := r.PathValue("id")                    // "42" for GET /users/42
+    fmt.Fprintf(w, "user %s", id)
+}
+
+http.ListenAndServe(":8080", mux)</code></pre></div>
+  <dl class="kv">
+    <dt><code>{id}</code></dt><dd>Matches one path segment. Read it with <code>r.PathValue("id")</code>.</dd>
+    <dt><code>{path...}</code></dt><dd>Trailing <b>wildcard</b> — matches the rest of the path, slashes and all.</dd>
+    <dt><code>GET /x</code> vs <code>/x</code></dt><dd>With a method, only that method matches (and <code>GET</code> implies <code>HEAD</code>); without one, any method matches.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="pathvalue-demo">
+  <h2><span class="section-num">03</span> Exercising a handler without a network</h2>
+  <p class="takeaway">You don't need a running server to test a handler. <code>httptest.NewRecorder()</code> is a fake <code>ResponseWriter</code> that <b>captures</b> the status, headers and body; <code>httptest.NewRequest</code> builds a request — call <code>ServeHTTP</code> directly.</p>
+  <p>To make the 1.22 path variable resolve in a test, register the handler on a real <code>ServeMux</code> and let the mux populate <code>PathValue</code>. The recorder then holds exactly what the client would have received:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+)
+
+func getUser(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	fmt.Fprintf(w, "user %s via %s", id, r.Method)
+}
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /users/{id}", getUser)
+
+	req := httptest.NewRequest("GET", "/users/42", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req) // the mux fills in PathValue("id")
+
+	fmt.Println("status:", rec.Code)
+	fmt.Println("body:  ", rec.Body.String())
+}</script>
+    <script type="text/plain" class="gp-output">status: 200
+body:   user 42 via GET</script>
+  </div>
+</section>
+
+<section class="section reveal" id="json-status">
+  <h2><span class="section-num">04</span> Writing JSON &amp; status codes</h2>
+  <p class="takeaway">There is no magic: set the <code>Content-Type</code> header, call <code>WriteHeader(code)</code> for a non-200 status, then write the body. <code>json.NewEncoder(w).Encode(v)</code> streams JSON straight to the response.</p>
+  <p>The order is strict. Headers must be set <b>before</b> <code>WriteHeader</code>, and the first <code>Write</code> implicitly sends <code>200</code> if you haven't called <code>WriteHeader</code> yet. Here's a handler captured with a recorder so the output is exact:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+)
+
+type user struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+func getUser(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json") // header FIRST
+	w.WriteHeader(http.StatusOK)                       // 200, explicitly
+	json.NewEncoder(w).Encode(user{ID: 42, Name: "Ada"})
+}
+
+func main() {
+	rec := httptest.NewRecorder()
+	getUser(rec, httptest.NewRequest("GET", "/users/42", nil))
+	fmt.Println("code:", rec.Code)
+	fmt.Println("ctype:", rec.Header().Get("Content-Type"))
+	fmt.Print(rec.Body.String())
+}</script>
+    <script type="text/plain" class="gp-output">code: 200
+ctype: application/json
+{"id":42,"name":"Ada"}</script>
+  </div>
+  <p class="muted">Note <code>Encode</code> appends a trailing newline — that's why the body ends after the brace on its own line.</p>
+</section>
+
+<section class="section reveal" id="gotchas">
+  <h2><span class="section-num">05</span> The traps: concurrency, header order &amp; precedence</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Every request runs in its own goroutine.</b> The server calls your handler concurrently for concurrent requests, so a package-level <code>var counter int</code> bumped from a handler is a <b>data race</b>. Guard shared mutable state with a <code>sync.Mutex</code> or <code>sync/atomic</code> — or keep handlers stateless. Also: you <b>must set headers before</b> <code>WriteHeader</code>/the first <code>Write</code>; once the status is sent, later <code>w.Header().Set(...)</code> calls are silently ignored.</p></div></div>
+  <p>Two more rules to keep straight:</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Topic</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td><b>1.22 precedence</b></td><td>The <b>most specific</b> pattern wins, regardless of registration order. <code>/users/{id}</code> beats <code>/users/</code>; a literal segment beats a wildcard. Two patterns that overlap but neither is more specific (e.g. <code>/a/{x}</code> vs <code>/{y}/b</code>) is a registration-time <b>panic</b>.</td></tr>
+      <tr><td><b>405 vs 404</b></td><td>If a path matches but the method doesn't, the mux returns <code>405 Method Not Allowed</code> with an <code>Allow</code> header — not a 404. That's only true once you register method-qualified patterns.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">sibling guide</span></div><p>In production this server usually sits behind an edge that does TLS termination, auth and rate limiting. See <a href="../../sysdesign-guide/blocks/api-gateway.html">API gateway</a> in the System Design guide for what that tier owns versus what your handler should.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A handler does <code>w.Write([]byte("hi"))</code> and <em>then</em> <code>w.Header().Set("Content-Type", "application/json")</code>. What does the client see for <code>Content-Type</code>?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Whatever Go sniffed (likely <code>text/plain</code>) — the late <code>Set</code> is ignored.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>application/json</code> — the header is applied before the response is flushed.</button>
+      <button class="quiz-opt"><span class="mark"></span>An empty <code>Content-Type</code>, since they conflict.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> The first <code>Write</code> sends the status line and headers (implicitly <code>200</code>), so any header you set afterward is too late and silently dropped. Because no <code>Content-Type</code> was set in time, the server sniffs the body and usually picks <code>text/plain</code>. Always set headers <b>before</b> the first <code>Write</code>/<code>WriteHeader</code>.</div>
+  </div>
+</section>
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../stdlib/stdlib-tour.html"><span class="pn-k">Previous</span><span class="pn-t">A tour of the rest (net, regexp, crypto)</span></a>
+            <a class="next" href="../webservices/middleware-routing.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Middleware, context &amp; routing patterns</span></a>
+          </nav>
+        </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#handler">Everything is an http.Handler</a>
+          <a href="#mux-router">The 1.22 router: method + path patterns</a>
+          <a href="#pathvalue-demo">Exercising a handler without a network</a>
+          <a href="#json-status">Writing JSON status codes</a>
+          <a href="#gotchas">The traps: concurrency, header order precedence</a>
+          <a href="#check">Check yourself</a>
+        </nav>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Go — a visual guide &middot; goroutines &middot; channels &middot; interfaces &middot; generics &middot; the runtime</span>
+        <span class="fmono">Built to open offline &middot; Go 1.26 era &middot; Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/gopad.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

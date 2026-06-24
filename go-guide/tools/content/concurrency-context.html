@@ -1,0 +1,106 @@
+<section class="hero reveal">
+  <span class="eyebrow">Concurrency · context</span>
+  <h1><code>context</code>: cancellation, deadlines &amp; values.</h1>
+  <p class="lead">A request comes in, fans out to a database, a cache, and two other services — then the client hangs up. How does <em>all</em> that work stop, promptly, without leaking goroutines? That's <code>context</code>: a stop-work order that flows down the call tree.</p>
+</section>
+
+<section class="section reveal" id="the-problem">
+  <h2><span class="section-num">01</span> The problem it solves</h2>
+  <p class="takeaway">A <code>context.Context</code> carries a <b>cancellation signal</b> and a <b>deadline</b> down through every API boundary and goroutine it touches, so a whole tree of work can be told to <b>stop at once</b>.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A context is a <em>stop-work order</em> that flows down the org chart. The CEO (the incoming request) hands it to a VP, who hands copies to managers, who hand copies to everyone doing the actual work. When the order is cancelled — the customer left, or the clock ran out — it propagates down every branch at once. Each worker is responsible for <em>watching</em> their copy and downing tools when it fires. The order only ever flows <em>downward</em>; a worker can't cancel the CEO.</p></div></div>
+  <p>Without it, a cancelled request leaves goroutines blocked on a slow database forever — a classic leak. With it, every layer watches <code>ctx.Done()</code> and bails the moment the signal arrives.</p>
+</section>
+
+<section class="section reveal" id="constructors">
+  <h2><span class="section-num">02</span> The constructors &amp; the Done channel</h2>
+  <p class="takeaway">You start from a <b>root</b> (<code>Background</code> / <code>TODO</code>) and <b>derive</b> children that add cancellation or a deadline. Each derive returns a <code>cancel</code> func; watch <code>&lt;-ctx.Done()</code> and read <code>ctx.Err()</code> to learn why it closed.</p>
+  <dl class="kv">
+    <dt><code>context.Background()</code></dt><dd>The empty root. Use it at the top of <code>main</code>, in tests, and in the inbound request of a server.</dd>
+    <dt><code>context.TODO()</code></dt><dd>A placeholder for "I haven't wired a real context here yet." Identical behaviour to <code>Background</code>; signals intent to the reader (and to linters).</dd>
+    <dt><code>WithCancel(parent)</code></dt><dd>Returns <code>(ctx, cancel)</code>. Calling <code>cancel()</code> closes <code>ctx.Done()</code>; <code>ctx.Err()</code> is then <code>context.Canceled</code>.</dd>
+    <dt><code>WithTimeout(parent, d)</code></dt><dd>Cancels automatically after duration <code>d</code> (sugar for <code>WithDeadline(parent, now+d)</code>). On expiry <code>ctx.Err()</code> is <code>context.DeadlineExceeded</code>.</dd>
+    <dt><code>WithDeadline(parent, t)</code></dt><dd>Cancels at an absolute time <code>t</code>. Same <code>DeadlineExceeded</code> error on expiry.</dd>
+    <dt><code>WithValue(parent, k, v)</code></dt><dd>Derives a context carrying one request-scoped key/value. Read it back with <code>ctx.Value(k)</code>.</dd>
+  </dl>
+  <p>The two things you read off a context: <code>&lt;-ctx.Done()</code> (a channel that <em>closes</em> when cancelled — so a receive unblocks) and <code>ctx.Err()</code> (<code>nil</code> while live, then <code>Canceled</code> or <code>DeadlineExceeded</code>).</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">recent additions</span></div><p>Go 1.21 added two useful tools: <code>context.WithoutCancel(parent)</code> — a child that keeps the parent's <em>values</em> but ignores its cancellation (for fire-and-forget cleanup after a request ends), and <code>context.AfterFunc(ctx, f)</code> — register <code>f</code> to run in its own goroutine once <code>ctx</code> is done, no manual <code>&lt;-ctx.Done()</code> loop needed.</p></div></div>
+</section>
+
+<section class="section reveal" id="deadline-in-action">
+  <h2><span class="section-num">03</span> A deadline in action</h2>
+  <p>A 10&nbsp;ms timeout against work that "takes" one second — the deadline <em>always</em> wins, so the output is deterministic. Note <code>defer cancel()</code> even on the timeout path:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "context"
+    "fmt"
+    "time"
+)
+
+func main() {
+    // Deadline of 10ms; the "work" would take 1s — so the deadline always fires first.
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+    defer cancel() // ALWAYS call cancel — even though the timeout will fire on its own.
+
+    select {
+    case <-time.After(1 * time.Second): // the slow work
+        fmt.Println("work finished")
+    case <-ctx.Done(): // the deadline fires first
+        fmt.Println(ctx.Err())
+    }
+}</script>
+    <script type="text/plain" class="gp-output">context deadline exceeded</script>
+  </div>
+  <p>The same shape with manual cancellation: a worker loops until told to stop, and we cancel it explicitly. <code>ctx.Err()</code> reports <code>context.Canceled</code> rather than <code>DeadlineExceeded</code>:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "context"
+    "errors"
+    "fmt"
+)
+
+func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    cancel() // pretend the caller gave up immediately
+
+    <-ctx.Done() // already closed, so this returns at once
+    fmt.Println(ctx.Err())
+    fmt.Println(errors.Is(ctx.Err(), context.Canceled))
+}</script>
+    <script type="text/plain" class="gp-output">context canceled
+true</script>
+  </div>
+</section>
+
+<section class="section reveal" id="the-rules">
+  <h2><span class="section-num">04</span> The rules (and the trap)</h2>
+  <p class="takeaway">Pass context as the <b>first parameter</b>, named <code>ctx</code>. <b>Never store it in a struct.</b> <b>Always call <code>cancel()</code></b>, even on the timeout path. Use <code>WithValue</code> only for <b>request-scoped</b> data — never for optional arguments.</p>
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Don't</div>
+      <p>Store a context in a struct field; pass it second or buried in options; use <code>ctx.Value</code> as a grab-bag for config and tunables; skip <code>cancel()</code> because "the timeout will handle it."</p>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Do</div>
+      <p>Make <code>ctx context.Context</code> the first param of any function that does I/O or blocks. <code>defer cancel()</code> immediately after deriving. Put only request-scoped values (request ID, auth principal) in <code>WithValue</code>, behind a typed key.</p>
+    </div>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Forgetting <code>cancel()</code> <b>leaks the context</b> (G15): <code>WithCancel</code>/<code>WithTimeout</code> attach a child to the parent and arm a timer; until you cancel, that goroutine/timer stays alive even after the deadline passes. <code>go vet</code> warns: <em>"the cancel function returned by context.WithTimeout should be called, not discarded."</em> Two more traps: passing a <b><code>nil</code> context</b> (pass <code>context.TODO()</code> instead) panics deep inside callees; and using <code>WithValue</code> as a <b>grab-bag</b> for things that should be explicit parameters — it hides dependencies and is unchecked at compile time.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You write <code>ctx, cancel := context.WithTimeout(parent, 5*time.Second)</code> and your work finishes in 50&nbsp;ms. Do you still need <code>cancel()</code>?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Yes — call it (via <code>defer cancel()</code>). Returning early without it leaves the timer and child context alive until the 5&nbsp;s elapses.</button>
+      <button class="quiz-opt"><span class="mark"></span>No — the work finished, so the context is already cleaned up automatically.</button>
+      <button class="quiz-opt"><span class="mark"></span>No — <code>cancel()</code> is only needed when the deadline actually fires.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> <code>cancel()</code> releases the context's resources <em>now</em> instead of when the deadline eventually trips. Skip it and you leak a timer and a child node on the parent for up to five seconds — multiply that across a busy server and you have a real leak. The idiom is to <code>defer cancel()</code> on the line right after deriving, which is why <code>go vet</code> flags a discarded <code>cancel</code>.</div>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">sibling guide</span></div><p>The same <code>ctx</code> that carries cancellation also carries <b>trace context</b> — the IDs that stitch a request's spans together across services. See <a href="../../observability-guide/traces/spans-and-context.html">Spans &amp; context propagation</a> in the Observability guide for how W3C tracecontext rides along your Go <code>context</code>.</p></div></div>
+</section>

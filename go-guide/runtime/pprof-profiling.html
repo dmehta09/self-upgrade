@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profiling & diagnosing with pprof | Go — a visual guide</title>
+  <meta name="description" content="Go — a visual guide — Profiling &amp; diagnosing with pprof. A sharp, diagram-first guide to Go for backend engineers and interviews: the language, slices &amp; interfaces, generics, and concurrency (goroutines, channels, the scheduler) — each idea in plain English then precise, with runnable Go examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ADD8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z'/><path d='M2.5 9.5h2.5M19 9.5h2.5'/><circle cx='9.6' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/><circle cx='14.4' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/go.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="runtime" data-page="runtime-pprof-profiling" data-lesson="rt-pprof">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Go — a visual guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z"/><path d="M2.5 9.5h2.5M19 9.5h2.5"/><circle cx="9.6" cy="10.6" r="1.1" fill="#06121a" stroke="none"/><circle cx="14.4" cy="10.6" r="1.1" fill="#06121a" stroke="none"/></svg></span>
+        <span class="brand-text"><b>Go — a visual guide</b><span>the language &amp; runtime, distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home · the map</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Getting started">
+        <h4><span class="dot"></span>Getting started</h4>
+        <a class="nav-link" href="../foundations/why-go.html">Why Go</a>
+        <a class="nav-link" href="../foundations/toolchain.html">Toolchain & modules</a>
+        <a class="nav-link" href="../foundations/hello-program.html">Anatomy of a program</a>
+        <a class="nav-link" href="../foundations/vars-and-types.html">Vars, constants & zero values</a>
+        <a class="nav-link" href="../foundations/control-flow.html">Control flow & functions</a>
+      </nav>
+      <nav class="nav-group is-language" aria-label="The language core">
+        <h4><span class="dot"></span>The language core</h4>
+        <a class="nav-link" href="../language/arrays-slices.html">Arrays & slices</a>
+        <a class="nav-link" href="../language/maps.html">Maps</a>
+        <a class="nav-link" href="../language/strings-runes-bytes.html">Strings, runes & bytes</a>
+        <a class="nav-link" href="../language/structs.html">Structs & embedding</a>
+        <a class="nav-link" href="../language/pointers.html">Pointers</a>
+        <a class="nav-link" href="../language/errors-and-defer.html">Errors, defer & panic</a>
+        <a class="nav-link" href="../language/error-handling-patterns.html">Error handling patterns</a>
+      </nav>
+      <nav class="nav-group is-types" aria-label="Types &amp; interfaces">
+        <h4><span class="dot"></span>Types & interfaces</h4>
+        <a class="nav-link" href="../types/methods.html">Methods & receivers</a>
+        <a class="nav-link" href="../types/interfaces.html">Interfaces</a>
+        <a class="nav-link" href="../types/nil-interfaces.html">The nil interface trap</a>
+        <a class="nav-link" href="../types/type-assertions-switch.html">Assertions & switches</a>
+        <a class="nav-link" href="../types/error-interface-design.html">Interfaces in practice</a>
+        <a class="nav-link" href="../types/reflection.html">Reflection & tags</a>
+      </nav>
+      <nav class="nav-group is-generics" aria-label="Generics &amp; modern Go">
+        <h4><span class="dot"></span>Generics & modern Go</h4>
+        <a class="nav-link" href="../generics/type-parameters.html">Type parameters</a>
+        <a class="nav-link" href="../generics/generic-stdlib.html">Generic stdlib</a>
+        <a class="nav-link" href="../generics/iterators.html">Iterators (range-func)</a>
+        <a class="nav-link" href="../generics/generics-pitfalls.html">Generics pitfalls</a>
+      </nav>
+      <nav class="nav-group is-concurrency" aria-label="Concurrency">
+        <h4><span class="dot"></span>Concurrency</h4>
+        <a class="nav-link" href="../concurrency/index.html">The big picture</a>
+        <a class="nav-link" href="../concurrency/goroutines.html">Goroutines</a>
+        <a class="nav-link" href="../concurrency/scheduler.html">The G-M-P scheduler</a>
+        <a class="nav-link" href="../concurrency/channels.html">Channels</a>
+        <a class="nav-link" href="../concurrency/select.html">select & multiplexing</a>
+        <a class="nav-link" href="../concurrency/sync-primitives.html">sync primitives</a>
+        <a class="nav-link" href="../concurrency/atomics-memory-model.html">Atomics & memory model</a>
+        <a class="nav-link" href="../concurrency/context.html">context</a>
+        <a class="nav-link" href="../concurrency/patterns.html">Concurrency patterns</a>
+        <a class="nav-link" href="../concurrency/errgroup.html">errgroup</a>
+        <a class="nav-link" href="../concurrency/leaks-deadlocks-races.html">Leaks, deadlocks & races</a>
+      </nav>
+      <nav class="nav-group is-stdlib" aria-label="Standard library">
+        <h4><span class="dot"></span>Standard library</h4>
+        <a class="nav-link" href="../stdlib/encoding-json.html">encoding/json</a>
+        <a class="nav-link" href="../stdlib/time.html">time</a>
+        <a class="nav-link" href="../stdlib/io-bufio.html">io & bufio</a>
+        <a class="nav-link" href="../stdlib/files-os.html">Files & os</a>
+        <a class="nav-link" href="../stdlib/slog.html">log/slog</a>
+        <a class="nav-link" href="../stdlib/stdlib-tour.html">Stdlib tour</a>
+      </nav>
+      <nav class="nav-group is-webservices" aria-label="HTTP services">
+        <h4><span class="dot"></span>HTTP services</h4>
+        <a class="nav-link" href="../webservices/net-http.html">net/http</a>
+        <a class="nav-link" href="../webservices/middleware-routing.html">Middleware & routing</a>
+        <a class="nav-link" href="../webservices/http-clients.html">HTTP clients</a>
+        <a class="nav-link" href="../webservices/json-apis.html">JSON APIs</a>
+        <a class="nav-link" href="../webservices/production-services.html">Production services</a>
+      </nav>
+      <nav class="nav-group is-testing" aria-label="Testing &amp; tooling">
+        <h4><span class="dot"></span>Testing & tooling</h4>
+        <a class="nav-link" href="../testing/testing-basics.html">Tests & table tests</a>
+        <a class="nav-link" href="../testing/mocking-interfaces.html">Mocking & seams</a>
+        <a class="nav-link" href="../testing/benchmarks.html">Benchmarks</a>
+        <a class="nav-link" href="../testing/fuzzing-coverage.html">Fuzzing & coverage</a>
+        <a class="nav-link" href="../testing/tooling.html">The tooling belt</a>
+      </nav>
+      <nav class="nav-group is-runtime" aria-label="Runtime &amp; performance">
+        <h4><span class="dot"></span>Runtime & performance</h4>
+        <a class="nav-link" href="../runtime/memory-model-stack-heap.html">Stack, heap & escape</a>
+        <a class="nav-link" href="../runtime/garbage-collector.html">The garbage collector</a>
+        <a class="nav-link" href="../runtime/pprof-profiling.html">pprof profiling</a>
+        <a class="nav-link" href="../runtime/performance-patterns.html">Performance patterns</a>
+        <a class="nav-link" href="../runtime/cgo-unsafe-build.html">cgo, unsafe & builds</a>
+      </nav>
+      <nav class="nav-group is-interview" aria-label="Interview prep">
+        <h4><span class="dot"></span>Interview prep</h4>
+        <a class="nav-link" href="../interview/question-bank.html">Question bank</a>
+        <a class="nav-link" href="../interview/machine-coding.html">Machine-coding</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheatsheet</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+        <a class="nav-link" href="../reference/drills.html">Timed drills</a>
+        <a class="nav-link" href="../reference/gotchas.html">Gotchas index</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">Profiling &amp; diagnosing with pprof</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Runtime &amp; performance · diagnostics</span>
+  <h1>Profiling &amp; diagnosing with pprof.</h1>
+  <p class="lead">Guessing where a Go program spends its time is how you waste a week optimizing the wrong loop. <code>pprof</code> is the built-in profiler that <em>measures</em> it for you — CPU, allocations, goroutines, blocking — and the execution tracer shows the whole runtime timeline. The rule is simple: never optimize without a profile.</p>
+</section>
+
+<section class="section reveal" id="why-measure">
+  <h2><span class="section-num">01</span> Measure, don't guess</h2>
+  <p class="takeaway">Performance work is a loop: <b>measure → find the hot spot → fix → re-measure</b>. A profile tells you <em>where</em> the cost actually is — which is almost never where you'd guess.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Optimizing without a profile is like a doctor prescribing surgery without an X-ray. The profiler is the X-ray: it samples your program many times a second and shows which functions the bone-saw should actually touch. Operate on the part that hurts — not the part you <em>assume</em> hurts. Nine times out of ten the real cost is somewhere boring you'd never have looked.</p></div></div>
+  <p>A profiler works by <b>sampling</b>: many times per second it records what the program is doing (which function is on the CPU, who allocated, who's blocked). Sampling is cheap, so the picture is statistically accurate without slowing things to a crawl.</p>
+</section>
+
+<section class="section reveal" id="profile-types">
+  <h2><span class="section-num">02</span> The profile types</h2>
+  <p>Each profile answers a different question. Pick the one that matches your symptom:</p>
+  <dl class="kv">
+    <dt>CPU (<code>profile</code>)</dt><dd>Where wall-clock CPU time goes. Samples the running goroutine ~100×/sec. Use it for "this is slow / pegs a core."</dd>
+    <dt>Heap (<code>heap</code> / <code>allocs</code>)</dt><dd>What's allocating. <code>inuse_space</code> shows live memory now; <code>alloc_space</code> shows total allocated over time (GC pressure). Use it for "high memory / GC churn."</dd>
+    <dt>Goroutine</dt><dd>A snapshot of every goroutine and its stack. A growing count is the classic <b>leak</b> signature.</dd>
+    <dt>Block</dt><dd>Time spent <em>blocked</em> on channels, mutexes, <code>sync</code> waits. Off by default — enable with <code>runtime.SetBlockProfileRate</code>.</dd>
+    <dt>Mutex</dt><dd>Contended lock holders. Off by default — enable with <code>runtime.SetMutexProfileFraction</code>.</dd>
+  </dl>
+  <p class="takeaway">Match the symptom to the profile: slow CPU → <b>CPU profile</b>; memory/GC → <b>heap profile</b>; stuck or leaking → <b>goroutine profile</b>; lock waits → <b>block/mutex</b>.</p>
+</section>
+
+<section class="section reveal" id="capturing">
+  <h2><span class="section-num">03</span> Capturing a profile</h2>
+  <p>Two main ways. In <b>tests/benchmarks</b>, flags write a profile file directly:</p>
+  <div class="codeblock shell">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="bash"># benchmark, capturing CPU + heap profiles
+go test -bench=. -cpuprofile=cpu.out -memprofile=mem.out
+
+# -benchmem also prints allocs/op and bytes/op inline
+go test -bench=. -benchmem</code></pre>
+  </div>
+  <p>In a <b>running service</b>, import the HTTP handler. The blank import registers handlers under <code>/debug/pprof</code> on the default mux — then you scrape them live:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">main.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="go">package main
+
+import (
+    "net/http"
+    _ "net/http/pprof" // registers /debug/pprof/* on http.DefaultServeMux
+)
+
+func main() {
+    // Keep this on an INTERNAL port, never public.
+    go http.ListenAndServe("localhost:6060", nil)
+    // ... your real server ...
+    select {}
+}</code></pre>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">capture live</span></div><p>Grab a 30-second CPU profile straight from a live process: <code>go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30</code>. For a heap snapshot, hit <code>/debug/pprof/heap</code>; for goroutines, <code>/debug/pprof/goroutine?debug=2</code> dumps every stack as readable text.</p></div></div>
+</section>
+
+<section class="section reveal" id="analyzing">
+  <h2><span class="section-num">04</span> Analyzing with <code>go tool pprof</code></h2>
+  <p>Point <code>go tool pprof</code> at a profile file or endpoint; it drops into an interactive shell. The commands you actually use:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Command</th><th>What it shows</th></tr></thead>
+      <tbody>
+        <tr><td><code>top</code></td><td>The functions costing the most (flat = self, cum = including callees). Your first move.</td></tr>
+        <tr><td><code>list Fn</code></td><td>Source of <code>Fn</code> annotated line-by-line with cost — pinpoints the exact hot line.</td></tr>
+        <tr><td><code>web</code></td><td>Opens a callgraph SVG in the browser (needs Graphviz).</td></tr>
+        <tr><td><code>-http=:8080</code></td><td>Launches the web UI with an interactive <b>flame graph</b> — width = time, the standard way to read a CPU profile.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="codeblock shell">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="bash"># interactive: top, then drill into the hottest function
+go tool pprof cpu.out
+(pprof) top
+(pprof) list parseRow
+
+# or jump straight to the flame-graph web UI
+go tool pprof -http=:8080 cpu.out</code></pre>
+  </div>
+  <p>Read the flame graph top-down by <em>width</em>: the widest box at any level is where the time goes. Click to zoom. A wide plateau of one function = your hot spot.</p>
+  <p>A profile is really just a tally: "which function was sampled the most." You can build the same intuition on fixed data — here we count where the samples landed and pick the winner, exactly the way <code>top</code> ranks functions:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "sort"
+)
+
+func main() {
+    // A pretend CPU profile: each sample names the function on-CPU.
+    samples := []string{
+        "parseRow", "parseRow", "parseRow", "parseRow",
+        "validate", "validate",
+        "writeOut",
+    }
+
+    counts := map[string]int{}
+    for _, fn := range samples {
+        counts[fn]++
+    }
+
+    // Rank like `pprof top`: most samples first (ties by name).
+    type row struct {
+        fn string
+        n  int
+    }
+    rows := make([]row, 0, len(counts))
+    for fn, n := range counts {
+        rows = append(rows, row{fn, n})
+    }
+    sort.Slice(rows, func(i, j int) bool {
+        if rows[i].n != rows[j].n {
+            return rows[i].n > rows[j].n
+        }
+        return rows[i].fn < rows[j].fn
+    })
+
+    for _, r := range rows {
+        fmt.Printf("%2d  %s\n", r.n, r.fn)
+    }
+    fmt.Println("hot spot:", rows[0].fn)
+}</script>
+    <script type="text/plain" class="gp-output"> 4  parseRow
+ 2  validate
+ 1  writeOut
+hot spot: parseRow</script>
+  </div>
+</section>
+
+<section class="section reveal" id="goroutine-count">
+  <h2><span class="section-num">05</span> Counting goroutines &amp; the execution tracer</h2>
+  <p>For a leak you often don't even need a full profile — <code>runtime.NumGoroutine()</code> returns the live count. If it climbs forever, goroutines aren't exiting:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "runtime"
+    "sync"
+)
+
+func main() {
+    before := runtime.NumGoroutine()
+
+    // Spawn a FIXED number, then JOIN them all with WaitGroup.
+    var wg sync.WaitGroup
+    for i := 0; i < 4; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            _ = i * i // trivial work
+        }()
+    }
+    wg.Wait() // every spawned goroutine has now returned
+
+    after := runtime.NumGoroutine()
+
+    // No leak: all 4 joined, so the count returns to baseline.
+    fmt.Println("before:", before)
+    fmt.Println("after :", after)
+    fmt.Println("leaked:", after-before)
+}</script>
+    <script type="text/plain" class="gp-output">before: 1
+after : 1
+leaked: 0</script>
+  </div>
+  <p>Because we <code>wg.Wait()</code> for every goroutine to finish before reading the count again, the result is deterministic: <code>0</code> leaked. Drop the <code>Wait()</code> in real code and a growing <code>after</code> would betray a leak. For allocation counts you'd reach for <code>runtime.ReadMemStats</code>, but those numbers depend on GC timing — read them in a benchmark, not a snippet:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">memstats.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="go">var m runtime.MemStats
+runtime.ReadMemStats(&amp;m)
+fmt.Println(m.Mallocs, m.HeapAlloc) // nondeterministic: depends on GC + runtime</code></pre>
+  </div>
+  <p>The <b>execution tracer</b> is the deepest tool — it records every scheduling event, GC, and syscall:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">trace.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="go">import "runtime/trace"
+
+f, _ := os.Create("trace.out")
+trace.Start(f)
+defer trace.Stop()
+// ... run the workload ...
+// then: go tool trace trace.out  → opens the timeline UI</code></pre>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">sibling lesson</span></div><p>A goroutine profile (or a climbing <code>NumGoroutine</code>) is how you <em>confirm</em> a leak you suspect. For the patterns that cause them — and how to avoid them — see <a href="../concurrency/leaks-deadlocks-races.html">leaks, deadlocks &amp; races</a>.</p></div></div>
+</section>
+
+<section class="section reveal" id="overhead">
+  <h2><span class="section-num">06</span> The cost — and the discipline</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Two traps. First, <b>don't optimize without a profile</b> — your intuition about the hot spot is usually wrong, and you'll waste effort (and add complexity) for no measured gain. Second, <b>block</b> and <b>mutex</b> profiling are <em>not</em> free — they're off by default and you must enable them (<code>SetBlockProfileRate</code> / <code>SetMutexProfileFraction</code>). CPU and heap sampling, by contrast, are cheap enough to leave on <code>/debug/pprof</code> in production behind an internal port — the sampling overhead is negligible.</p></div></div>
+  <p>The whole discipline in one sentence: profile to find the hot spot, change one thing, re-profile to prove it helped. If the second profile doesn't show improvement, revert — you added complexity for nothing.</p>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">07</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A long-running Go service slowly consumes more and more memory, and its <code>runtime.NumGoroutine()</code> keeps climbing over hours. Which profile most directly pinpoints the cause?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The <b>goroutine</b> profile — it dumps every live goroutine's stack, so a leak shows up as thousands stuck at the same line.</button>
+      <button class="quiz-opt"><span class="mark"></span>The CPU profile — it's the only one that works on a live service.</button>
+      <button class="quiz-opt"><span class="mark"></span>The mutex profile — climbing memory always means lock contention.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> A forever-climbing goroutine count is the textbook leak signature, and the goroutine profile (<code>/debug/pprof/goroutine?debug=2</code>) shows exactly where they're all parked — usually blocked on a channel that never receives or a missing <code>cancel()</code>. The retained memory is a <em>symptom</em> of the stuck goroutines holding references. CPU and heap profiles work on live services too; mutex contention is a different problem.</div>
+  </div>
+</section>
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../runtime/garbage-collector.html"><span class="pn-k">Previous</span><span class="pn-t">The garbage collector</span></a>
+            <a class="next" href="../runtime/performance-patterns.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Performance patterns &amp; allocation control</span></a>
+          </nav>
+        </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#why-measure">Measure, don't guess</a>
+          <a href="#profile-types">The profile types</a>
+          <a href="#capturing">Capturing a profile</a>
+          <a href="#analyzing">Analyzing with go tool pprof</a>
+          <a href="#goroutine-count">Counting goroutines the execution tracer</a>
+          <a href="#overhead">The cost — and the discipline</a>
+          <a href="#check">Check yourself</a>
+        </nav>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Go — a visual guide &middot; goroutines &middot; channels &middot; interfaces &middot; generics &middot; the runtime</span>
+        <span class="fmono">Built to open offline &middot; Go 1.26 era &middot; Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/gopad.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

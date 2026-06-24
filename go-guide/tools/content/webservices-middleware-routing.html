@@ -1,0 +1,136 @@
+<section class="hero reveal">
+  <span class="eyebrow">Web services · middleware</span>
+  <h1>Middleware, context &amp; routing patterns.</h1>
+  <p class="lead">Cross-cutting concerns — logging, auth, recovery, CORS — don't belong inside every handler. In Go they're <b>middleware</b>: functions that wrap a <code>Handler</code> and return a new one. Combined with request-scoped <code>context</code> values and subrouters, they keep your handlers focused on one job.</p>
+</section>
+
+<section class="section reveal" id="shape">
+  <h2><span class="section-num">01</span> Middleware is just <code>func(http.Handler) http.Handler</code></h2>
+  <p class="takeaway">A middleware <b>takes a handler and returns a wrapped handler</b>. The wrapper does work before and/or after, then calls <code>next.ServeHTTP(w, r)</code> to pass control down the chain.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Middleware is airport security layers wrapped around your gate. Each layer (logging, auth, recovery) inspects the passenger on the way in, waves them through to the next layer with <code>next.ServeHTTP</code>, and can do paperwork on the way back out. The innermost gate is your actual handler.</p></div></div>
+  <p>Because every middleware has the same signature, they <b>compose</b>: wrap a wrap of a wrap. The <code>next</code> parameter is the rest of the chain.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">middleware.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">func Logging(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        log.Printf("--&gt; %s %s", r.Method, r.URL.Path) // before
+        next.ServeHTTP(w, r)                            // call the chain
+        log.Printf("&lt;-- done")                          // after
+    })
+}</code></pre></div>
+</section>
+
+<section class="section reveal" id="chaining">
+  <h2><span class="section-num">02</span> Chaining &amp; the order trap</h2>
+  <p class="takeaway">Wrapping is nested: <code>Recover(Logging(Auth(handler)))</code> runs <b>Recover first on the way in</b> and last on the way out. The <b>outermost</b> middleware should be the most defensive.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Order matters, and recovery must be outermost.</b> A <code>panic</code> in a handler unwinds the stack; if your <code>Recover</code> middleware is <em>inside</em> the logging middleware, a panic in logging itself isn't caught — and the server drops the connection (the default <code>http.Server</code> recovers the goroutine but the client gets a broken/empty response). Put recovery on the outside so every layer below it — including auth and your handler — is protected.</p></div></div>
+  <p>Run a logging middleware through a recorder and watch the <b>deterministic order</b> of the before/after prints around the handler:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+)
+
+func Logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("log: before", r.Method, r.URL.Path)
+		next.ServeHTTP(w, r)
+		fmt.Println("log: after")
+	})
+}
+
+func hello(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("handler: running")
+	w.Write([]byte("hi"))
+}
+
+func main() {
+	h := Logging(http.HandlerFunc(hello)) // wrap once
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/x", nil))
+	fmt.Println("body:", rec.Body.String())
+}</script>
+    <script type="text/plain" class="gp-output">log: before GET /x
+handler: running
+log: after
+body: hi</script>
+  </div>
+</section>
+
+<section class="section reveal" id="context-values">
+  <h2><span class="section-num">03</span> Request-scoped values via <code>r.Context()</code></h2>
+  <p class="takeaway">Each request carries a <code>context.Context</code>. Middleware can attach request-scoped data — a request ID, the authenticated user — with <code>context.WithValue</code>, then hand a copied request downstream via <code>r.WithContext(ctx)</code>.</p>
+  <p>Use an <b>unexported key type</b> so your keys can't collide with another package's. Downstream handlers read the value back with <code>ctx.Value(key)</code> and a type assertion:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+)
+
+type ctxKey string
+
+const reqIDKey ctxKey = "reqID"
+
+// Middleware: stamp a request ID into the context.
+func WithRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), reqIDKey, "abc-123")
+		next.ServeHTTP(w, r.WithContext(ctx)) // pass the enriched request
+	})
+}
+
+// Handler: read it back out.
+func handler(w http.ResponseWriter, r *http.Request) {
+	id, _ := r.Context().Value(reqIDKey).(string)
+	fmt.Fprintf(w, "served request %s", id)
+}
+
+func main() {
+	h := WithRequestID(http.HandlerFunc(handler))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	fmt.Println(rec.Body.String())
+}</script>
+    <script type="text/plain" class="gp-output">served request abc-123</script>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Don't stuff everything into context values.</b> Context values are untyped (<code>any</code>) and invisible to the type checker, so overusing them turns explicit dependencies into hidden, runtime-typed magic. Reserve them for genuinely <b>request-scoped, cross-cutting</b> data (request ID, auth principal, trace span) — pass real arguments for everything else. Never use string literals as keys directly; use an unexported key type to avoid collisions.</p></div></div>
+</section>
+
+<section class="section reveal" id="subrouters">
+  <h2><span class="section-num">04</span> Route groups &amp; subrouters</h2>
+  <p class="takeaway">There's no special "group" API — you compose <code>ServeMux</code>es. Mount a sub-mux under a prefix with <code>StripPrefix</code>, and apply middleware to just that group by wrapping the sub-mux before mounting it.</p>
+  <p>This gives you per-group middleware (e.g. auth only on <code>/api/</code>) using only the standard library:</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">groups.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">api := http.NewServeMux()
+api.HandleFunc("GET /users/{id}", getUser)
+api.HandleFunc("POST /users", createUser)
+
+root := http.NewServeMux()
+// Mount the api sub-mux under /api/, stripping the prefix,
+// and wrap ONLY this group with auth.
+root.Handle("/api/", http.StripPrefix("/api",
+    RequireAuth(api)))
+root.HandleFunc("GET /healthz", healthz) // no auth on /healthz
+
+http.ListenAndServe(":8080", root)</code></pre></div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">global vs group</span></div><p>Apply truly universal middleware (recovery, request ID, top-level logging) by wrapping the <b>root</b> mux once: <code>http.ListenAndServe(":8080", Recover(WithRequestID(root)))</code>. Apply group-specific middleware (auth, rate limit) by wrapping the <b>sub-mux</b>. That separation is the whole pattern.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You wrap your routes as <code>Logging(Recover(handler))</code>. A handler panics. What happens?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Recover catches the panic (it's inside Logging), so the request is salvaged — but a panic in Logging itself would <em>not</em> be caught.</button>
+      <button class="quiz-opt"><span class="mark"></span>Nothing is caught — middleware can't recover from panics.</button>
+      <button class="quiz-opt"><span class="mark"></span>The whole server process crashes.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> <code>Logging(Recover(handler))</code> runs Logging outermost, Recover next, handler innermost — so Recover <em>does</em> wrap and protect the handler's panic. The subtle bug is the gap: a panic in the Logging layer is outside Recover and escapes. That's why recovery belongs <b>outermost</b>: <code>Recover(Logging(handler))</code> protects every layer below it.</div>
+  </div>
+</section>

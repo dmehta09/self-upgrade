@@ -1,0 +1,95 @@
+<section class="hero reveal">
+  <span class="eyebrow">Reference</span>
+  <h1>The Go gotchas index.</h1>
+  <p class="lead">Every language has a handful of traps that separate "I've written Go" from "I've been bitten by Go." Here they all are in one place — the symptom, the cause, and the one-line fix — each linked to the lesson that explains it. This is the spine of most Go interviews.</p>
+</section>
+
+<section class="section reveal" id="catalog">
+  <h2><span class="section-num">01</span> The catalog</h2>
+  <p>Eighteen traps, grouped by where they live. Click a trap to jump to the lesson that dissects it.</p>
+  <div class="sheet-grid">
+
+    <div class="sheet">
+      <h3>Slices &amp; maps</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>The trap</th><th>The fix</th></tr></thead>
+        <tbody>
+          <tr><td><b>Re-slice aliasing</b> — a sub-slice shares the backing array; writes leak both ways. <a href="../language/arrays-slices.html">→</a></td><td><code>copy</code> into a fresh slice when you need independence.</td></tr>
+          <tr><td><b>append clobbers a shared slice</b> — append into spare cap overwrites the parent. <a href="../language/arrays-slices.html">→</a></td><td>Cap the re-slice: <code>s[:n:n]</code> forces a realloc.</td></tr>
+          <tr><td><b>range copies the element</b> — mutating the loop value is lost. <a href="../language/arrays-slices.html">→</a></td><td>Index it: <code>xs[i] = …</code>.</td></tr>
+          <tr><td><b>Map iteration order is random</b> — output differs every run. <a href="../language/maps.html">→</a></td><td>Collect the keys and <code>sort</code> them.</td></tr>
+          <tr><td><b>Writing a nil map panics</b> — reads are fine, writes are not. <a href="../language/maps.html">→</a></td><td><code>make(map[K]V)</code> before the first write.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sheet">
+      <h3>defer, panic &amp; errors</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>The trap</th><th>The fix</th></tr></thead>
+        <tbody>
+          <tr><td><b>defer piles up in a loop</b> — all defers wait for the function to return. <a href="../language/errors-and-defer.html">→</a></td><td>Put the body in a helper/closure so each runs per iteration.</td></tr>
+          <tr><td><b>defer evaluates args now</b> — <code>defer f(x)</code> snapshots <code>x</code> immediately. <a href="../language/errors-and-defer.html">→</a></td><td>Defer a closure: <code>defer func(){ f(x) }()</code>.</td></tr>
+          <tr><td><b>recover only in a deferred func</b> — called anywhere else it returns nil. <a href="../language/errors-and-defer.html">→</a></td><td>Call <code>recover()</code> inside a deferred function in the same goroutine.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sheet">
+      <h3>Interfaces &amp; methods</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>The trap</th><th>The fix</th></tr></thead>
+        <tbody>
+          <tr><td><b>nil interface ≠ nil pointer</b> — returning a typed nil makes a non-nil error. <a href="../types/nil-interfaces.html">→</a></td><td>Return a bare <code>nil</code> on success, never a typed nil pointer.</td></tr>
+          <tr><td><b>Value vs pointer receiver</b> — a value receiver mutates a copy. <a href="../types/methods.html">→</a></td><td>Use a pointer receiver to mutate the original.</td></tr>
+          <tr><td><b>Comparing uncomparable types</b> — structs with slice/map/func fields. <a href="../language/structs.html">→</a></td><td>Use a comparable key (e.g. a joined string) or <code>reflect.DeepEqual</code>.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sheet">
+      <h3>Channels</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>The trap</th><th>The fix</th></tr></thead>
+        <tbody>
+          <tr><td><b>Send on a closed channel panics</b> — and closing a closed one panics too. <a href="../concurrency/channels.html">→</a></td><td>Only the sole sender closes, exactly once, after all sends.</td></tr>
+          <tr><td><b>nil channel blocks forever</b> — send &amp; recv both stall. <a href="../concurrency/channels.html">→</a></td><td>Deliberate use: set a channel to nil to <em>disable</em> its <code>select</code> case.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sheet">
+      <h3>sync &amp; the memory model</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>The trap</th><th>The fix</th></tr></thead>
+        <tbody>
+          <tr><td><b>Unsynchronized shared variable</b> — a write may never be observed. <a href="../concurrency/atomics-memory-model.html">→</a></td><td>Establish happens-before: a channel, Mutex, or atomic.</td></tr>
+          <tr><td><b>Copied a Mutex / WaitGroup</b> — a copy guards nothing. <a href="../concurrency/sync-primitives.html">→</a></td><td>Pointer receivers; share the struct by pointer. Heed <code>go vet</code>.</td></tr>
+          <tr><td><b>WaitGroup.Add inside the goroutine</b> — races <code>Wait</code>. <a href="../concurrency/sync-primitives.html">→</a></td><td>Call <code>wg.Add(1)</code> before the <code>go</code> statement.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sheet">
+      <h3>Loops, context &amp; JSON</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>The trap</th><th>The fix</th></tr></thead>
+        <tbody>
+          <tr><td><b>Loop-variable capture</b> — pre-1.22, closures shared one variable. <a href="../concurrency/goroutines.html">→</a></td><td>Go 1.22 makes it per-iteration; on older, write <code>v := v</code>.</td></tr>
+          <tr><td><b>Forgot to call cancel()</b> — leaks the context and its timer. <a href="../concurrency/context.html">→</a></td><td><code>defer cancel()</code> right after <code>WithTimeout/WithCancel</code>.</td></tr>
+          <tr><td><b>JSON: unexported fields / float64</b> — lowercase fields are skipped; numbers decode as float64. <a href="../stdlib/encoding-json.html">→</a></td><td>Export fields, add <code>json</code> tags; expect <code>float64</code> for untyped numbers.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+  </div>
+  <p class="viz-note">The same eighteen traps power the <a href="drills.html"><em>Spot the bug</em></a> drill and the <a href="flashcards.html">flashcards</a>.</p>
+</section>
+
+<section class="section reveal" id="drill">
+  <h2><span class="section-num">02</span> Quick self-test</h2>
+  <p>Five timed rounds of <em>Spot the bug</em> — read the symptom, name the trap. Misses link back to the lesson:</p>
+  <div class="trainer" data-trainer>
+    <script type="application/json" class="trainer-config">{ "mode": "spot-the-bug", "count": 5 }</script>
+  </div>
+</section>

@@ -1,0 +1,99 @@
+<section class="hero reveal">
+  <span class="eyebrow">Concurrency · the centerpiece</span>
+  <h1>Concurrency, the big picture.</h1>
+  <p class="lead">This is the part everyone comes to Go for. Before the mechanics — goroutines, channels, <code>select</code> — get the mental model straight: what concurrency <em>is</em>, why Go makes it cheap, and the one sentence that runs through the whole module.</p>
+</section>
+
+<section class="section reveal" id="not-parallelism">
+  <h2><span class="section-num">01</span> Concurrency is not parallelism</h2>
+  <p class="takeaway"><b>Concurrency</b> is <em>structuring</em> a program as independently-executing pieces. <b>Parallelism</b> is <em>actually running</em> several at the same instant. Concurrency is about <b>design</b>; parallelism is about <b>execution</b>.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>One barista juggling three drink orders — pulling a shot, then steaming milk for the next, then ringing up the first — is <em>concurrent</em>: the work is split into pieces she switches between. Add a second barista and the drinks now come out <em>in parallel</em>. The clever part was always the <em>structure</em> of the orders, not the number of baristas. A well-structured concurrent program <em>can</em> run in parallel — but it's correct and useful even on one core.</p></div></div>
+  <p>This is Rob Pike's famous talk in one line: <em>concurrency enables parallelism, but doesn't require it.</em> You write goroutines to <b>organize</b> independent work; the runtime decides how many CPUs actually run them at once (controlled by <code>GOMAXPROCS</code>, which since Go 1.25 is container-CPU-aware by default).</p>
+</section>
+
+<section class="section reveal" id="the-go-model">
+  <h2><span class="section-num">02</span> The Go model, in one breath</h2>
+  <p class="takeaway">Spin up work as <b>cheap goroutines</b>, let them <b>communicate over channels</b> instead of sharing memory, and let the <b>runtime multiplex</b> them onto a small pool of OS threads.</p>
+  <dl class="kv">
+    <dt>Goroutines, not threads</dt><dd>A goroutine starts at ~2&nbsp;KB of stack (an OS thread is ~1&nbsp;MB) and grows on demand. You can have hundreds of thousands. Launch one with <code>go f()</code> — that's the whole syntax.</dd>
+    <dt>Share by communicating</dt><dd>Go's motto: <b>"Do not communicate by sharing memory; instead, share memory by communicating."</b> Pass a value down a channel and ownership moves with it — only one goroutine touches it at a time, so there's nothing to lock.</dd>
+    <dt>The runtime multiplexes</dt><dd>The scheduler maps your <b>G</b>oroutines onto OS threads (<b>M</b>achines) via logical <b>P</b>rocessors (G-M-P). A blocked goroutine parks; its thread picks up another. You never manage threads yourself.</dd>
+  </dl>
+  <p>Here's the entire surface of "start concurrent work" — and the one trap that bites everyone first:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "sync"
+)
+
+func main() {
+    var wg sync.WaitGroup
+    for _, name := range []string{"ada", "alan", "grace"} {
+        wg.Go(func() { // Go 1.25: wg.Go adds 1 + runs in a goroutine
+            fmt.Println("hello from", name)
+        })
+    }
+    wg.Wait() // without this, main may exit before the goroutines run
+    fmt.Println("all done")
+}</script>
+    <script type="text/plain" class="gp-output">hello from grace
+hello from ada
+hello from alan
+all done</script>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">order is not guaranteed</span></div><p>The three "hello" lines can print in <em>any</em> order — goroutines run concurrently, so the only line you can rely on appearing last is <code>all done</code> (it's gated by <code>wg.Wait()</code>). Never write a test or program that depends on goroutine ordering.</p></div></div>
+</section>
+
+<section class="section reveal" id="roadmap">
+  <h2><span class="section-num">03</span> The roadmap</h2>
+  <p>Eleven lessons, each building on the last. Read them in order — concurrency is a stack where every layer assumes the one below.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>Lesson</th><th>What clicks</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><a href="goroutines.html">Goroutines</a></td><td><code>go f()</code>, stacks, the main-exits trap, how cheap they really are.</td></tr>
+        <tr><td>2</td><td><a href="scheduler.html">The G-M-P scheduler</a></td><td>How the runtime multiplexes goroutines onto threads; preemption &amp; <code>GOMAXPROCS</code>.</td></tr>
+        <tr><td>3</td><td><a href="channels.html">Channels</a></td><td>The pipe between goroutines: send/receive, buffered vs unbuffered, close.</td></tr>
+        <tr><td>4</td><td><a href="select.html"><code>select</code></a></td><td>Wait on many channels at once; timeouts, default, the nil-channel trick.</td></tr>
+        <tr><td>5</td><td><a href="sync-primitives.html"><code>sync</code> primitives</a></td><td><code>Mutex</code>, <code>RWMutex</code>, <code>WaitGroup</code>, <code>Once</code> — guarding shared state.</td></tr>
+        <tr><td>6</td><td><a href="atomics-memory-model.html">Atomics &amp; the memory model</a></td><td><code>sync/atomic</code>, happens-before, why an unsynchronised flag is a bug.</td></tr>
+        <tr><td>7</td><td><a href="context.html"><code>context</code></a></td><td>Cancellation, deadlines &amp; request-scoped values across goroutine trees.</td></tr>
+        <tr><td>8</td><td><a href="patterns.html">Patterns</a></td><td>Pipelines, fan-out/fan-in, worker pools, generators.</td></tr>
+        <tr><td>9</td><td><a href="errgroup.html"><code>errgroup</code></a></td><td>Run a group of goroutines, collect the first error, cancel the rest.</td></tr>
+        <tr><td>10</td><td><a href="leaks-deadlocks-races.html">Leaks, deadlocks &amp; races</a></td><td>The three failure modes — and the <code>-race</code> detector that finds them.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">sibling guide</span></div><p>Channels are in-process message queues; the same ideas — backpressure, buffering, fan-out — scale up to networks of services. See <a href="../../sysdesign-guide/blocks/messaging.html">Messaging &amp; queues</a> in the System Design guide for the distributed version of these patterns.</p></div></div>
+</section>
+
+<section class="section reveal" id="two-schools">
+  <h2><span class="section-num">04</span> Two schools: channels vs mutexes</h2>
+  <p class="takeaway">CSP-style <b>channels</b> move data between goroutines; <b>shared-memory + mutex</b> guards a value in place. Go gives you both — and the pragmatic answer is <b>use whichever is simplest</b>.</p>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Channels (CSP) — when data flows</div>
+      <p>Reach for channels when a <em>value is moving</em> between goroutines: a pipeline stage handing work to the next, a result coming back, a cancellation signal. Ownership travels with the message; nobody shares.</p>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Mutex — when state sits still</div>
+      <p>Reach for a <code>sync.Mutex</code> when you're <em>guarding a piece of state</em> that several goroutines read and write in place — a counter, a cache, a connection pool. Often it's the clearer, faster choice.</p>
+    </div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">the Go answer</span></div><p>The Go team's own guidance: <b>"Use whatever is most expressive and/or most simple."</b> A <code>Mutex</code> protecting a map is often clearer than a channel-fed goroutine that owns it. Don't force everything through channels because they're the flashy feature — reach for the lock when you're just guarding state.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A program structured with goroutines runs on a single-core machine (<code>GOMAXPROCS=1</code>). Which statement is true?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>It's still <b>concurrent</b> — the goroutines are independently-scheduled pieces — but not <b>parallel</b>, since only one runs at any instant.</button>
+      <button class="quiz-opt"><span class="mark"></span>Goroutines do nothing on one core; you need multiple cores for <code>go f()</code> to have any effect.</button>
+      <button class="quiz-opt"><span class="mark"></span>It's parallel but not concurrent — those words mean the same thing anyway.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Concurrency is about <em>structure</em>, parallelism about <em>simultaneous execution</em>. On one core the scheduler interleaves goroutines (concurrency) but never runs two at once (no parallelism). The structure is still useful: a goroutine blocked on I/O parks and lets another run, so even one core stays busy.</div>
+  </div>
+</section>

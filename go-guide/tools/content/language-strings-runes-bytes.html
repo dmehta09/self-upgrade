@@ -1,0 +1,135 @@
+<section class="hero reveal">
+  <span class="eyebrow">The language core · text</span>
+  <h1>Strings, runes &amp; bytes.</h1>
+  <p class="lead">A Go string is an immutable sequence of <em>bytes</em> — UTF-8 encoded text by convention. Indexing gives you a byte; ranging decodes runes. Confusing the two is the classic Unicode bug.</p>
+</section>
+
+<section class="section reveal" id="immutable-utf8">
+  <h2><span class="section-num">01</span> Strings are immutable UTF-8 bytes</h2>
+  <p class="takeaway">A <b><code>string</code></b> is a read-only slice of <b>bytes</b> (a pointer + length). Source code is UTF-8, so string literals hold <b>UTF-8-encoded</b> text. You cannot mutate a string in place — you build a new one.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A string is a printed receipt: a fixed strip of paper with bytes on it. Some characters fit in one slot (ASCII letters), but an emoji or an accented letter is printed across <em>several</em> slots. You can read any slot, but you can't erase one — to "change" the receipt you print a fresh one.</p></div></div>
+  <p>Two key terms. A <b>byte</b> is a <code>uint8</code> — one slot on the strip. A <b>rune</b> is an <code>int32</code> holding one Unicode <em>code point</em> — one logical character, which UTF-8 may store in 1–4 bytes.</p>
+</section>
+
+<section class="section reveal" id="index-vs-range">
+  <h2><span class="section-num">02</span> Indexing gives a byte; range decodes runes</h2>
+  <p class="takeaway"><code>s[i]</code> is the <b>i-th byte</b> (a <code>byte</code>), not the i-th character. A <code>for i, r := range s</code> loop <b>decodes UTF-8</b>: <code>i</code> is the <b>byte index</b> where each rune starts, and <code>r</code> is the <b>rune</b>.</p>
+  <p>Watch the byte index jump when it hits a multibyte character. In <code>"Go★"</code> the star (U+2605) is 3 bytes, so after byte index 2 the next rune would start at byte 5:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    s := "Go★" // 'G','o' are 1 byte each; '★' (U+2605) is 3 bytes
+
+    fmt.Println("len(s) =", len(s))     // BYTES, not characters
+
+    // range DECODES runes; i is the starting BYTE index of each rune
+    for i, r := range s {
+        fmt.Printf("byte %d -> rune %c (U+%04X)\n", i, r, r)
+    }
+
+    // s[i] is a raw BYTE, not a character
+    fmt.Println("s[0] =", s[0]) // 71, the byte value of 'G'
+}</script>
+    <script type="text/plain" class="gp-output">len(s) = 5
+byte 0 -> rune G (U+0047)
+byte 1 -> rune o (U+006F)
+byte 2 -> rune ★ (U+2605)
+s[0] = 71</script>
+  </div>
+  <p>Notice the indices are <b>0, 1, 2</b> — there's no rune at byte 3 or 4 because the star occupies bytes 2–4. To count characters, don't use <code>len</code>; use <code>utf8.RuneCountInString(s)</code> (here that's 3).</p>
+</section>
+
+<section class="section reveal" id="conversions">
+  <h2><span class="section-num">03</span> Conversions &amp; the toolkit</h2>
+  <p class="takeaway">Convert with <code>[]byte(s)</code> (the raw UTF-8 bytes), <code>[]rune(s)</code> (one element per character), and <code>string(...)</code> back again. <code>[]rune</code> is what you want for per-character indexing.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>You want…</th><th>Use</th></tr></thead>
+    <tbody>
+      <tr><td>Count characters (not bytes)</td><td><code>utf8.RuneCountInString(s)</code></td></tr>
+      <tr><td>Index the N-th character safely</td><td><code>[]rune(s)[n]</code></td></tr>
+      <tr><td>Search / split / replace</td><td><code>strings.Contains</code>, <code>strings.Split</code>, <code>strings.ReplaceAll</code></td></tr>
+      <tr><td>Build a string in a loop (no O(n²))</td><td><code>strings.Builder</code></td></tr>
+      <tr><td>Parse / format numbers</td><td><code>strconv.Atoi</code>, <code>strconv.Itoa</code>, <code>strconv.FormatFloat</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "strconv"
+    "strings"
+    "unicode/utf8"
+)
+
+func main() {
+    s := "héllo" // 'é' is 2 bytes (U+00E9)
+
+    fmt.Println(len(s), utf8.RuneCountInString(s)) // 6 bytes, 5 runes
+
+    rs := []rune(s) // one element per character
+    fmt.Println(string(rs[1]))                     // é — the 2nd character
+
+    fmt.Println(strings.ToUpper(s))                // HÉLLO
+
+    n, _ := strconv.Atoi("42")
+    fmt.Println(n + 1)                             // 43
+}</script>
+    <script type="text/plain" class="gp-output">6 5
+é
+HÉLLO
+43</script>
+  </div>
+</section>
+
+<section class="section reveal" id="byte-trap">
+  <h2><span class="section-num">04</span> The "len is bytes" trap</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><code>len(s)</code> is the <b>byte length, not the character count</b>, and <code>s[i]</code> is a <b>byte</b>. So reversing a string by bytes <b>corrupts</b> any multibyte character — it splits the UTF-8 sequence into invalid pieces. Reverse over <code>[]rune(s)</code> instead, so each character moves as a unit.</p></div></div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+// WRONG: reverses bytes — shreds the multibyte 'é'.
+func revBytes(s string) string {
+    b := []byte(s)
+    for i, j := 0, len(b)-1; i < j; i, j = i+1, j-1 {
+        b[i], b[j] = b[j], b[i]
+    }
+    return string(b)
+}
+
+// RIGHT: reverse runes — each character stays intact.
+func revRunes(s string) string {
+    r := []rune(s)
+    for i, j := 0, len(r)-1; i < j; i, j = i+1, j-1 {
+        r[i], r[j] = r[j], r[i]
+    }
+    return string(r)
+}
+
+func main() {
+    fmt.Printf("%q\n", revBytes("café")) // mojibake — broken bytes
+    fmt.Printf("%q\n", revRunes("café")) // "éfac" — correct
+}</script>
+    <script type="text/plain" class="gp-output">"\xa9fac\xc3"
+"éfac"</script>
+  </div>
+  <p>The <code>%q</code> on the byte-reversed result shows the <code>é</code>'s two bytes (<code>0xC3 0xA9</code>) split to opposite ends — no longer a valid character. The rune version moves <code>é</code> as one unit.</p>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">For <code>s := "héllo"</code> (the <code>é</code> is 2 UTF-8 bytes), what do <code>len(s)</code> and <code>s[1]</code> give?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>len(s)</code> is <b>6</b> (bytes), and <code>s[1]</code> is the <b>first byte of <code>é</code></b> (a <code>byte</code>, value 195) — not the character.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>len(s)</code> is 5 (characters), and <code>s[1]</code> is <code>'é'</code>.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>len(s)</code> is 5, and <code>s[1]</code> is <code>'l'</code>.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> <code>len</code> counts <em>bytes</em>: 1+2+1+1+1 = 6. And <code>s[i]</code> indexes <em>bytes</em>, so <code>s[1]</code> is the first of the two bytes encoding <code>é</code> (<code>0xC3</code> = 195), not a character. For characters, use <code>utf8.RuneCountInString</code> (→ 5) or index <code>[]rune(s)</code>.</div>
+  </div>
+</section>

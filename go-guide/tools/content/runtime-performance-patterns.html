@@ -1,0 +1,170 @@
+<section class="hero reveal">
+  <span class="eyebrow">Runtime &amp; performance · allocation control</span>
+  <h1>Performance patterns &amp; allocation control.</h1>
+  <p class="lead">Most Go slowdowns at scale aren't slow algorithms — they're <em>too many allocations</em> hammering the garbage collector. A handful of disciplined patterns (reuse buffers, preallocate, build strings the right way, keep values off the heap) cut that allocation rate dramatically. But every one of them is earned with a profile first.</p>
+</section>
+
+<section class="section reveal" id="profile-first">
+  <h2><span class="section-num">01</span> Profile first, optimize the hot path only</h2>
+  <p class="takeaway">The order is non-negotiable: <b>profile, find the hot path, then optimize just that.</b> A 200×/sec allocation in your inner loop matters; the same allocation in startup code does not.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Allocations are like printing a brand-new sheet of paper every time you need scratch space, then handing it to a cleanup crew (the GC) to shred later. The patterns here are about <em>reusing</em> the same sheet, or asking for the whole notepad up front instead of one page at a time. But you only bother on the desk you actually work at all day — not the one you visit once a month.</p></div></div>
+  <p>Each pattern below removes allocations. The win shows up as fewer <code>allocs/op</code> under <code>-benchmem</code> and less GC time in a heap profile — measured, not assumed.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">prerequisite</span></div><p>These patterns are pointless without numbers. First learn to get them: <a href="pprof-profiling.html">profiling &amp; diagnosing with pprof</a> shows how to find the hot path and prove a fix worked.</p></div></div>
+</section>
+
+<section class="section reveal" id="preallocate">
+  <h2><span class="section-num">02</span> Preallocate when you know the size</h2>
+  <p>Appending to a slice that starts at <code>nil</code> reallocates and copies the backing array as it grows. If you know (or can estimate) the final length, give <code>make</code> the capacity up front — the appends then never reallocate:</p>
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Grows &amp; reallocates</div>
+      <div class="codeblock">
+        <pre><code data-lang="go">out := []int{}            // cap 0
+for _, v := range src {   // realloc at 1,2,4,8,16…
+    out = append(out, v*v)
+}</code></pre>
+      </div>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">One allocation</div>
+      <div class="codeblock">
+        <pre><code data-lang="go">out := make([]int, 0, len(src)) // cap known
+for _, v := range src {         // no realloc
+    out = append(out, v*v)
+}</code></pre>
+      </div>
+    </div>
+  </div>
+  <p>The same applies to maps: <code>make(map[K]V, n)</code> presizes the buckets so a large map fill doesn't rehash repeatedly. The results are identical — only the allocation count differs:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "reflect"
+)
+
+func main() {
+    src := []int{1, 2, 3, 4, 5}
+
+    // Path A: start empty, let append grow (reallocates).
+    var grown []int
+    for _, v := range src {
+        grown = append(grown, v*v)
+    }
+
+    // Path B: preallocate exact capacity, then append.
+    pre := make([]int, 0, len(src))
+    for _, v := range src {
+        pre = append(pre, v*v)
+    }
+
+    // Same VALUES, different allocation behavior.
+    fmt.Println("grown:", grown)
+    fmt.Println("pre  :", pre)
+    fmt.Println("equal:", reflect.DeepEqual(grown, pre))
+}</script>
+    <script type="text/plain" class="gp-output">grown: [1 4 9 16 25]
+pre  : [1 4 9 16 25]
+equal: true</script>
+  </div>
+</section>
+
+<section class="section reveal" id="strings-builder">
+  <h2><span class="section-num">03</span> Build strings with <code>strings.Builder</code></h2>
+  <p>Strings are immutable, so <code>s += piece</code> in a loop allocates a brand-new string every iteration — O(n²) copying. <code>strings.Builder</code> writes into one growing buffer and produces the final string once:</p>
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h"><code>+=</code> in a loop</div>
+      <div class="codeblock">
+        <pre><code data-lang="go">s := ""
+for i := 0; i &lt; n; i++ {
+    s += strconv.Itoa(i) // new string each time
+}</code></pre>
+      </div>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h"><code>strings.Builder</code></div>
+      <div class="codeblock">
+        <pre><code data-lang="go">var b strings.Builder
+for i := 0; i &lt; n; i++ {
+    b.WriteString(strconv.Itoa(i))
+}
+s := b.String() // one result
+</code></pre>
+      </div>
+    </div>
+  </div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "strings"
+)
+
+func main() {
+    parts := []string{"go", "-", "1", ".", "26"}
+
+    var b strings.Builder
+    b.Grow(16) // optional: presize the buffer
+    for _, p := range parts {
+        b.WriteString(p)
+    }
+
+    out := b.String()
+    fmt.Println(out)
+    fmt.Println("len:", len(out))
+}</script>
+    <script type="text/plain" class="gp-output">go-1.26
+len: 7</script>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">presize</span></div><p>Call <code>b.Grow(n)</code> when you can estimate the final length — it allocates the buffer once instead of doubling it as you write. The same idea applies to <code>bytes.Buffer</code> for byte output.</p></div></div>
+</section>
+
+<section class="section reveal" id="pool-and-reuse">
+  <h2><span class="section-num">04</span> Reuse buffers: <code>sync.Pool</code> &amp; value vs pointer</h2>
+  <p><code>sync.Pool</code> keeps a free-list of reusable objects so a hot path can borrow a buffer instead of allocating one each call — ideal for per-request scratch buffers:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">pool.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="go">var bufPool = sync.Pool{
+    New: func() any { return new(bytes.Buffer) },
+}
+
+func handle(w io.Writer, data []byte) {
+    buf := bufPool.Get().(*bytes.Buffer)
+    buf.Reset()              // always reset a reused buffer
+    defer bufPool.Put(buf)   // return it for the next caller
+
+    buf.Write(data)
+    buf.WriteTo(w)
+}</code></pre>
+  </div>
+  <p>Two more allocation levers:</p>
+  <dl class="kv">
+    <dt>Avoid interface boxing on hot paths</dt><dd>Putting a value into <code>any</code> (e.g. via <code>fmt.Sprintf</code>) often heap-allocates to box it. In a tight loop, use a concrete type or <code>strconv</code> instead of <code>fmt</code>.</dd>
+    <dt>Value vs pointer</dt><dd>Passing a small struct <em>by value</em> stays on the stack; taking its address can force it to the heap. "Pointer is cheaper" is frequently false — let escape analysis decide.</dd>
+    <dt>Reuse byte buffers</dt><dd>For repeated I/O, keep one <code>[]byte</code> and <code>buf = buf[:0]</code> to clear it without freeing the backing array.</dd>
+  </dl>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">sibling lesson</span></div><p>Whether a value stays on the stack or escapes to the heap is the whole game here — <a href="memory-model-stack-heap.html">stack, heap &amp; escape analysis</a> shows how the compiler decides and how to read <code>-gcflags=-m</code>.</p></div></div>
+</section>
+
+<section class="section reveal" id="premature">
+  <h2><span class="section-num">05</span> The trap: premature optimization</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Two real traps. (1) <b><code>sync.Pool</code> objects can be garbage-collected</b> at any GC — <code>Get</code> may return a fresh object, so never assume pooled state persists, and always <code>Reset</code> before use. (2) <b>Micro-optimizing cold code</b> that hurts readability for no measured gain is a net loss — you've added complexity and traded nothing. If a benchmark doesn't show the win, revert it. Clear code first; optimize the hot path the profile pointed at, and only that.</p></div></div>
+  <p>The discipline, repeated: clear code → profile → optimize the proven hot path → re-measure. Anything you "optimize" without a before/after number is a guess wearing a costume.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">design judgment</span></div><p>"Is this optimization worth the complexity?" is a design-judgment question, not just a Go one. Ousterhout's take in <a href="../../aposd-guide/judgment/performance-and-what-matters.html">performance &amp; what matters</a> is the same lesson at the design level: measure, then spend complexity only where it buys real performance.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You replace <code>s += piece</code> in a hot loop with a <code>strings.Builder</code>. A teammate asks why it's faster even though both produce the same string. What's the real reason?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Strings are immutable, so <code>+=</code> allocates a new string every iteration (O(n²) copying); the Builder writes into one reused, growing buffer and materializes the string once.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>strings.Builder</code> runs the loop on a separate goroutine in parallel.</button>
+      <button class="quiz-opt"><span class="mark"></span>The Builder compresses the string so it uses less memory.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Because Go strings are immutable, each <code>+=</code> must allocate and copy the whole accumulated string so far — quadratic work and a fresh allocation every time. <code>strings.Builder</code> amortizes growth into one buffer (presizable with <code>Grow</code>) and only allocates the final string at <code>String()</code>. Same output, far fewer allocations — which is exactly what a heap profile would confirm.</div>
+  </div>
+</section>

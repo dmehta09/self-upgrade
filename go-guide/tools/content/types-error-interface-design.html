@@ -1,0 +1,168 @@
+<section class="hero reveal">
+  <span class="eyebrow">Types &amp; interfaces · in practice</span>
+  <h1>Interfaces in practice: errors, Stringer, sort.</h1>
+  <p class="lead">The standard library is held together by a few tiny interfaces you implement constantly: <code>error</code>, <code>fmt.Stringer</code>, and the sort hooks. Learn these three and you'll recognise the pattern everywhere — plus the receiver gotcha that quietly skips your method.</p>
+</section>
+
+<section class="section reveal" id="error-is-interface">
+  <h2><span class="section-num">01</span> <code>error</code> is just an interface</h2>
+  <p class="takeaway"><code>error</code> is a one-method interface: <code>interface { Error() string }</code>. Any type with an <code>Error()</code> method <b>is</b> an error — so you can build rich, typed errors that carry fields.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>There's nothing magic about <code>error</code> — it's not a built-in exception type, it's an ordinary interface anyone can implement. It's like a "must answer the question <em>what went wrong?</em>" contract. Sign the contract (write <code>Error() string</code>) and your struct counts as an error, fields and all.</p></div></div>
+  <p>A custom error type lets callers recover structured detail with <code>errors.As</code>. Note the <em>method</em>, not a magic keyword, is what makes it an error:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "errors"
+    "fmt"
+)
+
+type ParseError struct {
+    line int
+    msg  string
+}
+
+func (e *ParseError) Error() string {
+    return fmt.Sprintf("line %d: %s", e.line, e.msg)
+}
+
+func parse(ok bool) error {
+    if !ok {
+        return &ParseError{line: 7, msg: "unexpected token"}
+    }
+    return nil
+}
+
+func main() {
+    err := parse(false)
+    fmt.Println(err)               // uses Error()
+
+    var pe *ParseError
+    if errors.As(err, &pe) {       // recover the concrete type
+        fmt.Println("error was on line", pe.line)
+    }
+}</script>
+    <script type="text/plain" class="gp-output">line 7: unexpected token
+error was on line 7</script>
+  </div>
+</section>
+
+<section class="section reveal" id="stringer">
+  <h2><span class="section-num">02</span> <code>fmt.Stringer</code> — friendly printing</h2>
+  <p class="takeaway">Implement <code>String() string</code> (the <code>fmt.Stringer</code> interface) and <code>fmt</code> uses it whenever it prints your type with <code>%v</code>, <code>%s</code>, or <code>Println</code> — your own to-string hook.</p>
+  <p>Same one-method pattern as <code>error</code>. Give a type a <code>String()</code> and it controls its own display:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+type Color struct {
+    name string
+    hex  string
+}
+
+func (c Color) String() string { return fmt.Sprintf("%s(%s)", c.name, c.hex) }
+
+func main() {
+    c := Color{name: "teal", hex: "#0d9488"}
+    fmt.Println(c)              // Stringer kicks in
+    fmt.Printf("favourite: %v\n", c)
+}</script>
+    <script type="text/plain" class="gp-output">teal(#0d9488)
+favourite: teal(#0d9488)</script>
+  </div>
+</section>
+
+<section class="section reveal" id="receiver-gotcha">
+  <h2><span class="section-num">03</span> The receiver gotcha that skips your method</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>If you implement <code>String()</code> (or <code>Error()</code>) on a <b>pointer receiver</b> <code>*T</code> but then print a <b>value</b> <code>T</code>, the method <b>isn't in the value's method set</b> — so <code>fmt</code> doesn't call it and you get the default <code>{field …}</code> dump. Either implement it on the <em>value</em> receiver, or always pass a pointer (<code>&amp;t</code>).</p></div></div>
+  <p>Watch it: the value prints the raw struct, the pointer prints via <code>String()</code>:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+type Temp struct{ c int }
+
+// String has a POINTER receiver
+func (t *Temp) String() string { return fmt.Sprintf("%d°C", t.c) }
+
+func main() {
+    t := Temp{c: 20}
+    fmt.Println(t)   // {20}  — *Temp's String is NOT in Temp's method set
+    fmt.Println(&t)  // 20°C — *Temp's method set includes String
+}</script>
+    <script type="text/plain" class="gp-output">{20}
+20°C</script>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">method sets</span></div><p>This is the method-set rule from <a href="methods.html">Methods &amp; receivers</a> biting in practice: <code>*T</code>'s method set is a superset of <code>T</code>'s. For <code>Stringer</code>, prefer a <em>value</em> receiver unless the method must mutate.</p></div></div>
+</section>
+
+<section class="section reveal" id="sorting">
+  <h2><span class="section-num">04</span> Sorting: <code>sort.Interface</code> vs <code>slices.SortFunc</code></h2>
+  <p class="takeaway">Classic sorting implements three methods (<code>Len</code>/<code>Less</code>/<code>Swap</code>) — the <code>sort.Interface</code>. Modern Go (1.21+) usually skips that ceremony with <b><code>slices.SortFunc</code></b> and a comparison function returning <code>-1/0/+1</code>.</p>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Classic — three methods</div>
+      <div class="codeblock"><pre><code data-lang="go">type byName []Color
+func (s byName) Len() int           { return len(s) }
+func (s byName) Less(i, j int) bool { return s[i].name &lt; s[j].name }
+func (s byName) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+// sort.Sort(byName(colors))</code></pre></div>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Modern — one closure (Go 1.21+)</div>
+      <div class="codeblock"><pre><code data-lang="go">slices.SortFunc(colors, func(a, b Color) int {
+    return cmp.Compare(a.name, b.name) // -1, 0, or +1
+})</code></pre></div>
+    </div>
+  </div>
+  <p>Run the modern form — <code>cmp.Compare</code> (Go 1.21) does the <code>-1/0/+1</code> dance for any ordered type, so the comparison stays a one-liner:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "cmp"
+    "fmt"
+    "slices"
+)
+
+type Color struct {
+    name string
+    hex  string
+}
+
+func (c Color) String() string { return c.name }
+
+func main() {
+    colors := []Color{{"teal", "#0d9488"}, {"amber", "#f59e0b"}, {"rose", "#f43f5e"}}
+    slices.SortFunc(colors, func(a, b Color) int {
+        return cmp.Compare(a.name, b.name)
+    })
+    fmt.Println(colors)
+}</script>
+    <script type="text/plain" class="gp-output">[amber rose teal]</script>
+  </div>
+</section>
+
+<section class="section reveal" id="tiny-at-consumer">
+  <h2><span class="section-num">05</span> Design tiny interfaces at the consumer</h2>
+  <p class="takeaway">Don't pre-declare a sprawling interface beside your implementation. Define the <b>smallest interface the caller needs</b>, in the <b>caller's package</b> — that keeps abstractions sharp and tests trivial.</p>
+  <dl class="kv">
+    <dt>One method beats five</dt><dd>Easier to satisfy, easier to fake in tests, fewer reasons to change.</dd>
+    <dt>Owned by the consumer</dt><dd>The package that <em>uses</em> the behaviour declares the interface; the provider just exports a concrete type that happens to fit.</dd>
+    <dt>Name by behaviour</dt><dd><code>Reader</code>, <code>Notifier</code>, <code>Stringer</code> — the <code>-er</code> convention names the single capability.</dd>
+  </dl>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">design</span></div><p>Small interfaces at the consumer are the Go expression of deep modules and information hiding from the <a href="../../aposd-guide/modules/deep-modules.html">APOSD guide</a> — a narrow contract over a capable implementation.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You give <code>Temp</code> a <code>func (t *Temp) String() string</code>, then call <code>fmt.Println(myTemp)</code> with a <code>Temp</code> value (not a pointer). What prints?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The default struct dump like <code>{20}</code> — <code>String()</code> isn't in the value's method set, so <code>fmt</code> doesn't call it.</button>
+      <button class="quiz-opt"><span class="mark"></span>Your formatted string — <code>fmt</code> always finds <code>String()</code>.</button>
+      <button class="quiz-opt"><span class="mark"></span>A compile error about the wrong receiver.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> A pointer-receiver <code>String()</code> belongs to <code>*Temp</code>'s method set, not <code>Temp</code>'s. Printing a value falls back to the default format. Fix it by using a value receiver, or by printing <code>&amp;myTemp</code>.</div>
+  </div>
+</section>

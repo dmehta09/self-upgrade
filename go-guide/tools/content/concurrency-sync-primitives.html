@@ -1,0 +1,122 @@
+<section class="hero reveal">
+  <span class="eyebrow">Concurrency · the sync package</span>
+  <h1>sync: Mutex, RWMutex, WaitGroup, Once, Cond.</h1>
+  <p class="lead">Channels move data; the <code>sync</code> package <em>guards</em> data that several goroutines share in place. The star is the <code>Mutex</code> — and the fastest way to understand why you need one is to watch a data race lose an update, then watch a lock put it back.</p>
+</section>
+
+<section class="section reveal" id="why">
+  <h2><span class="section-num">01</span> Why a lock at all?</h2>
+  <p class="takeaway"><code>count++</code> looks atomic but isn't — it's <b>read, add, write</b>. If two goroutines interleave those steps on the same variable, one update is silently lost. A <code>sync.Mutex</code> makes the whole read-modify-write <b>mutually exclusive</b>.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A shared variable is a single-stall bathroom. Without a lock, two people walk in at once and chaos follows. A <code>Mutex</code> is the door bolt: whoever turns it gets the room to themselves; everyone else waits in line. The bolt doesn't make things faster — it makes the result <em>correct</em>.</p></div></div>
+</section>
+
+<section class="section reveal" id="race">
+  <h2><span class="section-num">02</span> The data race, made visible</h2>
+  <p>Two goroutines each run <code>count++</code> on a shared <code>count</code>. Step through their registers — both read the same old value, both write back, and one increment vanishes:</p>
+  <figure class="conviz reveal" data-conviz aria-label="A data race: two goroutines both read 0, both write 1, losing an increment">
+    <script type="application/json" class="cv-config">
+    { "frames": [
+      { "caption": "Both goroutines want to do <code>count++</code>. Each starts by <b>reading</b> count (currently 0) into its own register.",
+        "shared": { "name":"count", "val":0 },
+        "goroutines": [ { "id":"g1", "label":"G1", "reg":0, "op":"read count → 0", "state":"running" },
+                        { "id":"g2", "label":"G2", "reg":0, "op":"read count → 0", "state":"running" } ] },
+      { "caption": "Each adds 1 <b>in its own register</b>. Neither has written back yet — and neither knows the other exists.",
+        "shared": { "name":"count", "val":0 },
+        "goroutines": [ { "id":"g1", "label":"G1", "reg":1, "op":"reg = 0 + 1", "state":"running" },
+                        { "id":"g2", "label":"G2", "reg":1, "op":"reg = 0 + 1", "state":"running" } ] },
+      { "caption": "<b>G1</b> writes its 1 back to <code>count</code>.",
+        "shared": { "name":"count", "val":1 },
+        "goroutines": [ { "id":"g1", "label":"G1", "reg":1, "op":"write 1", "state":"done" },
+                        { "id":"g2", "label":"G2", "reg":1, "op":"still holding 1", "state":"running" } ] },
+      { "caption": "<b>G2</b> writes its 1 — right over the top of G1's. Two increments ran, but <code>count</code> is <b>1</b>. One update was <b>lost</b>.",
+        "shared": { "name":"count", "val":1 },
+        "goroutines": [ { "id":"g1", "label":"G1", "reg":1, "op":"done", "state":"done" },
+                        { "id":"g2", "label":"G2", "reg":1, "op":"write 1", "state":"done" } ],
+        "verdict": { "got":1, "want":2, "ok":false } }
+    ] }
+    </script>
+  </figure>
+</section>
+
+<section class="section reveal" id="mutex">
+  <h2><span class="section-num">03</span> The same code, with a Mutex</h2>
+  <p>Now each goroutine must <code>mu.Lock()</code> before touching <code>count</code>. The lock <b>serializes</b> them — G2 can't even read until G1 has finished writing and unlocked:</p>
+  <figure class="conviz reveal" data-conviz aria-label="A Mutex serializing two goroutines so no update is lost">
+    <script type="application/json" class="cv-config">
+    { "frames": [
+      { "caption": "G1 calls <code>mu.Lock()</code> and reads 0. G2 reaches its <code>Lock()</code>, finds the mutex held, and <b>blocks</b> — it doesn't even get to read.",
+        "shared": { "name":"count", "val":0 },
+        "lock": { "name":"mu", "owner":"G1" },
+        "goroutines": [ { "id":"g1", "label":"G1", "reg":0, "op":"Lock → read 0", "state":"running" },
+                        { "id":"g2", "label":"G2", "reg":null, "op":"Lock … blocked", "state":"blocked" } ] },
+      { "caption": "G1 increments and writes <b>1</b>, still holding the lock. G2 is still parked, waiting its turn.",
+        "shared": { "name":"count", "val":1 },
+        "lock": { "name":"mu", "owner":"G1" },
+        "goroutines": [ { "id":"g1", "label":"G1", "reg":1, "op":"write 1", "state":"running" },
+                        { "id":"g2", "label":"G2", "reg":null, "op":"Lock … blocked", "state":"blocked" } ] },
+      { "caption": "G1 calls <code>Unlock()</code>. Now G2 acquires the lock and reads the <b>current</b> value — <b>1</b>, not the stale 0.",
+        "shared": { "name":"count", "val":1 },
+        "lock": { "name":"mu", "owner":"G2" },
+        "goroutines": [ { "id":"g1", "label":"G1", "reg":1, "op":"Unlock; done", "state":"done" },
+                        { "id":"g2", "label":"G2", "reg":1, "op":"Lock → read 1", "state":"running" } ] },
+      { "caption": "G2 writes <b>2</b> and unlocks. The lock serialized the read-modify-writes — no update lost. <code>count</code> is correct.",
+        "shared": { "name":"count", "val":2 },
+        "lock": { "name":"mu", "owner":null },
+        "goroutines": [ { "id":"g1", "label":"G1", "reg":1, "op":"done", "state":"done" },
+                        { "id":"g2", "label":"G2", "reg":2, "op":"write 2; Unlock", "state":"done" } ],
+        "verdict": { "got":2, "want":2, "ok":true } }
+    ] }
+    </script>
+  </figure>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "sync"
+)
+
+func main() {
+    var mu sync.Mutex
+    count := 0
+    var wg sync.WaitGroup
+    for i := 0; i < 1000; i++ {
+        wg.Add(1)        // Add BEFORE the goroutine
+        go func() {
+            defer wg.Done()
+            mu.Lock()
+            count++       // the whole read-modify-write is protected
+            mu.Unlock()
+        }()
+    }
+    wg.Wait()
+    fmt.Println("count:", count)
+}</script>
+    <script type="text/plain" class="gp-output">count: 1000</script>
+  </div>
+  <p>The idiomatic pair is <code>mu.Lock()</code> then <code>defer mu.Unlock()</code> so the lock is released on every return path. Keep the critical section <b>small</b> — lock, touch the shared state, unlock; don't do I/O while holding it.</p>
+</section>
+
+<section class="section reveal" id="rest">
+  <h2><span class="section-num">04</span> The rest of the toolbox</h2>
+  <dl class="kv">
+    <dt><code>sync.RWMutex</code></dt><dd>Many concurrent <b>readers</b> (<code>RLock</code>) <em>or</em> one <b>writer</b> (<code>Lock</code>). Use it only when reads vastly dominate writes — otherwise a plain <code>Mutex</code> is simpler and often faster.</dd>
+    <dt><code>sync.WaitGroup</code></dt><dd>Wait for N goroutines to finish: <code>Add(n)</code>, each <code>Done()</code>, then <code>Wait()</code>. Go 1.25 added <code>wg.Go(func(){…})</code> which does the <code>Add</code>/<code>Done</code> for you.</dd>
+    <dt><code>sync.Once</code></dt><dd><code>once.Do(f)</code> runs <code>f</code> <b>exactly once</b>, even under concurrent first calls — the clean way to do lazy, thread-safe init.</dd>
+    <dt><code>sync.Cond</code></dt><dd>A condition variable for "wait until some predicate becomes true" — rarely needed; a channel is usually clearer.</dd>
+  </dl>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">never copy a sync value</span></div><p>A <code>Mutex</code> or <code>WaitGroup</code> must never be <b>copied</b> after first use — a copy is a <em>different</em> lock that guards nothing. So store them as fields and use <b>pointer receivers</b> (<code>func (s *Set) Add()</code>), and pass the struct by pointer. <code>go vet</code> catches most copies; heed it.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A struct holds a <code>sync.Mutex</code> field, and its method is declared <code>func (s Store) Add(...)</code> (value receiver). Why is the lock useless?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Each call copies the whole struct — including the Mutex — so every call locks a different, private lock.</button>
+      <button class="quiz-opt"><span class="mark"></span>Value receivers can't call methods like <code>Lock()</code>.</button>
+      <button class="quiz-opt"><span class="mark"></span>The Mutex needs to be a package-level global to work.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> A value receiver operates on a copy, and copying a <code>Mutex</code> yields an independent lock. Two goroutines calling <code>Add</code> lock <em>different</em> copies and freely race the shared map underneath. Use a pointer receiver and share the struct by pointer so everyone contends on the same lock.</div>
+  </div>
+</section>

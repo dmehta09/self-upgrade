@@ -1,0 +1,173 @@
+<section class="hero reveal">
+  <span class="eyebrow">Concurrency · debugging the failures</span>
+  <h1>Goroutine leaks, deadlocks &amp; the race detector.</h1>
+  <p class="lead">Concurrency that <em>works</em> is half the job; the capstone skill is debugging concurrency that <em>breaks</em>. Three failure families cause nearly every Go concurrency bug — a goroutine that can never exit (leak), every goroutine stuck waiting (deadlock), and unsynchronised access to shared memory (data race). Learn to spot each one and the tools that catch them.</p>
+</section>
+
+<section class="section reveal" id="leaks">
+  <h2><span class="section-num">01</span> Goroutine leaks: started, never finished</h2>
+  <p class="takeaway">A goroutine blocked <b>forever</b> — on a channel nobody will send to, or a receiver that already left — is never collected. It pins its stack and everything it captured, so leaks show up as <b>slow memory and goroutine-count growth</b>, not a crash.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>You send a waiter to fetch a dish from a kitchen that's already closed. They stand at the hatch forever, waiting for a plate that will never come. They don't error, they don't go home — they just occupy a spot. Start a thousand such waiters and the restaurant fills with people frozen mid-wait. That's a goroutine leak: not a crash, just quiet accumulation.</p></div></div>
+  <p>The GC can't help: a blocked goroutine is, by definition, still <em>reachable</em> work. The classic shape is launching a producer onto an unbuffered channel, then returning early (timeout, error, first-result-wins) so <b>nobody ever receives</b>:</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">leak.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="go">func leaky() int {
+    ch := make(chan int)          // unbuffered
+    go func() { ch &lt;- expensive() }()  // send blocks until someone receives
+    return 0                      // we return WITHOUT receiving — the goroutine is stuck on the send forever
+}</code></pre>
+  </div>
+  <p>The fix is a rule, not a trick: <b>every goroutine must have a guaranteed way to exit</b>. Give it a <code>done</code> / <code>ctx.Done()</code> channel to abandon the send, a <em>buffered</em> channel so the send never blocks, or an input that is eventually <b>closed</b>. Spot leaks at runtime with <code>runtime.NumGoroutine()</code> trending upward, or capture a goroutine profile (<code>pprof</code>) and read which line N goroutines are all parked on.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">note</span></div><p>The goroutine profile that pinpoints a leak — "N goroutines blocked at <code>chan send</code>, file:line" — is covered in <a href="../runtime/pprof-profiling.html">Profiling with pprof</a>.</p></div></div>
+</section>
+
+<section class="section reveal" id="leak-fix">
+  <h2><span class="section-num">02</span> Leak vs. fix, side by side</h2>
+  <p>Same producer goroutine; the only difference is whether it has an escape hatch. The leaky version blocks on a send nobody receives; the fixed version selects on <code>ctx.Done()</code> and exits cleanly when the caller gives up:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+// worker tries to deliver a result, but ALSO watches ctx.Done()
+// so it can never block forever if the caller walks away.
+func worker(ctx context.Context, out chan<- int) {
+	result := 42 // pretend this took a while to compute
+	select {
+	case out <- result:
+		fmt.Println("worker: delivered result")
+	case <-ctx.Done():
+		fmt.Println("worker exited cleanly:", ctx.Err())
+	}
+}
+
+func main() {
+	// Caller only waits 10ms, then cancels — it never receives.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	out := make(chan int) // unbuffered: a naive send here would block forever
+	go worker(ctx, out)
+
+	<-ctx.Done()                  // caller gives up
+	time.Sleep(20 * time.Millisecond) // let the worker observe cancellation
+	fmt.Println("main: done, no goroutine left blocked")
+}</script>
+    <script type="text/plain" class="gp-output">worker exited cleanly: context deadline exceeded
+main: done, no goroutine left blocked</script>
+  </div>
+  <p>Because the send and the cancel sit in the <b>same <code>select</code></b>, whichever happens first wins and the goroutine always returns. Drop the <code>case &lt;-ctx.Done()</code> and that goroutine leaks the instant the caller stops receiving.</p>
+</section>
+
+<section class="section reveal" id="deadlock">
+  <h2><span class="section-num">03</span> Deadlocks: everyone waiting on everyone</h2>
+  <p class="takeaway">A <b>deadlock</b> is when every goroutine is blocked, each waiting on a condition only another blocked goroutine could satisfy. If <em>all</em> goroutines are asleep, the runtime aborts with <code>fatal error: all goroutines are asleep - deadlock!</code></p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Two people meet in a narrow doorway, each holding a gift the other wants. "I'll hand you mine once you hand me yours." "No, you first." Neither moves. They'll stand there until the building closes — each one's progress depends on the other already having moved. That's a lock-ordering deadlock: a cycle of waits with no one able to take the first step.</p></div></div>
+  <p>The three classic causes — and their one-line fixes:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Cause</th><th>What happens</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td>Unbuffered send, no receiver</td><td><code>ch &lt;- v</code> blocks because nothing is reading; if it's the only goroutine, the runtime calls it.</td><td>Buffer the channel, or guarantee a receiver runs concurrently.</td></tr>
+        <tr><td>Lock-ordering (the deadly embrace)</td><td>G1 locks A then wants B; G2 locks B then wants A. Each holds what the other needs.</td><td>Always acquire multiple locks in a <b>single global order</b>.</td></tr>
+        <tr><td>WaitGroup never reaches zero</td><td><code>wg.Wait()</code> blocks forever because a <code>Done()</code> was missed (early return, panic, wrong <code>Add</code> count).</td><td><code>defer wg.Done()</code> at the top of every worker; or use <code>wg.Go()</code> (Go 1.25).</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Watch a lock-ordering deadlock form. Two goroutines each grab one mutex, then reach for the other's — and both freeze with no way out:</p>
+  <figure class="conviz reveal" data-conviz aria-label="A lock-ordering deadlock: G1 holds muA and wants muB while G2 holds muB and wants muA, so both block forever">
+    <script type="application/json" class="cv-config">
+    { "frames": [
+      { "caption": "Two locks, <code>muA</code> and <code>muB</code>. <b>G1</b> grabs <code>muA</code>; <b>G2</b> grabs <code>muB</code>. Both are still running — no conflict yet.",
+        "shared": { "name":"locks held", "val":"G1→muA, G2→muB" },
+        "lock": { "name":"muA", "owner":"G1" },
+        "goroutines": [ { "id":"g1", "label":"G1", "reg":null, "op":"locked muA, working", "state":"running" },
+                        { "id":"g2", "label":"G2", "reg":null, "op":"locked muB, working", "state":"running" } ] },
+      { "caption": "Now <b>G1</b> reaches for <code>muB</code> — but <b>G2</b> holds it. G1 <b>blocks</b>, still clutching <code>muA</code>.",
+        "shared": { "name":"locks held", "val":"G1→muA, G2→muB" },
+        "lock": { "name":"muB", "owner":"G2" },
+        "goroutines": [ { "id":"g1", "label":"G1", "reg":null, "op":"holds muA, wants muB", "state":"blocked" },
+                        { "id":"g2", "label":"G2", "reg":null, "op":"locked muB, working", "state":"running" } ] },
+      { "caption": "<b>G2</b> reaches for <code>muA</code> — but <b>G1</b> holds it. Now G2 <b>blocks</b> too. Each holds the lock the other is waiting for.",
+        "shared": { "name":"locks held", "val":"G1→muA, G2→muB" },
+        "lock": { "name":"muA", "owner":"G1" },
+        "goroutines": [ { "id":"g1", "label":"G1", "reg":null, "op":"holds muA, wants muB", "state":"blocked" },
+                        { "id":"g2", "label":"G2", "reg":null, "op":"holds muB, wants muA", "state":"blocked" } ] },
+      { "caption": "Neither can proceed; neither will ever release. The wait cycle is closed — this is a <b>deadlock</b>. The fix: make <em>both</em> goroutines lock <code>muA</code> <b>before</b> <code>muB</code>.",
+        "shared": { "name":"locks held", "val":"frozen — cyclic wait" },
+        "lock": { "name":"muA", "owner":"G1" },
+        "goroutines": [ { "id":"g1", "label":"G1", "reg":null, "op":"holds muA, wants muB", "state":"blocked" },
+                        { "id":"g2", "label":"G2", "reg":null, "op":"holds muB, wants muA", "state":"blocked" } ],
+        "verdict": { "got":"deadlock", "want":"both finish", "ok":false } }
+    ] }
+    </script>
+  </figure>
+  <p>Notice the runtime only printed <code>fatal error</code> in our table's first case because <b>every</b> goroutine was asleep. The lock-ordering case above can leave a <em>partial</em> deadlock — those two goroutines hang while the rest of the program keeps running — which the runtime will <b>not</b> detect. It just quietly stalls.</p>
+</section>
+
+<section class="section reveal" id="races">
+  <h2><span class="section-num">04</span> Data races &amp; the race detector</h2>
+  <p class="takeaway">A <b>data race</b> is two goroutines touching the same memory <em>concurrently</em> with at least one write and no synchronisation. The behaviour is undefined. Go's answer is <code>-race</code>: <code>go test -race</code> / <code>go run -race</code> <b>instruments every memory access</b> and prints the conflicting goroutines with their stacks.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>The race detector is a security camera wired to every shared variable. It can't predict trouble, but the moment two goroutines reach for the same memory without taking turns, it freezes the frame and shows you both hands — "this write at line 12, that read at line 19, and no lock between them." It only catches what actually happened on camera, so you have to make the bad scene play out.</p></div></div>
+  <p>Real <code>-race</code> can't run in a browser, so the gopad below shows the <b>report it would print</b>. The shape is always the same: a <code>WARNING: DATA RACE</code>, the conflicting <em>write</em> and <em>read</em>, each with a goroutine id and stack, then where each goroutine was created:</p>
+  <div class="gopad" data-gopad data-file="race-report.txt">
+    <script type="text/plain" class="gp-code">// Program under test (counter.go):
+//
+//   var count int
+//   func main() {
+//       var wg sync.WaitGroup
+//       for i := 0; i < 2; i++ {
+//           wg.Add(1)
+//           go func() { defer wg.Done(); count++ }() // unsynchronised write
+//       }
+//       wg.Wait()
+//       fmt.Println(count)
+//   }
+//
+// Run it under the race detector:
+//
+//   $ go run -race counter.go
+//
+// The detector prints (deterministic shape; ids/addrs vary per run):</script>
+    <script type="text/plain" class="gp-output">==================
+WARNING: DATA RACE
+Write at 0x00c000012345 by goroutine 8:
+  main.main.func1()
+      /app/counter.go:9 +0x44
+
+Previous read at 0x00c000012345 by goroutine 7:
+  main.main.func1()
+      /app/counter.go:9 +0x3a
+
+Goroutine 8 (running) created at:
+  main.main()
+      /app/counter.go:8 +0x9c
+
+Goroutine 7 (finished) created at:
+  main.main()
+      /app/counter.go:8 +0x9c
+==================
+Found 1 data race(s)
+exit status 66</script>
+  </div>
+  <p>Read it top-down: a <b>write</b> by goroutine 8 conflicts with a <b>previous read</b> by goroutine 7 at the same address and the same line (<code>count++</code>), with nothing synchronising them. The fix is <b>always real synchronisation</b> — a <code>sync.Mutex</code>, an <code>atomic.Int64</code>, or a channel that hands ownership across. Never paper over a race with <code>time.Sleep</code>: it changes the timing, hides the report, and leaves the bug.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Three traps in one. (1) <b><code>-race</code> is for tests, not production</b> — it adds large CPU and memory overhead (roughly 5–10× / 5–10×); never ship a <code>-race</code> binary. (2) <b>A green <code>-race</code> run does not prove the code is race-free</b> — the detector only sees races that <em>actually execute</em>, so a rare interleaving stays hidden until it doesn't. Run it in CI under realistic load and concurrency. (3) <b>Deadlock detection only fires when ALL goroutines block</b>; a partial deadlock (two stuck, the rest fine) just hangs with no <code>fatal error</code>.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Your service's memory and <code>runtime.NumGoroutine()</code> climb steadily under load, but there's no crash, no <code>fatal error</code>, and <code>go test -race</code> passes clean. What's the most likely culprit?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A goroutine leak — workers are blocking forever on a channel/send with no receiver and no <code>ctx.Done()</code> escape, so they accumulate and never get collected.</button>
+      <button class="quiz-opt"><span class="mark"></span>A deadlock — the runtime just hasn't printed it yet.</button>
+      <button class="quiz-opt"><span class="mark"></span>A data race that the detector missed and will eventually crash the process.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Growing goroutine count plus growing memory with <b>no</b> crash is the signature of a <b>leak</b>, not a deadlock or a race. A full deadlock would abort with <code>fatal error: all goroutines are asleep</code> immediately; a data race is a correctness bug that <code>-race</code> reports rather than a steady resource climb. The detector passing is expected — leaks aren't races. Capture a goroutine profile with <code>pprof</code>, find the line N goroutines are all parked on, and give that goroutine an exit path (a <code>done</code>/<code>ctx.Done()</code> channel, a buffered or closed channel, or a timeout).</div>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">note</span></div><p>These single-process failures have distributed cousins — partial failures, clock skew, and "is it slow or dead?" When you scale out, see <a href="../../ddia-guide/distributed/distributed-trouble.html">DDIA · The trouble with distributed systems</a>.</p></div></div>
+</section>

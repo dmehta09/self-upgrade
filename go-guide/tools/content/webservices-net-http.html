@@ -1,0 +1,147 @@
+<section class="hero reveal">
+  <span class="eyebrow">Web services · net/http</span>
+  <h1>net/http: servers, handlers &amp; the 1.22 router.</h1>
+  <p class="lead">Go ships a production-grade HTTP server in the standard library — no framework required. Since Go 1.22 the built-in <code>ServeMux</code> understands <b>methods, path variables and wildcards</b>, so the routing you used to import a third-party package for now lives in <code>net/http</code> itself.</p>
+</section>
+
+<section class="section reveal" id="handler">
+  <h2><span class="section-num">01</span> Everything is an <code>http.Handler</code></h2>
+  <p class="takeaway">The whole server is built on one tiny interface: <code>Handler</code> has a single method, <code>ServeHTTP(w ResponseWriter, r *Request)</code>. A plain function becomes one via <code>http.HandlerFunc</code>.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A handler is a clerk at a service window. The request <code>r</code> is the customer's filled-in form (URL, headers, body); the <code>ResponseWriter</code> <code>w</code> is the blank reply slip the clerk writes back on. The server's only job is to match each customer to the right window and hand the clerk both papers.</p></div></div>
+  <p><code>http.HandlerFunc</code> is an adapter: it's a function type whose own <code>ServeHTTP</code> just calls itself. That's the trick that lets <code>func(w, r)</code> satisfy the <code>Handler</code> interface with zero ceremony.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">handler.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">// The interface — one method.
+type Handler interface {
+    ServeHTTP(w http.ResponseWriter, r *http.Request)
+}
+
+// HandlerFunc adapts an ordinary function to that interface.
+func hello(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("hello"))
+}
+var h http.Handler = http.HandlerFunc(hello) // a func is now a Handler</code></pre></div>
+</section>
+
+<section class="section reveal" id="mux-router">
+  <h2><span class="section-num">02</span> The 1.22 router: method + path patterns</h2>
+  <p class="takeaway">Since <b>Go 1.22</b>, <code>http.ServeMux</code> patterns can include an <b>HTTP method</b> and <b>path variables</b>: <code>"GET /users/{id}"</code>. Pull a variable out with <code>r.PathValue("id")</code>.</p>
+  <p>Before 1.22 the mux only matched path prefixes — you wrote your own method check and parsed IDs by hand, or reached for <code>chi</code>/<code>gorilla</code>. Now the standard mux does it. A pattern is <code>[METHOD ]/path</code>; omit the method to match any method.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">routes.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">mux := http.NewServeMux()
+mux.HandleFunc("GET /users/{id}", getUser)     // {id} is a path variable
+mux.HandleFunc("POST /users", createUser)      // method is matched too
+mux.HandleFunc("GET /files/{path...}", serve)  // {path...} = trailing wildcard
+mux.HandleFunc("GET /users/{id}/", subtree)    // trailing slash = subtree match
+
+func getUser(w http.ResponseWriter, r *http.Request) {
+    id := r.PathValue("id")                    // "42" for GET /users/42
+    fmt.Fprintf(w, "user %s", id)
+}
+
+http.ListenAndServe(":8080", mux)</code></pre></div>
+  <dl class="kv">
+    <dt><code>{id}</code></dt><dd>Matches one path segment. Read it with <code>r.PathValue("id")</code>.</dd>
+    <dt><code>{path...}</code></dt><dd>Trailing <b>wildcard</b> — matches the rest of the path, slashes and all.</dd>
+    <dt><code>GET /x</code> vs <code>/x</code></dt><dd>With a method, only that method matches (and <code>GET</code> implies <code>HEAD</code>); without one, any method matches.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="pathvalue-demo">
+  <h2><span class="section-num">03</span> Exercising a handler without a network</h2>
+  <p class="takeaway">You don't need a running server to test a handler. <code>httptest.NewRecorder()</code> is a fake <code>ResponseWriter</code> that <b>captures</b> the status, headers and body; <code>httptest.NewRequest</code> builds a request — call <code>ServeHTTP</code> directly.</p>
+  <p>To make the 1.22 path variable resolve in a test, register the handler on a real <code>ServeMux</code> and let the mux populate <code>PathValue</code>. The recorder then holds exactly what the client would have received:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+)
+
+func getUser(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	fmt.Fprintf(w, "user %s via %s", id, r.Method)
+}
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /users/{id}", getUser)
+
+	req := httptest.NewRequest("GET", "/users/42", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req) // the mux fills in PathValue("id")
+
+	fmt.Println("status:", rec.Code)
+	fmt.Println("body:  ", rec.Body.String())
+}</script>
+    <script type="text/plain" class="gp-output">status: 200
+body:   user 42 via GET</script>
+  </div>
+</section>
+
+<section class="section reveal" id="json-status">
+  <h2><span class="section-num">04</span> Writing JSON &amp; status codes</h2>
+  <p class="takeaway">There is no magic: set the <code>Content-Type</code> header, call <code>WriteHeader(code)</code> for a non-200 status, then write the body. <code>json.NewEncoder(w).Encode(v)</code> streams JSON straight to the response.</p>
+  <p>The order is strict. Headers must be set <b>before</b> <code>WriteHeader</code>, and the first <code>Write</code> implicitly sends <code>200</code> if you haven't called <code>WriteHeader</code> yet. Here's a handler captured with a recorder so the output is exact:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+)
+
+type user struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+func getUser(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json") // header FIRST
+	w.WriteHeader(http.StatusOK)                       // 200, explicitly
+	json.NewEncoder(w).Encode(user{ID: 42, Name: "Ada"})
+}
+
+func main() {
+	rec := httptest.NewRecorder()
+	getUser(rec, httptest.NewRequest("GET", "/users/42", nil))
+	fmt.Println("code:", rec.Code)
+	fmt.Println("ctype:", rec.Header().Get("Content-Type"))
+	fmt.Print(rec.Body.String())
+}</script>
+    <script type="text/plain" class="gp-output">code: 200
+ctype: application/json
+{"id":42,"name":"Ada"}</script>
+  </div>
+  <p class="muted">Note <code>Encode</code> appends a trailing newline — that's why the body ends after the brace on its own line.</p>
+</section>
+
+<section class="section reveal" id="gotchas">
+  <h2><span class="section-num">05</span> The traps: concurrency, header order &amp; precedence</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Every request runs in its own goroutine.</b> The server calls your handler concurrently for concurrent requests, so a package-level <code>var counter int</code> bumped from a handler is a <b>data race</b>. Guard shared mutable state with a <code>sync.Mutex</code> or <code>sync/atomic</code> — or keep handlers stateless. Also: you <b>must set headers before</b> <code>WriteHeader</code>/the first <code>Write</code>; once the status is sent, later <code>w.Header().Set(...)</code> calls are silently ignored.</p></div></div>
+  <p>Two more rules to keep straight:</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Topic</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td><b>1.22 precedence</b></td><td>The <b>most specific</b> pattern wins, regardless of registration order. <code>/users/{id}</code> beats <code>/users/</code>; a literal segment beats a wildcard. Two patterns that overlap but neither is more specific (e.g. <code>/a/{x}</code> vs <code>/{y}/b</code>) is a registration-time <b>panic</b>.</td></tr>
+      <tr><td><b>405 vs 404</b></td><td>If a path matches but the method doesn't, the mux returns <code>405 Method Not Allowed</code> with an <code>Allow</code> header — not a 404. That's only true once you register method-qualified patterns.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">sibling guide</span></div><p>In production this server usually sits behind an edge that does TLS termination, auth and rate limiting. See <a href="../../sysdesign-guide/blocks/api-gateway.html">API gateway</a> in the System Design guide for what that tier owns versus what your handler should.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A handler does <code>w.Write([]byte("hi"))</code> and <em>then</em> <code>w.Header().Set("Content-Type", "application/json")</code>. What does the client see for <code>Content-Type</code>?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Whatever Go sniffed (likely <code>text/plain</code>) — the late <code>Set</code> is ignored.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>application/json</code> — the header is applied before the response is flushed.</button>
+      <button class="quiz-opt"><span class="mark"></span>An empty <code>Content-Type</code>, since they conflict.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> The first <code>Write</code> sends the status line and headers (implicitly <code>200</code>), so any header you set afterward is too late and silently dropped. Because no <code>Content-Type</code> was set in time, the server sniffs the body and usually picks <code>text/plain</code>. Always set headers <b>before</b> the first <code>Write</code>/<code>WriteHeader</code>.</div>
+  </div>
+</section>

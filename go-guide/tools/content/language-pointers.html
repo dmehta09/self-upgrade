@@ -1,0 +1,148 @@
+<section class="hero reveal">
+  <span class="eyebrow">The language core · pointers</span>
+  <h1>Pointers &amp; memory semantics.</h1>
+  <p class="lead">A pointer is just the address of a value. Go keeps them simple — no pointer arithmetic, garbage-collected — and they're how you share or mutate a value instead of copying it.</p>
+</section>
+
+<section class="section reveal" id="address-deref">
+  <h2><span class="section-num">01</span> <code>&amp;</code> takes an address, <code>*</code> follows it</h2>
+  <p class="takeaway"><b><code>&amp;x</code></b> yields a <b><code>*T</code></b> — the address of <code>x</code>. <b><code>*p</code></b> <b>dereferences</b> it — the value at that address. There is <b>no pointer arithmetic</b> in Go: you can't do <code>p+1</code>.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A value is a house; a pointer is its street address written on a slip of paper. <code>&amp;</code> reads the address off the house; <code>*</code> drives to that address and looks inside. Copy the slip and both copies point at the <em>same</em> house — repaint through one, everyone sees it.</p></div></div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    x := 10
+    p := &x   // p is *int — the address of x
+    fmt.Println(*p) // 10 — dereference: read the value at p
+
+    *p = 20   // write THROUGH the pointer
+    fmt.Println(x)  // 20 — x changed via p
+
+    var q *int
+    fmt.Println(q == nil) // true — zero value of a pointer is nil
+}</script>
+    <script type="text/plain" class="gp-output">10
+20
+true</script>
+  </div>
+</section>
+
+<section class="section reveal" id="value-vs-pointer">
+  <h2><span class="section-num">02</span> Value semantics: assignment copies</h2>
+  <p class="takeaway">Assigning or passing a value <b>copies it</b>. To let a function <b>mutate the caller's value</b>, pass a <b>pointer</b> — the function copies the <em>address</em>, but both addresses name the same value.</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+// takes a COPY — caller is untouched
+func incVal(n int) { n++ }
+
+// takes the ADDRESS — writes through to the caller's value
+func incPtr(n *int) { *n++ }
+
+func main() {
+    x := 5
+    incVal(x)
+    fmt.Println(x) // 5 — the copy was bumped, not x
+
+    incPtr(&x)
+    fmt.Println(x) // 6 — mutated via pointer
+}</script>
+    <script type="text/plain" class="gp-output">5
+6</script>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">escape</span></div><p>Returning <code>&amp;local</code> from a function is safe in Go — the compiler's <em>escape analysis</em> moves the value to the heap and the GC keeps it alive. No dangling pointers like in C.</p></div></div>
+</section>
+
+<section class="section reveal" id="new-vs-make">
+  <h2><span class="section-num">03</span> <code>new</code> vs <code>make</code></h2>
+  <p class="takeaway"><b><code>new(T)</code></b> allocates a zeroed <code>T</code> and returns a <b><code>*T</code></b> — works for any type. <b><code>make</code></b> is special: it builds and <b>initializes</b> the runtime structure for a <b>slice, map, or channel</b>, and returns the <b>value</b> (not a pointer).</p>
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">new(T) → *T, zeroed</div>
+      <div class="codeblock"><pre><code data-lang="go">p := new(int)   // *int, *p == 0
+*p = 7
+
+m := new(map[string]int)
+// *m is a NIL map — writing
+// (*m)["x"]=1 would PANIC</code></pre></div>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">make → ready slice/map/chan</div>
+      <div class="codeblock"><pre><code data-lang="go">s := make([]int, 0, 4) // usable slice
+m := make(map[string]int) // writable
+ch := make(chan int)      // usable chan
+m["x"] = 1                // fine</code></pre></div>
+    </div>
+  </div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+type Counter struct{ n int }
+
+func main() {
+    p := new(Counter) // *Counter, fully zeroed
+    p.n++             // Go auto-derefs: (*p).n++
+    fmt.Println(p.n)  // 1
+
+    n := new(int)
+    fmt.Println(*n)   // 0 — new zeroes the value
+
+    m := make(map[string]int) // make: ready to write
+    m["k"] = 42
+    fmt.Println(m["k"])
+}</script>
+    <script type="text/plain" class="gp-output">1
+0
+42</script>
+  </div>
+</section>
+
+<section class="section reveal" id="when-pointer">
+  <h2><span class="section-num">04</span> When to pass <code>*T</code> — and two traps</h2>
+  <p class="takeaway">Pass a pointer when you need to <b>mutate the caller's value</b> or <b>share one instance</b> (and to avoid copying a large struct). Otherwise prefer values — they're simpler and avoid aliasing surprises.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Dereferencing a <code>nil</code> pointer panics</b> (<code>invalid memory address or nil pointer dereference</code>) — always confirm a pointer is non-nil before <code>*p</code>. And you <b>cannot take the address of a map element</b>: <code>&amp;m[k]</code> is a compile error, because a map may rehash and move its entries. To mutate a struct stored in a map, read it out, change it, and write it back — or store <code>*T</code> values in the map.</p></div></div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+type P struct{ X int }
+
+func main() {
+    // &m[k] is illegal, so you can't do m["a"].X = 9 directly.
+    // Pattern A: read, modify, write back.
+    m := map[string]P{"a": {X: 1}}
+    p := m["a"]
+    p.X = 9
+    m["a"] = p
+    fmt.Println(m["a"].X) // 9
+
+    // Pattern B: store pointers — then you CAN mutate in place.
+    mp := map[string]*P{"a": {X: 1}}
+    mp["a"].X = 9 // legal: mp["a"] is already a *P
+    fmt.Println(mp["a"].X) // 9
+}</script>
+    <script type="text/plain" class="gp-output">9
+9</script>
+  </div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You have <code>m := map[string]Point{}</code> where <code>Point</code> is a struct. Which line compiles?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>p := m["a"]; p.X = 9; m["a"] = p</code> — read it out, modify, write back.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>m["a"].X = 9</code> — assign the field directly.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>(&amp;m["a"]).X = 9</code> — take the element's address first.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Map elements are <em>not addressable</em> (a map may move entries when it grows), so both <code>m["a"].X = 9</code> and <code>&amp;m["a"]</code> are compile errors. Read the struct into a variable, change it, and assign it back — or make the value type <code>*Point</code> so you're mutating through a pointer.</div>
+  </div>
+</section>

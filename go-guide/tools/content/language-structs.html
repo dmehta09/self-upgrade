@@ -1,0 +1,166 @@
+<section class="hero reveal">
+  <span class="eyebrow">The language core · structs</span>
+  <h1>Structs, embedding &amp; tags.</h1>
+  <p class="lead">Structs are Go's way to group fields into a value type. Embedding gives you composition (not inheritance), tags attach metadata for libraries, and good Go aims for a useful zero value.</p>
+</section>
+
+<section class="section reveal" id="value-types">
+  <h2><span class="section-num">01</span> Structs are value types</h2>
+  <p class="takeaway">A <b><code>struct</code></b> groups named fields into one value. It's a <b>value type</b>: assigning or passing a struct <b>copies all its fields</b>. Build one with a <b>composite literal</b>, ideally with field names.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A struct is a labeled form — name, age, email boxes filled in. Hand someone the form and (because it's a value) they get a <em>photocopy</em>: scribbling on their copy doesn't touch yours. To let them edit <em>your</em> original, you hand over a pointer to it instead.</p></div></div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+type Point struct {
+    X, Y int
+}
+
+func main() {
+    p := Point{X: 1, Y: 2} // named fields (clearest)
+    q := p                 // COPY — q is independent
+    q.X = 99
+    fmt.Println(p, q)      // p unchanged
+
+    fmt.Printf("%+v\n", p) // %+v prints field names
+}</script>
+    <script type="text/plain" class="gp-output">{1 2} {99 2}
+{X:1 Y:2}</script>
+  </div>
+</section>
+
+<section class="section reveal" id="embedding">
+  <h2><span class="section-num">02</span> Embedding is composition, not inheritance</h2>
+  <p class="takeaway">Declare a field with <b>no name — just a type</b>, and you <b>embed</b> it. The outer struct <b>promotes</b> the inner type's fields and methods, so you can call them directly. This is <b>composition</b>: "has-a", wired for convenience — not a class hierarchy.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">design</span></div><p>Promotion is <em>delegation</em>, not subtyping: a <code>Manager</code> that embeds <code>Person</code> is <b>not</b> a <code>Person</code> in Go's type system — there's no upcast. The method just gets forwarded to the embedded value.</p></div></div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+type Person struct {
+    Name string
+}
+
+func (p Person) Greet() string {
+    return "hi, I'm " + p.Name
+}
+
+type Employee struct {
+    Person // embedded — no field name
+    Title  string
+}
+
+func main() {
+    e := Employee{Person: Person{Name: "Ada"}, Title: "Eng"}
+
+    // promoted: Name and Greet() act as if declared on Employee
+    fmt.Println(e.Name)    // ↑ from embedded Person
+    fmt.Println(e.Greet()) // ↑ method promoted too
+    fmt.Println(e.Title)
+}</script>
+    <script type="text/plain" class="gp-output">Ada
+hi, I'm Ada
+Eng</script>
+  </div>
+  <p>If the outer struct declares a field or method with the same name, it <b>shadows</b> the promoted one — the inner is still reachable via the explicit path <code>e.Person.Name</code>.</p>
+</section>
+
+<section class="section reveal" id="tags">
+  <h2><span class="section-num">03</span> Struct tags: metadata for libraries</h2>
+  <p class="takeaway">A <b>struct tag</b> is a backtick string after a field. It's inert metadata read via reflection — encoders like <code>encoding/json</code> use it to map a Go field to an external name, omit zero values, or skip a field entirely.</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "encoding/json"
+    "fmt"
+)
+
+type User struct {
+    Name  string `json:"name"`
+    Email string `json:"email,omitempty"` // dropped if empty
+    pwd   string // unexported → never encoded
+}
+
+func main() {
+    u := User{Name: "Ada", pwd: "secret"} // Email left empty
+    b, _ := json.Marshal(u)
+    fmt.Println(string(b))
+}</script>
+    <script type="text/plain" class="gp-output">{"name":"Ada"}</script>
+  </div>
+  <p><code>Email</code> vanished thanks to <code>omitempty</code>, and the unexported <code>pwd</code> is invisible to the encoder (it can't reflect on it). Tags are just strings — a typo like <code>jsno:"x"</code> compiles fine and is silently ignored, so <code>go vet</code> has a check for it.</p>
+</section>
+
+<section class="section reveal" id="zero-value">
+  <h2><span class="section-num">04</span> Design for a useful zero value</h2>
+  <p class="takeaway">Idiomatic Go makes the <b>zero value useful</b>: a freshly declared struct should work without a constructor. <code>sync.Mutex</code> and <code>bytes.Buffer</code> are the canonical examples — <code>var mu sync.Mutex</code> and <code>var buf bytes.Buffer</code> are ready to use.</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "bytes"
+    "fmt"
+    "sync"
+)
+
+func main() {
+    var buf bytes.Buffer // zero value is an empty, ready buffer
+    buf.WriteString("ab")
+    buf.WriteString("cd")
+    fmt.Println(buf.String())
+
+    var mu sync.Mutex // zero value is an unlocked mutex
+    mu.Lock()
+    mu.Unlock()
+    fmt.Println("ok")
+}</script>
+    <script type="text/plain" class="gp-output">abcd
+ok</script>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Comparability:</b> <code>==</code> works on a struct only if <b>every field is comparable</b>. Add a <b>slice, map, or func</b> field and the struct becomes <b>non-comparable</b> — <code>a == b</code> is a <em>compile error</em>, and you <b>can't use it as a map key</b>. (A struct of strings/numbers/bools/pointers/arrays is fine.)</p></div></div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+type Key struct { // all comparable fields
+    Region string
+    Zone   int
+}
+
+type Bag struct { // has a slice field → NOT comparable
+    Items []int
+}
+
+func main() {
+    a := Key{"us", 1}
+    b := Key{"us", 1}
+    fmt.Println(a == b) // true — comparable, usable as a map key
+
+    m := map[Key]string{a: "ok"}
+    fmt.Println(m[b]) // ok — b equals a
+
+    // Bag{} == Bag{}  // <- would NOT compile: slice field is non-comparable
+    fmt.Println(len(Bag{}.Items))
+}</script>
+    <script type="text/plain" class="gp-output">true
+ok
+0</script>
+  </div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You add a <code>Tags []string</code> field to a struct, then try to use that struct as a map key. What happens?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span><b>Compile error</b> — a slice field makes the struct non-comparable, so it can't be a map key.</button>
+      <button class="quiz-opt"><span class="mark"></span>It works; Go compares the slices element by element.</button>
+      <button class="quiz-opt"><span class="mark"></span>It works, but two keys are equal only if the slices share a backing array.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Map keys must be comparable with <code>==</code>, and slices (like maps and funcs) are <em>not</em> comparable — so a struct containing one isn't either, and the program won't compile. Workarounds: key by a comparable projection (e.g. a joined string), or use an array field instead of a slice.</div>
+  </div>
+</section>

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Production services: graceful shutdown & deploy | Go — a visual guide</title>
+  <meta name="description" content="Go — a visual guide — Production services: graceful shutdown &amp; deploy. A sharp, diagram-first guide to Go for backend engineers and interviews: the language, slices &amp; interfaces, generics, and concurrency (goroutines, channels, the scheduler) — each idea in plain English then precise, with runnable Go examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ADD8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z'/><path d='M2.5 9.5h2.5M19 9.5h2.5'/><circle cx='9.6' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/><circle cx='14.4' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/go.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="webservices" data-page="webservices-production-services" data-lesson="web-production">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Go — a visual guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z"/><path d="M2.5 9.5h2.5M19 9.5h2.5"/><circle cx="9.6" cy="10.6" r="1.1" fill="#06121a" stroke="none"/><circle cx="14.4" cy="10.6" r="1.1" fill="#06121a" stroke="none"/></svg></span>
+        <span class="brand-text"><b>Go — a visual guide</b><span>the language &amp; runtime, distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home · the map</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Getting started">
+        <h4><span class="dot"></span>Getting started</h4>
+        <a class="nav-link" href="../foundations/why-go.html">Why Go</a>
+        <a class="nav-link" href="../foundations/toolchain.html">Toolchain & modules</a>
+        <a class="nav-link" href="../foundations/hello-program.html">Anatomy of a program</a>
+        <a class="nav-link" href="../foundations/vars-and-types.html">Vars, constants & zero values</a>
+        <a class="nav-link" href="../foundations/control-flow.html">Control flow & functions</a>
+      </nav>
+      <nav class="nav-group is-language" aria-label="The language core">
+        <h4><span class="dot"></span>The language core</h4>
+        <a class="nav-link" href="../language/arrays-slices.html">Arrays & slices</a>
+        <a class="nav-link" href="../language/maps.html">Maps</a>
+        <a class="nav-link" href="../language/strings-runes-bytes.html">Strings, runes & bytes</a>
+        <a class="nav-link" href="../language/structs.html">Structs & embedding</a>
+        <a class="nav-link" href="../language/pointers.html">Pointers</a>
+        <a class="nav-link" href="../language/errors-and-defer.html">Errors, defer & panic</a>
+        <a class="nav-link" href="../language/error-handling-patterns.html">Error handling patterns</a>
+      </nav>
+      <nav class="nav-group is-types" aria-label="Types &amp; interfaces">
+        <h4><span class="dot"></span>Types & interfaces</h4>
+        <a class="nav-link" href="../types/methods.html">Methods & receivers</a>
+        <a class="nav-link" href="../types/interfaces.html">Interfaces</a>
+        <a class="nav-link" href="../types/nil-interfaces.html">The nil interface trap</a>
+        <a class="nav-link" href="../types/type-assertions-switch.html">Assertions & switches</a>
+        <a class="nav-link" href="../types/error-interface-design.html">Interfaces in practice</a>
+        <a class="nav-link" href="../types/reflection.html">Reflection & tags</a>
+      </nav>
+      <nav class="nav-group is-generics" aria-label="Generics &amp; modern Go">
+        <h4><span class="dot"></span>Generics & modern Go</h4>
+        <a class="nav-link" href="../generics/type-parameters.html">Type parameters</a>
+        <a class="nav-link" href="../generics/generic-stdlib.html">Generic stdlib</a>
+        <a class="nav-link" href="../generics/iterators.html">Iterators (range-func)</a>
+        <a class="nav-link" href="../generics/generics-pitfalls.html">Generics pitfalls</a>
+      </nav>
+      <nav class="nav-group is-concurrency" aria-label="Concurrency">
+        <h4><span class="dot"></span>Concurrency</h4>
+        <a class="nav-link" href="../concurrency/index.html">The big picture</a>
+        <a class="nav-link" href="../concurrency/goroutines.html">Goroutines</a>
+        <a class="nav-link" href="../concurrency/scheduler.html">The G-M-P scheduler</a>
+        <a class="nav-link" href="../concurrency/channels.html">Channels</a>
+        <a class="nav-link" href="../concurrency/select.html">select & multiplexing</a>
+        <a class="nav-link" href="../concurrency/sync-primitives.html">sync primitives</a>
+        <a class="nav-link" href="../concurrency/atomics-memory-model.html">Atomics & memory model</a>
+        <a class="nav-link" href="../concurrency/context.html">context</a>
+        <a class="nav-link" href="../concurrency/patterns.html">Concurrency patterns</a>
+        <a class="nav-link" href="../concurrency/errgroup.html">errgroup</a>
+        <a class="nav-link" href="../concurrency/leaks-deadlocks-races.html">Leaks, deadlocks & races</a>
+      </nav>
+      <nav class="nav-group is-stdlib" aria-label="Standard library">
+        <h4><span class="dot"></span>Standard library</h4>
+        <a class="nav-link" href="../stdlib/encoding-json.html">encoding/json</a>
+        <a class="nav-link" href="../stdlib/time.html">time</a>
+        <a class="nav-link" href="../stdlib/io-bufio.html">io & bufio</a>
+        <a class="nav-link" href="../stdlib/files-os.html">Files & os</a>
+        <a class="nav-link" href="../stdlib/slog.html">log/slog</a>
+        <a class="nav-link" href="../stdlib/stdlib-tour.html">Stdlib tour</a>
+      </nav>
+      <nav class="nav-group is-webservices" aria-label="HTTP services">
+        <h4><span class="dot"></span>HTTP services</h4>
+        <a class="nav-link" href="../webservices/net-http.html">net/http</a>
+        <a class="nav-link" href="../webservices/middleware-routing.html">Middleware & routing</a>
+        <a class="nav-link" href="../webservices/http-clients.html">HTTP clients</a>
+        <a class="nav-link" href="../webservices/json-apis.html">JSON APIs</a>
+        <a class="nav-link" href="../webservices/production-services.html">Production services</a>
+      </nav>
+      <nav class="nav-group is-testing" aria-label="Testing &amp; tooling">
+        <h4><span class="dot"></span>Testing & tooling</h4>
+        <a class="nav-link" href="../testing/testing-basics.html">Tests & table tests</a>
+        <a class="nav-link" href="../testing/mocking-interfaces.html">Mocking & seams</a>
+        <a class="nav-link" href="../testing/benchmarks.html">Benchmarks</a>
+        <a class="nav-link" href="../testing/fuzzing-coverage.html">Fuzzing & coverage</a>
+        <a class="nav-link" href="../testing/tooling.html">The tooling belt</a>
+      </nav>
+      <nav class="nav-group is-runtime" aria-label="Runtime &amp; performance">
+        <h4><span class="dot"></span>Runtime & performance</h4>
+        <a class="nav-link" href="../runtime/memory-model-stack-heap.html">Stack, heap & escape</a>
+        <a class="nav-link" href="../runtime/garbage-collector.html">The garbage collector</a>
+        <a class="nav-link" href="../runtime/pprof-profiling.html">pprof profiling</a>
+        <a class="nav-link" href="../runtime/performance-patterns.html">Performance patterns</a>
+        <a class="nav-link" href="../runtime/cgo-unsafe-build.html">cgo, unsafe & builds</a>
+      </nav>
+      <nav class="nav-group is-interview" aria-label="Interview prep">
+        <h4><span class="dot"></span>Interview prep</h4>
+        <a class="nav-link" href="../interview/question-bank.html">Question bank</a>
+        <a class="nav-link" href="../interview/machine-coding.html">Machine-coding</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheatsheet</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+        <a class="nav-link" href="../reference/drills.html">Timed drills</a>
+        <a class="nav-link" href="../reference/gotchas.html">Gotchas index</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">Production services: graceful shutdown &amp; deploy</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">HTTP services · production</span>
+  <h1>Production services: graceful shutdown &amp; deploy.</h1>
+  <p class="lead">The default <code>http.Server</code> has <b>no timeouts</b> and no clean stop. Production-ready means three additions: explicit <b>timeouts</b>, a <b>graceful shutdown</b> on <code>SIGINT</code>/<code>SIGTERM</code>, and a <b>health endpoint</b> — then ship it as one static binary in a tiny container.</p>
+</section>
+
+<section class="section reveal" id="timeouts">
+  <h2><span class="section-num">01</span> Always set server timeouts</h2>
+  <p class="takeaway">A zero-value <code>http.Server</code> (and <code>http.ListenAndServe</code>) has <b>no <code>ReadTimeout</code>, <code>WriteTimeout</code>, or <code>IdleTimeout</code></b>. A single slow client can hold a connection open <b>forever</b>. Always construct an explicit <code>&amp;http.Server{...}</code> with bounded timeouts.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>No timeouts is a phone line with no "are you still there?" — a prankster picks up, says nothing, and ties up the line indefinitely. Do that across thousands of connections (the classic <em>slowloris</em> attack) and every line is busy, so real callers get a busy tone. Timeouts are the operator hanging up on dead air.</p></div></div>
+  <div class="kv">
+    <dl class="kv"><dt><code>ReadTimeout</code></dt><dd>Max time to read the entire request, headers + body. Caps slow-send clients.</dd></dl>
+    <dl class="kv"><dt><code>WriteTimeout</code></dt><dd>Max time to write the response. Caps slow-read clients.</dd></dl>
+    <dl class="kv"><dt><code>IdleTimeout</code></dt><dd>Max keep-alive idle time between requests on one connection.</dd></dl>
+    <dl class="kv"><dt><code>ReadHeaderTimeout</code></dt><dd>Just the headers — a cheap, targeted slowloris guard.</dd></dl>
+  </div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"fmt"
+	"net/http"
+	"time"
+)
+
+func main() {
+	// Construct an explicit server with bounded timeouts.
+	srv := &http.Server{
+		Addr:              ":8080",
+		ReadTimeout:       5 * time.Second,
+		ReadHeaderTimeout: 2 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	// Print them so the config is visible (no Listen — stays offline).
+	fmt.Println("addr:", srv.Addr)
+	fmt.Println("read:", srv.ReadTimeout)
+	fmt.Println("read-header:", srv.ReadHeaderTimeout)
+	fmt.Println("write:", srv.WriteTimeout)
+	fmt.Println("idle:", srv.IdleTimeout)
+
+	// Contrast: the zero-value server has NONE of these.
+	var def http.Server
+	fmt.Println("default read timeout:", def.ReadTimeout) // 0s = no limit!
+}</script>
+    <script type="text/plain" class="gp-output">addr: :8080
+read: 5s
+read-header: 2s
+write: 10s
+idle: 2m0s
+default read timeout: 0s</script>
+  </div>
+</section>
+
+<section class="section reveal" id="graceful-shutdown">
+  <h2><span class="section-num">02</span> Graceful shutdown on SIGINT/SIGTERM</h2>
+  <p class="takeaway">On a deploy, the orchestrator sends <code>SIGTERM</code>. Catch it with <b><code>signal.NotifyContext</code></b>, stop accepting new connections, and call <b><code>srv.Shutdown(ctx)</code></b> to <b>drain in-flight requests</b> before exiting. A hard <code>os.Exit</code> drops live requests on the floor.</p>
+  <p>The pattern: run <code>ListenAndServe</code> in a goroutine, block on <code>ctx.Done()</code>, then <code>Shutdown</code> with a bounded timeout context so a stuck handler can't block the deploy forever. <code>Shutdown</code> returns once all connections are idle or the context expires.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">main.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">func main() {
+    // Cancel the context when SIGINT or SIGTERM arrives.
+    ctx, stop := signal.NotifyContext(context.Background(),
+        os.Interrupt, syscall.SIGTERM)
+    defer stop()
+
+    srv := &amp;http.Server{Addr: ":8080", ReadTimeout: 5 * time.Second}
+
+    go func() {
+        if err := srv.ListenAndServe(); err != nil &amp;&amp;
+            !errors.Is(err, http.ErrServerClosed) {
+            slog.Error("listen", "err", err)
+            os.Exit(1)
+        }
+    }()
+
+    &lt;-ctx.Done() // block until a signal cancels the context
+    slog.Info("shutting down gracefully")
+
+    // Give in-flight requests up to 10s to finish, then force-stop.
+    shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    if err := srv.Shutdown(shutCtx); err != nil {
+        slog.Error("shutdown", "err", err)
+    }
+}</code></pre></div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+// A deterministic stand-in for the signal->Shutdown skeleton.
+// We cancel the context ourselves instead of waiting on a real signal,
+// so the output is identical every run (no blocking, no network).
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Simulate "SIGTERM arrived" by cancelling the context.
+	go func() {
+		cancel() // stands in for signal.NotifyContext firing
+	}()
+
+	<-ctx.Done() // in real code: waits for SIGINT/SIGTERM
+	fmt.Println("shutting down gracefully")
+
+	// Bounded drain window, exactly like srv.Shutdown(shutCtx).
+	shutCtx, stop := context.WithTimeout(context.Background(), 10*time.Second)
+	defer stop()
+	fmt.Println("drain deadline set; waiting for in-flight requests")
+	_ = shutCtx
+	fmt.Println("server stopped")
+}</script>
+    <script type="text/plain" class="gp-output">shutting down gracefully
+drain deadline set; waiting for in-flight requests
+server stopped</script>
+  </div>
+</section>
+
+<section class="section reveal" id="health-config-logs">
+  <h2><span class="section-num">03</span> Health checks, config, structured logs</h2>
+  <p class="takeaway">Add a cheap <b><code>/healthz</code></b> (liveness) and <b><code>/readyz</code></b> (readiness) endpoint, read all config from <b>env/flags</b> (never hard-code), and emit <b>structured logs with <code>log/slog</code> to stdout</b> so the container runtime collects them.</p>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Hard to operate</div>
+      <div class="codeblock"><pre><code data-lang="go">addr := ":8080"            // baked-in
+log.Printf("started %s", addr) // unstructured
+// log to a file inside the container -&gt; lost on restart</code></pre></div>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">12-factor friendly</div>
+      <div class="codeblock"><pre><code data-lang="go">addr := cmp.Or(os.Getenv("ADDR"), ":8080") // env, with default
+logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+logger.Info("started", "addr", addr) // structured, to stdout</code></pre></div>
+    </div>
+  </div>
+  <p>Liveness answers "is the process alive?" (restart me if not); readiness answers "should I receive traffic <em>now</em>?" (hold traffic while a dependency warms up). Keep <code>/healthz</code> dependency-free so a flaky database doesn't trigger a needless restart.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">health.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK) // alive: don't touch dependencies
+})
+mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+    if !db.Ping() {              // ready: check real dependencies
+        http.Error(w, "not ready", http.StatusServiceUnavailable)
+        return
+    }
+    w.WriteHeader(http.StatusOK)
+})</code></pre></div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">logging</span></div><p>For handlers, levels, and JSON output with <code>log/slog</code> in depth, see <a href="../stdlib/slog.html">structured logging with log/slog</a>.</p></div></div>
+</section>
+
+<section class="section reveal" id="ship-it">
+  <h2><span class="section-num">04</span> Ship one static binary in a tiny container</h2>
+  <p class="takeaway">Go compiles to a <b>single static binary</b> with no runtime to install. Build it with <code>CGO_ENABLED=0</code>, then copy <em>just</em> that binary into a <b><code>scratch</code></b> or <b>distroless</b> image — a multi-MB container instead of a multi-hundred-MB one, with almost no attack surface.</p>
+  <div class="codeblock shell"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">Dockerfile</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="bash"># --- build stage: compile a static binary ---
+FROM golang:1.26 AS build
+WORKDIR /src
+COPY . .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /app ./cmd/server
+
+# --- run stage: nothing but the binary ---
+FROM scratch
+COPY --from=build /app /app
+COPY --from=build /etc/ssl/certs /etc/ssl/certs  # for outbound TLS
+EXPOSE 8080
+USER 65534:65534                                  # run as non-root
+ENTRYPOINT ["/app"]</code></pre></div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">12-factor</span></div><p>The 12-factor basics Go makes easy: <b>config in the environment</b> (read with <code>os.Getenv</code>/flags), <b>logs as an event stream to stdout</b> (let the platform route them), <b>stateless processes</b> (no on-disk session state), and <b>fast startup / graceful shutdown</b> for disposability. A static binary + <code>scratch</code> image makes builds reproducible and deploys quick.</p></div></div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">deploy</span></div><p>Multi-stage builds, layer caching, and minimal base images in depth: <a href="../../devops-guide/containers/images-and-dockerfiles.html">Images &amp; Dockerfiles</a> in the DevOps guide.</p></div></div>
+</section>
+
+<section class="section reveal" id="deploy-trap">
+  <h2><span class="section-num">05</span> The deploy trap: dropped requests</h2>
+  <p class="takeaway">During a rolling deploy, the platform sends <code>SIGTERM</code> and starts a new pod. If your old process <b>exits immediately</b> instead of draining, every in-flight request gets a connection reset — users see <code>502</code>s on every deploy.</p>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Three production-killers, all from skipping the boilerplate: (1) <b>no server timeouts</b> — one slow or silent client per connection, multiplied, is a slowloris resource-exhaustion DoS (the default server has <em>none</em>, so you must set them); (2) <b>no <code>srv.Shutdown</code></b> — the process dies on <code>SIGTERM</code> and <b>drops in-flight requests</b>, so every deploy throws 502s; (3) <b>logging to a file</b> inside the container instead of <b>stdout</b> — the log collector never sees it and your logs vanish on the next restart. Set timeouts, drain on signal, log to stdout.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Your service runs <code>http.ListenAndServe(":8080", mux)</code> and exits via <code>os.Exit(0)</code> when it sees <code>SIGTERM</code>. On every deploy a few users get connection-reset errors. What are the two root causes?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>No timeouts (the default server has none) and no <code>srv.Shutdown</code> — in-flight requests are dropped instead of drained.</button>
+      <button class="quiz-opt"><span class="mark"></span>Nothing is wrong; connection resets on deploy are unavoidable in Go.</button>
+      <button class="quiz-opt"><span class="mark"></span>The port <code>:8080</code> is the problem; production must use <code>:443</code>.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> <code>http.ListenAndServe</code> uses a zero-value server with <b>no <code>ReadTimeout</code>/<code>WriteTimeout</code>/<code>IdleTimeout</code></b>, and <code>os.Exit</code> kills the process <em>mid-request</em>. The fix: construct an explicit <code>&amp;http.Server{}</code> with timeouts, catch the signal with <code>signal.NotifyContext</code>, and call <code>srv.Shutdown(ctx)</code> so live requests finish before the process exits.</div>
+  </div>
+</section>
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../webservices/json-apis.html"><span class="pn-k">Previous</span><span class="pn-t">Building JSON APIs &amp; validation</span></a>
+            <a class="next" href="../testing/testing-basics.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">testing: tests, table tests &amp; subtests</span></a>
+          </nav>
+        </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#timeouts">Always set server timeouts</a>
+          <a href="#graceful-shutdown">Graceful shutdown on SIGINT/SIGTERM</a>
+          <a href="#health-config-logs">Health checks, config, structured logs</a>
+          <a href="#ship-it">Ship one static binary in a tiny container</a>
+          <a href="#deploy-trap">The deploy trap: dropped requests</a>
+          <a href="#check">Check yourself</a>
+        </nav>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Go — a visual guide &middot; goroutines &middot; channels &middot; interfaces &middot; generics &middot; the runtime</span>
+        <span class="fmono">Built to open offline &middot; Go 1.26 era &middot; Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/gopad.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

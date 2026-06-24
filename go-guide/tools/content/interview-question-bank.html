@@ -1,0 +1,277 @@
+<section class="hero reveal">
+  <span class="eyebrow">Interview &middot; question bank</span>
+  <h1>The Go question bank.</h1>
+  <p class="lead">A curated bank of the questions Go interviews actually ask &mdash; grouped by topic, each answer crisp and senior-level, with a line to rehearse out loud and the follow-ups to expect. Answer <em>before</em> you open the card. June 2026, Go 1.26 era.</p>
+</section>
+
+<section class="section reveal" id="how">
+  <h2><span class="section-num">00</span> How to use this</h2>
+  <p>Read the prompt, answer aloud, then open the card and compare. Aim to <b>explain the mechanic and name the trap</b>, not recite. Difficulty chips: <span class="pm-chip diff-warm">warm</span> opener, <span class="pm-chip diff-core">core</span> expected, <span class="pm-chip diff-stretch">stretch</span> senior. Each answer links to the lesson that proves it; the same traps drive the <a href="../reference/gotchas.html">gotchas index</a> and the <a href="../reference/drills.html">timed drills</a>.</p>
+</section>
+
+<section class="section qa-topic reveal" id="qa-data">
+  <h2><span class="section-num">01</span> Slices, maps &amp; data</h2>
+  <div class="qa-set">
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is a slice, and why can two slices alias the same data?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>A slice is a small header &mdash; a pointer to a backing array, a length, and a capacity. Slicing or assigning copies the <em>header</em>, not the array, so two slices can point at the same backing storage. A write through one is visible through the other for any index they both cover. <code>copy</code> into a fresh slice when you need true independence.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;A slice is a pointer-len-cap header over a shared array. Re-slicing copies the header, not the data &mdash; so writes leak between aliases until I <code>copy</code>.&rdquo;</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>When does <code>append</code> stop aliasing the parent? (When it reallocates &mdash; or use a 3-index slice <code>s[lo:hi:hi]</code> to force it.)</li><li>What does <code>range</code> over a slice copy? (The element value &mdash; mutate via the index.)</li></ul></div>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How can <code>append</code> silently corrupt a shared slice?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>If a sub-slice still has spare capacity, <code>append</code> writes into that spare cell &mdash; which belongs to the parent&rsquo;s backing array &mdash; instead of allocating. So <code>append</code> to a function&rsquo;s slice argument can overwrite data the caller still holds. The fix is a 3-index slice <code>s[lo:hi:hi]</code>, which caps capacity at the length so the next <code>append</code> is forced to reallocate.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;<code>append</code> into spare capacity writes the parent&rsquo;s array. I cap with a 3-index slice so it&rsquo;s forced to realloc and can&rsquo;t clobber.&rdquo;</p></div></div>
+        <p>See <a href="../language/arrays-slices.html">arrays &amp; slices</a> for the len/cap model.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Three things about Go maps that trip people up?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>One: a write to a <code>nil</code> map panics, though reads are fine &mdash; <code>make</code> it first. Two: iteration order is deliberately randomized, so anything order-dependent must sort the keys. Three: reading an absent key returns the zero value silently, so use comma-ok (<code>v, ok := m[k]</code>) to tell &ldquo;absent&rdquo; from &ldquo;present and zero.&rdquo; Maps aren&rsquo;t safe for concurrent writes.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Nil-map writes panic, iteration order is random, and a missing key reads as zero &mdash; so I <code>make</code> it, sort keys, and use comma-ok.&rdquo;</p></div></div>
+        <p>See <a href="../language/maps.html">maps</a>.</p>
+      </div>
+    </details>
+
+  </div>
+</section>
+
+<section class="section qa-topic reveal" id="qa-types">
+  <h2><span class="section-num">02</span> Interfaces, methods &amp; generics</h2>
+  <div class="qa-set">
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why is a non-nil error returned from a function that &ldquo;returned nil&rdquo;?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>An interface value is a (type, value) pair and is only <code>nil</code> when <em>both</em> are nil. If you return a typed nil pointer &mdash; say <code>var p *MyError; return p</code> &mdash; the interface carries a concrete type with a nil value, so <code>err != nil</code> is true even though the pointer is nil. The fix: return a bare <code>nil</code> on success, never a typed nil.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;An interface is a type-value pair; it&rsquo;s nil only if both are. A typed-nil pointer in an error makes it non-nil &mdash; so I return a literal <code>nil</code>.&rdquo;</p></div></div>
+        <p>See <a href="../types/nil-interfaces.html">nil interfaces vs nil pointers</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Value receiver vs pointer receiver &mdash; how do you choose?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>A value receiver operates on a <em>copy</em>, so it can&rsquo;t mutate the original and is wasteful for large structs. Use a pointer receiver to mutate, to avoid copying, or when the type holds a <code>sync.Mutex</code> (copying the lock is a bug). Keep the method set consistent: don&rsquo;t mix value and pointer receivers on one type. Note only <code>*T</code> satisfies an interface if any method has a pointer receiver.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Pointer receiver to mutate, to avoid a big copy, or if it holds a lock. I keep receivers consistent across the type&rsquo;s methods.&rdquo;</p></div></div>
+        <p>See <a href="../types/methods.html">methods &amp; receivers</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How does Go satisfy interfaces, and why does that matter for design?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Interfaces are satisfied <em>structurally</em> &mdash; a type implements one just by having the methods, with no <code>implements</code> keyword. So you define small interfaces at the <em>consumer</em>, and existing types satisfy them for free. The idiom is &ldquo;accept interfaces, return structs,&rdquo; and keep interfaces tiny &mdash; <code>io.Reader</code> is one method.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Structural typing &mdash; no <code>implements</code>. I define small interfaces where they&rsquo;re consumed; accept interfaces, return structs.&rdquo;</p></div></div>
+        <p>See <a href="../types/interfaces.html">interfaces</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When do generics earn their place over <code>interface{}</code>?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>When you need the <em>same</em> type relationship preserved &mdash; in and out, or across params &mdash; with compile-time safety and no boxing. A generic <code>Map[T, U]</code> or a <code>Min[T cmp.Ordered]</code> keeps types exact; <code>any</code> would erase them and need a runtime assertion. Reach for generics for container/algorithm code, not to abstract behavior &mdash; that&rsquo;s still an interface&rsquo;s job.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Generics when I must preserve the type relationship without boxing &mdash; containers and algorithms. Interfaces are still for abstracting behavior.&rdquo;</p></div></div>
+        <p>See <a href="../generics/type-parameters.html">type parameters</a>.</p>
+      </div>
+    </details>
+
+  </div>
+</section>
+
+<section class="section qa-topic reveal" id="qa-concurrency">
+  <h2><span class="section-num">03</span> Goroutines, channels &amp; select</h2>
+  <div class="qa-set">
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is a goroutine, and how is it different from an OS thread?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>A goroutine is a lightweight, runtime-scheduled task &mdash; it starts with a tiny growable stack (a couple of KB) and the runtime multiplexes many goroutines onto a few OS threads. The scheduler is the <b>G-M-P</b> model: goroutines (G) run on logical processors (P), each bound to a thread (M). That&rsquo;s why launching thousands is cheap where thousands of threads wouldn&rsquo;t be.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;A goroutine is a cheap runtime task with a tiny growable stack, multiplexed onto OS threads by the G-M-P scheduler &mdash; so thousands are fine.&rdquo;</p></div></div>
+        <p>See <a href="../concurrency/goroutines.html">goroutines</a> and the <a href="../concurrency/scheduler.html">scheduler</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Buffered vs unbuffered channels &mdash; what changes?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>An unbuffered channel is a rendezvous: the send blocks until a receiver is ready, so it also <em>synchronizes</em> the two goroutines. A buffered channel accepts up to its capacity without a waiting receiver, decoupling sender and receiver and smoothing bursts &mdash; it blocks only when full (send) or empty (receive). Buffer for throughput, not to &ldquo;avoid&rdquo; blocking.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Unbuffered is a rendezvous that also synchronizes; buffered decouples up to its capacity and blocks only when full or empty.&rdquo;</p></div></div>
+        <p>See <a href="../concurrency/channels.html">channels</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Walk the closed-and-nil channel matrix.</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>On a <b>closed</b> channel: receive returns immediately with the zero value and <code>ok == false</code> (drains buffered values first); <em>sending</em> panics; closing again panics. On a <b>nil</b> channel: both send and receive block <em>forever</em>. That nil behavior is a feature &mdash; setting a channel to nil disables its <code>select</code> case so a loop can stop watching it.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Closed: recv yields zero/false, send panics. Nil: both block forever &mdash; which I use to switch off a <code>select</code> case.&rdquo;</p></div></div>
+        <p>See <a href="../concurrency/channels.html">channels</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What does <code>select</code> do, and what does <code>default</code> change?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><code>select</code> waits on several channel operations and proceeds with whichever is ready; if more than one is ready it picks <em>uniformly at random</em> to avoid starvation. Adding a <code>default</code> case makes it non-blocking &mdash; if nothing is ready, <code>default</code> runs immediately. A <code>select</code> with no cases (<code>select{}</code>) blocks forever.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;<code>select</code> takes whichever case is ready, random among ties. A <code>default</code> makes it non-blocking; no cases blocks forever.&rdquo;</p></div></div>
+        <p>See <a href="../concurrency/select.html">select &amp; multiplexing</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Did the loop-variable closure bug go away?</span><span class="pm-chip diff-warm">warm</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Mostly, yes &mdash; Go 1.22 made the loop variable <em>per-iteration</em>, so a goroutine or closure capturing it now sees its own copy. Before 1.22 every closure shared one variable and usually printed the final value. On older code (or to be explicit) you still write <code>v := v</code> to shadow it inside the loop.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Since 1.22 the loop variable is per-iteration, so closures capture their own copy. Pre-1.22 I&rsquo;d shadow with <code>v := v</code>.&rdquo;</p></div></div>
+        <p>See <a href="../concurrency/goroutines.html">goroutines</a>.</p>
+      </div>
+    </details>
+
+  </div>
+</section>
+
+<section class="section qa-topic reveal" id="qa-sync">
+  <h2><span class="section-num">04</span> Synchronization &amp; the memory model</h2>
+  <div class="qa-set">
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Mutex vs channel vs atomic &mdash; when each?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>A <code>sync.Mutex</code> guards a critical section over shared state &mdash; simplest when state stays put. A channel <em>transfers ownership</em> of data between goroutines &mdash; &ldquo;don&rsquo;t communicate by sharing memory; share memory by communicating.&rdquo; <code>sync/atomic</code> is for a single counter or flag where a full lock is overkill. Rule of thumb: mutex to protect state, channels to move it, atomics for one word.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Mutex to protect shared state, channels to hand off ownership, atomics for a single counter or flag. Match the tool to the shape of the sharing.&rdquo;</p></div></div>
+        <p>See <a href="../concurrency/sync-primitives.html">sync primitives</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Explain &ldquo;happens-before&rdquo; and why an unsynchronized read can see a stale value.</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>The Go memory model only guarantees one goroutine sees another&rsquo;s write if there&rsquo;s a <em>happens-before</em> edge between them &mdash; established by a channel send/receive, a <code>Mutex</code>, <code>sync/atomic</code>, or <code>WaitGroup</code>. Without one, the compiler and CPU may reorder or cache, so a reader can observe a stale value or never see the write at all. A &ldquo;done&rdquo; bool flipped without synchronization is the classic example &mdash; and a data race is undefined behavior, not just &ldquo;the old value.&rdquo;</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Visibility needs a happens-before edge &mdash; a channel, lock, or atomic. Without one it&rsquo;s a data race, which is undefined behavior, not a stale-but-defined read.&rdquo;</p></div></div>
+        <p>See <a href="../concurrency/atomics-memory-model.html">atomics &amp; the memory model</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why must you never copy a <code>sync.Mutex</code> or <code>WaitGroup</code>?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Their internal state <em>is</em> the synchronization. Copy the struct &mdash; for example a value receiver, or passing a struct by value &mdash; and the copy has its own independent lock/counter, so two goroutines &ldquo;guarding&rdquo; the same data actually take different locks and the protection evaporates. Always share by pointer; <code>go vet</code> flags lock copies.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;The lock&rsquo;s state is the sync &mdash; a copy guards nothing. I share by pointer and let <code>go vet</code> catch copies.&rdquo;</p></div></div>
+        <p>See <a href="../concurrency/sync-primitives.html">sync primitives</a>.</p>
+      </div>
+    </details>
+
+  </div>
+</section>
+
+<section class="section qa-topic reveal" id="qa-context-errors">
+  <h2><span class="section-num">05</span> context, errors &amp; defer</h2>
+  <div class="qa-set">
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is <code>context</code> for, and what&rsquo;s the cardinal rule?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><code>context.Context</code> carries cancellation, deadlines, and request-scoped values across API boundaries. You pass it as the first argument, and goroutines watch <code>&lt;-ctx.Done()</code> to stop early. The cardinal rule: whenever you create a cancelable context (<code>WithCancel/WithTimeout/WithDeadline</code>) you must <code>defer cancel()</code> &mdash; even on the success path &mdash; or you leak the context and its timer.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;<code>Context</code> propagates cancellation and deadlines, first arg by convention. And I always <code>defer cancel()</code> &mdash; even on success &mdash; or I leak.&rdquo;</p></div></div>
+        <p>See <a href="../concurrency/context.html">context</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you wrap errors, and how do <code>errors.Is</code> and <code>errors.As</code> differ?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Wrap with <code>fmt.Errorf("doing X: %w", err)</code> &mdash; <code>%w</code> (not <code>%v</code>) keeps the underlying error reachable. <code>errors.Is(err, target)</code> walks the chain to test for a specific <em>sentinel</em> value like <code>io.EOF</code>; <code>errors.As(err, &amp;target)</code> walks it to find an error of a specific <em>type</em> and binds it so you can read its fields. Is for identity, As for type.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;<code>%w</code> to wrap, <code>errors.Is</code> for a sentinel value, <code>errors.As</code> to pull out a concrete type. Is = identity, As = type.&rdquo;</p></div></div>
+        <p>See <a href="../language/error-handling-patterns.html">error handling patterns</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Explain <code>defer</code>, <code>panic</code>, and <code>recover</code> &mdash; and the two defer traps.</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Deferred calls run when the function returns, in <b>LIFO</b> order, even during a panic &mdash; which is what makes <code>recover()</code> work, but only when called <em>inside a deferred function</em> in the same goroutine. Two traps: defer&rsquo;s arguments are evaluated <em>immediately</em> (defer a closure if you need the later value), and a <code>defer</code> inside a loop piles up until the function returns &mdash; move the body into a helper so each cleanup runs per iteration.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Defers run LIFO at return; <code>recover</code> only works inside a deferred func. Args snapshot immediately, and defers in a loop stack up &mdash; so I use a helper.&rdquo;</p></div></div>
+        <p>See <a href="../language/errors-and-defer.html">errors, defer &amp; panic</a>.</p>
+      </div>
+    </details>
+
+  </div>
+</section>
+
+<section class="section qa-topic reveal" id="qa-runtime">
+  <h2><span class="section-num">06</span> Runtime: GC, escape analysis &amp; tooling</h2>
+  <div class="qa-set">
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How does Go&rsquo;s garbage collector work at a high level?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>It&rsquo;s a <b>concurrent, tri-color mark-and-sweep</b> collector that runs alongside your program to keep pauses sub-millisecond. Objects are white (unreachable), grey (reached, not scanned), or black (scanned); a <b>write barrier</b> catches pointers mutated mid-mark so nothing reachable is collected. There&rsquo;s no generational compaction &mdash; it&rsquo;s non-moving &mdash; and <code>GOGC</code> (or 1.19&rsquo;s soft memory limit) tunes how often it runs.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Concurrent tri-color mark-sweep with a write barrier for sub-millisecond pauses; non-moving, tuned by <code>GOGC</code> or the memory limit.&rdquo;</p></div></div>
+        <p>See <a href="../runtime/garbage-collector.html">the garbage collector</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is escape analysis, and why should you care?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>At compile time Go decides whether a value can live on the goroutine&rsquo;s <b>stack</b> (freed automatically when the function returns) or must <b>escape</b> to the heap (managed by the GC). It escapes when its lifetime outlives the function &mdash; typically because a pointer to it is returned, stored, or captured by a closure. Fewer escapes mean fewer allocations and less GC pressure. Inspect with <code>go build -gcflags=-m</code>.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;The compiler decides stack vs heap; a value escapes when its pointer outlives the function. I check with <code>-gcflags=-m</code> to cut allocations.&rdquo;</p></div></div>
+        <p>See <a href="../runtime/memory-model-stack-heap.html">stack vs heap</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Concurrency vs parallelism &mdash; what&rsquo;s the distinction?</span><span class="pm-chip diff-warm">warm</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Concurrency is <em>structure</em> &mdash; composing independently progressing tasks (goroutines, channels). Parallelism is <em>execution</em> &mdash; running tasks literally at the same instant on multiple cores. A concurrent program may run on one core and still be correct; <code>GOMAXPROCS</code> controls how many run in parallel. Rob Pike&rsquo;s line: &ldquo;concurrency is about dealing with many things at once; parallelism is about doing many things at once.&rdquo;</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Concurrency is how I structure independent tasks; parallelism is running them at once on many cores. <code>GOMAXPROCS</code> turns one into the other.&rdquo;</p></div></div>
+        <p>See <a href="../concurrency/scheduler.html">the scheduler</a>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you find a data race, and what does <code>go test -race</code> actually do?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Run the suite with <code>-race</code>: the race detector instruments memory accesses and reports when two goroutines touch the same location concurrently with no happens-before edge and at least one write &mdash; printing both stacks. It only catches races on code paths your tests <em>actually exercise</em>, so it&rsquo;s a dynamic tool, not a proof; it also slows execution, so it&rsquo;s a CI gate, not a production flag.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;<code>-race</code> instruments accesses and flags concurrent unsynchronized access with a write. It only sees exercised paths &mdash; a CI gate, not a guarantee.&rdquo;</p></div></div>
+        <p>See <a href="../concurrency/leaks-deadlocks-races.html">leaks, deadlocks &amp; races</a>.</p>
+      </div>
+    </details>
+
+  </div>
+</section>
+
+<section class="section reveal" id="next">
+  <h2><span class="section-num">07</span> Where to go next</h2>
+  <p>When the cards feel easy, prove it under pressure. Run the <a href="../reference/drills.html">timed drills</a> (three modes, traps included), then take the live coding rounds in <a href="machine-coding.html">concurrency machine-coding</a> &mdash; worker pool, rate limiter, and a single-flight cache, each with a working solution.</p>
+</section>

@@ -1,0 +1,106 @@
+<section class="hero reveal">
+  <span class="eyebrow">Types &amp; interfaces · the nil trap</span>
+  <h1>The nil interface trap.</h1>
+  <p class="lead">A function returns an <code>error</code>. You return a nil pointer to your error type. The caller's <code>if err != nil</code> fires anyway. This is the most famous footgun in Go — and a top interview question. Here's exactly why it happens.</p>
+</section>
+
+<section class="section reveal" id="two-parts">
+  <h2><span class="section-num">01</span> An interface value has two parts</h2>
+  <p class="takeaway">An interface value is a <b>(type, value) pair</b>: a slot for the <b>dynamic type</b> and a slot for the <b>value</b>. It is <code>nil</code> only when <b>both</b> slots are empty.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Think of an interface as a shipping box with two labels: <b>"what's inside"</b> (the type) and <b>"the contents"</b> (the value). An empty box has <em>both</em> labels blank. But a box labelled "contains: a <code>*MyError</code>" is <em>not</em> empty — even if the thing inside is itself an empty pointer. The label "what's inside" is filled in, so the box is not nil.</p></div></div>
+  <p>So there are two very different kinds of "nothing": a <b>nil interface</b> (both slots blank) and an interface that <b>holds a nil pointer</b> (the type slot says <code>*MyError</code>, the value slot is a nil pointer). They look the same when you print them — and they compare differently to <code>nil</code>.</p>
+</section>
+
+<section class="section reveal" id="typed-nil">
+  <h2><span class="section-num">02</span> A typed nil is NOT <code>== nil</code></h2>
+  <p class="takeaway">Put a <b>typed nil pointer</b> into an interface and the interface is <b>not nil</b> — its type slot is set. <code>(*T)(nil)</code> wrapped in <code>any</code> compares <b><code>!= nil</code></b>.</p>
+  <p>Watch the headline behaviour directly. A nil <code>*int</code> is nil <em>as a pointer</em>, but once it's boxed into an <code>any</code> the box knows its type, so it isn't a nil interface:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+func main() {
+    var p *int = nil          // a nil pointer
+    fmt.Println(p == nil)     // true  — nil as a *int
+
+    var i any = p             // box it into an interface
+    fmt.Println(i == nil)     // false — type slot = *int!
+    fmt.Printf("type=%T value=%v\n", i, i)
+}</script>
+    <script type="text/plain" class="gp-output">true
+false
+type=*int value=<nil></script>
+  </div>
+  <p>The interface <code>i</code> carries <em>(type=<code>*int</code>, value=nil)</em>. The type slot is occupied, so <code>i == nil</code> is <code>false</code> even though the pointer inside is nil. Printing it shows <code>&lt;nil&gt;</code>, which is exactly what makes the bug so sneaky — it <em>looks</em> nil.</p>
+</section>
+
+<section class="section reveal" id="the-error-bug">
+  <h2><span class="section-num">03</span> The <code>if err != nil</code> failure</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>This is THE nil-interface trap.</b> If a function declares it returns <code>error</code> (an interface) but you return a <em>concrete</em> <code>*MyError</code> that happens to be nil, the returned <code>error</code> is <b>not nil</b> — its type slot is <code>*MyError</code>. Every <code>if err != nil</code> upstream now treats success as failure. The fix: never return a typed nil pointer through an error interface.</p></div></div>
+  <p>Here's the classic reproduction. <code>do()</code> "succeeds" — but the caller sees an error:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import "fmt"
+
+type MyError struct{ msg string }
+
+func (e *MyError) Error() string { return e.msg }
+
+func do(fail bool) error {
+    var e *MyError       // nil *MyError
+    if fail {
+        e = &MyError{"boom"}
+    }
+    return e             // BUG: returns a non-nil error even when e is nil
+}
+
+func main() {
+    err := do(false)     // we did NOT fail
+    fmt.Println(err == nil) // false — surprise!
+    if err != nil {
+        fmt.Println("caller thinks it failed:", err)
+    }
+}</script>
+    <script type="text/plain" class="gp-output">false
+caller thinks it failed: <nil></script>
+  </div>
+  <p>The <code>return e</code> boxes a nil <code>*MyError</code> into the <code>error</code> interface. Type slot = <code>*MyError</code>, value = nil → the interface is non-nil. And calling <code>err.Error()</code> here would even <em>print</em> fine because the method has a pointer receiver and doesn't dereference <code>e</code> — but compare it against <code>nil</code> and the lie is exposed.</p>
+</section>
+
+<section class="section reveal" id="how-to-avoid">
+  <h2><span class="section-num">04</span> How to avoid it</h2>
+  <p class="takeaway">In any function that returns <code>error</code>, <b>return the literal <code>nil</code></b> on the success path — never a typed nil pointer variable. Keep the concrete error type out of your return slot until you actually have an error.</p>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Leaks a typed nil</div>
+      <div class="codeblock"><pre><code data-lang="go">func do() error {
+    var e *MyError
+    // ... e stays nil on success ...
+    return e   // non-nil interface!
+}</code></pre></div>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Returns a true nil interface</div>
+      <div class="codeblock"><pre><code data-lang="go">func do() error {
+    if bad {
+        return &amp;MyError{"boom"}
+    }
+    return nil // literal nil interface
+}</code></pre></div>
+    </div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">rules of thumb</span></div><p>(1) Declare error variables as <code>error</code>, not <code>*MyError</code>, where they flow to a return. (2) On success, write <code>return ..., nil</code> explicitly. (3) Be wary of helpers that return a concrete pointer error type — assign through an <code>error</code> first. (4) <code>go vet</code> and linters like <code>nilness</code>/<code>staticcheck</code> can catch some of these; the habit catches the rest.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A function returns <code>error</code>. On success it does <code>var e *MyError; return e</code> (so <code>e</code> is a nil <code>*MyError</code>). The caller writes <code>if err != nil</code>. What happens on the success path?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The branch <b>runs</b> — the interface holds (type=<code>*MyError</code>, value=nil), so it's not <code>== nil</code>.</button>
+      <button class="quiz-opt"><span class="mark"></span>The branch is skipped — a nil pointer becomes a nil interface.</button>
+      <button class="quiz-opt"><span class="mark"></span>It panics with a nil dereference.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Boxing a typed nil pointer into the <code>error</code> interface fills the type slot, so the interface is non-nil even though the pointer is nil. The <code>if err != nil</code> branch fires on a success — the textbook nil-interface trap. Fix: <code>return nil</code> literally on success.</div>
+  </div>
+</section>

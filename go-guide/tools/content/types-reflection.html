@@ -1,0 +1,153 @@
+<section class="hero reveal">
+  <span class="eyebrow">Types &amp; interfaces · reflection</span>
+  <h1>Reflection &amp; struct tags (use sparingly).</h1>
+  <p class="lead">Reflection lets a program inspect and manipulate its own types at <em>runtime</em> — it's how <code>encoding/json</code> reads your <code>json:"name"</code> tags. It's powerful, and a trap: slow, panic-prone, and blind to the compiler. Reach for it last.</p>
+</section>
+
+<section class="section reveal" id="typeof-valueof">
+  <h2><span class="section-num">01</span> <code>reflect.TypeOf</code> &amp; <code>reflect.ValueOf</code></h2>
+  <p class="takeaway">Reflection's two entry points: <code>reflect.TypeOf(x)</code> hands you the runtime <b>type</b> (name, kind, fields); <code>reflect.ValueOf(x)</code> hands you the runtime <b>value</b> you can read (and, if addressable, write).</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Normally code knows the shape of its data at compile time, like a worker who memorised the blueprint. Reflection is handing that worker a flashlight and saying "figure out the shape <em>now</em>, whatever it is." Flexible — but they're slower than someone who already knew, and they'll trip if the room isn't what they expected.</p></div></div>
+  <p>Walk a struct's fields generically, reading each name, type and value at runtime:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "reflect"
+)
+
+type User struct {
+    Name string
+    Age  int
+}
+
+func main() {
+    u := User{Name: "Ada", Age: 36}
+    t := reflect.TypeOf(u)
+    v := reflect.ValueOf(u)
+    fmt.Println("type:", t.Name(), "| kind:", t.Kind())
+
+    for i := range t.NumField() {       // range-over-int (Go 1.22)
+        f := t.Field(i)
+        fmt.Printf("%s (%s) = %v\n", f.Name, f.Type, v.Field(i))
+    }
+}</script>
+    <script type="text/plain" class="gp-output">type: User | kind: struct
+Name (string) = Ada
+Age (int) = 36</script>
+  </div>
+</section>
+
+<section class="section reveal" id="struct-tags">
+  <h2><span class="section-num">02</span> Reading struct tags — how json finds names</h2>
+  <p class="takeaway">A <b>struct tag</b> is a string literal after a field (<code>`json:"name"`</code>). It's metadata, invisible to normal code; libraries read it <em>via reflection</em> — that's exactly how <code>encoding/json</code> knows to emit <code>"name"</code> instead of <code>"Name"</code>.</p>
+  <p><code>f.Tag.Get("json")</code> pulls the value for the <code>json</code> key. This is the entire mechanism behind <code>json:"email,omitempty"</code>, <code>db:"..."</code>, validation tags, and ORMs:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "reflect"
+)
+
+type User struct {
+    Name  string `json:"name"`
+    Email string `json:"email,omitempty"`
+    Age   int    `json:"age"`
+}
+
+func main() {
+    t := reflect.TypeOf(User{})
+    for i := range t.NumField() {
+        f := t.Field(i)
+        fmt.Printf("%-5s -> json tag %q\n", f.Name, f.Tag.Get("json"))
+    }
+}</script>
+    <script type="text/plain" class="gp-output">Name  -> json tag "name"
+Email -> json tag "email,omitempty"
+Age   -> json tag "age"</script>
+  </div>
+</section>
+
+<section class="section reveal" id="the-cost">
+  <h2><span class="section-num">03</span> The cost: slow, panicky, unchecked</h2>
+  <p class="takeaway">Reflection trades away Go's best guarantees. It is <b>much slower</b> than direct code, it <b>panics at runtime</b> for misuse the compiler would normally catch, and it <b>loses compile-time type safety</b> — typos become crashes, not build errors.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Cost</th><th>What it means</th></tr></thead>
+      <tbody>
+        <tr><td>Speed</td><td>Field access via <code>reflect</code> is far slower than <code>x.Field</code> — it can't be inlined and does runtime bookkeeping.</td></tr>
+        <tr><td>Panics</td><td>Wrong kind, unexported field, unaddressable value → <code>panic</code> at runtime, not a compile error.</td></tr>
+        <tr><td>Safety</td><td>The compiler can't check reflective code. Refactors and renames slip through silently.</td></tr>
+        <tr><td>Readability</td><td>Reflective code is harder to read and to follow in a debugger.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section reveal" id="reflection-panics">
+  <h2><span class="section-num">04</span> The trap: reflection panics &amp; bypasses the checker</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Reflective writes <b>panic</b> on the slightest misuse. <code>reflect.ValueOf(x)</code> gives an <b>unaddressable</b> copy, so calling <code>Set…</code> on it panics; so does touching an <b>unexported</b> field. None of this is caught at compile time — reflection <b>bypasses the type checker</b>. Reach for a <b>generic</b> or an <b>interface</b> first; use reflection only when the type truly is unknown until runtime.</p></div></div>
+  <p>The classic panic — trying to <code>Set</code> a field on a non-pointer value:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "reflect"
+)
+
+type User struct{ Name string }
+
+func main() {
+    u := User{Name: "Ada"}
+    v := reflect.ValueOf(u)         // a COPY — unaddressable
+    fmt.Println("before:", u.Name)
+    v.FieldByName("Name").SetString("Grace") // panic: not addressable
+    fmt.Println("after:", u.Name)
+}</script>
+    <script type="text/plain" class="gp-output">before: Ada
+panic: reflect: reflect.Value.SetString using unaddressable value
+
+exit status 2</script>
+  </div>
+  <p>To write through reflection you must pass a <em>pointer</em> and start from <code>reflect.ValueOf(&amp;u).Elem()</code> — which is exactly the awkwardness that makes a plain assignment or a generic the better tool most of the time.</p>
+</section>
+
+<section class="section reveal" id="when-justified">
+  <h2><span class="section-num">05</span> When it's justified — vs when it isn't</h2>
+  <p class="takeaway">Reflection earns its place in <b>serializers, decoders and ORMs</b> — code that must work with <em>types it can't know in advance</em>. For "same logic, many known types," a <b>generic</b> is faster and type-safe; for "varying behaviour," an <b>interface</b> is cleaner.</p>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Reflection where a generic fits</div>
+      <div class="codeblock"><pre><code data-lang="go">// runtime, slow, panics on non-numbers
+func Sum(xs any) float64 { /* reflect over a slice */ }</code></pre></div>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Generic — compile-time &amp; fast (Go 1.18+)</div>
+      <div class="codeblock"><pre><code data-lang="go">func Sum[T int | float64](xs []T) T {
+    var total T
+    for _, x := range xs { total += x }
+    return total
+}</code></pre></div>
+    </div>
+  </div>
+  <dl class="kv">
+    <dt>Use reflection</dt><dd><code>encoding/json</code>, <code>encoding/xml</code>, ORMs, generic printers, validators, dependency injection — the type is decided by data at runtime.</dd>
+    <dt>Prefer a generic</dt><dd>One algorithm over many known element types, with full type-checking and speed.</dd>
+    <dt>Prefer an interface</dt><dd>Different types, different behaviour — let method dispatch do the work.</dd>
+  </dl>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">json</span></div><p>Struct tags pay off most in serialization — see how <code>encoding/json</code> uses them in the <a href="../stdlib/encoding-json.html">encoding/json</a> lesson.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You do <code>v := reflect.ValueOf(u)</code> on a struct value <code>u</code>, then call <code>v.FieldByName("Name").SetString("x")</code>. What happens?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A <b>runtime panic</b> — <code>ValueOf(u)</code> is an unaddressable copy, so it can't be set.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>u.Name</code> becomes <code>"x"</code> — reflection writes through.</button>
+      <button class="quiz-opt"><span class="mark"></span>A compile error — <code>SetString</code> needs a string field.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Passing a value (not a pointer) to <code>reflect.ValueOf</code> yields an unaddressable copy; any <code>Set…</code> panics at <em>runtime</em>, not compile time — reflection sidesteps the checker. To write, use <code>reflect.ValueOf(&amp;u).Elem()</code>. Better still, avoid reflection here entirely.</div>
+  </div>
+</section>

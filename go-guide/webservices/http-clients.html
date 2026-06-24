@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HTTP clients, timeouts & resilience | Go — a visual guide</title>
+  <meta name="description" content="Go — a visual guide — HTTP clients, timeouts &amp; resilience. A sharp, diagram-first guide to Go for backend engineers and interviews: the language, slices &amp; interfaces, generics, and concurrency (goroutines, channels, the scheduler) — each idea in plain English then precise, with runnable Go examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ADD8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z'/><path d='M2.5 9.5h2.5M19 9.5h2.5'/><circle cx='9.6' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/><circle cx='14.4' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/go.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="webservices" data-page="webservices-http-clients" data-lesson="web-clients">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Go — a visual guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z"/><path d="M2.5 9.5h2.5M19 9.5h2.5"/><circle cx="9.6" cy="10.6" r="1.1" fill="#06121a" stroke="none"/><circle cx="14.4" cy="10.6" r="1.1" fill="#06121a" stroke="none"/></svg></span>
+        <span class="brand-text"><b>Go — a visual guide</b><span>the language &amp; runtime, distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home · the map</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Getting started">
+        <h4><span class="dot"></span>Getting started</h4>
+        <a class="nav-link" href="../foundations/why-go.html">Why Go</a>
+        <a class="nav-link" href="../foundations/toolchain.html">Toolchain & modules</a>
+        <a class="nav-link" href="../foundations/hello-program.html">Anatomy of a program</a>
+        <a class="nav-link" href="../foundations/vars-and-types.html">Vars, constants & zero values</a>
+        <a class="nav-link" href="../foundations/control-flow.html">Control flow & functions</a>
+      </nav>
+      <nav class="nav-group is-language" aria-label="The language core">
+        <h4><span class="dot"></span>The language core</h4>
+        <a class="nav-link" href="../language/arrays-slices.html">Arrays & slices</a>
+        <a class="nav-link" href="../language/maps.html">Maps</a>
+        <a class="nav-link" href="../language/strings-runes-bytes.html">Strings, runes & bytes</a>
+        <a class="nav-link" href="../language/structs.html">Structs & embedding</a>
+        <a class="nav-link" href="../language/pointers.html">Pointers</a>
+        <a class="nav-link" href="../language/errors-and-defer.html">Errors, defer & panic</a>
+        <a class="nav-link" href="../language/error-handling-patterns.html">Error handling patterns</a>
+      </nav>
+      <nav class="nav-group is-types" aria-label="Types &amp; interfaces">
+        <h4><span class="dot"></span>Types & interfaces</h4>
+        <a class="nav-link" href="../types/methods.html">Methods & receivers</a>
+        <a class="nav-link" href="../types/interfaces.html">Interfaces</a>
+        <a class="nav-link" href="../types/nil-interfaces.html">The nil interface trap</a>
+        <a class="nav-link" href="../types/type-assertions-switch.html">Assertions & switches</a>
+        <a class="nav-link" href="../types/error-interface-design.html">Interfaces in practice</a>
+        <a class="nav-link" href="../types/reflection.html">Reflection & tags</a>
+      </nav>
+      <nav class="nav-group is-generics" aria-label="Generics &amp; modern Go">
+        <h4><span class="dot"></span>Generics & modern Go</h4>
+        <a class="nav-link" href="../generics/type-parameters.html">Type parameters</a>
+        <a class="nav-link" href="../generics/generic-stdlib.html">Generic stdlib</a>
+        <a class="nav-link" href="../generics/iterators.html">Iterators (range-func)</a>
+        <a class="nav-link" href="../generics/generics-pitfalls.html">Generics pitfalls</a>
+      </nav>
+      <nav class="nav-group is-concurrency" aria-label="Concurrency">
+        <h4><span class="dot"></span>Concurrency</h4>
+        <a class="nav-link" href="../concurrency/index.html">The big picture</a>
+        <a class="nav-link" href="../concurrency/goroutines.html">Goroutines</a>
+        <a class="nav-link" href="../concurrency/scheduler.html">The G-M-P scheduler</a>
+        <a class="nav-link" href="../concurrency/channels.html">Channels</a>
+        <a class="nav-link" href="../concurrency/select.html">select & multiplexing</a>
+        <a class="nav-link" href="../concurrency/sync-primitives.html">sync primitives</a>
+        <a class="nav-link" href="../concurrency/atomics-memory-model.html">Atomics & memory model</a>
+        <a class="nav-link" href="../concurrency/context.html">context</a>
+        <a class="nav-link" href="../concurrency/patterns.html">Concurrency patterns</a>
+        <a class="nav-link" href="../concurrency/errgroup.html">errgroup</a>
+        <a class="nav-link" href="../concurrency/leaks-deadlocks-races.html">Leaks, deadlocks & races</a>
+      </nav>
+      <nav class="nav-group is-stdlib" aria-label="Standard library">
+        <h4><span class="dot"></span>Standard library</h4>
+        <a class="nav-link" href="../stdlib/encoding-json.html">encoding/json</a>
+        <a class="nav-link" href="../stdlib/time.html">time</a>
+        <a class="nav-link" href="../stdlib/io-bufio.html">io & bufio</a>
+        <a class="nav-link" href="../stdlib/files-os.html">Files & os</a>
+        <a class="nav-link" href="../stdlib/slog.html">log/slog</a>
+        <a class="nav-link" href="../stdlib/stdlib-tour.html">Stdlib tour</a>
+      </nav>
+      <nav class="nav-group is-webservices" aria-label="HTTP services">
+        <h4><span class="dot"></span>HTTP services</h4>
+        <a class="nav-link" href="../webservices/net-http.html">net/http</a>
+        <a class="nav-link" href="../webservices/middleware-routing.html">Middleware & routing</a>
+        <a class="nav-link" href="../webservices/http-clients.html">HTTP clients</a>
+        <a class="nav-link" href="../webservices/json-apis.html">JSON APIs</a>
+        <a class="nav-link" href="../webservices/production-services.html">Production services</a>
+      </nav>
+      <nav class="nav-group is-testing" aria-label="Testing &amp; tooling">
+        <h4><span class="dot"></span>Testing & tooling</h4>
+        <a class="nav-link" href="../testing/testing-basics.html">Tests & table tests</a>
+        <a class="nav-link" href="../testing/mocking-interfaces.html">Mocking & seams</a>
+        <a class="nav-link" href="../testing/benchmarks.html">Benchmarks</a>
+        <a class="nav-link" href="../testing/fuzzing-coverage.html">Fuzzing & coverage</a>
+        <a class="nav-link" href="../testing/tooling.html">The tooling belt</a>
+      </nav>
+      <nav class="nav-group is-runtime" aria-label="Runtime &amp; performance">
+        <h4><span class="dot"></span>Runtime & performance</h4>
+        <a class="nav-link" href="../runtime/memory-model-stack-heap.html">Stack, heap & escape</a>
+        <a class="nav-link" href="../runtime/garbage-collector.html">The garbage collector</a>
+        <a class="nav-link" href="../runtime/pprof-profiling.html">pprof profiling</a>
+        <a class="nav-link" href="../runtime/performance-patterns.html">Performance patterns</a>
+        <a class="nav-link" href="../runtime/cgo-unsafe-build.html">cgo, unsafe & builds</a>
+      </nav>
+      <nav class="nav-group is-interview" aria-label="Interview prep">
+        <h4><span class="dot"></span>Interview prep</h4>
+        <a class="nav-link" href="../interview/question-bank.html">Question bank</a>
+        <a class="nav-link" href="../interview/machine-coding.html">Machine-coding</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheatsheet</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+        <a class="nav-link" href="../reference/drills.html">Timed drills</a>
+        <a class="nav-link" href="../reference/gotchas.html">Gotchas index</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">HTTP clients, timeouts &amp; resilience</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Web services · clients</span>
+  <h1>HTTP clients, timeouts &amp; resilience.</h1>
+  <p class="lead">Calling another service is where Go programs hang in production. <code>http.Get</code> and the default client have <b>no timeout</b> — one slow upstream can pin a goroutine forever. This lesson is the safe way to make outbound requests: a configured <code>http.Client</code>, per-request deadlines via context, body draining, and connection reuse.</p>
+</section>
+
+<section class="section reveal" id="no-timeout">
+  <h2><span class="section-num">01</span> <code>http.Get</code> is a production footgun</h2>
+  <p class="takeaway"><code>http.Get</code> and <code>http.DefaultClient</code> have <code>Timeout == 0</code>, which means <b>wait forever</b>. For anything real, create your own <code>http.Client</code> with a <code>Timeout</code> set.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>The default client is a phone call with no hang-up button. If the other side never answers, you hold the line forever — and every held line is a goroutine and a socket you can't get back. A <code>Timeout</code> is the "I'll wait 5 seconds, then hang up" rule that keeps you from running out of phones.</p></div></div>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">No timeout — can hang forever</div>
+      <div class="codeblock"><pre><code data-lang="go">// http.Get uses http.DefaultClient: Timeout == 0
+resp, err := http.Get("https://api.example.com/x")</code></pre></div>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">A bounded, reusable client</div>
+      <div class="codeblock"><pre><code data-lang="go">var client = &amp;http.Client{Timeout: 5 * time.Second}
+resp, err := client.Get("https://api.example.com/x")</code></pre></div>
+    </div>
+  </div>
+  <p><code>Client.Timeout</code> is a <b>whole-request</b> budget: connect + send + read headers + read the entire body. For finer control — or to cancel mid-flight — reach for context (next).</p>
+</section>
+
+<section class="section reveal" id="context-deadline">
+  <h2><span class="section-num">02</span> Per-request deadlines with context</h2>
+  <p class="takeaway">Build the request with <code>http.NewRequestWithContext(ctx, ...)</code>. A <code>ctx</code> from <code>context.WithTimeout</code> gives that one call its own deadline and lets a caller <b>cancel</b> it (e.g. the user disconnected).</p>
+  <p>You can inspect the request you've built before sending it — no network needed. Its method, URL and headers are all set on the value:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+)
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel() // ALWAYS release the timer
+
+	body := strings.NewReader(`{"name":"Ada"}`)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://api.example.com/users", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer t0ken")
+
+	// We only inspect the request here — no real call is made.
+	fmt.Println("method:", req.Method)
+	fmt.Println("url:   ", req.URL.String())
+	fmt.Println("ctype: ", req.Header.Get("Content-Type"))
+	fmt.Println("auth:  ", req.Header.Get("Authorization"))
+	_, hasDeadline := req.Context().Deadline()
+	fmt.Println("has deadline:", hasDeadline)
+}</script>
+    <script type="text/plain" class="gp-output">method: POST
+url:    https://api.example.com/users
+ctype:  application/json
+auth:   Bearer t0ken
+has deadline: true</script>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>The zero-value default client has no timeout.</b> <code>http.Get</code>, <code>http.Post</code> and a bare <code>&amp;http.Client{}</code> will all block indefinitely on a dead or slow peer. Always set <code>Client.Timeout</code> <em>and</em> pass a context deadline (they cover different scopes), and remember <code>defer cancel()</code> — skipping it leaks the timer until the deadline fires.</p></div></div>
+</section>
+
+<section class="section reveal" id="close-drain">
+  <h2><span class="section-num">03</span> Always close — and drain — the body</h2>
+  <p class="takeaway">When <code>err == nil</code>, <code>resp.Body</code> is an open stream you <b>must</b> <code>defer resp.Body.Close()</code>. To let the connection be <b>reused</b>, also read the body to EOF (drain it) before closing.</p>
+  <p>An unread, unclosed body holds a TCP connection out of the pool — do it on every request and you leak connections until the process dies. The canonical shape:</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">call.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">resp, err := client.Do(req)
+if err != nil {
+    return err // on error, resp is nil — nothing to close
+}
+defer resp.Body.Close()                  // 1. always close
+
+var out User
+if err := json.NewDecoder(resp.Body).Decode(&amp;out); err != nil {
+    return err
+}
+io.Copy(io.Discard, resp.Body)           // 2. drain leftovers so the
+                                         //    connection can be reused
+if resp.StatusCode &gt;= 400 {
+    return fmt.Errorf("upstream: %s", resp.Status)
+}</code></pre></div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">check status yourself</span></div><p>A non-2xx response is <b>not</b> a Go error — <code>err</code> is only set for transport failures (DNS, connection, timeout). You must inspect <code>resp.StatusCode</code> / <code>resp.Status</code> yourself. A "successful" <code>Do</code> can still be a <code>500</code>.</p></div></div>
+</section>
+
+<section class="section reveal" id="reuse-tuning">
+  <h2><span class="section-num">04</span> Reuse one client; tune the Transport</h2>
+  <p class="takeaway">Create <b>one</b> <code>http.Client</code> and share it. Its <code>Transport</code> holds the connection pool, so a per-request client throws pooling away and re-dials (and re-TLS-handshakes) every time.</p>
+  <p>For high-throughput callers, tune the shared <code>Transport</code> — raise idle connections per host, set dial/TLS sub-timeouts. We build the client and print its config back (no network call needed) so the values are exact:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"fmt"
+	"net/http"
+	"time"
+)
+
+// One shared client for the whole program — never one per request.
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        100,              // total idle conns kept
+		MaxIdleConnsPerHost: 10,              // default is only 2!
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 5 * time.Second,
+	},
+}
+
+func main() {
+	tr := httpClient.Transport.(*http.Transport)
+	fmt.Println("client timeout:    ", httpClient.Timeout)
+	fmt.Println("max idle/host:     ", tr.MaxIdleConnsPerHost)
+	fmt.Println("idle conn timeout: ", tr.IdleConnTimeout)
+}</script>
+    <script type="text/plain" class="gp-output">client timeout:     10s
+max idle/host:      10
+idle conn timeout:  1m30s</script>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>A new <code>Client</code> (or <code>Transport</code>) per request defeats connection pooling.</b> Each fresh transport keeps its own idle-connection pool, so connections are never reused — you pay a TCP+TLS handshake every call and can exhaust ephemeral ports under load. The default <code>MaxIdleConnsPerHost</code> is just <b>2</b>, which silently throttles a hot path even with one shared client. Make the client once, raise per-host idle conns if you call one host hard.</p></div></div>
+</section>
+
+<section class="section reveal" id="retries">
+  <h2><span class="section-num">05</span> Retries &amp; backoff (sketch)</h2>
+  <p class="takeaway">Retry only <b>idempotent</b> requests and only <b>retryable</b> failures (timeouts, connection resets, <code>429</code>/<code>503</code>). Back off <b>exponentially with jitter</b> and cap attempts, and always respect the parent context's deadline.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">retry.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">func getWithRetry(ctx context.Context, url string) (*http.Response, error) {
+    var lastErr error
+    backoff := 100 * time.Millisecond
+    for attempt := 0; attempt &lt; 3; attempt++ {
+        req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+        resp, err := httpClient.Do(req)
+        if err == nil &amp;&amp; resp.StatusCode &lt; 500 {
+            return resp, nil                 // success or a non-retryable 4xx
+        }
+        if resp != nil {
+            io.Copy(io.Discard, resp.Body)   // drain before discarding
+            resp.Body.Close()
+        }
+        lastErr = err
+        select {
+        case &lt;-ctx.Done():
+            return nil, ctx.Err()            // honour the deadline
+        case &lt;-time.After(backoff):
+            backoff *= 2                     // exponential (add jitter in prod)
+        }
+    }
+    return nil, lastErr
+}</code></pre></div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">in this guide</span></div><p>Cancellation and deadlines flow through <code>context.Context</code> — the same value you pass to <code>NewRequestWithContext</code>. See <a href="../concurrency/context.html">Context: cancellation &amp; deadlines</a> for how <code>WithTimeout</code>, <code>WithCancel</code> and <code>ctx.Done()</code> work end to end.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">06</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Your service calls one upstream thousands of times a second and creates <code>&amp;http.Client{Timeout: 5*time.Second}</code> inside each handler. Latency is fine but you keep running out of ephemeral ports. Why?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>A new client = a new Transport = a fresh empty connection pool, so connections are never reused; each call opens (and soon closes) a new socket.</button>
+      <button class="quiz-opt"><span class="mark"></span>The 5-second timeout is too long and holds connections open.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>http.Client</code> isn't safe for concurrent use, so it spawns extra sockets.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> The connection pool lives on the <code>Transport</code>, which lives on the <code>Client</code>. A per-request client gets a brand-new transport whose idle pool starts empty, so nothing is reused — every request dials a fresh TCP (and TLS) connection, burning ephemeral ports. Create <b>one</b> shared client (a single <code>http.Client</code> is safe for concurrent use) and reuse it everywhere.</div>
+  </div>
+</section>
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../webservices/middleware-routing.html"><span class="pn-k">Previous</span><span class="pn-t">Middleware, context &amp; routing patterns</span></a>
+            <a class="next" href="../webservices/json-apis.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Building JSON APIs &amp; validation</span></a>
+          </nav>
+        </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#no-timeout">http.Get is a production footgun</a>
+          <a href="#context-deadline">Per-request deadlines with context</a>
+          <a href="#close-drain">Always close — and drain — the body</a>
+          <a href="#reuse-tuning">Reuse one client; tune the Transport</a>
+          <a href="#retries">Retries backoff (sketch)</a>
+          <a href="#check">Check yourself</a>
+        </nav>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Go — a visual guide &middot; goroutines &middot; channels &middot; interfaces &middot; generics &middot; the runtime</span>
+        <span class="fmono">Built to open offline &middot; Go 1.26 era &middot; Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/gopad.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

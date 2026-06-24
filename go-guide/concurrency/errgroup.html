@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Structured concurrency with errgroup | Go — a visual guide</title>
+  <meta name="description" content="Go — a visual guide — Structured concurrency with errgroup. A sharp, diagram-first guide to Go for backend engineers and interviews: the language, slices &amp; interfaces, generics, and concurrency (goroutines, channels, the scheduler) — each idea in plain English then precise, with runnable Go examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ADD8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z'/><path d='M2.5 9.5h2.5M19 9.5h2.5'/><circle cx='9.6' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/><circle cx='14.4' cy='10.6' r='1.1' fill='%2300ADD8' stroke='none'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/go.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="concurrency" data-page="concurrency-errgroup" data-lesson="co-errgroup">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Go — a visual guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9c0-3 3-5 7-5s7 2 7 5v4c0 3.3-3 6-7 6s-7-2.7-7-6Z"/><path d="M2.5 9.5h2.5M19 9.5h2.5"/><circle cx="9.6" cy="10.6" r="1.1" fill="#06121a" stroke="none"/><circle cx="14.4" cy="10.6" r="1.1" fill="#06121a" stroke="none"/></svg></span>
+        <span class="brand-text"><b>Go — a visual guide</b><span>the language &amp; runtime, distilled</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home · the map</a>
+      </nav>
+      <nav class="nav-group is-foundations" aria-label="Getting started">
+        <h4><span class="dot"></span>Getting started</h4>
+        <a class="nav-link" href="../foundations/why-go.html">Why Go</a>
+        <a class="nav-link" href="../foundations/toolchain.html">Toolchain & modules</a>
+        <a class="nav-link" href="../foundations/hello-program.html">Anatomy of a program</a>
+        <a class="nav-link" href="../foundations/vars-and-types.html">Vars, constants & zero values</a>
+        <a class="nav-link" href="../foundations/control-flow.html">Control flow & functions</a>
+      </nav>
+      <nav class="nav-group is-language" aria-label="The language core">
+        <h4><span class="dot"></span>The language core</h4>
+        <a class="nav-link" href="../language/arrays-slices.html">Arrays & slices</a>
+        <a class="nav-link" href="../language/maps.html">Maps</a>
+        <a class="nav-link" href="../language/strings-runes-bytes.html">Strings, runes & bytes</a>
+        <a class="nav-link" href="../language/structs.html">Structs & embedding</a>
+        <a class="nav-link" href="../language/pointers.html">Pointers</a>
+        <a class="nav-link" href="../language/errors-and-defer.html">Errors, defer & panic</a>
+        <a class="nav-link" href="../language/error-handling-patterns.html">Error handling patterns</a>
+      </nav>
+      <nav class="nav-group is-types" aria-label="Types &amp; interfaces">
+        <h4><span class="dot"></span>Types & interfaces</h4>
+        <a class="nav-link" href="../types/methods.html">Methods & receivers</a>
+        <a class="nav-link" href="../types/interfaces.html">Interfaces</a>
+        <a class="nav-link" href="../types/nil-interfaces.html">The nil interface trap</a>
+        <a class="nav-link" href="../types/type-assertions-switch.html">Assertions & switches</a>
+        <a class="nav-link" href="../types/error-interface-design.html">Interfaces in practice</a>
+        <a class="nav-link" href="../types/reflection.html">Reflection & tags</a>
+      </nav>
+      <nav class="nav-group is-generics" aria-label="Generics &amp; modern Go">
+        <h4><span class="dot"></span>Generics & modern Go</h4>
+        <a class="nav-link" href="../generics/type-parameters.html">Type parameters</a>
+        <a class="nav-link" href="../generics/generic-stdlib.html">Generic stdlib</a>
+        <a class="nav-link" href="../generics/iterators.html">Iterators (range-func)</a>
+        <a class="nav-link" href="../generics/generics-pitfalls.html">Generics pitfalls</a>
+      </nav>
+      <nav class="nav-group is-concurrency" aria-label="Concurrency">
+        <h4><span class="dot"></span>Concurrency</h4>
+        <a class="nav-link" href="../concurrency/index.html">The big picture</a>
+        <a class="nav-link" href="../concurrency/goroutines.html">Goroutines</a>
+        <a class="nav-link" href="../concurrency/scheduler.html">The G-M-P scheduler</a>
+        <a class="nav-link" href="../concurrency/channels.html">Channels</a>
+        <a class="nav-link" href="../concurrency/select.html">select & multiplexing</a>
+        <a class="nav-link" href="../concurrency/sync-primitives.html">sync primitives</a>
+        <a class="nav-link" href="../concurrency/atomics-memory-model.html">Atomics & memory model</a>
+        <a class="nav-link" href="../concurrency/context.html">context</a>
+        <a class="nav-link" href="../concurrency/patterns.html">Concurrency patterns</a>
+        <a class="nav-link" href="../concurrency/errgroup.html">errgroup</a>
+        <a class="nav-link" href="../concurrency/leaks-deadlocks-races.html">Leaks, deadlocks & races</a>
+      </nav>
+      <nav class="nav-group is-stdlib" aria-label="Standard library">
+        <h4><span class="dot"></span>Standard library</h4>
+        <a class="nav-link" href="../stdlib/encoding-json.html">encoding/json</a>
+        <a class="nav-link" href="../stdlib/time.html">time</a>
+        <a class="nav-link" href="../stdlib/io-bufio.html">io & bufio</a>
+        <a class="nav-link" href="../stdlib/files-os.html">Files & os</a>
+        <a class="nav-link" href="../stdlib/slog.html">log/slog</a>
+        <a class="nav-link" href="../stdlib/stdlib-tour.html">Stdlib tour</a>
+      </nav>
+      <nav class="nav-group is-webservices" aria-label="HTTP services">
+        <h4><span class="dot"></span>HTTP services</h4>
+        <a class="nav-link" href="../webservices/net-http.html">net/http</a>
+        <a class="nav-link" href="../webservices/middleware-routing.html">Middleware & routing</a>
+        <a class="nav-link" href="../webservices/http-clients.html">HTTP clients</a>
+        <a class="nav-link" href="../webservices/json-apis.html">JSON APIs</a>
+        <a class="nav-link" href="../webservices/production-services.html">Production services</a>
+      </nav>
+      <nav class="nav-group is-testing" aria-label="Testing &amp; tooling">
+        <h4><span class="dot"></span>Testing & tooling</h4>
+        <a class="nav-link" href="../testing/testing-basics.html">Tests & table tests</a>
+        <a class="nav-link" href="../testing/mocking-interfaces.html">Mocking & seams</a>
+        <a class="nav-link" href="../testing/benchmarks.html">Benchmarks</a>
+        <a class="nav-link" href="../testing/fuzzing-coverage.html">Fuzzing & coverage</a>
+        <a class="nav-link" href="../testing/tooling.html">The tooling belt</a>
+      </nav>
+      <nav class="nav-group is-runtime" aria-label="Runtime &amp; performance">
+        <h4><span class="dot"></span>Runtime & performance</h4>
+        <a class="nav-link" href="../runtime/memory-model-stack-heap.html">Stack, heap & escape</a>
+        <a class="nav-link" href="../runtime/garbage-collector.html">The garbage collector</a>
+        <a class="nav-link" href="../runtime/pprof-profiling.html">pprof profiling</a>
+        <a class="nav-link" href="../runtime/performance-patterns.html">Performance patterns</a>
+        <a class="nav-link" href="../runtime/cgo-unsafe-build.html">cgo, unsafe & builds</a>
+      </nav>
+      <nav class="nav-group is-interview" aria-label="Interview prep">
+        <h4><span class="dot"></span>Interview prep</h4>
+        <a class="nav-link" href="../interview/question-bank.html">Question bank</a>
+        <a class="nav-link" href="../interview/machine-coding.html">Machine-coding</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheatsheet</a>
+        <a class="nav-link" href="../reference/flashcards.html">Flashcards</a>
+        <a class="nav-link" href="../reference/drills.html">Timed drills</a>
+        <a class="nav-link" href="../reference/gotchas.html">Gotchas index</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">Structured concurrency with errgroup</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal">
+  <span class="eyebrow">Concurrency · structured concurrency</span>
+  <h1>Structured concurrency with <code>errgroup</code>.</h1>
+  <p class="lead">Run a batch of goroutines, wait for all of them, surface the first failure, and cancel the rest — in about four lines. <code>errgroup</code> is Go's practical answer to "fan out work, then collect the result or the error" without hand-wiring a <code>WaitGroup</code>, an error channel, and a <code>context</code> yourself.</p>
+</section>
+
+<section class="section reveal" id="the-idea">
+  <h2><span class="section-num">01</span> The team lead that waits — and pulls the team back</h2>
+  <p class="takeaway"><code>errgroup.Group</code> launches sibling goroutines, <b>waits for all of them</b>, returns the <b>first non-nil error</b>, and (with <code>WithContext</code>) <b>cancels the rest</b> the moment one fails.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Think of a <b>team lead</b> handing out parallel tasks. They stand at the door and won't leave until <em>everyone</em> is back — and the instant one teammate reports a failure, the lead radios the whole team: "stop, come home, we're done here." You get one verdict (the first failure) and nobody is left wandering the building.</p></div></div>
+  <p>That bundle of behaviour — bounded lifetimes, one place that waits, one place that fails — is what people mean by <b>structured concurrency</b>: goroutines that don't outlive the call that started them. Go doesn't have a dedicated language construct for it yet (the topic is recent and evolving), so <code>errgroup</code> from <code>golang.org/x/sync</code> is the idiomatic, battle-tested take.</p>
+</section>
+
+<section class="section reveal" id="api">
+  <h2><span class="section-num">02</span> The whole API is three calls</h2>
+  <p class="takeaway">Make a group tied to a context, launch each unit with <code>g.Go(func() error{…})</code>, then block on <code>g.Wait()</code>, which hands you the <b>first</b> error or <code>nil</code>.</p>
+  <dl class="kv">
+    <dt><code>g, ctx := errgroup.WithContext(parent)</code></dt><dd>Make a group whose <code>ctx</code> is <b>cancelled on the first error</b> (or when <code>Wait</code> returns). Pass that <code>ctx</code> into your workers so they can bail.</dd>
+    <dt><code>g.Go(func() error { … })</code></dt><dd>Run one unit of work in its own goroutine. Returning a non-nil error trips the group.</dd>
+    <dt><code>err := g.Wait()</code></dt><dd>Block until every <code>g.Go</code> finishes; return the <b>first</b> non-nil error (or <code>nil</code> if all succeeded).</dd>
+    <dt><code>g.SetLimit(n)</code></dt><dd>Cap concurrency to at most <code>n</code> active goroutines — <code>g.Go</code> blocks until a slot frees. Use it to bound parallel work (e.g. don't open 10 000 sockets at once).</dd>
+  </dl>
+  <p>Here's a fan-out where every task succeeds. We fetch the length of each name concurrently, then <b>sort and aggregate before printing</b> so the output never depends on which goroutine finished first:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "fmt"
+    "sort"
+    "sync"
+
+    "golang.org/x/sync/errgroup"
+)
+
+func main() {
+    names := []string{"ada", "go", "gopher", "ken"}
+    lengths := make([]int, len(names))
+
+    var g errgroup.Group
+    var mu sync.Mutex
+    total := 0
+
+    for i, name := range names { // Go 1.22+: i, name are per-iteration
+        g.Go(func() error {
+            n := len(name) // pretend this is real work
+            lengths[i] = n // distinct index per task: no lock needed
+            mu.Lock()
+            total += n
+            mu.Unlock()
+            return nil
+        })
+    }
+
+    if err := g.Wait(); err != nil {
+        fmt.Println("failed:", err)
+        return
+    }
+
+    sort.Ints(lengths) // sort so output is deterministic
+    fmt.Println("lengths:", lengths)
+    fmt.Println("total:", total)
+}</script>
+    <script type="text/plain" class="gp-output">lengths: [2 3 3 6]
+total: 14</script>
+  </div>
+</section>
+
+<section class="section reveal" id="first-error">
+  <h2><span class="section-num">03</span> First error wins, siblings get cancelled</h2>
+  <p class="takeaway">With <code>WithContext</code>, the first worker to return an error <b>cancels <code>ctx</code></b>; well-behaved siblings notice via <code>&lt;-ctx.Done()</code> and stop early. <code>Wait</code> reports that first error.</p>
+  <p>One task fails deliberately. We print the exact error string <code>Wait</code> returns — deterministic because we hard-code which task fails:</p>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+    "context"
+    "fmt"
+
+    "golang.org/x/sync/errgroup"
+)
+
+func fetch(ctx context.Context, id int) error {
+    if id == 2 {
+        return fmt.Errorf("task %d: bad gateway", id)
+    }
+    // A real worker would do: select on ctx.Done() vs its work.
+    select {
+    case <-ctx.Done():
+        return ctx.Err() // sibling cancelled us
+    default:
+        return nil
+    }
+}
+
+func main() {
+    g, ctx := errgroup.WithContext(context.Background())
+    for id := 0; id < 5; id++ {
+        g.Go(func() error { return fetch(ctx, id) })
+    }
+    if err := g.Wait(); err != nil {
+        fmt.Println("group failed:", err)
+    } else {
+        fmt.Println("all ok")
+    }
+}</script>
+    <script type="text/plain" class="gp-output">group failed: task 2: bad gateway</script>
+  </div>
+  <p>Notice <code>fetch</code> selects on <code>&lt;-ctx.Done()</code>. That cooperation is the whole point: the group <em>signals</em> cancellation, but a goroutine only stops if it actually <em>checks</em>.</p>
+</section>
+
+<section class="section reveal" id="before-after">
+  <h2><span class="section-num">04</span> Before &amp; after: what errgroup deletes</h2>
+  <p class="takeaway">Hand-rolling the same behaviour means a <code>WaitGroup</code>, a buffered error channel, a manual <code>context.WithCancel</code>, and careful "report only the first error" logic. <code>errgroup</code> collapses all of it.</p>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">By hand: WaitGroup + error channel + cancel</div>
+      <div class="codeblock"><pre><code data-lang="go">ctx, cancel := context.WithCancel(parent)
+defer cancel()
+
+var wg sync.WaitGroup
+errCh := make(chan error, len(tasks))
+
+for _, t := range tasks {
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        if err := t.Run(ctx); err != nil {
+            errCh &lt;- err
+            cancel()        // pull the siblings back
+        }
+    }()
+}
+wg.Wait()
+close(errCh)
+
+var firstErr error          // dig the first error out
+for err := range errCh {
+    if firstErr == nil {
+        firstErr = err
+    }
+}
+if firstErr != nil {
+    return firstErr
+}</code></pre></div>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">With errgroup</div>
+      <div class="codeblock"><pre><code data-lang="go">g, ctx := errgroup.WithContext(parent)
+
+for _, t := range tasks {
+    g.Go(func() error {
+        return t.Run(ctx) // first non-nil cancels ctx
+    })
+}
+return g.Wait()             // first error, or nil</code></pre></div>
+    </div>
+  </div>
+  <p>Same semantics — wait for all, cancel on first failure, surface that failure — but the <code>WaitGroup</code> bookkeeping, the channel sizing, the <code>close</code>, and the "keep only the first error" loop all vanish into the library.</p>
+</section>
+
+<section class="section reveal" id="gotchas">
+  <h2><span class="section-num">05</span> The traps</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Cancellation only works if your workers honour <code>ctx</code>.</b> <code>WithContext</code> cancels the context, but a goroutine busy in a tight loop or a blocking call that ignores <code>ctx</code> keeps running anyway. Pass <code>ctx</code> into every call that accepts one (<code>http.NewRequestWithContext</code>, <code>db.QueryContext</code>, …) or <code>select</code> on <code>&lt;-ctx.Done()</code> — otherwise "cancel the siblings" cancels nothing.</p></div></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>Two more sharp edges.</b> (1) <code>g.Wait()</code> returns <em>only the first</em> error — every other goroutine's error is dropped. If you need them all, collect into a slice yourself or wrap with <code>errors.Join</code>. (2) <b>Loop-variable capture</b>: on Go 1.22+ each iteration gets a fresh <code>i</code>/<code>v</code>, so <code>g.Go(func() error { use(v) })</code> is safe; on Go 1.21 and earlier you must shadow it (<code>v := v</code>) or every goroutine sees the last value.</p></div></div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">bound it</span></div><p>Unbounded fan-out over a big input will happily spawn thousands of goroutines and exhaust file descriptors or connections. Reach for <code>g.SetLimit(n)</code> to turn the group into a bounded worker pool — it's the simplest semaphore you'll ever write.</p></div></div>
+</section>
+
+<section class="section reveal" id="see-also">
+  <h2><span class="section-num">06</span> Where this fits</h2>
+  <p>Inside the language, <code>errgroup</code> sits on top of three things you've already met: a <a href="sync-primitives.html"><code>WaitGroup</code></a> to wait, a <a href="context.html"><code>context</code></a> to cancel, and the <a href="patterns.html">fan-out / fan-in pattern</a> to structure the work. It just packages them with the right defaults.</p>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">design</span></div><p><code>g.SetLimit(n)</code> is a concurrency cap — the same idea, formalised, that the LLD guide builds from scratch in its <a href="../../lld-guide/advanced/rate-limiter.html">rate limiter</a> (token bucket &amp; semaphore). Worth a read for how a bounded-permit system looks when you implement it by hand.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">07</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You run five tasks with <code>errgroup.WithContext</code>. Task 2 returns an error almost immediately; the others are slow <code>time.Sleep</code> loops that never look at the context. What does <code>g.Wait()</code> return, and when?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>It returns task 2's error, but only <b>after the slow tasks finish</b> — they ignore <code>ctx</code>, so cancellation can't stop them.</button>
+      <button class="quiz-opt"><span class="mark"></span>It returns immediately the instant task 2 fails, killing the other goroutines.</button>
+      <button class="quiz-opt"><span class="mark"></span>It returns a joined error containing every task's failure.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> <code>Wait</code> blocks until <em>all</em> <code>g.Go</code> functions return; it can't forcibly kill a goroutine. The context is cancelled on task 2's failure, but a worker that never checks <code>&lt;-ctx.Done()</code> runs to completion regardless — so you wait for the slowest one and then get the <em>first</em> error (task 2's). That's exactly why "honour <code>ctx</code> in your workers" is the headline gotcha.</div>
+  </div>
+</section>
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../concurrency/patterns.html"><span class="pn-k">Previous</span><span class="pn-t">Patterns: pool, fan-in/out, pipeline, semaphore</span></a>
+            <a class="next" href="../concurrency/leaks-deadlocks-races.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Goroutine leaks, deadlocks &amp; the race detector</span></a>
+          </nav>
+        </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#the-idea">The team lead that waits — and pulls the team back</a>
+          <a href="#api">The whole API is three calls</a>
+          <a href="#first-error">First error wins, siblings get cancelled</a>
+          <a href="#before-after">Before after: what errgroup deletes</a>
+          <a href="#gotchas">The traps</a>
+          <a href="#see-also">Where this fits</a>
+          <a href="#check">Check yourself</a>
+        </nav>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Go — a visual guide &middot; goroutines &middot; channels &middot; interfaces &middot; generics &middot; the runtime</span>
+        <span class="fmono">Built to open offline &middot; Go 1.26 era &middot; Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/gopad.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>
