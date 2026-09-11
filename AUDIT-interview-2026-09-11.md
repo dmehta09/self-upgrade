@@ -166,11 +166,11 @@ Author commands (after this pass):
 
 ### Aptitude & Reasoning
 
-**Coverage:** quant (9) · reasoning (8) · verbal (4) · DI (3) · 121-Q bank · formula/flashcards.
+**Coverage:** quant (9) · reasoning (8) · verbal (4) · DI (3) · 125-Q bank · formula/flashcards.
 
-**Gaps:** authentic hard RC, larger stretch pool.
+**Gaps:** larger stretch pool only (nice-to-have).
 
-**Shipped:** [geometry](aptitude-guide/quant/geometry-and-mensuration.html); [coded inequalities](aptitude-guide/reasoning/coded-inequalities.html); multi-set DI densified on [caselets](aptitude-guide/di/caselets-and-mixed-sets.html).
+**Shipped:** [geometry](aptitude-guide/quant/geometry-and-mensuration.html); [coded inequalities](aptitude-guide/reasoning/coded-inequalities.html); multi-set DI on [caselets](aptitude-guide/di/caselets-and-mixed-sets.html); harder RC stems on [reading comprehension](aptitude-guide/verbal/reading-comprehension.html).
 
 ---
 
@@ -260,12 +260,13 @@ Author commands (after this pass):
 - [x] Aptitude geometry & mensuration lesson
 - [x] Aptitude coded inequalities lesson
 - [x] Aptitude multi-set DI densify on caselets
+- [x] Aptitude harder RC stems densify
 
 ### Still open
 
 1. ~~GenAI: soften landscape brand names; fix finetuning/production module maps; HyDE cross-link~~ (done in senior wave)
 2. ~~DSA: Min Window, Meeting Rooms, LRU, Dijkstra, 2D DP, fix Stock pattern label~~ (done)
-3. ~~Aptitude: geometry + coded inequalities + multi-set DI~~ (done) — still open: harder RC stretch
+3. ~~Aptitude: geometry + coded inequalities + multi-set DI + harder RC~~ (done)
 4. ~~FastAPI: Auth II, async tests, compose+Postgres~~ (done)
 5. ~~LangStack: middleware lesson, MCP cross-link, context engineering~~ (done)
 6. ~~Densify viz captions / whiteboard~~ (done on key pages)
