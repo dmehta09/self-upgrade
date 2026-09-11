@@ -48,6 +48,7 @@
           <a class="nav-link" href="#subsets">Subsets</a>
           <a class="nav-link" href="#combination-sum">Combination Sum</a>
           <a class="nav-link" href="#permutations">Permutations</a>
+          <a class="nav-link" href="#word-search">Word Search</a>
         </div>
         <a class="nav-link" href="../patterns/graphs.html">Graphs</a>
         <a class="nav-link" href="../patterns/dynamic-programming.html">Dynamic Programming</a>
@@ -64,6 +65,7 @@
       </nav>
       <nav class="nav-group" aria-label="Reference"><h4>Reference</h4>
         <a class="nav-link" href="../reference/python-coding-round.html">Python coding round</a>
+        <a class="nav-link" href="../reference/blind-75.html">Blind 75 tracker</a>
         <a class="nav-link" href="../reference/cheatsheet.html">Cheat-sheet &amp; glossary</a>
       </nav>
     </aside>
@@ -675,6 +677,168 @@ print(permute([1, 2, 3]))
             </details>
           </section>
 
+          <!-- ===== PROBLEM 4: WORD SEARCH ===== -->
+          <section class="section problem reveal" id="word-search">
+            <header class="problem-meta">
+              <h2><span class="section-num">04</span> &nbsp;Word Search</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Backtracking</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~25 min</span>
+                <span class="pm-chip cx">O(m · n · 4ᴸ) time · O(L) space</span>
+              </div>
+            </header>
+            <p class="lead">Given an <code>m × n</code> board of letters and a string <code>word</code>, return whether <code>word</code> can be formed by walking adjacent cells (up/down/left/right — no diagonals, no reuse of the same cell). For the board below and <code>word = "ABCCED"</code> the answer is <code>True</code>; for <code>"ABCB"</code> it's <code>False</code> (you'd need to reuse <code>B</code>).</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">A word hunt on a letter grid <span class="tag">analogy</span></div>
+                <p>You're hunting a word on a Scrabble-like board. Start on any cell that matches the first letter, then step to a neighboring cell for the next letter. If a path dies, <strong>erase your footprints</strong> and try a different neighbour — classic maze-and-string backtracking. Marking a cell with <code>#</code> while you're on it stops you from stepping on it twice; restoring the letter on the way out frees it for other paths.</p>
+              </div>
+            </div>
+
+            <div class="diagram" role="img" aria-label="3x4 letter board for word search ABCCED">
+              <div style="display:flex;flex-direction:column;gap:14px;padding:6px 2px;">
+                <div style="display:flex;flex-direction:column;gap:6px;align-items:center;font-family:var(--mono,monospace);">
+                  <div style="display:flex;gap:8px;">
+                    <span class="db" style="padding:8px 12px;border-radius:10px;background:rgba(129,140,248,.16);border:1px solid rgba(129,140,248,.4);">A</span>
+                    <span class="db" style="padding:8px 12px;border-radius:10px;background:rgba(52,211,153,.16);border:1px solid rgba(52,211,153,.4);">B</span>
+                    <span class="db" style="padding:8px 12px;border-radius:10px;background:rgba(52,211,153,.16);border:1px solid rgba(52,211,153,.4);">C</span>
+                    <span class="db" style="padding:8px 12px;border-radius:10px;background:rgba(129,140,248,.16);border:1px solid rgba(129,140,248,.4);">E</span>
+                  </div>
+                  <div style="display:flex;gap:8px;">
+                    <span class="db" style="padding:8px 12px;border-radius:10px;background:rgba(129,140,248,.16);border:1px solid rgba(129,140,248,.4);">S</span>
+                    <span class="db" style="padding:8px 12px;border-radius:10px;background:rgba(129,140,248,.16);border:1px solid rgba(129,140,248,.4);">F</span>
+                    <span class="db" style="padding:8px 12px;border-radius:10px;background:rgba(52,211,153,.16);border:1px solid rgba(52,211,153,.4);">C</span>
+                    <span class="db" style="padding:8px 12px;border-radius:10px;background:rgba(129,140,248,.16);border:1px solid rgba(129,140,248,.4);">S</span>
+                  </div>
+                  <div style="display:flex;gap:8px;">
+                    <span class="db" style="padding:8px 12px;border-radius:10px;background:rgba(129,140,248,.16);border:1px solid rgba(129,140,248,.4);">A</span>
+                    <span class="db" style="padding:8px 12px;border-radius:10px;background:rgba(129,140,248,.16);border:1px solid rgba(129,140,248,.4);">D</span>
+                    <span class="db" style="padding:8px 12px;border-radius:10px;background:rgba(52,211,153,.16);border:1px solid rgba(52,211,153,.4);">E</span>
+                    <span class="db" style="padding:8px 12px;border-radius:10px;background:rgba(52,211,153,.16);border:1px solid rgba(52,211,153,.4);">E</span>
+                  </div>
+                </div>
+                <p class="muted" style="text-align:center;margin:0;">One valid path for <code>ABCCED</code>: A→B→C→C→E→D (highlighted). Reusing a cell is illegal — that's why <code>ABCB</code> fails.</p>
+              </div>
+            </div>
+
+            <h3>How to solve it</h3>
+            <p>DFS from every cell that matches <code>word[0]</code>, with in-place visit marking:</p>
+            <ol>
+              <li>Write a helper <code>dfs(r, c, i)</code> meaning "can we match <code>word[i:]</code> starting at cell <code>(r, c)</code>?"</li>
+              <li>Base success: <code>i == len(word)</code> — every letter matched.</li>
+              <li>Base failure: out of bounds, or <code>board[r][c] != word[i]</code>.</li>
+              <li>Choose: save the letter, set <code>board[r][c] = '#'</code>, try the four neighbours with <code>i + 1</code>.</li>
+              <li>Undo: restore the saved letter so other paths can use this cell.</li>
+              <li>Kick off <code>dfs</code> from every board cell; return <code>True</code> on the first success.</li>
+            </ol>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-bad">O(m · n · 4ᴸ)</span></td><td>Up to m·n starts; each step fans out to 4 directions for word length L (pruned in practice).</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(L)</span></td><td>Recursion depth at most the word length (board mutated in place — no visit set).</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+              <div class="co-body"><div class="co-title">Always restore the letter</div><p>Forgetting to put the original character back after DFS is the classic bug — later starting points see a board full of <code>#</code> and miss valid words. Choose → recurse → <strong>un-choose</strong>.</p></div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why mark a visited cell with <code>'#'</code> instead of a separate set?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because <code>#</code> can never appear in the input word</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>It reuses the board as the visit mask (O(1) extra space) and can't match any letter — as long as you restore on the way back</button>
+                <button class="quiz-opt"><span class="mark"></span>Sets are illegal in interviews</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> Overwriting with a sentinel that won't equal <code>word[i]</code> blocks reuse without a hash set. The undo step is mandatory so the board is clean for the next attempt.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Nested loops over every <code>(r, c)</code>. Inside <code>dfs</code>: if <code>i == len(word)</code> return True; if OOB or mismatch return False; save <code>board[r][c]</code>, set <code>'#'</code>, try four dirs with <code>i+1</code>, restore, return whether any dir succeeded.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">word_search.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="28">
+def exist(board, word):
+    rows, cols = len(board), len(board[0])
+
+    def dfs(r, c, i):
+        if i == len(word):
+            return True
+        if r < 0 or c < 0 or r >= rows or c >= cols or board[r][c] != word[i]:
+            return False
+        tmp = board[r][c]
+        board[r][c] = "#"
+        found = (dfs(r + 1, c, i + 1) or dfs(r - 1, c, i + 1) or
+                 dfs(r, c + 1, i + 1) or dfs(r, c - 1, i + 1))
+        board[r][c] = tmp
+        return found
+
+    for r in range(rows):
+        for c in range(cols):
+            if dfs(r, c, 0):
+                return True
+    return False
+
+board = [["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]]
+print(exist([row[:] for row in board], "ABCCED"))
+print(exist([row[:] for row in board], "ABCB"))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">True
+False</pre></div>
+                </div>
+                <p>We copy each board row before a test so the second call starts from a clean grid. Choose (<code>#</code>) → recurse → undo is the same maze-string rhythm as Subsets, just on a 2-D board.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">DFS + backtracking from every start cell is the interview default: mark the cell with <code>#</code>, try four neighbours, restore. A visit set also works; mutating the board keeps extra space to the recursion depth.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Try every cell as start] --> dfs["dfs r,c,i"]
+  dfs --> doneI{"i == len word?"}
+  doneI -->|yes| yes[Return True]
+  doneI -->|no| ok{"In bounds and matches word[i]?"}
+  ok -->|no| no[Return False]
+  ok -->|yes| mark["Save letter, set #"]
+  mark --> nbrs[Try 4 neighbours i+1]
+  nbrs --> undo[Restore letter]
+  undo --> ret[Return any neighbour True]
+  yes --> out[Done]
+  no --> out
+  ret --> out
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def exist(board, word):</code><span>Return whether <code>word</code> can be traced on the board without reusing cells.</span></li>
+                  <li><code>rows, cols = len(board), len(board[0])</code><span>Cache dimensions for bound checks.</span></li>
+                  <li><code>def dfs(r, c, i):</code><span>Can we match <code>word[i:]</code> starting at <code>(r, c)</code>?</span></li>
+                  <li><code>if i == len(word): return True</code><span>All characters matched — success.</span></li>
+                  <li><code>if r &lt; 0 or c &lt; 0 or r &gt;= rows or c &gt;= cols or board[r][c] != word[i]:</code><span>Out of bounds or wrong letter — dead end.</span></li>
+                  <li><code>tmp = board[r][c]</code><span>Save the letter so we can restore it later.</span></li>
+                  <li><code>board[r][c] = "#"</code><span>Mark visited — this cell can't be reused on this path.</span></li>
+                  <li><code>found = (dfs(...) or ...)</code><span>Try up/down/left/right for the next character.</span></li>
+                  <li><code>board[r][c] = tmp</code><span>Undo: free the cell for other branches / starts.</span></li>
+                  <li><code>return found</code><span>True if any neighbour completed the word.</span></li>
+                  <li><code>for r in range(rows): for c in range(cols):</code><span>Every cell is a potential starting letter.</span></li>
+                  <li><code>if dfs(r, c, 0): return True</code><span>First successful path wins.</span></li>
+                  <li><code>return False</code><span>No start led to a full match.</span></li>
+                </ol>
+                <p class="walk-why">Time O(m · n · 4ᴸ) worst case; space O(L) for the DFS stack.</p>
+              </div>
+            </details>
+          </section>
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -689,6 +853,7 @@ print(permute([1, 2, 3]))
           <a href="#subsets">Subsets</a>
           <a href="#combination-sum">Combination Sum</a>
           <a href="#permutations">Permutations</a>
+          <a href="#word-search">Word Search</a>
         </aside>
       </div>
 

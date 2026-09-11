@@ -31,11 +31,15 @@ window.LESSONS = [
   { id: "pat-tries",           title: "Tries",                         url: "patterns/tries.html",               module: "patterns",    tool: "patterns" },
   { id: "pat-union-find",      title: "Union-Find",                    url: "patterns/union-find.html",          module: "patterns",    tool: "patterns" },
   { id: "pat-design",          title: "Design",                        url: "patterns/design.html",              module: "patterns",    tool: "patterns" },
-  { id: "pat-bits",            title: "Bit Manipulation",              url: "patterns/bits.html",                module: "patterns",    tool: "patterns" }
+  { id: "pat-bits",            title: "Bit Manipulation",              url: "patterns/bits.html",                module: "patterns",    tool: "patterns" },
+
+  /* ---- REFERENCE (tracked) ---- */
+  { id: "ref-blind-75",        title: "Blind 75 tracker",              url: "reference/blind-75.html",           module: "reference",  tool: "reference" }
 ];
 
 /* Ordered module groups for the home dashboard. */
 window.LESSON_MODULES = [
   { key: "foundations", label: "Foundations" },
-  { key: "patterns",    label: "Patterns" }
+  { key: "patterns",    label: "Patterns" },
+  { key: "reference",   label: "Reference" }
 ];

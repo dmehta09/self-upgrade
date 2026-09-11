@@ -26,6 +26,7 @@ const FILES = [
   "drill/index.html",
   "reference/cheatsheet.html",
   "reference/python-coding-round.html",
+  "reference/blind-75.html",
 ];
 
 function decode(s) {

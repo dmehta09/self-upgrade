@@ -45,6 +45,7 @@
           <a class="nav-link" href="#search-rotated">Search in Rotated Sorted Array</a>
           <a class="nav-link" href="#bsearch-answer">On the answer</a>
           <a class="nav-link" href="#koko">Koko Eating Bananas</a>
+          <a class="nav-link" href="#find-min-rotated">Find Minimum in Rotated Sorted Array</a>
         </div>
         <a class="nav-link" href="../patterns/linked-list.html">Linked List</a>
         <a class="nav-link" href="../patterns/trees-traversal.html">Trees · BFS &amp; DFS</a>
@@ -65,6 +66,7 @@
       </nav>
       <nav class="nav-group" aria-label="Reference"><h4>Reference</h4>
         <a class="nav-link" href="../reference/python-coding-round.html">Python coding round</a>
+        <a class="nav-link" href="../reference/blind-75.html">Blind 75 tracker</a>
         <a class="nav-link" href="../reference/cheatsheet.html">Cheat-sheet &amp; glossary</a>
       </nav>
     </aside>
@@ -629,6 +631,152 @@ print(min_speed([30, 11, 23, 4, 20], 5))
             </div>
           </section>
 
+          <!-- ===== PROBLEM 4: FIND MINIMUM IN ROTATED SORTED ARRAY ===== -->
+          <section class="section problem reveal" id="find-min-rotated">
+            <header class="problem-meta">
+              <h2><span class="section-num">05</span> &nbsp;Find Minimum in Rotated Sorted Array</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Binary Search</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~20 min</span>
+                <span class="pm-chip cx">O(log n) time · O(1) space</span>
+              </div>
+            </header>
+            <p class="lead">A sorted array was rotated at some pivot — for example <code>[0,1,2,4,5,6,7]</code> became <code>[4,5,6,7,0,1,2]</code>. Find the <strong>minimum</strong> element in <code>O(log n)</code> time. Assume all values are unique. For <code>[3,4,5,1,2]</code> the answer is <code>1</code>; for an unrotated array like <code>[11,13,15,17]</code> the answer is the first element, <code>11</code>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Find the cut in a cut deck <span class="tag">analogy</span></div>
+                <p>Same cut deck as Search in Rotated Sorted Array — but now you only want the <em>smallest</em> card, which sits right at the cut. Peek at the middle card and compare it to the rightmost card in your window. If the middle is <strong>bigger</strong> than the right end, the cut (and the minimum) must be to the middle's right. If the middle is <strong>smaller or equal</strong>, the right run is tidy — the cut is at mid or to its left. Halve until the window pins the valley.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Binary search finding the minimum in a rotated sorted array by comparing mid to hi">
+              <figcaption class="viz-title">Compare mid to hi — the valley is always in the unsorted half</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": [4, 5, 6, 7, 0, 1, 2] },
+                "frames": [
+                  {"pointers":[{"name":"lo","at":0},{"name":"hi","at":6},{"name":"mid","at":3}],"active":[3],"caption":"mid=7, hi=2. 7 > 2 → the cut is right of mid. lo = mid + 1."},
+                  {"pointers":[{"name":"lo","at":4},{"name":"hi","at":6},{"name":"mid","at":5}],"active":[5],"dim":[0,1,2,3],"caption":"mid=1, hi=2. 1 ≤ 2 → min is at mid or left. hi = mid."},
+                  {"pointers":[{"name":"lo","at":4},{"name":"hi","at":5},{"name":"mid","at":4}],"active":[4],"dim":[0,1,2,3,6],"caption":"mid=0, hi=1. 0 ≤ 1 → hi = mid."},
+                  {"match":[4],"dim":[0,1,2,3,5,6],"caption":"lo == hi at index 4. Minimum is 0."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Binary-search the index of the minimum. Keep <code>lo</code> and <code>hi</code> as inclusive bounds and compare the midpoint to the <em>right</em> end:</p>
+            <ol>
+              <li>Start with <code>lo = 0</code>, <code>hi = len(nums) - 1</code>.</li>
+              <li>While <code>lo &lt; hi</code>: compute <code>mid = (lo + hi) // 2</code>.</li>
+              <li>If <code>nums[mid] &gt; nums[hi]</code>, the left-through-mid run is still ascending past the right end — the rotation cut (and the min) is strictly to mid's right: <code>lo = mid + 1</code>.</li>
+              <li>Otherwise mid itself could be the min (or something left of it is): <code>hi = mid</code>. Never do <code>hi = mid - 1</code> here — you'd throw away a possible answer.</li>
+              <li>When <code>lo == hi</code>, that index holds the minimum. Return <code>nums[lo]</code>.</li>
+            </ol>
+            <p>If the array was never rotated, <code>nums[mid] &lt;= nums[hi]</code> every time and the window shrinks left to index 0 — correct.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-great">O(log n)</span></td><td>Each comparison discards half the window.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-great">O(1)</span></td><td>Only <code>lo</code>, <code>hi</code>, and <code>mid</code>.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout tip">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span>
+              <div class="co-body"><div class="co-title">Compare to <code>hi</code>, not <code>lo</code></div><p>Comparing mid to <code>lo</code> gets messy when the array isn't rotated (<code>nums[lo] &lt;= nums[mid]</code> is always true then). Comparing to <code>hi</code> cleanly answers: "is the right side still sorted from mid?" If yes, the valley is mid-or-left; if no, it's strictly right.</p></div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">When <code>nums[mid] &gt; nums[hi]</code>, where is the minimum?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>At mid or to its left</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Strictly to the right of mid</button>
+                <button class="quiz-opt"><span class="mark"></span>Always at index 0</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> Mid is still on the "high" ascending run after the cut, so everything from <code>lo</code> through <code>mid</code> is bigger than the right end. The valley must be in <code>mid+1 … hi</code>.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Loop while <code>lo &lt; hi</code>. If <code>nums[mid] &gt; nums[hi]</code>, set <code>lo = mid + 1</code>; else set <code>hi = mid</code>. Return <code>nums[lo]</code> when they meet. Don't use <code>hi = mid - 1</code> on the equal/smaller branch.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">find_min_rotated.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="16">
+def find_min(nums):
+    lo, hi = 0, len(nums) - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if nums[mid] > nums[hi]:
+            lo = mid + 1
+        else:
+            hi = mid
+    return nums[lo]
+
+print(find_min([3, 4, 5, 1, 2]))
+print(find_min([4, 5, 6, 7, 0, 1, 2]))
+print(find_min([11, 13, 15, 17]))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">1
+0
+11</pre></div>
+                </div>
+                <p>Each step asks one question — is mid still on the high side of the cut? — and throws away the half that cannot hold the valley. Same cut-deck intuition as search-rotated, but hunting the floor instead of a target.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Compare mid to hi on a rotated sorted array: mid &gt; hi means the min is strictly right of mid; otherwise mid might be the min, so keep it with hi = mid. That one-pass binary search finds the valley in O(log n) without first locating the pivot separately.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["lo = 0, hi = n - 1"] --> loop{"lo &lt; hi?"}
+  loop -->|no| ans["Return nums[lo]"]
+  loop -->|yes| mid["mid = (lo + hi) // 2"]
+  mid --> cmp{"nums[mid] &gt; nums[hi]?"}
+  cmp -->|yes| right["lo = mid + 1"]
+  cmp -->|no| keep["hi = mid"]
+  right --> loop
+  keep --> loop
+  ans --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def find_min(nums):</code><span>Return the minimum value in a rotated sorted array of unique ints.</span></li>
+                  <li><code>lo, hi = 0, len(nums) - 1</code><span>Inclusive window over the whole array.</span></li>
+                  <li><code>while lo &lt; hi:</code><span>Shrink until the window is a single index — the valley.</span></li>
+                  <li><code>mid = (lo + hi) // 2</code><span>Probe the middle of the current window.</span></li>
+                  <li><code>if nums[mid] &gt; nums[hi]:</code><span>Mid sits on the high run; the cut (and min) is to the right.</span></li>
+                  <li><code>lo = mid + 1</code><span>Discard mid and everything left of it.</span></li>
+                  <li><code>else: hi = mid</code><span>Right side from mid is sorted — keep mid as a candidate min.</span></li>
+                  <li><code>return nums[lo]</code><span>When <code>lo == hi</code>, that cell is the minimum.</span></li>
+                </ol>
+                <p class="walk-why">Time O(log n) one comparison per halving; space O(1).</p>
+              </div>
+            </details>
+
+          </section>
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -644,6 +792,7 @@ print(min_speed([30, 11, 23, 4, 20], 5))
           <a href="#search-rotated">Search in Rotated Sorted Array</a>
           <a href="#bsearch-answer">On the answer</a>
           <a href="#koko">Koko Eating Bananas</a>
+          <a href="#find-min-rotated">Find Minimum in Rotated Sorted Array</a>
         </aside>
       </div>
 
