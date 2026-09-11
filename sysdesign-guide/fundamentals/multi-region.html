@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi-region, DR & data residency | The System Design Field Guide</title>
+  <meta name="description" content="Active-active vs active-passive, RPO/RTO, GeoDNS and latency routing, residency, conflict resolution, and a DR runbook." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="fundamentals" data-page="fund-multi-region" data-lesson="fund-multi-region">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+        <a class="nav-link" href="../fundamentals/async-patterns.html">CQRS · outbox · sagas</a>
+        <a class="nav-link" href="../fundamentals/multi-region.html">Multi-region &amp; DR</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+        <a class="nav-link" href="../advanced/feature-store.html">ML feature store</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/cell-architecture.html">Cell architecture</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Mock-interview drills</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../fundamentals/index.html" style="color:var(--accent)">Fundamentals</a><span class="sep">/</span><span class="current">Multi-region, DR & data residency</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Fundamentals · multi-region</span>
+  <h1>Multi-region, DR &amp; data residency.</h1>
+  <p class="lead">One availability zone is a single blast radius. Multi-region is how you survive a metro outage, cut latency for global users, and satisfy residency laws — but every cross-region write pays in lag, conflict risk, or cost. Interviewers want RPO/RTO numbers and a clear active-active vs active-passive choice, not just "we'd deploy in three regions."</p>
+</section>
+
+<section class="section reveal" id="topo">
+  <h2><span class="section-num">01</span> &nbsp;Active-active vs active-passive</h2>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">🔁</span><h4>Active-passive (hot standby)</h4><p>One region serves traffic; the other replicates (often async) and takes over on failover. Simpler conflict story; RTO includes DNS/health-check failover time; standby capacity is paid for and mostly idle.</p></div>
+    <div class="card feature"><span class="f-ic fx">⚡</span><h4>Active-active</h4><p>All regions serve traffic. Needs GeoDNS/latency routing, data locality or conflict resolution, and careful sticky/home-region writes for strong data. Higher utilization; harder correctness.</p></div>
+  </div>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "How multi-region should you go?",
+      "axisLabel": "From single-region HA to globally writable active-active:",
+      "stops": [
+        { "label": "Multi-AZ only", "dims": { "Resilience": 45, "Latency (global)": 20, "Ops complexity": 25, "Cost": 30 }, "note": "Survive an AZ failure inside one region. Fine for many products; a whole-region outage is still a full outage." },
+        { "label": "Active-passive DR", "dims": { "Resilience": 75, "Latency (global)": 35, "Ops complexity": 55, "Cost": 60 }, "note": "Async replica region + failover runbook. Good RPO if lag is small; RTO is minutes–hours depending on how automatic failover is. Writes stay simple." },
+        { "label": "Active-active reads", "dims": { "Resilience": 85, "Latency (global)": 80, "Ops complexity": 70, "Cost": 75 }, "note": "Pin writes to a home region; serve reads from local replicas. RYOW via sticky home. Common for social / content." },
+        { "label": "Active-active writes", "dims": { "Resilience": 95, "Latency (global)": 90, "Ops complexity": 95, "Cost": 90 }, "note": "Every region accepts writes. You own conflict resolution (CRDTs, LWW, or app merge) or per-entity home pinning. Reserve for products that can't afford a single write region." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="rpo-rto">
+  <h2><span class="section-num">02</span> &nbsp;RPO &amp; RTO — say the numbers</h2>
+  <div class="kv">
+    <dt>RPO — Recovery Point Objective</dt><dd>How much data can you lose? Measured as time: async replication with 30 s lag ⇒ RPO ≈ 30 s. Sync/semi-sync cross-region can approach RPO ≈ 0 at the cost of write latency.</dd>
+    <dt>RTO — Recovery Time Objective</dt><dd>How long until you're serving again? Includes detection, failover, DNS propagation, cache warm, and "are we sure the old primary is fenced?"</dd>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pattern</th><th>Typical RPO</th><th>Typical RTO</th><th>Trade</th></tr></thead>
+      <tbody>
+        <tr><td>Async replica + manual failover</td><td>seconds–minutes</td><td>tens of minutes</td><td>cheap; human in the loop</td></tr>
+        <tr><td>Async + automated failover</td><td>seconds</td><td>1–5 min</td><td>need fencing / split-brain protection</td></tr>
+        <tr><td>Sync / consensus across regions</td><td>~0</td><td>seconds</td><td>cross-region RTT on every write</td></tr>
+        <tr><td>Active-active + conflict merge</td><td>~0 locally</td><td>~0 for survivors</td><td>merge logic is the product</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Interview move</div><p>State RPO/RTO as product requirements first ("payments: RPO 0, RTO &lt; 1 min; feed: RPO 5 s OK"). Then pick the topology. Don't invent five-nines multi-region without a budget.</p></div></div>
+</section>
+
+<section class="section reveal" id="routing">
+  <h2><span class="section-num">03</span> &nbsp;GeoDNS, latency routing &amp; stickiness</h2>
+  <p>Users need to land in the right place:</p>
+  <ul>
+    <li><strong>GeoDNS / latency-based DNS</strong> (Route 53, Cloudflare) — map client geography to the nearest healthy region.</li>
+    <li><strong>Anycast</strong> — same VIP announced from many PoPs; BGP sends packets to the closest. Great for edge/gateways; careful with TCP mid-session moves.</li>
+    <li><strong>Health-checked failover</strong> — remove an unhealthy region from the pool; pair with connection draining.</li>
+    <li><strong>Stickiness / home region</strong> — for RYOW and strong writes, pin a user or tenant to a home region and only fail over on hard outage.</li>
+  </ul>
+  <p>Chat gateways, URL shorteners at the edge, and ride-hailing city shards all lean on "nearest healthy" — see <a href="consistency.html#session">session guarantees</a> when the nearest replica is stale for the author.</p>
+</section>
+
+<section class="section reveal" id="residency">
+  <h2><span class="section-num">04</span> &nbsp;Data residency &amp; conflict resolution</h2>
+  <div class="kv">
+    <dt>Data residency</dt><dd>Keep PII / regulated rows in the user's legal region; replicate only non-PII metadata or encrypted blobs if needed. Multi-tenant SaaS often pins a tenant to a region at signup.</dd>
+    <dt>Last-write-wins (LWW)</dt><dd>Timestamp (or hybrid logical clock) wins. Simple; can lose concurrent updates. Fine for presence, profile "last status."</dd>
+    <dt>CRDTs / merge</dt><dd>Commutative merges (counters, sets, maps) converge without coordination. Great for collaborative state; heavier to reason about.</dd>
+    <dt>Home-region authority</dt><dd>One region owns an entity; others forward writes. Avoids conflicts at the cost of cross-region hop for that entity.</dd>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Split-brain on failover</div><p>If the "dead" primary comes back writing while the new primary is live, you fork history. Fence the old primary (STONITH, lease expiry, generation numbers) before promoting. Name fencing when you describe automated failover.</p></div></div>
+</section>
+
+<section class="section reveal" id="runbook">
+  <h2><span class="section-num">05</span> &nbsp;DR runbook — what you'd say on the whiteboard</h2>
+  <div class="steps" style="margin-top: 12px;">
+    <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Detect</h4><p>Regional health: synthetic probes from outside the region, error-budget burn, replication lag alerts — not just "host down."</p></div></div>
+    <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Decide</h4><p>Is it AZ-local (shift load inside region) or region-wide? Who has authority to declare failover?</p></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Fence &amp; promote</h4><p>Stop writes to the old primary; promote replica; verify generation / watermark.</p></div></div>
+    <div class="step"><span class="step-num">4</span><div class="step-body"><h4>Redirect traffic</h4><p>DNS/anycast/weight flip; drain connections; watch error rates and lag.</p></div></div>
+    <div class="step"><span class="step-num">5</span><div class="step-body"><h4>Reconcile &amp; learn</h4><p>Replay outbox / catch-up replication; reconcile money systems; postmortem and game-day the runbook.</p></div></div>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">Product needs "no lost payments" across a region outage, and can tolerate ~80 ms extra write latency. What's the honest design?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Async active-passive with RPO of a few seconds — money can replay later</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Sync or consensus-backed replication (or dual-commit) so RPO ≈ 0, accepting cross-region write latency</button>
+      <button class="quiz-opt"><span class="mark"></span>Active-active LWW on the ledger — conflicts are fine for money</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> RPO ≈ 0 for money means you pay latency (or a carefully designed dual-write + reconciliation). LWW and multi-second async lag are the wrong conflict/RPO tools for a ledger.</div>
+  </div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../fundamentals/async-patterns.html"><span class="pn-k">‹ Back</span><span class="pn-t">CQRS, outbox, sagas & idempotency</span></a>
+            <a class="next" href="../blocks/index.html"><span class="pn-k">Next ›</span><span class="pn-t">The building blocks</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#topo">Active-active vs active-passive</a>
+          <a href="#rpo-rto">RPO & RTO — say the numbers</a>
+          <a href="#routing">GeoDNS, latency routing & stickiness</a>
+          <a href="#residency">Data residency & conflict resolution</a>
+          <a href="#runbook">DR runbook — what you'd say on the whiteboard</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Fundamentals · Multi-region, DR & data residency</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/tradeoff.js"></script>
+</body>
+</html>

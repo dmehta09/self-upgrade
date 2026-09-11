@@ -13,6 +13,8 @@ window.LESSONS = [
   { id: "fund-numbers",        title: "Numbers you must know",     url: "fundamentals/numbers.html",          module: "fundamentals", tool: "fundamentals" },
   { id: "fund-availability",   title: "Availability & SLAs",       url: "fundamentals/availability.html",     module: "fundamentals", tool: "fundamentals" },
   { id: "fund-consistency",    title: "Consistency, CAP & PACELC", url: "fundamentals/consistency.html",      module: "fundamentals", tool: "fundamentals" },
+  { id: "fund-async-patterns", title: "CQRS, outbox, sagas & idempotency", url: "fundamentals/async-patterns.html", module: "fundamentals", tool: "fundamentals" },
+  { id: "fund-multi-region",   title: "Multi-region, DR & data residency", url: "fundamentals/multi-region.html", module: "fundamentals", tool: "fundamentals" },
 
   /* ---- Foundations · Building blocks ---- */
   { id: "blocks-overview",     title: "The building blocks",       url: "blocks/index.html",                  module: "blocks", tool: "blocks" },

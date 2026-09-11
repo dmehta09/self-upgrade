@@ -148,11 +148,13 @@ def encode(num: int) -> str:
 </section>
 
 <section class="section reveal" id="ops">
-  <h2><span class="section-num">09</span> &nbsp;Observability &amp; cost</h2>
+  <h2><span class="section-num">09</span> &nbsp;Failure, multi-region, observability &amp; cost</h2>
   <div class="kv">
-    <dt>Metrics &amp; SLOs</dt><dd>Redirect latency p99 (SLO &lt; 50–100 ms at the edge); <strong>cache hit ratio</strong> (SLO ≥ 90–95% — your leading indicator, alert below ~85%); redirect availability ≥ 99.99%; create success rate ≥ 99.9%; replication lag; 404 rate (expired/invalid).</dd>
-    <dt>Alerts</dt><dd>Hit ratio drop (herd/cold cache), 5xx rate &gt; 0.1%, cross-region lag beyond budget, id-range exhaustion rate.</dd>
-    <dt>Cost (order of magnitude)</dt><dd>Driven by <strong>cache memory</strong> (dominant at high read QPS) and <strong>egress / CDN request fees</strong> (billions of tiny redirects); compute scales with read QPS; <strong>storage is a rounding error</strong> (even 365B records ≈ tens of TB on managed KV).</dd>
+    <dt>Failure modes</dt><dd>Cache cold / node loss → miss storm on KV (stampede protection + replicas). KGS / counter range exhaustion → pre-allocate ranges with headroom alerts. DB primary fail → promote replica; redirects stay on edge KV while create path degrades. Poison short codes → rate-limit create, quarantine abusive destinations.</dd>
+    <dt>Multi-region</dt><dd>Serve redirects from edge / regional KV (eventual OK); pin creates to a home write region or multi-master with conflict-free codes (range-per-region). Accept a seconds-long RYOW window after create, or sticky-read the author to home. Cross-region lag is a metric, not a blocker for redirects.</dd>
+    <dt>Observability</dt><dd>Redirect latency p99 (SLO &lt; 50–100 ms at the edge); <strong>cache hit ratio</strong> (SLO ≥ 90–95% — alert below ~85%); redirect availability ≥ 99.99%; create success rate ≥ 99.9%; replication lag; 404 rate (expired/invalid). Alert on hit-ratio drop, 5xx &gt; 0.1%, lag beyond budget, id-range exhaustion.</dd>
+    <dt>Cost</dt><dd>Driven by <strong>cache memory</strong> (dominant at high read QPS) and <strong>egress / CDN request fees</strong> (billions of tiny redirects); compute scales with read QPS; <strong>storage is a rounding error</strong> (even 365B records ≈ tens of TB on managed KV).</dd>
+    <dt>Security</dt><dd>Open-redirect / phishing abuse: malware URL scanning, destination allowlists for enterprise, rate-limit create, CAPTCHA on burst. Don't log full destination PII longer than needed; short-code enumeration is mitigated by enough entropy + rate limits.</dd>
   </div>
 </section>
 

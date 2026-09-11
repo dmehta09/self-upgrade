@@ -36,6 +36,8 @@
         <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
         <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
         <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+        <a class="nav-link" href="../fundamentals/async-patterns.html">CQRS · outbox · sagas</a>
+        <a class="nav-link" href="../fundamentals/multi-region.html">Multi-region &amp; DR</a>
       </nav>
       <nav class="nav-group is-blocks" aria-label="Building blocks">
         <h4><span class="dot"></span>Building blocks</h4>
@@ -327,7 +329,7 @@ FOR UPDATE;          -- must be >= 1, else abort: "org must keep an owner"</code
 </section>
 
 <section class="section reveal" id="scale">
-  <h2><span class="section-num">08</span> &nbsp;Scale, failure modes &amp; observability</h2>
+  <h2><span class="section-num">08</span> &nbsp;Scale</h2>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Quantity</th><th>Assumption</th><th>Result</th></tr></thead>
@@ -338,11 +340,22 @@ FOR UPDATE;          -- must be >= 1, else abort: "org must keep an owner"</code
       </tbody>
     </table>
   </div>
-  <p>The membership table is small; the real pressure is <strong>member-list pagination, permission resolution over team trees, and seat-count fan-out</strong> on the few giant tenants. Failure modes: orphaned resources (own them at the org, not the user, so they survive departures), invite abuse (rate-limit + token hashing + row-lock), seat drift (reconcile vs billing), and an append-only <strong>membership audit log</strong> (<span class="mono">invited / accepted / role.changed / removed / ownership.transferred</span>) — a SOC 2 hard requirement, retained ~15 months.</p>
+  <p>The membership table is small; the real pressure is <strong>member-list pagination, permission resolution over team trees, and seat-count fan-out</strong> on the few giant tenants.</p>
+</section>
+
+<section class="section reveal" id="ops">
+  <h2><span class="section-num">09</span> &nbsp;Failure, multi-region, observability &amp; cost</h2>
+  <div class="kv">
+    <dt>Failure modes</dt><dd>Orphaned resources → own them at the <strong>org</strong>, not the user, so they survive departures. Invite abuse → rate-limit + hashed single-use tokens + <span class="mono">FOR UPDATE</span> on accept. Seat drift → reconcile membership counts vs billing. Last-owner races → lock inside the demote/remove transaction. Dual demote → both must see the same locked owner count.</dd>
+    <dt>Multi-region</dt><dd>Pin an org (tenant) to a <strong>home region</strong> for membership writes (strong, low-conflict); replicate read models for "my orgs" / member lists. Cross-region invite accept forwards to home. Residency: keep org PII and membership rows in the org's legal region.</dd>
+    <dt>Observability</dt><dd>Invite accept success / race abort rate; membership mutation lag to authz caches; seat-count vs billed seats drift; permission-check p99 over team trees; audit-log write failures (page — SOC 2). Alert on "org with zero owners" invariant breaks.</dd>
+    <dt>Cost</dt><dd>DB + indexes are cheap at millions of memberships; spend is on <strong>authz fan-out</strong> (team tree resolution, cache invalidation) and giant-tenant member-list pagination. Cache session-scoped "my orgs"; don't N+1 team inheritance on every request.</dd>
+    <dt>Security</dt><dd>Append-only <strong>membership audit log</strong> (<span class="mono">invited / accepted / role.changed / removed / ownership.transferred</span>) retained ~15 months. Hash invite tokens at rest; expire invites; never leak other orgs' membership via global user search without scope checks.</dd>
+  </div>
 </section>
 
 <section class="section reveal" id="recap">
-  <h2><span class="section-num">09</span> &nbsp;Trade-offs &amp; interview recap</h2>
+  <h2><span class="section-num">10</span> &nbsp;Trade-offs &amp; interview recap</h2>
   <div class="quiz" data-quiz>
     <p class="q">Why model role on a <span class="mono">memberships</span> join table instead of putting a <span class="mono">role</span> column on the user?</p>
     <div class="quiz-opts">
@@ -371,7 +384,8 @@ FOR UPDATE;          -- must be >= 1, else abort: "org must keep an owner"</code
           <a href="#invites">Invitations</a>
           <a href="#api">API & the graph queries</a>
           <a href="#ownership">Ownership transfer & last-owner protection</a>
-          <a href="#scale">Scale, failure modes & observability</a>
+          <a href="#scale">Scale</a>
+          <a href="#ops">Failure, multi-region, observability & cost</a>
           <a href="#recap">Trade-offs & interview recap</a>
         </aside>
       </div>

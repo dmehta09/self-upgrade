@@ -36,6 +36,8 @@
         <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
         <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
         <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+        <a class="nav-link" href="../fundamentals/async-patterns.html">CQRS · outbox · sagas</a>
+        <a class="nav-link" href="../fundamentals/multi-region.html">Multi-region &amp; DR</a>
       </nav>
       <nav class="nav-group is-blocks" aria-label="Building blocks">
         <h4><span class="dot"></span>Building blocks</h4>
@@ -284,12 +286,77 @@ def nearby_drivers(lat, lng, res=9, want=10, max_k=4):   # read path: O(k) ring
     <div class="card feature"><span class="f-ic fx">💥</span><h4>Index node crash</h4><p>That shard's driver set is lost — but no durability is needed: drivers re-register within ~4 s. Gossip (SWIM) detects the down node and reshards.</p></div>
     <div class="card feature"><span class="f-ic fx">🌍</span><h4>Geo-sharding</h4><p>Shard by city/region — rides are local, so cross-shard traffic is near-zero, a region outage degrades only its cities, and capacity scales by adding city shards.</p></div>
   </div>
+  <p>Step through the two failures that separate a junior dispatch sketch from a senior one — double-dispatch and a dead geo-index shard:</p>
+  <figure class="failsim" data-failsim aria-label="Failure simulator: Uber matching race and geo-index crash">
+    <figcaption class="fs-title">Break dispatch — matching race &amp; index shard loss</figcaption>
+    <div class="fs-scenarios"></div>
+    <div class="fs-stage"></div>
+    <div class="fs-caption" aria-live="polite"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reset" type="button" aria-label="Reset to healthy">⏮</button>
+      <button class="fs-btn fs-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="fs-btn fs-play" type="button" aria-label="Play">▶</button>
+      <button class="fs-btn fs-next" type="button" aria-label="Next step">›</button>
+      <div class="fs-progress"><div class="fs-progress-fill"></div></div>
+      <span class="fs-step">– / –</span>
+    </div>
+    <div class="fs-note" hidden></div>
+    <script type="application/json" class="fs-config">
+    {
+      "nodes": [
+        { "id": "r1",    "label": "Rider A",          "type": "user",  "col": 0, "row": 0 },
+        { "id": "r2",    "label": "Rider B",          "type": "user",  "col": 0, "row": 2 },
+        { "id": "match", "label": "Matching service", "type": "app",   "col": 1, "row": 1 },
+        { "id": "idx",   "label": "Geo-index shard",  "type": "redis", "col": 2, "row": 0 },
+        { "id": "drv",   "label": "Driver D",         "type": "user",  "col": 2, "row": 2 },
+        { "id": "trip",  "label": "Trip store",       "type": "store", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "r1",    "to": "match", "label": "request" },
+        { "from": "r2",    "to": "match", "label": "request" },
+        { "from": "match", "to": "idx",   "label": "nearby" },
+        { "from": "drv",   "to": "idx",   "label": "location 4Hz" },
+        { "from": "match", "to": "drv",   "label": "offer" },
+        { "from": "match", "to": "trip",  "label": "acceptOffer" }
+      ],
+      "scenarios": [
+        {
+          "id": "double-dispatch",
+          "label": "Two riders, one driver",
+          "target": { "node": "drv" },
+          "steps": [
+            { "caption": "Both riders' matchers pick driver D. Without a single owner for accept, both could win — double-dispatch.",
+              "degrade": ["match"], "badges": [{ "node": "drv", "text": "2 offers" }] },
+            { "caption": "acceptOffer is linearizable per driver (consistent-hash driver key to one node) + soft-lock. First accept wins; loser gets 409 ALREADY_TAKEN.",
+              "reroute": [["match","trip"]], "badges": [{ "node": "trip", "text": "1 trip" }, { "node": "drv", "text": "locked" }] },
+            { "caption": "Location stream stays eventually consistent; only the accept path pays for strong consistency.", "recover": true }
+          ],
+          "interviewer": "Per-data consistency: location = eventual; acceptOffer = linearizable. Say that split out loud."
+        },
+        {
+          "id": "index-crash",
+          "label": "Geo-index shard crashes",
+          "target": { "node": "idx" },
+          "steps": [
+            { "caption": "The in-memory geo shard dies. That city's live driver set vanishes — matching for that shard goes blind.",
+              "fail": ["idx"], "degrade": ["match"], "edgesDown": [["match","idx"],["drv","idx"]] },
+            { "caption": "No durability needed: drivers re-register within ~4 s; gossip (SWIM) detects the node and reshards. Stale fixes older than N intervals = offline.",
+              "fail": ["idx"], "promote": ["match"], "badges": [{ "node": "drv", "text": "re-register" }] },
+            { "caption": "Shard warms as heartbeats land. City geo-sharding already limited the blast radius to one locality.", "recover": true }
+          ],
+          "interviewer": "The location index is disposable and self-healing — that's why it isn't a durable DB, and why city sharding bounds the outage."
+        }
+      ]
+    }
+    </script>
+  </figure>
 </section>
 
 <section class="section reveal" id="ops">
   <h2><span class="section-num">08</span> &nbsp;Observability &amp; cost</h2>
   <div class="kv">
     <dt>Metrics &amp; SLOs</dt><dd>Match latency p99 (SLO &lt; ~1 s), match success/fulfillment rate per city, <strong>location-update freshness</strong> (alert if % of drivers with a stale fix rises), ETA error (MAE vs actual → retrain trigger), surge accuracy, cluster membership churn.</dd>
+    <dt>Multi-region / DR</dt><dd>Shard by city/metro (rides are local). Fail a city cell over to a warm standby in-region; cross-region only for billing/trip history. RPO on trip ledger ≈ seconds (synced); live geo-index is rebuildable from the location stream (RTO minutes).</dd>
     <dt>Cost</dt><dd>Dominated by the durable trip store + the matching/ETA compute and the in-memory geo-index fleet. Location state itself is cheap; the spend is on routing/ETA inference and keeping the index hot and sharded.</dd>
     <dt>2026 reality</dt><dd>Uber open-sourced <strong>H3</strong> (now a geospatial standard well beyond Uber); the dispatch index historically leaned on Google <strong>S2</strong>; application sharding via gossip (Ringpop/SWIM). Routing = graph (contraction hierarchies) + ML-on-top (DeepETA).</dd>
   </div>
@@ -344,5 +411,6 @@ def nearby_drivers(lat, lng, res=9, want=10, max_k=4):   # read path: O(k) ring
   <script src="../assets/js/reqflow.js"></script>
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/tradeoff.js"></script>
+  <script src="../assets/js/failsim.js"></script>
 </body>
 </html>

@@ -133,6 +133,72 @@ def route_to_recipient(user, msg):
     <div class="card feature"><span class="f-ic fx">🌩️</span><h4>Reconnect storm</h4><p>A region failure makes millions reconnect at once, keeping the fleet down longer than the outage. Use <strong>exponential backoff with jitter</strong>, server <span class="mono">Retry-After</span> hints, staggered token TTLs, and edge admission control.</p></div>
     <div class="card feature"><span class="f-ic fx">🐌</span><h4>Slow consumers</h4><p>A client that can't drain its socket must not OOM the gateway — apply back-pressure and load-shedding (Discord uses GenStage).</p></div>
   </div>
+  <p>Inject the failures interviewers always ask about — gateway death and a reconnect storm — and narrate the recovery:</p>
+  <figure class="failsim" data-failsim aria-label="Failure simulator: chat gateway crash and reconnect storm">
+    <figcaption class="fs-title">Break the chat path — gateway loss &amp; reconnect storm</figcaption>
+    <div class="fs-scenarios"></div>
+    <div class="fs-stage"></div>
+    <div class="fs-caption" aria-live="polite"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reset" type="button" aria-label="Reset to healthy">⏮</button>
+      <button class="fs-btn fs-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="fs-btn fs-play" type="button" aria-label="Play">▶</button>
+      <button class="fs-btn fs-next" type="button" aria-label="Next step">›</button>
+      <div class="fs-progress"><div class="fs-progress-fill"></div></div>
+      <span class="fs-step">– / –</span>
+    </div>
+    <div class="fs-note" hidden></div>
+    <script type="application/json" class="fs-config">
+    {
+      "nodes": [
+        { "id": "alice", "label": "Alice",              "type": "user",  "col": 0, "row": 0 },
+        { "id": "bob",   "label": "Bob (offline)",      "type": "user",  "col": 0, "row": 2 },
+        { "id": "gw1",   "label": "Gateway A",          "type": "ws",    "col": 1, "row": 0 },
+        { "id": "gw2",   "label": "Gateway B",          "type": "ws",    "col": 1, "row": 2 },
+        { "id": "reg",   "label": "Session registry",   "type": "redis", "col": 2, "row": 1 },
+        { "id": "bus",   "label": "Pub/sub backplane",  "type": "kafka", "col": 3, "row": 1 },
+        { "id": "store", "label": "Messages + mailbox", "type": "store", "col": 4, "row": 1 }
+      ],
+      "edges": [
+        { "from": "alice", "to": "gw1", "label": "WebSocket" },
+        { "from": "bob",   "to": "gw2" },
+        { "from": "gw1",   "to": "reg", "label": "who's where" },
+        { "from": "gw2",   "to": "reg" },
+        { "from": "gw1",   "to": "store", "label": "persist" },
+        { "from": "gw1",   "to": "bus", "label": "fan-out" },
+        { "from": "bus",   "to": "gw2" }
+      ],
+      "scenarios": [
+        {
+          "id": "gw-crash",
+          "label": "Kill gateway A (Alice's sockets)",
+          "target": { "node": "gw1" },
+          "steps": [
+            { "caption": "Gateway A dies. Alice's sockets drop; in-flight deliveries on A are gone — but store-before-ack means committed messages are safe.",
+              "fail": ["gw1"], "degrade": ["alice"], "edgesDown": [["alice","gw1"],["gw1","reg"],["gw1","bus"],["gw1","store"]] },
+            { "caption": "Alice reconnects to any healthy gateway (B), re-registers in the session registry, and resumes from last seq — server replays after it.",
+              "fail": ["gw1"], "promote": ["gw2"], "reroute": [["alice","gw2"],["gw2","reg"],["gw2","store"]] },
+            { "caption": "No pinning required: state lives in registry + store. This is why gateways stay thin.", "recover": true }
+          ],
+          "interviewer": "Name store-before-ack and resume-from-seq unprompted — gateway crash must not imply message loss, and clients must not be sticky to a dead box."
+        },
+        {
+          "id": "reconnect-storm",
+          "label": "Region blip → reconnect storm",
+          "target": { "node": "reg" },
+          "steps": [
+            { "caption": "A brief region blip drops millions of sockets. Everyone reconnects at once — registry and gateways melt harder than the original outage.",
+              "degrade": ["reg","gw1","gw2"], "badges": [{ "node": "reg", "text": "QPS ×100" }] },
+            { "caption": "Defense: exponential backoff + jitter, Retry-After hints, staggered token TTLs, edge admission control — shed until the fleet can accept.",
+              "degrade": ["reg"], "badges": [{ "node": "alice", "text": "backoff" }, { "node": "bob", "text": "backoff" }] },
+            { "caption": "Connections drip back in. The lesson: reconnect storms are a first-class failure mode for any persistent-connection system.", "recover": true }
+          ],
+          "interviewer": "Reconnect storms keep systems down longer than the outage — say backoff+jitter and admission control before they ask."
+        }
+      ]
+    }
+    </script>
+  </figure>
 </section>
 
 <section class="section reveal" id="ops">

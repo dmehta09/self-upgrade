@@ -1,0 +1,102 @@
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Fundamentals · async patterns</span>
+  <h1>CQRS, outbox, sagas &amp; idempotency.</h1>
+  <p class="lead">Once you leave a single database transaction, "update A and B together" becomes a distributed problem. The patterns below — CQRS, the transactional outbox, sagas, and idempotency keys — are how mid-senior designs keep money and inventory correct without 2PC. You'll reuse them on every checkout and payments case.</p>
+</section>
+
+<section class="section reveal" id="cqrs">
+  <h2><span class="section-num">01</span> &nbsp;CQRS — separate write model from read model</h2>
+  <p><strong>Command Query Responsibility Segregation</strong> means: writes go to a normalized source of truth; reads come from one or more denormalized projections tuned for the query. The two models sync asynchronously (events / CDC).</p>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✍️</span><h4>Write side</h4><p>Orders, inventory reservations, ledger entries — strong invariants, few indexes, optimized for correctness and conflict detection.</p></div>
+    <div class="card feature"><span class="f-ic fx">📖</span><h4>Read side</h4><p>Catalog search, order history, "my feed" — denormalized, cached, eventually consistent. Rebuildable from the event stream.</p></div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">When to reach for it</div><p>Read and write shapes diverge hard (e-commerce catalog vs checkout), or you need many read models from one write stream (audit, search, analytics). Skip it for CRUD apps where one Postgres table serves both. See <a href="../expert/ecommerce-checkout.html">checkout</a> (write) vs <a href="../expert/ecommerce-catalog.html">catalog</a> (read).</p></div></div>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "How far to push CQRS",
+      "axisLabel": "From shared tables to full event-sourced projections:",
+      "stops": [
+        { "label": "Shared DB", "dims": { "Simplicity": 95, "Read scale": 30, "Write safety": 80, "Ops burden": 15 }, "note": "One schema for reads and writes. Fine until a hot read path forces denormalization or a write path needs different isolation." },
+        { "label": "Read replicas + cache", "dims": { "Simplicity": 70, "Read scale": 70, "Write safety": 80, "Ops burden": 40 }, "note": "Still one write model; scale reads with replicas and cache-aside. Accept RYOW gaps or sticky primary for the author." },
+        { "label": "CQRS + events", "dims": { "Simplicity": 35, "Read scale": 95, "Write safety": 90, "Ops burden": 75 }, "note": "Commands mutate the write model and emit events; projections rebuild independently. Best when read shapes multiply — and when you're ready to own lag and rebuilds." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="outbox">
+  <h2><span class="section-num">02</span> &nbsp;Transactional outbox — reliable events without 2PC</h2>
+  <p>The dual-write trap: write the DB, then publish to Kafka. Crash between them → lost event or orphan event. The <strong>outbox</strong> fixes it: in <em>one local transaction</em>, write the business row <em>and</em> an outbox row; a relay (poller or Debezium CDC) publishes to the bus.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Outbox: commit once, publish reliably</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Transactional outbox",
+      "nodes": [
+        { "id": "api", "label": "Order API", "type": "app", "col": 0, "row": 1 },
+        { "id": "db", "label": "Orders + outbox", "type": "store", "col": 1, "row": 1 },
+        { "id": "relay", "label": "Outbox relay", "type": "worker", "col": 2, "row": 1 },
+        { "id": "bus", "label": "Kafka", "type": "kafka", "col": 3, "row": 1 },
+        { "id": "pay", "label": "Payment / email…", "type": "consumer", "col": 4, "row": 1 }
+      ],
+      "edges": [
+        { "from": "api", "to": "db", "label": "1 txn" },
+        { "from": "db", "to": "relay", "label": "poll / CDC" },
+        { "from": "relay", "to": "bus", "label": "publish" },
+        { "from": "bus", "to": "pay", "label": "consume" }
+      ],
+      "steps": [
+        { "edge": ["api","db"], "caption": "API writes order + outbox row in one ACID transaction — either both commit or neither." },
+        { "edge": ["db","relay"], "caption": "Relay (or CDC) sees the new outbox row after commit. A crash before publish is safe: the row is still there." },
+        { "edge": ["relay","bus"], "caption": "Relay publishes to Kafka with the outbox id as the event id, then marks the row sent (or deletes it)." },
+        { "edge": ["bus","pay"], "caption": "Downstream consumers process at-least-once; they dedupe on event id. No 2PC required." }
+      ]
+    }
+    </script>
+  </figure>
+  <p>Canonical on <a href="../advanced/payments.html">payments</a> and <a href="../expert/ecommerce-checkout.html">checkout</a>: order state + outbox event share one local transaction so a crash never silently drops "order.placed."</p>
+</section>
+
+<section class="section reveal" id="saga">
+  <h2><span class="section-num">03</span> &nbsp;Sagas — choreography vs orchestration</h2>
+  <p>A <strong>saga</strong> is a long-running business transaction across services: each local step has a <strong>compensation</strong> (semantic undo). Prefer sagas over distributed 2PC for anything spanning inventory, payment, and order.</p>
+  <div class="kv">
+    <dt>Orchestration</dt><dd>A central orchestrator (checkout service, Temporal workflow) tells each participant what to do next and runs compensations in reverse on failure. Easy to visualize and debug; orchestrator is a coordination hotspot (make it durable).</dd>
+    <dt>Choreography</dt><dd>Services react to each other's events ("InventoryReserved" → Payment listens). No central brain; coupling moves into the event graph. Harder to see the whole flow; watch for cyclic surprises.</dd>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Say the compensation</div><p>Every forward step needs a named undo: reserve → release; authorize → void; capture → refund. If the release fails, the hold's <strong>TTL</strong> is the backstop. Walk this on the whiteboard for <a href="../expert/ecommerce-checkout.html">checkout</a> — interviewers grade the unhappy path.</p></div></div>
+</section>
+
+<section class="section reveal" id="idempotency">
+  <h2><span class="section-num">04</span> &nbsp;Idempotency keys &amp; the exactly-once illusion</h2>
+  <p>Networks retry. Clients double-click. Workers redeliver. <strong>At-least-once</strong> delivery is the realistic default; <strong>exactly-once end-to-end</strong> across independent systems is an illusion you approximate with idempotency.</p>
+  <div class="kv">
+    <dt>Idempotency key</dt><dd>Client-generated UUID on "create payment / place order." Server stores key → result; a retry returns the original outcome instead of charging twice. Same pattern at the PSP boundary.</dd>
+    <dt>At-least-once</dt><dd>Message may arrive twice. Consumers must be safe to replay (dedupe table, upsert, or natural uniqueness).</dd>
+    <dt>"Exactly-once"</dt><dd>In practice: at-least-once + idempotent handler (+ maybe transactional consume). Kafka EOS is within the log/consumer group — not a free pass across your DB and a card network.</dd>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">The payment API times out after you called the PSP. What's the safe next move?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Retry with a new idempotency key so the PSP treats it as a fresh charge</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Retry (or poll status) with the same idempotency key — never blind-retry with a new key</button>
+      <button class="quiz-opt"><span class="mark"></span>Mark the payment failed immediately and ask the user to pay again</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> a timeout is an unknown, not a failure. The same key makes the PSP return the original result; a new key risks a double charge. Park in a transitional state and reconcile — see <a href="../advanced/payments.html">payments</a>.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">One sentence that lands</div><p>"I don't promise exactly-once across the wire — I promise at-least-once delivery plus idempotent handlers keyed by a client idempotency id, with an outbox so the event isn't lost between commit and publish."</p></div></div>
+</section>

@@ -117,6 +117,72 @@ def pick_rendition(ladder, measured_bps, buffer_s,
     <div class="card feature"><span class="f-ic fx">🌍</span><h4>Multi-region</h4><p>Regional storage (residency + locality), global CDN for delivery, upload at the nearest ingest PoP; immutable segments are safe to serve stale on origin/PoP failover.</p></div>
     <div class="card feature"><span class="f-ic fx">📊</span><h4>QoE observability</h4><p><strong>Rebuffer ratio</strong> (SLO &lt; 1%), <strong>startup/join time</strong> (2 s delay → &gt;50% abandon), start-failure rate (&lt; 0.5%), bitrate served, <strong>CDN byte-offload</strong> (≥95%). Alert on rebuffer spike by region/CDN/ISP and byte-offload drops (cost blowout).</p></div>
   </div>
+  <p>Two failures worth stepping through on the whiteboard — a dead transcode farm and a PoP/origin outage:</p>
+  <figure class="failsim" data-failsim aria-label="Failure simulator: YouTube transcode and CDN path">
+    <figcaption class="fs-title">Break streaming — transcode farm &amp; CDN miss storm</figcaption>
+    <div class="fs-scenarios"></div>
+    <div class="fs-stage"></div>
+    <div class="fs-caption" aria-live="polite"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reset" type="button" aria-label="Reset to healthy">⏮</button>
+      <button class="fs-btn fs-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="fs-btn fs-play" type="button" aria-label="Play">▶</button>
+      <button class="fs-btn fs-next" type="button" aria-label="Next step">›</button>
+      <div class="fs-progress"><div class="fs-progress-fill"></div></div>
+      <span class="fs-step">– / –</span>
+    </div>
+    <div class="fs-note" hidden></div>
+    <script type="application/json" class="fs-config">
+    {
+      "nodes": [
+        { "id": "creator", "label": "Uploader",        "type": "user",     "col": 0, "row": 0 },
+        { "id": "viewer",  "label": "Viewer",          "type": "user",     "col": 0, "row": 2 },
+        { "id": "ingest",  "label": "Ingest / API",    "type": "app",      "col": 1, "row": 0 },
+        { "id": "obj",     "label": "Object storage",  "type": "store",    "col": 2, "row": 0 },
+        { "id": "tc",      "label": "Transcode farm",  "type": "worker",   "col": 3, "row": 0 },
+        { "id": "cdn",     "label": "CDN / edge",      "type": "edge",     "col": 2, "row": 2 },
+        { "id": "origin",  "label": "Origin shield",   "type": "store",    "col": 3, "row": 2 }
+      ],
+      "edges": [
+        { "from": "creator", "to": "ingest", "label": "upload" },
+        { "from": "ingest",  "to": "obj",    "label": "raw" },
+        { "from": "obj",     "to": "tc",     "label": "jobs" },
+        { "from": "tc",      "to": "obj",    "label": "segments" },
+        { "from": "viewer",  "to": "cdn",    "label": "ABR" },
+        { "from": "cdn",     "to": "origin", "label": "miss" },
+        { "from": "origin",  "to": "obj" }
+      ],
+      "scenarios": [
+        {
+          "id": "transcode-down",
+          "label": "Transcode farm outage",
+          "target": { "node": "tc" },
+          "steps": [
+            { "caption": "The farm dies mid-backlog. New uploads land in object storage but never become playable ladders — watch path for old titles is unaffected.",
+              "fail": ["tc"], "edgesDown": [["obj","tc"],["tc","obj"]], "badges": [{ "node": "obj", "text": "queue ↑" }] },
+            { "caption": "Jobs are idempotent (content-addressed outputs) — restart workers, retry with backoff; poison jobs go to a DLQ so one bad upload can't block the farm.",
+              "promote": ["tc"], "reroute": [["obj","tc"]] },
+            { "caption": "Chunk-level retries re-run only failed chunks. Uploads resume; processing lag is the SLO you watch.", "recover": true }
+          ],
+          "interviewer": "Decouple upload from process: raw bytes are durable first; transcode is async, idempotent, and DLQ-backed."
+        },
+        {
+          "id": "cdn-origin",
+          "label": "Edge PoP + origin pressure",
+          "target": { "node": "cdn" },
+          "steps": [
+            { "caption": "A PoP fails or hit-ratio collapses. Viewers miss to mid-tier/origin — rebuffer rises and egress cost spikes.",
+              "fail": ["cdn"], "degrade": ["origin"], "edgesDown": [["viewer","cdn"]], "badges": [{ "node": "origin", "text": "QPS ↑" }] },
+            { "caption": "Steer to a healthy PoP / second CDN; immutable segments make failover safe. Origin shield collapses duplicate misses.",
+              "fail": ["cdn"], "promote": ["origin"], "reroute": [["viewer","origin"]] },
+            { "caption": "Byte-offload recovers. Alert on rebuffer-by-region and offload drops — QoE and cost share the same signal.", "recover": true }
+          ],
+          "interviewer": "Streaming is a CDN design: immutable segments, multi-CDN steering, and byte-offload as a first-class SLO."
+        }
+      ]
+    }
+    </script>
+  </figure>
 </section>
 
 <section class="section reveal" id="recap">

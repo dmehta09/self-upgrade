@@ -36,6 +36,8 @@
         <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
         <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
         <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+        <a class="nav-link" href="../fundamentals/async-patterns.html">CQRS · outbox · sagas</a>
+        <a class="nav-link" href="../fundamentals/multi-region.html">Multi-region &amp; DR</a>
       </nav>
       <nav class="nav-group is-blocks" aria-label="Building blocks">
         <h4><span class="dot"></span>Building blocks</h4>
@@ -282,11 +284,13 @@ class BloomFilter:
 </section>
 
 <section class="section reveal" id="ops">
-  <h2><span class="section-num">08</span> &nbsp;2026 wrinkles, observability &amp; cost</h2>
+  <h2><span class="section-num">08</span> &nbsp;Failure, multi-region, observability &amp; cost</h2>
   <div class="kv">
-    <dt>JS rendering</dt><dd>Many pages need a headless-Chromium render (Google's two-phase fetch-then-render) costing ~1–2 orders of magnitude more CPU than a raw fetch — render <em>selectively</em>, gated by crawl budget. (Note: most AI crawlers — GPTBot, ClaudeBot — don't render JS.)</dd>
-    <dt>Metrics &amp; SLOs</dt><dd>Pages/s vs target, fetch p50/p99, URL-seen + near-dup hit rates (≈29% dupes; a drop means dedup broke), <strong>per-host politeness violations (must be zero — page immediately)</strong>, frontier depth + hot-host runaway, 4xx/5xx/429 rates, TLS-handshake CPU%.</dd>
-    <dt>Cost</dt><dd>Drivers, biggest first: rendering compute, fetch CPU (TLS), then storage (compress WARC + dedup before store — the 2025 case used instance storage because S3 for one day was $2k–5k). Bandwidth is rarely the wall.</dd>
+    <dt>Failure modes</dt><dd>Frontier loss → durable log + checkpoint seen-set (a crash must not forget progress). Poison / tarpit hosts → per-host caps, timeouts, circuit breakers. Worker death → reclaim leased URLs via lease TTL. Dedup Bloom false-positive storm → rebuild from durable URL log if hit-rate collapses.</dd>
+    <dt>Multi-region</dt><dd>Partition frontier by <span class="mono">hash(host)</span> so politeness stays correct; place fetch workers near target ASNs when possible. Seen-set / Bloom can be regional with periodic merge, or global with higher coordination — prefer regional + accept rare cross-region re-fetches. Don't geo-replicate raw WARC eagerly — ship summaries / indexes.</dd>
+    <dt>Observability</dt><dd>Pages/s vs target, fetch p50/p99, URL-seen + near-dup hit rates (≈29% dupes; a drop means dedup broke), <strong>per-host politeness violations (must be zero — page immediately)</strong>, frontier depth + hot-host runaway, 4xx/5xx/429 rates, TLS-handshake CPU%, consumer lag on the frontier log.</dd>
+    <dt>Cost</dt><dd>Drivers, biggest first: JS rendering compute, fetch CPU (TLS), then storage (compress WARC + dedup before store — the 2025 case used instance storage because S3 for one day was $2k–5k). Bandwidth is rarely the wall. Render selectively, gated by crawl budget.</dd>
+    <dt>Security / politeness</dt><dd>Respect robots.txt + crawl-delay; identify with a clear User-Agent; never ignore 429/Retry-After. Isolate crawl credentials; treat fetched HTML as untrusted (XSS in render farm). Blocklist malware / illegal destinations at the frontier.</dd>
   </div>
 </section>
 
@@ -320,7 +324,7 @@ class BloomFilter:
           <a href="#dedup">Dedup: URL-seen & near-duplicate content</a>
           <a href="#politeness">Politeness, traps & freshness</a>
           <a href="#failure">Failure modes & distributed coordination</a>
-          <a href="#ops">2026 wrinkles, observability & cost</a>
+          <a href="#ops">Failure, multi-region, observability & cost</a>
           <a href="#recap">Trade-offs & interview recap</a>
         </aside>
       </div>

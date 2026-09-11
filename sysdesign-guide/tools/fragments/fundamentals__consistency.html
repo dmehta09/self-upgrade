@@ -11,7 +11,6 @@
     <div class="card feature"><span class="f-ic fx">🎯</span><h4>Strong consistency</h4><p>Every read returns the most recent write, always. Simple to reason about, but requires coordination between replicas — which costs latency and availability.</p></div>
     <div class="card feature"><span class="f-ic fx">🌊</span><h4>Eventual consistency</h4><p>Replicas may briefly disagree, but converge "eventually" (usually milliseconds). Fast and highly available; you must tolerate reading slightly stale data.</p></div>
   </div>
-  <p>Useful middle grounds: <strong>read-your-own-writes</strong> (you always see your own latest change), <strong>monotonic reads</strong> (you never see time go backwards), and <strong>causal consistency</strong> (effects never appear before their causes).</p>
   <div class="callout analogy">
     <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
     <div class="co-body">
@@ -19,10 +18,80 @@
       <p>Two bank tellers sharing one ledger. <strong>Strong:</strong> they lock the book so only one writes at a time — never wrong, sometimes you wait. <strong>Eventual:</strong> they each scribble in their own copy and reconcile every few seconds — never blocked, but for a moment your balance might look off. A bank picks strong; a "likes" counter happily picks eventual.</p>
     </div>
   </div>
+  <p>Between those poles sit precise models (linearizability, sequential consistency) and per-client <a href="#session">session guarantees</a>. Interviewers care that you pick the <em>right word</em>, not that you recite a textbook.</p>
+</section>
+
+<section class="section reveal" id="linearizability">
+  <h2><span class="section-num">02</span> &nbsp;Linearizability vs sequential vs eventual</h2>
+  <p>These three words get swapped carelessly. Use the precise one — interviewers notice:</p>
+  <div class="kv">
+    <dt>Linearizability (strict / "strong")</dt><dd>There is a single global real-time order. Once a write completes, <em>every</em> subsequent read (any client, any replica) sees it — as if one copy existed. Requires coordination (leader, consensus, or quorum with W+R&gt;N). Say this for money, inventory locks, leader election, and "acceptOffer must be exactly-once."</dd>
+    <dt>Sequential consistency</dt><dd>Operations from all clients appear in <em>some</em> total order that respects each client's program order — but that order need not match wall-clock time. Rarer in product talk; useful when you mean "ordered, but not real-time fresh." Don't say it unless you mean it.</dd>
+    <dt>Eventual consistency</dt><dd>Replicas converge if writes stop; for a while, different clients can see different values. No global "now." Say this for feeds, likes, presence, shopping carts, CDN objects — and always name the conflict policy (LWW, CRDT, merge).</dd>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Word they want</th><th>What you mean</th><th>When to say it</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Linearizable</strong></td><td>real-time single-copy illusion</td><td>payments, seat/inventory hold, distributed lock, ride accept</td></tr>
+        <tr><td><strong>Strong</strong> (loose)</td><td>usually = linearizable in interviews</td><td>fine shorthand — then name the mechanism (leader / quorum)</td></tr>
+        <tr><td><strong>Causal</strong></td><td>cause before effect; not all concurrent ops ordered</td><td>comment threads, collaborative edits, "reply never before parent"</td></tr>
+        <tr><td><strong>Eventual</strong></td><td>converges; may be briefly stale</td><td>social counters, caches, multi-region replicas with async repl</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Interview phrasing</div><p>"I'd make <em>acceptOffer</em> linearizable (single-owner shard / consensus) so a driver is never double-booked, but the location stream is eventually consistent — a 4-second stale fix is fine and self-heals." Per-data-type, not per-system.</p></div></div>
+</section>
+
+<section class="section reveal" id="session">
+  <h2><span class="section-num">03</span> &nbsp;Session guarantees</h2>
+  <p>Full linearizability is expensive. Many products only need guarantees <em>for one client session</em> — the middle ground that feels "correct" without global coordination:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Guarantee</th><th>Promise</th><th>How you get it</th><th>Breaks if…</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Read-your-own-writes (RYOW)</strong></td><td>After I write, <em>I</em> always see it</td><td>Sticky session to primary / home region; or merge own recent writes on read</td><td>Read load-balanced to a lagging replica</td></tr>
+        <tr><td><strong>Monotonic reads</strong></td><td>I never see time go backwards</td><td>Sticky replica; or version vector / session token</td><td>Hopping between replicas with different lag</td></tr>
+        <tr><td><strong>Monotonic writes</strong></td><td>My writes are applied in order</td><td>Single writer path / per-key leader</td><td>Concurrent writers to the same key without sequencing</td></tr>
+        <tr><td><strong>Causal consistency</strong></td><td>If B was caused by A, nobody sees B without A</td><td>Causal metadata / dependency tracking; or single-threaded per conversation</td><td>Independent replicas applying concurrent ops without causality</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Lab: pick the guarantee</div><p>Walk these aloud. (1) User edits a profile, refreshes, and sees the old bio → missing <strong>RYOW</strong> (route reads to the write replica or home region). (2) Feed shows post #50, refresh shows #48 → missing <strong>monotonic reads</strong> (sticky replica or version watermark). (3) Parent comment missing while the reply is visible → missing <strong>causal</strong> (store dependency or deliver via a single ordered log per thread). Session guarantees are the cheapest "feels consistent" fix — name them before escalating to linearizable.</p></div></div>
+  <div class="quiz" data-quiz>
+    <p class="q">A user posts a tweet, immediately opens their profile, and the tweet is missing — but other users already see it. Which guarantee failed for the author?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Linearizability globally — every replica must be in sync first</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Read-your-own-writes — the author's read hit a replica that hadn't received the write yet</button>
+      <button class="quiz-opt"><span class="mark"></span>Monotonic writes — the write itself was reordered</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> others seeing it proves the write landed somewhere; the author just read a lagging replica. Fix RYOW (sticky primary / merge own recent posts) without paying for full linearizability.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="quorum-lab">
+  <h2><span class="section-num">04</span> &nbsp;Tunable consistency with quorums</h2>
+  <p>Leaderless stores (Dynamo, Cassandra) dial freshness with <strong>N</strong> replicas, write quorum <strong>W</strong>, read quorum <strong>R</strong>. If <strong>W + R &gt; N</strong>, every read overlaps a write and you get strong-ish freshness without a single leader. Dial W/R and break replicas yourself — same lab as on the <a href="../data/replication.html#quorum">replication</a> page:</p>
+  <div class="quorum" data-quorum>
+    <script type="application/json" class="qr-config">
+    {
+      "title": "Consistency dial — N = 3",
+      "n": 3, "w": 2, "r": 2,
+      "presets": [
+        { "label": "Strong (W+R>N)", "w": 2, "r": 2 },
+        { "label": "Fast & loose",   "w": 1, "r": 1 },
+        { "label": "Fast reads",     "w": 3, "r": 1 },
+        { "label": "Fast writes",    "w": 1, "r": 3 }
+      ]
+    }
+    </script>
+    <noscript><p>The quorum lab needs JavaScript.</p></noscript>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Three experiments</div><p>(1) W=1, R=1, lag a replica, write, read — catch a stale read. (2) Partition one replica, "Write to far side" with W=1, heal — split-brain / LWW. (3) Same with W=2: the far side can't reach quorum and refuses — that refusal <em>is</em> the CP choice.</p></div></div>
 </section>
 
 <section class="section reveal" id="cap">
-  <h2><span class="section-num">02</span> &nbsp;The CAP theorem</h2>
+  <h2><span class="section-num">05</span> &nbsp;The CAP theorem</h2>
   <p>CAP says: when a <strong>network partition</strong> happens (some machines can't talk to others — and at scale, it <em>will</em>), you must choose between two of three:</p>
   <div class="kv">
     <dt>C — Consistency</dt><dd>Every read sees the latest write (or an error).</dd>
@@ -37,7 +106,7 @@
 </section>
 
 <section class="section reveal" id="pacelc">
-  <h2><span class="section-num">03</span> &nbsp;PACELC — the part interviewers want in 2026</h2>
+  <h2><span class="section-num">06</span> &nbsp;PACELC — the part interviewers want in 2026</h2>
   <p>CAP only describes behaviour <em>during</em> a partition — which is rare. PACELC adds the everyday case: <strong>"if Partition, then A or C; Else (normal operation), Latency or Consistency."</strong> Even with a healthy network, keeping replicas in lockstep costs latency. So the deeper trade-off is constant: <strong>how much latency will you pay for fresher reads?</strong></p>
   <div class="tradeoff" data-tradeoff>
     <script type="application/json" class="tr-config">

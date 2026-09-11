@@ -36,6 +36,8 @@
         <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
         <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
         <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+        <a class="nav-link" href="../fundamentals/async-patterns.html">CQRS · outbox · sagas</a>
+        <a class="nav-link" href="../fundamentals/multi-region.html">Multi-region &amp; DR</a>
       </nav>
       <nav class="nav-group is-blocks" aria-label="Building blocks">
         <h4><span class="dot"></span>Building blocks</h4>
@@ -262,6 +264,70 @@ def get_home_timeline(user, cursor, limit=20):                 # read = push lis
     <div class="card feature"><span class="f-ic fx">💰</span><h4>Cost</h4><p>Timeline-cache RAM (~13 TB working set × replication) is the big fixed cost — cache only active users, cap length, store IDs not objects. Fan-out compute scales with posts × followers; ML inference is now a first-order driver.</p></div>
   </div>
   <p class="small">Observability: home-timeline read p99 (SLO &lt; ~200 ms), <strong>fan-out lag / post-to-visible</strong> (SLO p99 &lt; ~5 s), cache hit ratios. Alert on a hit-ratio drop <em>combined with</em> a DB-read surge — the classic cache-failure → stampede signature.</p>
+  <p>Break the two failures that define this design — fan-out backlog and timeline-cache loss:</p>
+  <figure class="failsim" data-failsim aria-label="Failure simulator: news feed fan-out backlog and cache loss">
+    <figcaption class="fs-title">Break the feed — backlog &amp; cache loss</figcaption>
+    <div class="fs-scenarios"></div>
+    <div class="fs-stage"></div>
+    <div class="fs-caption" aria-live="polite"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reset" type="button" aria-label="Reset to healthy">⏮</button>
+      <button class="fs-btn fs-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="fs-btn fs-play" type="button" aria-label="Play">▶</button>
+      <button class="fs-btn fs-next" type="button" aria-label="Next step">›</button>
+      <div class="fs-progress"><div class="fs-progress-fill"></div></div>
+      <span class="fs-step">– / –</span>
+    </div>
+    <div class="fs-note" hidden></div>
+    <script type="application/json" class="fs-config">
+    {
+      "nodes": [
+        { "id": "user", "label": "Poster",           "type": "user",   "col": 0, "row": 1 },
+        { "id": "api",  "label": "Post API",         "type": "app",    "col": 1, "row": 1 },
+        { "id": "q",    "label": "Fan-out queue",    "type": "kafka",  "col": 2, "row": 1 },
+        { "id": "wk",   "label": "Fan-out workers",  "type": "worker", "col": 3, "row": 1 },
+        { "id": "tc",   "label": "Timeline cache",   "type": "redis",  "col": 4, "row": 0 },
+        { "id": "db",   "label": "Posts + graph",    "type": "store",  "col": 4, "row": 2 }
+      ],
+      "edges": [
+        { "from": "user", "to": "api", "label": "post" },
+        { "from": "api",  "to": "db",  "label": "persist" },
+        { "from": "api",  "to": "q",   "label": "enqueue" },
+        { "from": "q",    "to": "wk" },
+        { "from": "wk",   "to": "tc",  "label": "push IDs" },
+        { "from": "api",  "to": "tc",  "label": "read path" }
+      ],
+      "scenarios": [
+        {
+          "id": "fanout-backlog",
+          "label": "Celebrity / viral fan-out backlog",
+          "target": { "node": "wk" },
+          "steps": [
+            { "caption": "A post from an account past the push threshold (or a viral spike) floods the queue. Workers can't keep up — post-to-visible lag climbs.",
+              "degrade": ["wk","q"], "badges": [{ "node": "q", "text": "lag ↑" }] },
+            { "caption": "Mitigations kick in: hybrid pull for celebs, priority lanes, autoscale workers, per-author rate limits. Reads still work from existing timelines.",
+              "degrade": ["wk"], "reroute": [["api","db"]], "badges": [{ "node": "api", "text": "pull celebs" }] },
+            { "caption": "Lag drains. The metric you page on is fan-out lag / post-to-visible — not raw QPS.", "recover": true }
+          ],
+          "interviewer": "Hybrid fan-out is the answer to this scenario: push for normal accounts, pull celebrities at read time so one post can't write 50M timelines."
+        },
+        {
+          "id": "cache-loss",
+          "label": "Timeline cache shard dies",
+          "target": { "node": "tc" },
+          "steps": [
+            { "caption": "A Redis shard dies. Those users' precomputed timelines vanish — cache is not truth.",
+              "fail": ["tc"], "degrade": ["api"], "edgesDown": [["wk","tc"],["api","tc"]] },
+            { "caption": "On read, rebuild lazily: pull followees' recent posts from graph + posts store, rematerialize the timeline. Cap blast radius with sharding + replicas.",
+              "fail": ["tc"], "reroute": [["api","db"]], "badges": [{ "node": "db", "text": "rebuild" }] },
+            { "caption": "Hot users warm first. Pair cache loss with stampede protection so the DB isn't crushed by correlated rebuilds.", "recover": true }
+          ],
+          "interviewer": "Say 'cache is not truth' and name lazy rebuild from posts+graph — plus sharding so one shard loss isn't everyone."
+        }
+      ]
+    }
+    </script>
+  </figure>
   <p>One last lens: nobody designs this architecture on day one. Walk the journey a feed actually takes — each stage is the previous one plus exactly one bottleneck fix, which is how you should present it on the whiteboard:</p>
   <figure class="journey" data-journey aria-label="Scale journey: how a feed architecture evolves">
     <figcaption class="jy-title">A feed from 10K to 250M users</figcaption>
@@ -344,6 +410,72 @@ def get_home_timeline(user, cursor, limit=20):                 # read = push lis
   </figure>
 </section>
 
+</section>
+
+<section class="section reveal" id="failsim">
+  <h2><span class="section-num">07b</span> &nbsp;Break it — failure simulator</h2>
+  <figure class="failsim" data-failsim aria-label="Failure simulator: news feed fan-out under failure">
+    <figcaption class="fs-title">Break the fan-out — cache &amp; celebrity paths</figcaption>
+    <div class="fs-scenarios"></div>
+    <div class="fs-stage"></div>
+    <div class="fs-caption" aria-live="polite"></div>
+    <div class="fs-controls">
+      <button class="fs-btn fs-reset" type="button" aria-label="Reset to healthy">⏮</button>
+      <button class="fs-btn fs-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="fs-btn fs-play" type="button" aria-label="Play">▶</button>
+      <button class="fs-btn fs-next" type="button" aria-label="Next step">›</button>
+      <div class="fs-progress"><div class="fs-progress-fill"></div></div>
+      <span class="fs-step">– / –</span>
+    </div>
+    <div class="fs-note" hidden></div>
+    <script type="application/json" class="fs-config">
+    {
+      "nodes": [
+        { "id": "u", "label": "Poster", "type": "user", "col": 0, "row": 1 },
+        { "id": "api", "label": "Post API", "type": "service", "col": 1, "row": 1 },
+        { "id": "q", "label": "Fan-out queue", "type": "queue", "col": 2, "row": 0 },
+        { "id": "cache", "label": "Timeline cache", "type": "store", "col": 3, "row": 0 },
+        { "id": "db", "label": "Post store", "type": "store", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "u", "to": "api", "label": "post" },
+        { "from": "api", "to": "db", "label": "persist" },
+        { "from": "api", "to": "q", "label": "enqueue fan-out" },
+        { "from": "q", "to": "cache", "label": "push to followers" }
+      ],
+      "scenarios": [
+        {
+          "id": "cache-down",
+          "label": "Timeline cache outage",
+          "target": { "node": "cache" },
+          "steps": [
+            { "caption": "Writes still land in the post store; fan-out workers can't push into Redis.",
+              "fail": ["cache"], "edgesDown": [["q","cache"]], "badges": [{ "node": "db", "text": "source of truth" }] },
+            { "caption": "Reads fall back to fan-out-on-read / DB merge for hot users; accept higher latency.",
+              "fail": ["cache"], "degrade": ["api"], "badges": [{ "node": "api", "text": "degraded read" }] },
+            { "caption": "On recovery, rebuild timelines from the durable post store + follow graph.", "recover": true }
+          ],
+          "interviewer": "Cache is an accelerator. Durability lives in the post store; name the rebuild path."
+        },
+        {
+          "id": "celeb",
+          "label": "Celebrity post spikes the queue",
+          "target": { "node": "q" },
+          "steps": [
+            { "caption": "Fan-out-on-write tries to push to tens of millions of timelines — queue depth explodes.",
+              "degrade": ["q"], "badges": [{ "node": "q", "text": "backlog" }] },
+            { "caption": "Hybrid: skip push for celebrity follows; readers pull celebrity posts at read time.",
+              "reroute": [["api","db"]], "badges": [{ "node": "api", "text": "hybrid" }] },
+            { "caption": "Queue drains for normal users; celebrity path never depended on O(followers) writes.", "recover": true }
+          ],
+          "interviewer": "Celebrity / hybrid fan-out is the classic feed answer — say it before they ask."
+        }
+      ]
+    }
+    </script>
+  </figure>
+</section>
+
 <section class="section reveal" id="recap">
   <h2><span class="section-num">08</span> &nbsp;Trade-offs &amp; interview recap</h2>
   <div class="quiz" data-quiz>
@@ -374,6 +506,7 @@ def get_home_timeline(user, cursor, limit=20):                 # read = push lis
           <a href="#celebrity">The celebrity problem → hybrid</a>
           <a href="#ranking">Ranking (the 2026 reality: ML, not chronological)</a>
           <a href="#failure">Failure modes, multi-region & cost</a>
+          <a href="#failsim">b Break it — failure simulator</a>
           <a href="#recap">Trade-offs & interview recap</a>
         </aside>
       </div>
@@ -393,5 +526,6 @@ def get_home_timeline(user, cursor, limit=20):                 # read = push lis
   <script src="../assets/js/tradeoff.js"></script>
   <script src="../assets/js/capacity.js"></script>
   <script src="../assets/js/journey.js"></script>
+  <script src="../assets/js/failsim.js"></script>
 </body>
 </html>

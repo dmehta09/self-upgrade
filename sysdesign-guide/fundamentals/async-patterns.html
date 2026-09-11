@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CQRS, outbox, sagas & idempotency | The System Design Field Guide</title>
+  <meta name="description" content="The async backbone of mid-senior designs: CQRS, transactional outbox, saga choreography vs orchestration, idempotency keys, and the exactly-once illusion." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='19' cy='6' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><circle cx='12' cy='18' r='2.3' fill='none' stroke='%2338bdf8' stroke-width='2'/><path d='M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4' stroke='%2338bdf8' stroke-width='2'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="fundamentals" data-page="fund-async-patterns" data-lesson="fund-async-patterns">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The System Design Field Guide home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M7 7.4l4 8.6M17 7.4l-4 8.6M7.3 6h9.4"/></svg></span>
+        <span class="brand-text"><b>System Design</b><span>Concepts · Cases · Scale</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+        <a class="nav-link" href="../reference/cheatsheet.html">Cheat sheet</a>
+      </nav>
+      <nav class="nav-group is-fundamentals" aria-label="Fundamentals">
+        <h4><span class="dot"></span>Fundamentals</h4>
+        <a class="nav-link" href="../fundamentals/index.html">Reading a design question</a>
+        <a class="nav-link" href="../fundamentals/estimation.html">Back-of-envelope math</a>
+        <a class="nav-link" href="../fundamentals/numbers.html">Numbers you must know</a>
+        <a class="nav-link" href="../fundamentals/availability.html">Availability &amp; SLAs</a>
+        <a class="nav-link" href="../fundamentals/consistency.html">Consistency · CAP · PACELC</a>
+        <a class="nav-link" href="../fundamentals/async-patterns.html">CQRS · outbox · sagas</a>
+        <a class="nav-link" href="../fundamentals/multi-region.html">Multi-region &amp; DR</a>
+      </nav>
+      <nav class="nav-group is-blocks" aria-label="Building blocks">
+        <h4><span class="dot"></span>Building blocks</h4>
+        <a class="nav-link" href="../blocks/index.html">The building blocks</a>
+        <a class="nav-link" href="../blocks/load-balancing.html">Load balancing</a>
+        <a class="nav-link" href="../blocks/api-gateway.html">API gateway &amp; proxies</a>
+        <a class="nav-link" href="../blocks/cdn.html">CDN &amp; the edge</a>
+        <a class="nav-link" href="../blocks/caching.html">Caching</a>
+        <a class="nav-link" href="../blocks/messaging.html">Queues, pub/sub &amp; streams</a>
+      </nav>
+      <nav class="nav-group is-data" aria-label="Data at scale">
+        <h4><span class="dot"></span>Data at scale</h4>
+        <a class="nav-link" href="../data/index.html">SQL vs NoSQL</a>
+        <a class="nav-link" href="../data/indexing.html">Indexing</a>
+        <a class="nav-link" href="../data/sharding.html">Sharding &amp; partitioning</a>
+        <a class="nav-link" href="../data/replication.html">Replication &amp; quorums</a>
+        <a class="nav-link" href="../data/consensus.html">Consensus &amp; leader election</a>
+        <a class="nav-link" href="../data/consistent-hashing.html">Consistent hashing</a>
+      </nav>
+      <nav class="nav-group is-warmup" aria-label="Warm-up designs">
+        <h4><span class="dot"></span>Warm-up designs</h4>
+        <a class="nav-link" href="../warmup/index.html">The design playbook</a>
+        <a class="nav-link" href="../warmup/url-shortener.html">URL shortener</a>
+        <a class="nav-link" href="../warmup/rate-limiter.html">Rate limiter</a>
+        <a class="nav-link" href="../warmup/unique-id.html">Unique ID generator</a>
+      </nav>
+      <nav class="nav-group is-core" aria-label="Core designs">
+        <h4><span class="dot"></span>Core designs</h4>
+        <a class="nav-link" href="../core/distributed-cache.html">Distributed cache</a>
+        <a class="nav-link" href="../core/web-crawler.html">Web crawler</a>
+        <a class="nav-link" href="../core/notification-system.html">Notification system</a>
+        <a class="nav-link" href="../core/news-feed.html">News feed (Twitter)</a>
+        <a class="nav-link" href="../core/file-sync.html">Dropbox / file sync</a>
+        <a class="nav-link" href="../core/chat.html">Chat (WhatsApp)</a>
+      </nav>
+      <nav class="nav-group is-advanced" aria-label="Advanced designs">
+        <h4><span class="dot"></span>Advanced designs</h4>
+        <a class="nav-link" href="../advanced/uber.html">Uber / ride-hailing</a>
+        <a class="nav-link" href="../advanced/youtube.html">YouTube / streaming</a>
+        <a class="nav-link" href="../advanced/payments.html">Payment system</a>
+        <a class="nav-link" href="../advanced/llm-serving.html">LLM serving</a>
+        <a class="nav-link" href="../advanced/vector-recommender.html">Vector search &amp; recsys</a>
+        <a class="nav-link" href="../advanced/feature-store.html">ML feature store</a>
+      </nav>
+      <nav class="nav-group is-expert" aria-label="Expert designs">
+        <h4><span class="dot"></span>Expert designs</h4>
+        <a class="nav-link" href="../expert/multi-tenancy.html">Multi-tenant SaaS</a>
+        <a class="nav-link" href="../expert/cell-architecture.html">Cell architecture</a>
+        <a class="nav-link" href="../expert/user-management.html">User management</a>
+        <a class="nav-link" href="../expert/org-management.html">Organizations &amp; teams</a>
+        <a class="nav-link" href="../expert/authentication.html">Authentication</a>
+        <a class="nav-link" href="../expert/authorization.html">Authorization</a>
+        <a class="nav-link" href="../expert/ecommerce-catalog.html">E-commerce: catalog &amp; cart</a>
+        <a class="nav-link" href="../expert/ecommerce-checkout.html">E-commerce: checkout</a>
+        <a class="nav-link" href="../expert/billing.html">Billing &amp; subscriptions</a>
+        <a class="nav-link" href="../expert/audit-log.html">Audit log</a>
+      </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Mock-interview drills</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../fundamentals/index.html" style="color:var(--accent)">Fundamentals</a><span class="sep">/</span><span class="current">CQRS, outbox, sagas & idempotency</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg></button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+<section class="hero reveal" style="padding-top:8px;">
+  <span class="eyebrow">Fundamentals · async patterns</span>
+  <h1>CQRS, outbox, sagas &amp; idempotency.</h1>
+  <p class="lead">Once you leave a single database transaction, "update A and B together" becomes a distributed problem. The patterns below — CQRS, the transactional outbox, sagas, and idempotency keys — are how mid-senior designs keep money and inventory correct without 2PC. You'll reuse them on every checkout and payments case.</p>
+</section>
+
+<section class="section reveal" id="cqrs">
+  <h2><span class="section-num">01</span> &nbsp;CQRS — separate write model from read model</h2>
+  <p><strong>Command Query Responsibility Segregation</strong> means: writes go to a normalized source of truth; reads come from one or more denormalized projections tuned for the query. The two models sync asynchronously (events / CDC).</p>
+  <div class="grid grid-2">
+    <div class="card feature"><span class="f-ic fx">✍️</span><h4>Write side</h4><p>Orders, inventory reservations, ledger entries — strong invariants, few indexes, optimized for correctness and conflict detection.</p></div>
+    <div class="card feature"><span class="f-ic fx">📖</span><h4>Read side</h4><p>Catalog search, order history, "my feed" — denormalized, cached, eventually consistent. Rebuildable from the event stream.</p></div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">When to reach for it</div><p>Read and write shapes diverge hard (e-commerce catalog vs checkout), or you need many read models from one write stream (audit, search, analytics). Skip it for CRUD apps where one Postgres table serves both. See <a href="../expert/ecommerce-checkout.html">checkout</a> (write) vs <a href="../expert/ecommerce-catalog.html">catalog</a> (read).</p></div></div>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "How far to push CQRS",
+      "axisLabel": "From shared tables to full event-sourced projections:",
+      "stops": [
+        { "label": "Shared DB", "dims": { "Simplicity": 95, "Read scale": 30, "Write safety": 80, "Ops burden": 15 }, "note": "One schema for reads and writes. Fine until a hot read path forces denormalization or a write path needs different isolation." },
+        { "label": "Read replicas + cache", "dims": { "Simplicity": 70, "Read scale": 70, "Write safety": 80, "Ops burden": 40 }, "note": "Still one write model; scale reads with replicas and cache-aside. Accept RYOW gaps or sticky primary for the author." },
+        { "label": "CQRS + events", "dims": { "Simplicity": 35, "Read scale": 95, "Write safety": 90, "Ops burden": 75 }, "note": "Commands mutate the write model and emit events; projections rebuild independently. Best when read shapes multiply — and when you're ready to own lag and rebuilds." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="outbox">
+  <h2><span class="section-num">02</span> &nbsp;Transactional outbox — reliable events without 2PC</h2>
+  <p>The dual-write trap: write the DB, then publish to Kafka. Crash between them → lost event or orphan event. The <strong>outbox</strong> fixes it: in <em>one local transaction</em>, write the business row <em>and</em> an outbox row; a relay (poller or Debezium CDC) publishes to the bus.</p>
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Outbox: commit once, publish reliably</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Transactional outbox",
+      "nodes": [
+        { "id": "api", "label": "Order API", "type": "app", "col": 0, "row": 1 },
+        { "id": "db", "label": "Orders + outbox", "type": "store", "col": 1, "row": 1 },
+        { "id": "relay", "label": "Outbox relay", "type": "worker", "col": 2, "row": 1 },
+        { "id": "bus", "label": "Kafka", "type": "kafka", "col": 3, "row": 1 },
+        { "id": "pay", "label": "Payment / email…", "type": "consumer", "col": 4, "row": 1 }
+      ],
+      "edges": [
+        { "from": "api", "to": "db", "label": "1 txn" },
+        { "from": "db", "to": "relay", "label": "poll / CDC" },
+        { "from": "relay", "to": "bus", "label": "publish" },
+        { "from": "bus", "to": "pay", "label": "consume" }
+      ],
+      "steps": [
+        { "edge": ["api","db"], "caption": "API writes order + outbox row in one ACID transaction — either both commit or neither." },
+        { "edge": ["db","relay"], "caption": "Relay (or CDC) sees the new outbox row after commit. A crash before publish is safe: the row is still there." },
+        { "edge": ["relay","bus"], "caption": "Relay publishes to Kafka with the outbox id as the event id, then marks the row sent (or deletes it)." },
+        { "edge": ["bus","pay"], "caption": "Downstream consumers process at-least-once; they dedupe on event id. No 2PC required." }
+      ]
+    }
+    </script>
+  </figure>
+  <p>Canonical on <a href="../advanced/payments.html">payments</a> and <a href="../expert/ecommerce-checkout.html">checkout</a>: order state + outbox event share one local transaction so a crash never silently drops "order.placed."</p>
+</section>
+
+<section class="section reveal" id="saga">
+  <h2><span class="section-num">03</span> &nbsp;Sagas — choreography vs orchestration</h2>
+  <p>A <strong>saga</strong> is a long-running business transaction across services: each local step has a <strong>compensation</strong> (semantic undo). Prefer sagas over distributed 2PC for anything spanning inventory, payment, and order.</p>
+  <div class="kv">
+    <dt>Orchestration</dt><dd>A central orchestrator (checkout service, Temporal workflow) tells each participant what to do next and runs compensations in reverse on failure. Easy to visualize and debug; orchestrator is a coordination hotspot (make it durable).</dd>
+    <dt>Choreography</dt><dd>Services react to each other's events ("InventoryReserved" → Payment listens). No central brain; coupling moves into the event graph. Harder to see the whole flow; watch for cyclic surprises.</dd>
+  </div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Say the compensation</div><p>Every forward step needs a named undo: reserve → release; authorize → void; capture → refund. If the release fails, the hold's <strong>TTL</strong> is the backstop. Walk this on the whiteboard for <a href="../expert/ecommerce-checkout.html">checkout</a> — interviewers grade the unhappy path.</p></div></div>
+</section>
+
+<section class="section reveal" id="idempotency">
+  <h2><span class="section-num">04</span> &nbsp;Idempotency keys &amp; the exactly-once illusion</h2>
+  <p>Networks retry. Clients double-click. Workers redeliver. <strong>At-least-once</strong> delivery is the realistic default; <strong>exactly-once end-to-end</strong> across independent systems is an illusion you approximate with idempotency.</p>
+  <div class="kv">
+    <dt>Idempotency key</dt><dd>Client-generated UUID on "create payment / place order." Server stores key → result; a retry returns the original outcome instead of charging twice. Same pattern at the PSP boundary.</dd>
+    <dt>At-least-once</dt><dd>Message may arrive twice. Consumers must be safe to replay (dedupe table, upsert, or natural uniqueness).</dd>
+    <dt>"Exactly-once"</dt><dd>In practice: at-least-once + idempotent handler (+ maybe transactional consume). Kafka EOS is within the log/consumer group — not a free pass across your DB and a card network.</dd>
+  </div>
+  <div class="quiz" data-quiz>
+    <p class="q">The payment API times out after you called the PSP. What's the safe next move?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Retry with a new idempotency key so the PSP treats it as a fresh charge</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Retry (or poll status) with the same idempotency key — never blind-retry with a new key</button>
+      <button class="quiz-opt"><span class="mark"></span>Mark the payment failed immediately and ask the user to pay again</button>
+    </div>
+    <div class="quiz-explain"><b>Right:</b> a timeout is an unknown, not a failure. The same key makes the PSP return the original result; a new key risks a double charge. Park in a transitional state and reconcile — see <a href="../advanced/payments.html">payments</a>.</div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">One sentence that lands</div><p>"I don't promise exactly-once across the wire — I promise at-least-once delivery plus idempotent handlers keyed by a client idempotency id, with an outbox so the event isn't lost between commit and publish."</p></div></div>
+</section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../fundamentals/consistency.html"><span class="pn-k">‹ Back</span><span class="pn-t">Consistency, CAP & PACELC</span></a>
+            <a class="next" href="../fundamentals/multi-region.html"><span class="pn-k">Next ›</span><span class="pn-t">Multi-region, DR & data residency</span></a>
+          </nav>
+        </div>
+
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#cqrs">CQRS — separate write model from read model</a>
+          <a href="#outbox">Transactional outbox — reliable events without 2PC</a>
+          <a href="#saga">Sagas — choreography vs orchestration</a>
+          <a href="#idempotency">Idempotency keys & the exactly-once illusion</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Fundamentals · CQRS, outbox, sagas & idempotency</span>
+        <span class="fmono">The System Design Field Guide · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/tradeoff.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
+</body>
+</html>
