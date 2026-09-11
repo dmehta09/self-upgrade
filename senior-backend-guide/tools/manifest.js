@@ -16,12 +16,13 @@ const MODULES = [
     { slug: "aws-nginx",     title: "AWS, Nginx & networking",              nav: "10 · AWS / Nginx",   id: "sb-d10" },
     { slug: "security",      title: "Security & multi-tenancy",             nav: "11 · Security",      id: "sb-d11" },
     { slug: "ownership",     title: "Delivery & senior judgment",           nav: "12 · Ownership",     id: "sb-d12" },
+    { slug: "projects",      title: "My projects deep dive",                nav: "13 · Projects",      id: "sb-d13" },
   ]},
 ];
 
 const REFERENCE = [
   { dir: "", slug: "method", title: "How to answer scenario questions", nav: "Answer method", tool: "method", id: "sb-method" },
-  { dir: "practice", slug: "drills", title: "Rapid-fire drills", nav: "Rapid-fire drills", tool: "practice", widgets: ["quizdrill.js", "drill-bank.js"] },
+  { dir: "practice", slug: "drills", title: "Rapid-fire drills", nav: "Rapid-fire drills", tool: "practice", widgets: ["drill-bank.js"] },
   { dir: "practice", slug: "flashcards", title: "Flashcards", nav: "Flashcards", tool: "practice", widgets: ["flashcards.js"] },
   { dir: "reference", slug: "cheatsheets", title: "Domain cheatsheets", nav: "Cheatsheets", tool: "reference" },
   { dir: "reference", slug: "glossary", title: "Glossary", nav: "Glossary", tool: "reference" },

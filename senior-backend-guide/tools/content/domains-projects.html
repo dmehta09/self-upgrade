@@ -1,0 +1,896 @@
+          <section class="hero reveal">
+            <span class="eyebrow">Domain · d13</span>
+            <h1>My projects deep dive</h1>
+            <p class="lead">Senior project deep-dives test whether you can narrate architecture, tradeoffs, and operability across real platforms—not recite a feature list. Anchor answers on three guide labels: document intelligence RAG platform (NestJS orchestration + FastAPI AI worker), institutional LMS (federated GraphQL, search, chat, data lifecycle), and healthcare diagnostics platform (DDD, strangler cutover, CQRS, HIPAA-aligned controls). Lead with the failure mode you prevent, name the metric that proves safety, and close with how you would detect regression in production.</p>
+          </section>
+
+          <section class="section reveal" id="primer">
+            <h2><span class="section-num">01</span> &nbsp;Decision cheat strip</h2>
+            <div class="cheat-strip">
+<div class="chip-card"><strong>Ingest→gen</strong><span>Parse/table → chunk → embed → retrieve → generate; Nest orchestrates, FastAPI does AI</span></div>
+<div class="chip-card"><strong>Structure &gt; text</strong><span>Preserve tables/layout; naive PDF text destroys LLM grounding</span></div>
+<div class="chip-card"><strong>Hybrid retrieve</strong><span>Vector + metadata filters + relevance score beats vector-only</span></div>
+<div class="chip-card"><strong>Idempotent reprocess</strong><span>Per-document/action keys; safe retries without duplicate side effects</span></div>
+<div class="chip-card"><strong>Federation edge</strong><span>Gateway owns composition; services own schema slices + evolution contracts</span></div>
+<div class="chip-card"><strong>Live/archive</strong><span>Hot working set vs cold store; prove metric parity before cutover</span></div>
+<div class="chip-card"><strong>Strangler dual-run</strong><span>Shadow compare, % traffic, rollback; never big-bang cutover</span></div>
+<div class="chip-card"><strong>Detect→fix→permanent</strong><span>Mitigate first, then systemic fix with alert + runbook ownership</span></div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="cards">
+            <h2><span class="section-num">02</span> &nbsp;Scenario cards (open → rehearse)</h2>
+            <p class="muted">Work closed-book first: say your structure out loud, then open the card. Mark the domain practiced when you can recite the “say it” lines cold.</p>
+
+<details class="sac reveal" id="d13-q01">
+  <summary><span class="sac-id">d13-q01</span><span class="sac-q">Walk through the end-to-end architecture of a document intelligence RAG platform from ingest to generate. Who owns what between NestJS and FastAPI?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd narrate a staged pipeline: ingest and tenancy in NestJS, parse/table/chunk/embed/retrieve/generate in a FastAPI AI worker, with typed contracts, idempotent jobs, and org-scoped storage at every hop.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify the pipeline stages and ownership: NestJS owns auth, org tenancy, job orchestration, and product APIs; FastAPI owns parse, table extraction, chunking, embedding, retrieval, and generation because those are CPU/GPU-heavy and model-versioned.</li>
+<li>Ingest accepts documents per org, persists metadata and S3 object keys, and enqueues a job with an idempotency key so retries never double-bill embedding or duplicate index rows.</li>
+<li>Parse/table extraction preserves structure before semantic chunking; chunks carry document_id, org_id, page/section, and table refs so retrieve can filter before similarity search.</li>
+<li>Embed and index into an org-scoped vector store; retrieve combines vector hits with metadata filters; generate uses versioned prompts and structured outputs back to Nest for persistence.</li>
+<li>Tradeoff: monolith one process vs Nest orchestrator + FastAPI worker—split because model deps, scale axes, and blast radius differ; cost is HMAC/service auth and schema versioning across the hop.</li>
+<li>Failure modes: silent partial ingest, cross-org chunk leakage, and generate succeeding while Nest never records results—detect with job state machine and end-to-end correlation ids.</li>
+<li>Prevent/ops: dashboard job stage latency and failure rate per stage; alert when embed or retrieve lag exceeds SLO or when dead-letter depth crosses threshold.</li>
+<li>Runbook covers reprocess-by-document_id, prompt/model rollback, and a game-day that injects worker timeouts to verify Nest compensating cleanup and retry budgets.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  ingest[Nest_ingest] --&gt; parse[FastAPI_parse_table]
+  parse --&gt; chunk[Chunk_embed]
+  chunk --&gt; retrieve[Hybrid_retrieve]
+  retrieve --&gt; generate[Generate]
+  generate --&gt; nestOut[Nest_persist]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># Stage ownership
+# Nest: auth, org, job FSM, S3 keys, product API
+# FastAPI: parse/table, chunk, embed, retrieve, generate
+# Contract: HMAC + org_id + idempotency_key + correlation_id</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest modules: DocumentsModule + JobsModule orchestrate; HttpModule/client to FastAPI with signed headers; never let the AI worker invent tenant context from the request body alone.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Nest owns tenancy and orchestration; FastAPI owns the AI stages. Every hop is org-scoped, idempotent, and observable by stage so we can reprocess safely without guessing where the pipeline stalled.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Letting FastAPI invent org_id from the upload payload — unsigned tenant context is a cross-tenant leak waiting to happen.</li>
+<li>Collapsing all stages into one HTTP request — timeouts and partial writes become undiagnosable and unblockable.</li>
+<li>Skipping idempotency on reprocess — duplicate embeddings and conflicting chunk versions corrupt retrieval quality silently.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>Where do you put retries: Nest job FSM or FastAPI internal?</li>
+<li>How do you version embedding models without reindexing the world at once?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q02">
+  <summary><span class="sac-id">d13-q02</span><span class="sac-q">On planning PDFs, why prefer table extraction over naive PDF text extraction for LLM grounding?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd contrast structure-preserving extractors with text dumps: tables carry label–value alignment that prose flattening destroys, so retrieval and generation start wrong before the model even reasons.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify the failure: naive PDF text often serialises cells left-to-right or out of reading order, so a 'Budget' label and a currency amount detach—LLMs then invent plausible but wrong figures.</li>
+<li>Table extraction keeps row/column/header relationships, enabling chunking that cites table_id, row, and cell ranges instead of orphaned sentences.</li>
+<li>For planning PDFs, merged cells, multi-line headers, and footnotes are semantic; structure-aware parsers flag uncertainty instead of silently dropping alignment.</li>
+<li>Tradeoff: OCR/table pipelines cost more latency and ops complexity vs cheap text extract—pay it because wrong numbers in plans are high-blast integrity failures, not cosmetic RAG misses.</li>
+<li>Downstream design: store both rendered markdown/HTML of tables and structured JSON so hybrid retrieve can boost table chunks when queries mention metrics or line items.</li>
+<li>Failure modes: false-confident flat text, header rows treated as data, and currency/unit loss—detect with golden PDF fixtures and numeric checksum probes in CI.</li>
+<li>Prevent/ops: track table-extraction confidence and human-review rate as quality metrics; alert when extraction confidence drops below threshold after a parser upgrade.</li>
+<li>Monitor grounded-answer evals on a fixed planning corpus after each parse model change; runbook includes rollback to last known-good extractor and reprocess of affected document_ids.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># Prefer structured table JSON + markdown render
+# over page.get_text() alone
+# Fixture: assert label-cell alignment on golden PDFs</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest stores extraction artifacts and quality scores; FastAPI returns typed table payloads so Nest can gate indexing on confidence without re-parsing.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Structure is the ground truth for planning numbers. I preserve tables so retrieval cites real cells; naive text dumps manufacture confident hallucinations.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Shipping vector search on flattened text and calling hallucinations a 'prompt issue' — the data lost structure before the prompt existed.</li>
+<li>Ignoring merged cells and multi-page tables — partial rows look complete and poison embeddings.</li>
+<li>No golden-PDF regression suite — parser upgrades silently degrade the highest-value documents.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you chunk a multi-page financial table?</li>
+<li>When do you escalate low-confidence extractions to humans?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q03">
+  <summary><span class="sac-id">d13-q03</span><span class="sac-q">How would you design semantic chunking and metadata for planning PDFs on a document intelligence RAG platform?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd chunk by semantic units—sections, tables, figures—not fixed token windows, and attach org, document, section, page, table, and sensitivity metadata so filters prune before similarity.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify goals: chunks must be self-contained enough for retrieval yet small enough to fit context; planning PDFs need section-aware splits plus whole-table or row-group chunks for numeric fidelity.</li>
+<li>Semantic chunking uses headings, list boundaries, and table regions; overlapping windows only at narrative prose, never mid-cell, because mid-cell splits destroy value alignment.</li>
+<li>Metadata minimum: org_id, document_id, version, page_range, section_path, chunk_type (prose|table|caption), sensitivity, and extraction_confidence for filter and audit.</li>
+<li>Tradeoff: larger table chunks preserve context vs smaller row chunks improve precision—hybridise: store parent table summary plus child row groups linked by parent_chunk_id.</li>
+<li>Index design: vector on content; filterable fields on metadata; deny queries missing org_id at the API so the vector store never becomes the tenancy enforcer of last resort.</li>
+<li>Failure modes: overlong chunks that drown signal, orphan table rows, and metadata drift after reprocess—detect with chunk-size histograms and parent/child integrity checks.</li>
+<li>Prevent/ops: dashboard median chunk tokens and filter hit-rate; alert when chunk_type mix shifts sharply after a parser change.</li>
+<li>SLO on retrieve latency with metadata filters enabled; runbook for rechunk-by-document_id when embedding or chunker versions bump.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">json</span></div><pre><code data-lang="json">{
+  &quot;org_id&quot;: &quot;...&quot;,
+  &quot;document_id&quot;: &quot;...&quot;,
+  &quot;chunk_type&quot;: &quot;table_row_group&quot;,
+  &quot;section_path&quot;: &quot;Q3/Budget&quot;,
+  &quot;parent_chunk_id&quot;: &quot;tbl-12&quot;,
+  &quot;page_range&quot;: [4, 5]
+}</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest validates and persists metadata contracts; FastAPI chunker must echo the same schema version so reprocess jobs stay compatible with Nest's index writer.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Chunk by meaning, not by arbitrary tokens, and make metadata the first retrieval gate. Planning PDFs especially need table-aware parents and children, always org-scoped.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Fixed 500-token windows through tables — splits numbers from labels and tanks answer quality.</li>
+<li>Metadata only in the prompt, not in the index filters — similarity search returns cross-section noise and riskier cross-tenant bugs if org is missing.</li>
+<li>No parent/child links for tables — you cannot reassemble context or reprocess a single table safely.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you handle annexes and footnotes that clarify a table?</li>
+<li>What changes when documents are multi-lingual?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q04">
+  <summary><span class="sac-id">d13-q04</span><span class="sac-q">Compare hybrid retrieval (vector + metadata filters + relevance scoring) to vector-only search for document intelligence RAG.</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd argue vector-only is a recall starting point, not a product: metadata filters enforce tenancy and document scope, then a relevance layer re-ranks so generation sees grounded, permitted chunks.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify: vector-only returns nearest embeddings; hybrid applies hard filters (org, document set, chunk_type, time) then scores with vector similarity plus optional lexical/boost signals.</li>
+<li>Filters are security and product correctness first—org_id and ACL are not 'optional ranking features'—then quality: boost table chunks for numeric queries, recency for versioned plans.</li>
+<li>Relevance scoring merges dense similarity with BM25 or structured boosts and may use a cross-encoder re-ranker on the shortlist because top-k embedding hits still include near-miss sections.</li>
+<li>Tradeoff: hybrid adds latency and index complexity vs vector-only simplicity—accept cost because wrong-tenant or wrong-document hits are integrity incidents, not UX nits.</li>
+<li>Operationalise: log filter predicates, candidate counts pre/post filter, and final scores so you can debug empty results vs over-filtered queries.</li>
+<li>Failure modes: filters too tight (empty context), filters too loose (noisy context), and score ties that flip answers—detect with offline eval sets and online groundedness sampling.</li>
+<li>Prevent/ops: monitor retrieve p95, empty-result rate, and cross-org zero-hit assertions; alert when empty-result rate spikes after a metadata schema change.</li>
+<li>Dashboard top abort reasons (no candidates post-filter vs LLM refusal); game-day injects missing org filter to prove the API fails closed rather than vector-scanning the world.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TB
+  q[Query] --&gt; filt[Metadata_filters]
+  filt --&gt; vec[Vector_topk]
+  vec --&gt; score[Relevance_rerank]
+  score --&gt; ctx[Bounded_context]
+  ctx --&gt; gen[Generate]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># Pseudo
+cands = filter(org_id, doc_ids, chunk_type)
+hits = vector.search(cands, embedding, k=50)
+ranked = rerank(query, hits)[:8]</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest composes allowed document_ids from authz before calling FastAPI retrieve; the worker must re-check org_id on every returned chunk as defense in depth.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Hybrid retrieval is how RAG stays tenant-safe and answerable. Vectors find candidates; metadata and scoring decide what the model is allowed to see.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Vector-only across a shared index — tenancy becomes a prompt instruction, which is not an access control.</li>
+<li>Filtering only after generation — wastes tokens and can leak snippets into logs or traces.</li>
+<li>No logging of pre/post filter counts — empty answers look like model failure when the filter was wrong.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>When would you add a cross-encoder re-ranker?</li>
+<li>How do you evaluate retrieval quality without reading every answer?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q05">
+  <summary><span class="sac-id">d13-q05</span><span class="sac-q">How do you make LLM calls production-grade with structured outputs, versioned prompts, bounded retries, and typed errors?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd treat the model like an unreliable dependency: versioned prompts, schema-validated outputs, explicit error types, and bounded retries with backoff—never 'parse whatever JSON it returned'.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify contracts: each prompt has an id/version, input schema, and output schema; Nest and FastAPI share typed error codes (validation, rate_limit, model_timeout, unsafe_content) rather than free-text failures.</li>
+<li>Structured outputs (JSON schema / tool mode) are validated before persistence; on schema miss, classify as retryable vs poison and route accordingly.</li>
+<li>Versioned prompts live in config with changelog; pin model+prompt versions on jobs so reprocess is reproducible and A/B is intentional, not accidental drift.</li>
+<li>Bounded retries: only transient errors, exponential backoff + jitter, max attempts, and idempotency keys so duplicate successes do not double-write.</li>
+<li>Tradeoff: strict schemas reject some good answers vs loose parsing that corrupts stores—prefer fail-fast validation because silent bad JSON becomes silent bad product data.</li>
+<li>Failure modes: infinite retry storms, prompt edits changing production mid-flight, and swallowing model errors as empty 200s—detect with attempt counters and error-class metrics.</li>
+<li>Prevent/ops: alert on elevated schema-validation failure rate and on retry exhaustion; track prompt version as a label on latency and quality dashboards.</li>
+<li>SLO on generate success rate after retries; runbook maps each typed error to page/owner and includes kill-switch to freeze a bad prompt version.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># retry policy
+# retryable: timeout, 429, 5xx
+# non-retryable: schema_invalid, unsafe_content, authz
+# max_attempts=3, backoff=exp+jitter, idempotency_key=job_id</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest persists prompt_version and model_id on the job record; FastAPI returns typed Problem Details so Nest can map to HTTP status and user-visible error without string matching.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Prompts and schemas are versioned APIs. I validate structured outputs, classify typed errors, and bound retries so the model cannot silently corrupt or melt the worker pool.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>json.loads on free-form model text with no schema — one extra trailing comma poisons an entire document version.</li>
+<li>Unlimited retries on 429 — turns a rate limit into a self-inflicted outage.</li>
+<li>Editing the live prompt without version pin — yesterday's evals stop predicting today's answers.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you roll back a bad prompt version safely?</li>
+<li>What belongs in the prompt vs in deterministic post-processing?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q06">
+  <summary><span class="sac-id">d13-q06</span><span class="sac-q">How do you ensure per-document and per-action idempotency when reprocessing documents on a RAG platform?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd key every side effect—store write, embed upsert, index delete/replace, notify—by document_id+action+content_version so retries and reprocess jobs converge to one correct state.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify: reprocessing is normal (parser upgrade, failed mid-pipeline); without idempotency you get duplicate chunks, double embedding cost, and conflicting versions in retrieve.</li>
+<li>Per-document keys: (org_id, document_id, content_hash|version); per-action keys: (document_id, stage, version) recorded in a job ledger before external side effects.</li>
+<li>Replace semantics for indexes: delete-by-document_id then upsert new chunks in one logical unit, or versioned namespaces with atomic pointer flip after success.</li>
+<li>Tradeoff: ledger + careful upserts vs 'just run again'—ledger cost is mandatory because vector stores and S3 do not give you business-level exactly-once.</li>
+<li>Downstream consumers (notifications, billing meters) must also key on action ids; never emit 'document_processed' twice for the same version without a new version bump.</li>
+<li>Failure modes: partial stage success, ledger write after side effect, and clock-skewed 'latest wins'—detect with stage checksums and reconcile jobs.</li>
+<li>Prevent/ops: metric duplicate-suppress hits and reprocess success rate; alert when the same document_id exceeds retry threshold without terminal state.</li>
+<li>Dashboard stuck-in-stage jobs; runbook for force-complete vs safe-replay, and game-day that crashes mid-embed to prove replace semantics leave one coherent version.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># idempotency
+key = f&quot;{org}:{doc_id}:{stage}:{content_version}&quot;
+if ledger.seen(key): return prior_result
+result = do_stage()
+ledger.record(key, result)</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest owns the job ledger and document version pointer; FastAPI stages must accept client-supplied idempotency keys and return prior results on replay.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Reprocess is a first-class path. I ledger per-document and per-action keys and use replace semantics so retries converge—never accumulate duplicate chunks.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Generating a new UUID inside the worker per attempt — every retry looks like new work and doubles embeddings.</li>
+<li>Appending chunks on reprocess instead of replace — retrieve quality collapses under duplicate near-identical vectors.</li>
+<li>Acking the queue before the ledger commit — crashes recreate work without dedupe.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How long do you retain idempotency ledger rows?</li>
+<li>How do you reprocess a single stage without invalidating the whole document?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q07">
+  <summary><span class="sac-id">d13-q07</span><span class="sac-q">Design org-scoped multi-tenancy and HMAC authentication between NestJS and FastAPI. What isolation failure modes matter most?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd make org_id a hard dimension on every store and cache key, authenticate Nest→FastAPI with HMAC service identity, and assume any missing filter is a Sev-1 design bug.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify trust boundary: browsers never talk to FastAPI; Nest authenticates users, derives org_id from session/RBAC, and calls FastAPI with HMAC-signed headers including org_id, timestamp, and body hash.</li>
+<li>FastAPI verifies signature, skew window, and that path/body org_id matches the signed claim—reject on mismatch; never trust unsigned JSON fields for tenancy.</li>
+<li>Data isolation: separate vector namespaces or mandatory org filter, S3 prefixes per org, Redis key prefixes, and DB row predicates; defense in depth across all four.</li>
+<li>Tradeoff: shared cluster with strict filters vs fully isolated clusters—start shared+strict for cost, isolate noisy/high-risk tenants when blast radius demands it.</li>
+<li>Failure modes: worker trusting client org_id, shared embedding index without filter, cache keys missing org, and signed-but-stale requests replayed—detect with canary cross-tenant probes in staging.</li>
+<li>Logging redacts document content but keeps org_id + correlation_id so incidents are diagnosable without leaking payloads.</li>
+<li>Prevent/ops: continuous test that a token for org A cannot retrieve org B chunks; alert on HMAC failures and on queries executed without org predicate.</li>
+<li>Monitor authz deny rate and cross-tenant canary results on a dashboard; runbook covers key rotation and emergency disable of a compromised worker identity.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># Headers (conceptual)
+# X-Timestamp, X-Org-Id, X-Signature=HMAC(secret, ts+org+body_hash)
+# Reject if |now-ts|&gt;skew or org mismatch</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest signing interceptor on the outgoing FastAPI client; rotate shared secrets via secrets manager; never embed long-lived raw secrets in env without rotation runbooks.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Tenancy is enforced in signatures and storage keys, not in prompts. HMAC proves Nest called us; org-scoped indexes and caches prove we cannot leak across customers.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Passing org_id only in the JSON body without signing — attackers who reach the worker pick any tenant.</li>
+<li>One global vector collection with optional metadata filter — one missed filter is a multi-tenant breach.</li>
+<li>Caching embeddings by content hash alone — identical public PDFs could leak across orgs if ACLs differ.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you rotate HMAC secrets without downtime?</li>
+<li>Would you isolate vector indexes per org from day one?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q08">
+  <summary><span class="sac-id">d13-q08</span><span class="sac-q">How do you design S3 handoff between NestJS and FastAPI with compensating cleanup when the downstream stage fails?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd treat S3 objects as staging artifacts with ownership and TTL: Nest writes, FastAPI reads, and compensating actions delete or quarantine orphans when the job terminal-fails.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify handoff: Nest uploads original + intermediate artifacts under org-prefixed keys, records keys on the job, and passes signed references—not unbounded public URLs—to FastAPI.</li>
+<li>FastAPI reads via short-lived credentials or pre-signed GET scoped to that key; it never lists the whole bucket as a substitute for a job contract.</li>
+<li>On success, Nest promotes artifacts to durable locations and indexes; on terminal failure, compensating cleanup deletes staging keys or moves them to a quarantine prefix for forensics.</li>
+<li>Tradeoff: eager delete vs quarantine TTL—quarantine helps debug poison PDFs; TTL caps cost; choose quarantine+TTL for production.</li>
+<li>Saga-style: each stage records 'wrote:key' in the ledger so compensation is precise; never 'delete whole prefix' after a partial multi-doc batch.</li>
+<li>Failure modes: orphan objects after worker crash, deleting durable inputs on retryable errors, and permission gaps that leave public ACLs—detect with bucket inventory vs job ledger reconcile.</li>
+<li>Prevent/ops: metric orphan-bytes and compensation success rate; alert when staging prefix growth exceeds threshold or reconcile lag grows.</li>
+<li>Dashboard S3 vs ledger drift; runbook for manual quarantine purge; game-day kills FastAPI mid-parse to prove Nest compensation runs and retries remain idempotent.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TB
+  nestPut[Nest_put_staging] --&gt; apiRead[FastAPI_read]
+  apiRead --&gt;|success| promote[Promote_durable]
+  apiRead --&gt;|terminal_fail| comp[Compensate_delete_or_quarantine]
+  promote --&gt; ledger[Ledger_done]
+  comp --&gt; ledger</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># compensation
+# on terminal_fail:
+#   for key in job.staging_keys: quarantine_or_delete(key)
+#   ledger.mark(job_id, COMPENSATED)
+# never delete durable input on retryable errors</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest JobsModule owns the compensation saga; FastAPI reports stage outcomes with typed errors so Nest can distinguish retryable vs terminal before deleting anything.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>S3 is a staged handoff with a ledger, not a junk drawer. Success promotes; failure compensates with delete or quarantine so orphans do not become a silent cost and compliance problem.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Leaving staging forever 'for debugging' — unbounded cost and broader data exposure surface.</li>
+<li>Deleting the source object on the first worker timeout — destroys evidence and blocks safe retry.</li>
+<li>Pre-signed URLs with long TTL and broad prefixes — expands the blast radius if a URL leaks.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you reconcile bucket inventory against the job ledger?</li>
+<li>What retention do auditors require for failed document artifacts?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q09">
+  <summary><span class="sac-id">d13-q09</span><span class="sac-q">How would you operate federated GraphQL across 7+ NestJS services on an institutional LMS—gateway ownership and schema evolution?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd put a gateway in charge of composition and authz at the edge, while each Nest service owns its schema slice, publish contract, and backwards-compatible evolution rules.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify ownership: gateway owns authentication, query budgeting, composition, and client-facing errors; domain services own types/resolvers for courses, users, enrolments, chat, search, etc.</li>
+<li>Schema evolution: additive changes preferred; deprecations with sunset dates; breaking changes require dual-run fields or a new major and coordinated client migration.</li>
+<li>Federation contracts: each service publishes a subgraph; CI composition checks catch key conflicts and missing @key fields before deploy.</li>
+<li>Tradeoff: BFF per client vs one federated graph—federation reduces duplicate joins across LMS domains but concentrates edge risk; mitigate with complexity limits and persisted queries.</li>
+<li>Failure modes: noisy-neighbour queries, schema drift breaking composition, and partial outages returning inconsistent graphs—detect with subgraph health and gateway error-class metrics.</li>
+<li>Authz stays in resolvers/services for object-level rules; gateway enforces coarse tenant/session presence so a missing token never fans out to seven internals.</li>
+<li>Prevent/ops: monitor gateway p95, subgraph error rates, and composition CI failures; alert when any subgraph exceeds error threshold or schema publish fails.</li>
+<li>SLO on gateway availability separate from individual services; runbook for schema rollback and for shedding expensive operations during incidents.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># CI gate
+# 1. rover/composition validate
+# 2. contract tests for @key entities
+# 3. deny breaking changes without dual-run plan</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Each Nest codebase exposes a subgraph module; shared scalars/enums live in a versioned package; gateway config lists subgraph endpoints with health checks and timeouts.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>The gateway composes and protects; services own their slices. We evolve additively with composition CI so seven Nest subgraphs do not become seven ways to break the client.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Letting any service push breaking schema without composition checks — clients fail in production first.</li>
+<li>Putting all business authz only in the gateway — object-level rules rot and leak across resolvers.</li>
+<li>Unbounded nested queries — one client request fans into a self-inflicted LMS outage.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you handle a subgraph outage without blanking the whole page?</li>
+<li>Persisted queries vs free-form clients—when do you require them?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q10">
+  <summary><span class="sac-id">d13-q10</span><span class="sac-q">How do you keep Elasticsearch course search consistent with Mongo as the source of truth on an institutional LMS?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd treat Mongo as SoT and ES as a derived index: reliable change capture, idempotent upserts/deletes, lag metrics, and rebuild playbooks—never dual-write without a reconcile story.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify: course create/update/delete commits in Mongo first; an outbox or change stream publishes index commands so ES is eventually consistent with bounded lag.</li>
+<li>Indexer consumers upsert by course_id idempotently; deletes tombstone by id; mapping changes go through versioned indexes with alias flip.</li>
+<li>Consistency model told to product: search may lag writes by N seconds; read-your-writes for authors can bypass ES via Mongo for the edit UI.</li>
+<li>Tradeoff: sync dual-write in the request vs async outbox—prefer outbox because ES blips must not fail enrolments or course saves.</li>
+<li>Failure modes: poison messages, mapping explosions, and silent lag growth—detect with outbox age, consumer lag, and sample Mongo↔ES checksum jobs.</li>
+<li>Rebuild path: reindex from Mongo into a new index, verify counts/sample hashes, then atomic alias swap with rollback alias.</li>
+<li>Prevent/ops: alert on consumer lag and outbox depth; dashboard search freshness and index doc count vs Mongo active courses.</li>
+<li>SLO on lag threshold for catalogue freshness; runbook for pause/unpause consumers and for alias rollback after a bad mapping deploy.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># outbox row: {id, aggregate:course, course_id, op, payload, created_at}
+# consumer: upsert/delete by course_id; commit offset after ES ack</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Course Nest service writes outbox in the same Mongo transaction as the course doc when possible; a dedicated search-indexer worker owns ES credentials and mappings.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Mongo is truth; Elasticsearch is a projection. Outbox plus lag alerts and rebuild aliases keep search useful without making ES a write dependency.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Dual-writing ES inside the HTTP handler — ES downtime blocks course administration.</li>
+<li>No rebuild/alias strategy — mapping changes become multi-hour outages.</li>
+<li>Ignoring delete events — withdrawn courses linger in search and confuse learners.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you provide read-your-writes for course authors?</li>
+<li>What is your max acceptable search lag and why?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q11">
+  <summary><span class="sac-id">d13-q11</span><span class="sac-q">Design WebSocket chat for 1000+ concurrent users on an institutional LMS: persistence, reliable delivery, and fan-out/backpressure.</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd separate connection fan-out from durable persistence: write path commits messages first, then fans out with backpressure, and clients recover via catch-up cursors—not by hoping sockets stay up.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify roles: gateway/socket tier holds connections; chat service persists messages and receipts; Redis/pubsub or a broker fans events across nodes for 1000+ concurrent users.</li>
+<li>Reliable delivery: assign monotonic per-room sequence or cursor; client ACKs; on reconnect, catch-up query from last cursor so disconnects do not drop history.</li>
+<li>Persistence before fan-out for messages that must not vanish; ephemeral typing indicators can be best-effort and rate-limited.</li>
+<li>Backpressure: per-connection outbound buffers with drop/slow-consumer disconnect policies; server-side rate limits on send to protect persistence and fan-out.</li>
+<li>Tradeoff: sticky sessions vs fully pub/sub mesh—prefer pub/sub so scale-out does not pin rooms to one box; cost is slightly higher fan-out complexity.</li>
+<li>Failure modes: hot rooms melting a node, unbounded reconnect storms, and duplicate delivery on retry—detect with connection count, outbound buffer depth, and duplicate-suppress metrics.</li>
+<li>Prevent/ops: alert on connection spike, message persist lag, and fan-out error rate; dashboard concurrent sockets and room hotness.</li>
+<li>SLO on persist success and catch-up latency after reconnect; runbook for shedding non-critical events and for draining a bad node without dropping durable messages.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># delivery
+# 1. persist message + seq
+# 2. publish room event
+# 3. local sockets write; slow consumer → disconnect
+# 4. catchup: GET /messages?after=seq</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest gateway or a dedicated WS service authenticates on connect, maps user→rooms, and uses a Redis adapter for multi-instance fan-out; business rules stay in a chat domain module.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Persist first, fan out second, catch up by cursor. Backpressure and rate limits keep a hot room from taking down the institutional LMS chat tier.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Fan-out before durable write — acknowledged UI messages disappear on crash.</li>
+<li>Infinite server buffers for slow clients — memory death under 1000+ sockets.</li>
+<li>No catch-up cursor — every blip forces full history reload or silent gaps.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you handle presence and typing without drowning the broker?</li>
+<li>What changes at 10k concurrent vs 1k?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q12">
+  <summary><span class="sac-id">d13-q12</span><span class="sac-q">Mongo activity collection is ~16M documents / ~160GB. How would you design a live vs archive split?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd define a hot working-set window for learner-facing reads, move cold activity to archive storage with the same logical schema, and cut over only behind lag/metric gates.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify access patterns: dashboards and recent learner feeds need hot data; compliance and rare audits need cold history—optimize storage and indexes for the hot predicate first.</li>
+<li>Live collection keeps recent N months (or size-bounded) with indexes tailored to hot queries; archive collection/cluster stores older docs, possibly compressed or in cheaper storage.</li>
+<li>Migration job moves by time watermark in batches with idempotent upserts to archive and deletes/marks from live only after archive ack and checksum.</li>
+<li>Tradeoff: time-based split vs size-based—time is explainable to product; size caps protect the primary; combine with both a date watermark and a max live size alarm.</li>
+<li>Reads: application query layer routes by timestamp; dual-read during transition for boundary ranges to avoid missing edge documents.</li>
+<li>Failure modes: wrong watermark deleting unarchived docs, index bloat remaining on live, and app bugs querying only live for historical exports—detect with count reconcile and sample hash jobs.</li>
+<li>Prevent/ops: dashboard live size, archive lag behind watermark, and reconcile deltas; alert when live GB exceeds threshold or archive lag grows.</li>
+<li>SLO on archive lag and zero unexplained reconcile delta; runbook for pause mover, restore-from-archive probe, and game-day partial cutover rollback.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  live[Live_hot_set] --&gt;|watermark_batches| archive[Archive_cold]
+  archive --&gt;|ack_checksum| prune[Prune_live]
+  live --&gt; appHot[Hot_reads]
+  archive --&gt; appCold[Audit_reads]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># mover batch
+# select live where ts &lt; watermark limit B
+# upsert archive by _id
+# verify sample hashes
+# delete live ids only after verify</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Activity Nest service owns the routing repository that picks live vs archive; workers for move/prune run with distributed locks so two pods cannot prune the same watermark window.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Split by access pattern: hot live indexes for the working set, cold archive for history, with watermarked movers and reconcile gates so we never delete what we have not archived.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Deleting from live before archive durability is proven — unrecoverable learner history loss.</li>
+<li>One giant TTL index as the only strategy — uncontrolled deletes without reconcile or restore drills.</li>
+<li>Leaving unused historical indexes on live — you pay RAM for data you already intended to cool.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you choose the watermark with product?</li>
+<li>What is your restore probe for a single learner's history?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q13">
+  <summary><span class="sac-id">d13-q13</span><span class="sac-q">You claim ~71% working-set reduction with zero learner-metric delta. How do you prove safety before and after cutover?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd define the learner metrics up front, run shadow/dual-read comparisons, gate cutover on parity thresholds, and keep a fast rollback—savings without evidence is just a risky story.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify metrics that matter: enrolment completion rates, activity-powered dashboard correctness, search/chat-adjacent counters if tied to activity, and support ticket volume—not only disk GB freed.</li>
+<li>Before cutover: dry-run mover, dual-read shadow mode comparing live-only vs live+archive results on sampled learner feeds, and checksum counts for moved ranges.</li>
+<li>Prove zero delta: pre/post dashboards with the same windows; statistical guardrails (no significant change beyond agreed epsilon) reviewed with stakeholders.</li>
+<li>Tradeoff: longer shadow period vs faster savings—prefer shadow until parity holds across weekly learner cycles because LMS usage is bursty around terms.</li>
+<li>Cutover gates: archive lag SLO green, reconcile delta=0, shadow mismatch rate under threshold, restore probe passed in staging and production canary orgs.</li>
+<li>Failure modes: metric that ignores a silent empty feed, sampling bias missing edge orgs, and celebrating GB freed while learners see gaps—detect with synthetic learners and org-stratified samples.</li>
+<li>Prevent/ops: publish a parity dashboard through shadow and T+14 days; alert on mismatch rate or on learner-facing empty-result spikes.</li>
+<li>Runbook for immediate routing rollback to pre-split reads; game-day injects archive unreadability to verify fail-safe behaviour and alerts.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># gates
+# shadow_mismatch &lt; ε
+# reconcile_delta == 0
+# archive_lag &lt; SLO
+# restore_probe PASS
+# then flip read router</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Feature flag the read router in the Nest activity module so cutover and rollback are config flips, not redeploys across all LMS services.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Disk savings are not the proof—learner-metric parity is. Shadow compares, stratified samples, and rollback-ready routing are how a ~71% working-set cut stays safe.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Using only disk metrics as success — learners can break while Grafana looks green on GB.</li>
+<li>Global average parity that hides one large org's regression — stratify samples.</li>
+<li>No rollback flag — discovering mismatch after prune is too late.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>Which learner metrics would you refuse to skip?</li>
+<li>How long do you keep shadow running after flip?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q14">
+  <summary><span class="sac-id">d13-q14</span><span class="sac-q">Why would you reject a compaction that risks ~21K enrolments for roughly ~0.3% storage savings?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd frame it as asymmetric risk: a tiny efficiency win cannot justify a blast radius that large—seniors kill 'clever' jobs when expected value is negative.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify the math: ~0.3% storage savings is negligible cost relief; ~21K enrolments at risk is a trust and operations catastrophe with support, refunds, and regulatory fallout on an institutional LMS.</li>
+<li>Judgment rule: if blast radius includes durable learner state and rollback is uncertain, require overwhelming benefit and proven dry-runs—this proposal fails both.</li>
+<li>Ask for evidence: how was enrolment risk estimated, what is restore time objective, who pages, and what dry-run showed on a canary org?</li>
+<li>Tradeoff framing for stakeholders: cheaper disks or archive tiering vs gambling enrolments—present safer alternatives that achieve savings without touching enrolment integrity.</li>
+<li>Safer paths: live/archive for activity (not enrolments), index hygiene, TTL only on truly ephemeral collections, storage class changes that do not rewrite source-of-truth docs.</li>
+<li>Failure modes if forced: partial compaction, silent referential breaks, and 'we can fix forward' without a restore probe—refuse and escalate if pressured.</li>
+<li>Prevent/ops: encode a risk gate in the runbook—jobs touching enrolment graphs need explicit metric, blast estimate, and rollback drill before scheduling.</li>
+<li>Monitor for unauthorized dangerous jobs via change management alerts; track near-miss proposals as a culture metric so the org learns to kill bad expected value early.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># decision check
+# benefit: ~0.3% storage
+# blast: ~21K enrolments, uncertain restore
+# verdict: REJECT → pursue archive/tiering instead</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Any Nest-scheduled compaction touching enrolment collections requires dual approval and a feature-flagged dry-run path; production write mode stays off until gates pass.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I reject asymmetric bets: ~0.3% savings versus ~21K enrolments is not engineering thrift—it is negligence. We take storage wins that do not wager the enrolment graph.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Optimising for storage dashboards while ignoring learner-state blast radius — wrong objective function.</li>
+<li>Assuming backups equal safe rollback without a timed restore drill — backups that have never been restored are hopes.</li>
+<li>Agreeing under schedule pressure 'just this once' — creates precedent for the next worse job.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you say no to a director pushing the compaction?</li>
+<li>What safer savings would you propose in the same meeting?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q15">
+  <summary><span class="sac-id">d13-q15</span><span class="sac-q">Design data-lifecycle operations for the institutional LMS: distributed locks, run ledgers, dry-run and restore probes.</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd treat lifecycle jobs as controlled change: one lock owner, an append-only run ledger, mandatory dry-run, and restore probes before any prune becomes default.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify lifecycle stages: classify → move/archive → verify → prune → report; each stage is separately restartable and idempotent.</li>
+<li>Distributed locks (Redis/etcd) per collection/watermark prevent overlapping movers; lock TTL + fencing tokens so a dead worker cannot prune after a new owner starts.</li>
+<li>Run ledger records run_id, actor, mode (dry-run|apply), watermark, counts, checksums, and outcome; every apply run must reference a successful dry-run fingerprint.</li>
+<li>Dry-run computes would-move/would-delete sets without mutating; restore probes recover a sampled learner or org slice from archive into a sandbox and compare.</li>
+<li>Tradeoff: slower gated lifecycle vs aggressive cleanup—gates win because LMS history mistakes are existential trust failures.</li>
+<li>Failure modes: lock loss double-prune, dry-run/apply skew, and restore never practiced—detect with ledger anomalies and scheduled probe failures.</li>
+<li>Prevent/ops: dashboard lifecycle runs, lock contention, and probe pass rate; alert on apply without dry-run reference or on probe failure.</li>
+<li>SLO on max prune lag only after safety gates; runbook for halt-all-lifecycle, ledger forensics, and game-day restore under time pressure.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TB
+  lock[Acquire_lock] --&gt; dry[Dry_run_ledger]
+  dry --&gt; probe[Restore_probe]
+  probe --&gt;|pass| apply[Apply_move_prune]
+  apply --&gt; verify[Checksum_verify]
+  verify --&gt; release[Release_lock]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># apply gate
+# require ledger.dry_run_fingerprint == current_plan
+# require restore_probe.status == PASS
+# require lock.fencing_token == owner</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest workers use a LifecycleModule with lock + ledger repositories; GraphQL admin mutations can start dry-runs but apply requires elevated role and two-person rule in production.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Lifecycle is a product with locks, ledgers, dry-runs, and restore probes. If we cannot restore a sample, we do not prune.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Cron without a lock — two pods prune the same window and race deletes.</li>
+<li>Apply mode that drifts from the dry-run plan — you verified the wrong set.</li>
+<li>Never running restore probes — discovery of backup failure happens during a real incident.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do fencing tokens prevent a stale lock holder from pruning?</li>
+<li>What sample size do you use for restore probes?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q16">
+  <summary><span class="sac-id">d13-q16</span><span class="sac-q">Where would you put Redis on hot GraphQL paths in an institutional LMS—what to cache, how to invalidate, how to stop stampedes?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd cache stable, high-read entities and permission-safe projections at the gateway or service layer, invalidate on write outboxes, and use single-flight/jitter to prevent stampedes.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify candidates: course catalogue cards, public metadata, and permission-filtered menus—not per-learner highly mutable activity feeds unless carefully keyed and short-TTL.</li>
+<li>Key design includes org_id, entity_id, authz version or role hash so two roles never share a forbidden projection.</li>
+<li>Invalidation: writer updates Mongo then publishes invalidation events; delete keys or bump a generation version; TTL is a backstop, not the primary correctness mechanism for admin edits.</li>
+<li>Stampede control: lock or single-flight on miss, staggered TTL jitter, and optional stale-while-revalidate for catalogue reads where brief staleness is acceptable.</li>
+<li>Tradeoff: gateway edge cache vs service-local Redis—edge helps anonymous catalogue; service cache respects richer authz; often both with clear ownership.</li>
+<li>Failure modes: caching personalized data under shared keys, invalidating before commit, and thundering herds on expiry—detect with hit-rate, miss storms, and wrong-user canaries.</li>
+<li>Prevent/ops: monitor hit rate, miss latency, and lock wait; alert on miss storms and on Redis error rate with defined shed behaviour.</li>
+<li>Dashboard GraphQL field latency with/without cache; runbook for flush-by-prefix and game-day Redis outage proving the LMS degrades safely without stampeding Mongo.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># key: lms:v1:{org}:{type}:{id}:{authz_ver}
+# on write commit → PUBLISH invalidate
+# on miss → single_flight(fill) + ttl jitter</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> DataLoader + Redis caching in Nest resolvers must still be org-scoped; DataLoader alone does not fix cross-request stampedes—pair with Redis single-flight for hot course ids.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Cache shared, authz-safe projections with org-aware keys. Invalidate on write, jitter TTLs, and single-flight misses so Redis speeds GraphQL without becoming a consistency or stampede bomb.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Caching GraphQL responses without authz in the key — cross-learner data leaks.</li>
+<li>Invalidating before Mongo commit — rollback leaves a hole that refills with stale data.</li>
+<li>Synchronized TTL on millions of course keys — periodic Mongo stampedes every expiry boundary.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>What do you intentionally not cache on the GraphQL path?</li>
+<li>Fail open or closed when Redis is down for catalogue vs enrolments?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q17">
+  <summary><span class="sac-id">d13-q17</span><span class="sac-q">How would you structure a healthcare diagnostics platform with modular DDD on FastAPI (patient, appointment, records, billing)?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd bound contexts around patient, appointment, records, and billing with explicit anti-corruption layers, separate persistence where needed, and FastAPI routers that do not reach across aggregates casually.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify bounded contexts: Patient (identity/demographics), Appointment (scheduling), Records (clinical artifacts), Billing (charges/claims)—each with its own models, invariants, and ubiquitous language.</li>
+<li>FastAPI layout: per-context packages (domain, application, adapters); routers call application services, not other contexts' ORMs directly.</li>
+<li>Integration via domain events or application APIs: e.g., AppointmentConfirmed emits an event Billing may consume—no shared mutable tables across contexts.</li>
+<li>Tradeoff: modular monolith vs microservices first—start modular monolith on FastAPI for transactional clarity, split only when scale or ownership forces it.</li>
+<li>Invariants: records access requires patient authz; billing never invents clinical facts; appointments cannot orphan required consent checks when policy demands them.</li>
+<li>Failure modes: 'shared PatientModel imported everywhere', leaky transactions across contexts, and billing reading raw clinical notes—detect with import-linters and architecture tests.</li>
+<li>Prevent/ops: track cross-context import violations in CI; monitor event publish/consume lag between appointment and billing.</li>
+<li>Dashboard context-level error rates; runbook ownership per context so pages go to the right on-call, not a generic blob.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># packages
+# patient/, appointment/, records/, billing/
+# each: domain/, application/, adapters/api/, adapters/db/
+# forbid: billing importing records.orm</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Modular DDD keeps clinical and billing languages apart. FastAPI packages own their invariants and talk through APIs/events—not shared tables—so the healthcare diagnostics platform can evolve safely.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>One giant models.py for all contexts — boundaries exist only on slides.</li>
+<li>Billing services joining clinical tables directly — compliance and coupling explode together.</li>
+<li>Microservices before stable boundaries — distributed mess with the same muddled model.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>When would you split Records into its own deployable?</li>
+<li>How do you handle a transaction that seems to need appointment + billing atomically?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q18">
+  <summary><span class="sac-id">d13-q18</span><span class="sac-q">Describe a strangler-fig migration from NestJS/Cloud Functions toward Cloud Run for a healthcare diagnostics platform—cutover and dual-run risks.</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd strangler by route/capability: dual-run with shadow compares, percentage cutover, and instant rollback—never a big-bang flip of clinical traffic.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify strangler: identify seams (auth, appointments API, records ingest); extract one capability at a time onto Cloud Run while Nest/Cloud Functions remain the facade.</li>
+<li>Dual-run: shadow mode sends copies to Cloud Run, compares status/body hashes for non-mutating GETs; writes use careful replay or idempotent dual-write only with strong ledgering.</li>
+<li>Cutover: percentage traffic via gateway/flag; error budget and latency gates; rollback is flag flip, not rebuild.</li>
+<li>Tradeoff: longer dual-run cost vs big-bang speed—clinical systems prefer dual-run because silent behavioural drift is patient-impacting.</li>
+<li>Risks: divergent auth assumptions, double side effects on writes, clock/config drift, and incomplete observability on the new runtime—detect with shadow mismatch metrics and canary orgs.</li>
+<li>Data path: ensure Firestore/Mongo/SQL connections, IAM, and secrets are equivalent; warm Cloud Run to avoid cold-start SLO burns on first clinical requests.</li>
+<li>Prevent/ops: dashboard shadow mismatch rate, Cloud Run error ratio, and cold-start p95; alert when mismatch exceeds threshold.</li>
+<li>SLO gates on cutover steps; runbook for immediate traffic rollback and game-day kill of Cloud Run to prove facade fallback still serves critical reads.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  client[Clients] --&gt; facade[Nest_or_Functions_facade]
+  facade --&gt;|pct_traffic| run[Cloud_Run_new]
+  facade --&gt;|shadow| compare[Compare_hashes]
+  facade --&gt;|fallback| legacy[Legacy_impl]
+  compare --&gt; gates[Cutover_gates]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># cutover gates
+# shadow_mismatch &lt; ε
+# run_5xx &lt; budget
+# p95 &lt; SLO
+# then increase pct; else rollback flag</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest facade keeps stable URLs while proxying to Cloud Run; feature flags choose legacy vs new per route; Cloud Functions triggers strangler the same way behind the facade.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Strangler means dual-run, compare, then percentage cutover with a flag rollback. On a healthcare diagnostics platform, big-bang rewrites are how you schedule an incident.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Big-bang DNS cutover without shadow — first production day is your integration test.</li>
+<li>Dual-writing non-idempotent clinical side effects — duplicate labs or bills.</li>
+<li>Ignoring cold starts on Cloud Run for synchronous clinical APIs — SLO burn looks like 'random' latency.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you shadow compare mutating endpoints safely?</li>
+<li>What is your rollback time objective at 5% vs 50% traffic?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q19">
+  <summary><span class="sac-id">d13-q19</span><span class="sac-q">How do you apply CQRS with Cloud Tasks/Pub/Sub on a healthcare diagnostics platform—fail-fast validation, DLQ, and retries?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd validate commands synchronously at the write API, accept only after invariants pass, then dispatch async work via Tasks/Pub/Sub with idempotent handlers, bounded retries, and a DLQ that pages.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify CQRS: write model handles commands with fail-fast validation (schema, authz, domain invariants); read models project from events for query-optimized views.</li>
+<li>After commit, enqueue Cloud Tasks or Pub/Sub messages with idempotency keys; handlers update projections, notify, or call downstream lab systems.</li>
+<li>Retries: transient errors with exponential backoff; poison messages after N attempts go to DLQ with payload + error class preserved for replay.</li>
+<li>Tradeoff: sync do-everything vs async projections—async protects API latency but requires lag-tolerant reads and clear 'processing' states in UX.</li>
+<li>Fail-fast belongs before enqueue: never put invalid clinical commands on the bus hoping a worker will sort them out.</li>
+<li>Failure modes: retry amplification, unordered events breaking projections, and DLQ neglect—detect with queue age, DLQ depth, and projection lag metrics.</li>
+<li>Prevent/ops: alert on DLQ depth > 0 for clinical topics and on projection lag beyond SLO; dashboard command success vs event handle success.</li>
+<li>Runbook for replay-from-DLQ with idempotent handlers; game-day injects worker failures to prove retries settle and DLQ pages humans.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TB
+  api[Write_API_validate] --&gt; commit[Commit_write_model]
+  commit --&gt; bus[Tasks_or_PubSub]
+  bus --&gt; handler[Idempotent_handler]
+  handler --&gt;|ok| read[Update_read_model]
+  handler --&gt;|poison| dlq[DLQ_page]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># handler
+# if ledger.seen(event_id): return
+# try process; on retryable: raise
+# on poison: nack to DLQ after max_attempts</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> If the facade remains Nest, it performs fail-fast DTO/authz checks then publishes; FastAPI workers own projections—contracts must share event schemas and idempotency keys.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Validate commands up front, enqueue durable work second, and treat DLQ as a paging signal. CQRS on Cloud Tasks/Pub/Sub only works if handlers are idempotent and lag is visible.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Enqueueing first and validating in the worker — the bus fills with garbage and clinical ops drown.</li>
+<li>Infinite retries without DLQ — poison labs block the subscription forever.</li>
+<li>Non-idempotent handlers — every retry creates duplicate clinical side effects.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you expose projection lag to clinicians in the UI?</li>
+<li>Ordering: when do you need Pub/Sub ordering keys vs tolerate eventual order?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q20">
+  <summary><span class="sac-id">d13-q20</span><span class="sac-q">Design lab-result ingestion with GPT vision transcription: JSON validation, unit normalisation, and risk-based human review.</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd treat vision output as untrusted: schema-validate, normalise units, score risk, and require human review for high-impact fields before results become clinically actionable.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify pipeline: ingest image/PDF → GPT vision structured extract → JSON schema validate → unit normalisation → risk score → auto-accept or human review queue → commit to records.</li>
+<li>Validation rejects missing required fields, impossible ranges, and unknown analytes; typed errors drive retry vs human escalation.</li>
+<li>Unit normalisation maps mg/dL vs mmol/L etc. into canonical units with explicit conversion audit; never silently drop units.</li>
+<li>Risk-based review: critical analytes, low model confidence, out-of-range values, or patient-matched anomalies force human confirmation; low-risk routine fields may auto-accept under policy.</li>
+<li>Tradeoff: full human review vs selective automation—selective with audit trails scales; full review bottlenecks; zero review is unsafe.</li>
+<li>Failure modes: confident wrong decimals, unit confusion, and auto-commit of critical values—detect with golden-image suites and reviewer disagreement rates.</li>
+<li>Prevent/ops: metric auto-accept rate, review lag, and post-commit correction rate; alert when correction rate or low-confidence volume exceeds threshold.</li>
+<li>Dashboard review queue SLO; runbook to raise review strictness kill-switch; game-day feeds known adversarial/noisy labs to prove fail-to-review behaviour.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  img[Lab_image] --&gt; vision[GPT_vision]
+  vision --&gt; schema[JSON_schema]
+  schema --&gt; units[Unit_normalise]
+  units --&gt; risk[Risk_score]
+  risk --&gt;|low| auto[Auto_commit]
+  risk --&gt;|high| human[Human_review]
+  human --&gt; commit[Records_commit]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># gates
+# schema_ok &amp;&amp; units_ok &amp;&amp; (risk &lt; T or reviewer_approved)
+# else → review_queue with reasons[]</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Vision proposes; validation and units constrain; risk policy decides what humans must see. Clinical safety beats end-to-end automation vanity metrics.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Writing raw model JSON to the patient record — schema drift becomes clinical data drift.</li>
+<li>Auto-accepting critical analytes on confidence alone — confidence is not calibration.</li>
+<li>Normalising units without an audit trail — you cannot explain a value in a safety review.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you calibrate the risk threshold with clinicians?</li>
+<li>What is your policy when the image is unreadable?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q21">
+  <summary><span class="sac-id">d13-q21</span><span class="sac-q">For HIPAA-aligned controls on a healthcare diagnostics platform (Firebase Auth, encryption, RBAC, audit), what do you actually verify in the design?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd verify concrete control outcomes: who can access which PHI, where it is encrypted, how audit trails prove access, and how auth tokens map to RBAC—not a checklist of product logos.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify: HIPAA-aligned design means enforceable minimum necessary access, encryption in transit/at rest, authentication, authorisation, and auditable access to ePHI—verify each with tests and threat scenarios.</li>
+<li>Firebase Auth: confirm identity provider config, session/token lifetimes, MFA policy where required, and that API gateways reject unauthenticated clinical routes.</li>
+<li>Encryption: TLS everywhere; at-rest encryption on datastore/object storage; secrets in a manager—not in source; verify key rotation ownership.</li>
+<li>RBAC: role→permission matrix for patient, clinician, admin, billing; object-level checks (own patients vs all); deny by default in resolvers/services.</li>
+<li>Audit: immutable access logs for PHI reads/writes with actor, patient ref, purpose, timestamp; verify logs are queryable for investigations and retained per policy.</li>
+<li>Failure modes: broad service accounts, missing object checks, PHI in logs/metrics, and audit gaps on batch jobs—detect with threat modeling and automated access reviews.</li>
+<li>Prevent/ops: alert on anomalous PHI access volume and on authz deny spikes; monitor audit pipeline lag so investigations are not blind.</li>
+<li>Dashboard access anomalies; runbook for credential compromise; game-day attempts cross-patient reads to prove RBAC and audit both fire.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># design verification checklist
+# [ ] unauth clinical routes → 401
+# [ ] cross-patient read → 403 + audit
+# [ ] PHI redacted from app logs
+# [ ] key rotation owner named</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I verify outcomes: deny-by-default RBAC, encryption evidence, and auditability of PHI access. Tool names are not controls until tests and game-days prove them.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Equating 'we use Firebase Auth' with HIPAA compliance — identity alone is not minimum-necessary access.</li>
+<li>Logging request bodies that contain lab results — your observability becomes a PHI spill.</li>
+<li>Shared admin roles without object-level checks — one compromised account reads all patients.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do break-glass emergency access work with audit?</li>
+<li>What do you put in metrics vs what must never leave the encrypted store?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q22">
+  <summary><span class="sac-id">d13-q22</span><span class="sac-q">You improved a complex Firestore query by ~50%. What indexing and data-model tradeoffs typically unlock that?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd explain composite indexes, denormalisation for read shapes, and avoiding fan-out queries—then name what write complexity and storage you accepted for the ~50% read win.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify the slow shape: multi-field filters/sorts without a matching composite index, or client-side joins that multiply round trips on the healthcare diagnostics platform.</li>
+<li>Indexing: add composite indexes aligned to equality→inequality→orderBy constraints; remove unused indexes that inflate write cost.</li>
+<li>Model tradeoffs: denormalise fields onto documents that match the query (e.g., appointment list projections), or maintain a read-model collection updated via events.</li>
+<li>Tradeoff: faster reads vs more write fan-out and consistency windows—acceptable when clinician UX is read-heavy and writes are bounded.</li>
+<li>Measure honestly: p95 latency and read ops billed before/after on the same query volume; ensure the win is not a colder cache artefact.</li>
+<li>Failure modes: exploding indexes, hot documents from denormalisation, and stale projections—detect with write latency and projection lag metrics.</li>
+<li>Prevent/ops: dashboard query p95 and index list size; alert if write latency regresses past threshold after new indexes/denorm.</li>
+<li>Runbook for index rollback/disable and for rebuilding projections; verify with a load test that the ~50% holds under concurrent clinicians.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># before: filter A,B orderBy C without composite → fanout
+# after: composite(A,B,C) + denorm list doc
+# measure: p95 + read_ops before/after</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Firestore gains usually come from the right composite index plus a read-shaped model. I pay in write fan-out deliberately, and I prove the ~50% with p95 under load—not a single warm query.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Adding every possible composite index — write amplification and deployment pain for unused paths.</li>
+<li>Client-side filtering huge collections — looks fine in dev, melts in production concurrency.</li>
+<li>Claiming 50% from a single local run without production-shaped load — measurement theatre.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>When is Realtime Listeners the wrong tool for this query?</li>
+<li>How do you migrate denormalised fields without downtime?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q23">
+  <summary><span class="sac-id">d13-q23</span><span class="sac-q">How do you use emulator-backed pytest toward ~92% coverage on a healthcare diagnostics platform—what do you mock vs run for real?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd run domain logic and Firestore/Auth emulators for real integration boundaries, mock only unstable externals like GPT vision and third-party payers, and treat coverage as a floor—not a substitute for contract tests.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify pyramid: pure domain unit tests are fast and numerous; emulator-backed tests cover Auth rules, Firestore queries, and task handlers against local emulators; a thin set of contract tests hits staging.</li>
+<li>Real via emulators: security rules, composite queries, transactional writes, and idempotent consumers—these fail in ways mocks hide.</li>
+<li>Mock: GPT vision, SMS, external clearinghouses—provide recorded fixtures and schema validators so mocks cannot silently drift from contracts.</li>
+<li>Coverage ~92%: focus on critical packages (records, authz, billing invariants); do not chase 100% on generated clients or trivial DTOs at the expense of boundary tests.</li>
+<li>Tradeoff: slower emulator CI vs pure mocks—pay CI minutes because healthcare false greens are expensive.</li>
+<li>Failure modes: over-mocking Firestore, flaky emulator startup, and coverage theatre on dead code—detect with mutation testing on authz and with flaky-test budgets.</li>
+<li>Prevent/ops: CI gate on coverage threshold for critical paths and on emulator suite green; track flaky rate as a reliability metric.</li>
+<li>Dashboard CI duration vs flake rate; runbook for emulator version pins; periodically game-day a staging smoke that mirrors emulator scenarios on real managed services.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># pytest markers
+# @unit  → pure domain
+# @emu   → firestore/auth emulators
+# @mock_ext → gpt/payer fixtures + schema asserts</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Emulators for our data/auth boundaries, mocks for expensive probabilistic externals, coverage as a critical-path floor. That is how you approach ~92% without lying to yourself.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Mocking Firestore so thoroughly that security rules never run — false confidence on PHI access.</li>
+<li>Chasing line coverage on generated code while skipping emulator query tests — the ~50% query bug returns.</li>
+<li>Unpinned emulator versions — CI greens locally and fails in pipeline randomly.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>What is your flake budget and quarantine policy?</li>
+<li>Which tests must run against real GCP before a clinical cutover?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d13-q24">
+  <summary><span class="sac-id">d13-q24</span><span class="sac-q">Give a cross-cutting production failure story framework (detect → mitigate → permanent fix) usable on the document intelligence RAG platform, institutional LMS, or healthcare diagnostics platform.</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd use an evidence framework—not autobiography: detect with SLIs, mitigate to stop bleeding, then permanent fix with owners, metrics, and a game-day so the same class of failure cannot silently return.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Clarify the framework: Detect (symptom + blast radius) → Mitigate (stop patient/learner/customer harm) → Diagnose (evidence) → Permanent fix (systemic) → Verify (metric + game-day)—portable across all three platforms.</li>
+<li>Detect: name the SLI that moved (error rate, lag, empty retrieve, chat disconnects, projection lag, authz anomalies) and the dashboard/alert that should have fired—or the gap if it did not.</li>
+<li>Mitigate first: feature flag off, traffic shed, reprocess pause, dual-run rollback, raise review strictness—choose the reversible control that shrinks blast radius fastest.</li>
+<li>Diagnose with evidence: correlation ids, stage metrics, queue lag, canary org diffs—avoid blame narratives; write a timeline of facts.</li>
+<li>Permanent fix changes the system: idempotency, filter, index, lock, schema gate, alert, or runbook—not only 'restarted the pod'.</li>
+<li>Tradeoff: long RCA theatre vs quick mitigate—always mitigate first; schedule deep fix with owners and dates once harm is contained.</li>
+<li>Prevent/ops: add or fix the alert that should have detected earlier; define threshold and page routing; attach a runbook link to the alert.</li>
+<li>Close with verification: metric returns to SLO, shadow/canary stays clean, and a game-day re-injects the failure mode to prove detection and mitigation still work on that platform.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># evidence card
+# SLI/alert: ...
+# blast: ...
+# mitigate: ...
+# permanent fix: ...
+# verify metric + game-day date: ...</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Works the same for Nest gateways and FastAPI workers: correlate across services with one request/job id, and ensure each platform's on-call owns mitigate vs permanent-fix follow-through.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Detect with SLIs, mitigate to stop harm, then fix the system and prove it with alerts and a game-day. Same framework whether the blast is RAG retrieval, LMS data lifecycle, or clinical projections.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Jumping to root-cause debates while blast radius grows — patients/learners keep getting hurt during the argument.</li>
+<li>Calling a restart the permanent fix — the same alert-less failure returns next week.</li>
+<li>Autobiographical storytelling without metrics — interview theatre that does not transfer to the next outage.</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>Apply the framework to a bad prompt deploy on the RAG platform.</li>
+<li>Apply the framework to archive prune lag on the institutional LMS.</li></ul>
+    
+  </div>
+</details>
+          </section>
+
+          <section class="section reveal" id="check">
+            <h2><span class="section-num">03</span> &nbsp;Self-check</h2>
+<div class="quiz">
+      <div class="quiz-q">On a document intelligence RAG platform, why is table-aware extraction preferred over naive PDF text extraction?</div>
+      <button class="quiz-opt" data-correct="false"><span class="mark"></span>It is always faster than OCR and never needs retries</button>
+<button class="quiz-opt" data-correct="true"><span class="mark"></span>It preserves cell/row structure so retrieval and generation stay grounded in real numbers and labels</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>LLMs ignore tables, so any text dump is equivalent</button>
+      <div class="quiz-explain">Planning and financial PDFs encode meaning in grid structure; flattening to prose loses alignment between labels and values and produces confident wrong answers.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">Institutional LMS activity is ~16M docs / ~160GB. Safest first move to reduce working set?</div>
+      <button class="quiz-opt" data-correct="false"><span class="mark"></span>Hard-delete old rows immediately to free disk</button>
+<button class="quiz-opt" data-correct="true"><span class="mark"></span>Design a live/archive split with dry-run, restore probes, and metric parity gates before cutover</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Compaction that risks ~21K enrolments for a ~0.3% size win</button>
+      <div class="quiz-explain">Seniors separate hot working set from cold archive and prove learner-metric safety; they reject asymmetric risk for negligible savings.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">Healthcare diagnostics: lab results via GPT vision. What must surround the model output?</div>
+      <button class="quiz-opt" data-correct="false"><span class="mark"></span>Trust the model JSON and write straight to the patient record</button>
+<button class="quiz-opt" data-correct="true"><span class="mark"></span>Schema validation, unit normalisation, and risk-based human review before clinical use</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Store raw images only and skip structured ingestion</button>
+      <div class="quiz-explain">Vision transcription is probabilistic; typed validation, unit normalisation, and human review for high-risk fields keep patient safety above automation speed.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">NestJS↔FastAPI on org-scoped multi-tenant RAG. Primary isolation failure to design against?</div>
+      <button class="quiz-opt" data-correct="false"><span class="mark"></span>HMAC on every hop plus org_id on every data key, query, and cache namespace</button>
+<button class="quiz-opt" data-correct="true"><span class="mark"></span>Worker trusting client-supplied org_id without signed service identity, or shared vector namespaces across orgs</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Using S3 for document handoff between services</button>
+      <div class="quiz-explain">Cross-tenant leakage usually comes from unsigned trust of tenant context or shared indexes/caches—not from using object storage itself.</div>
+    </div>
+          </section>
