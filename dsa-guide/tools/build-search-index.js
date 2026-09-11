@@ -25,6 +25,7 @@ const FILES = [
   "patterns/design.html", "patterns/bits.html",
   "drill/index.html",
   "reference/cheatsheet.html",
+  "reference/python-coding-round.html",
 ];
 
 function decode(s) {

@@ -66,6 +66,7 @@ Author commands (after this pass):
 |---------|------|-------|---------------------|--------|
 | Pattern map | [patterns/index.html](dsa-guide/patterns/index.html) picker | — | “Constraint → pattern” | ⬜ |
 | Two pointers / SW / Hash | pick weak pattern page + step `visualizer` | — | Big-O + invariant | ⬜ |
+| Python coding bank | [reference/python-coding-round.html](dsa-guide/reference/python-coding-round.html) | Top 12 + traps | LC starter out loud | ⬜ |
 | Timed round | [drill/index.html](dsa-guide/drill/index.html) | 40-min mock | Rubric out loud | ⬜ |
 | Cheatsheet | [reference/cheatsheet.html](dsa-guide/reference/cheatsheet.html) | — | When-to table | ⬜ |
 
