@@ -166,7 +166,7 @@ Author commands (after this pass):
 
 ### Aptitude & Reasoning
 
-**Coverage:** quant (9) · reasoning (8) · verbal (4) · DI (3) · 118-Q bank · formula/flashcards.
+**Coverage:** quant (9) · reasoning (8) · verbal (4) · DI (3) · 121-Q bank · formula/flashcards.
 
 **Gaps:** authentic hard RC, larger stretch pool.
 

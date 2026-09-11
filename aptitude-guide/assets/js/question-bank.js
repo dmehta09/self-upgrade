@@ -186,6 +186,9 @@ window.APTI_QUESTIONS = [
   { section:"di", topic:"di-caselets", diff:"core", q:"Revenue 500, cost 350. Profit margin?", options:["30%","25%","35%","40%"], answer:0, explain:"Profit 150 &divide; 500 = 30%." },
   { section:"di", topic:"di-caselets", diff:"core", q:"Sales grew from 400 (2018) to 500 (2019). % growth?", options:["25%","20%","10%","30%"], answer:0, explain:"100 &divide; 400 = 25%." },
   { section:"di", topic:"di-caselets", diff:"warm", q:"Best first move on a dense caselet?", options:["Extract numbers into a small table","Read every word twice","Answer from memory","Skip all of it"], answer:0, explain:"Turn prose into a table; most questions then need one quick calc." },
+  { section:"di", topic:"di-caselets", diff:"stretch", q:"2019 revenue = 500. Pie of 2019: Product A = 40%. A&rsquo;s revenue?", options:["200","40","250","160"], answer:0, explain:"Multi-set: share &times; that year&rsquo;s total = 0.4 &times; 500 = 200." },
+  { section:"di", topic:"di-caselets", diff:"stretch", q:"60 like tea, 50 like coffee, 20 like both. How many like at least one?", options:["90","110","70","80"], answer:0, explain:"Union = 60 + 50 &minus; 20 = 90 (don&rsquo;t add 110)." },
+  { section:"di", topic:"di-caselets", diff:"core", q:"Bar 2018 = 400, 2019 = 500. Pie (2019) X = 30%. Wrong move?", options:["30% of 400","30% of 500","Read the pie caption","Compute 0.3 &times; 500"], answer:0, explain:"Applying 2019&rsquo;s pie to 2018&rsquo;s total is the classic multi-set trap." },
 
   /* ---------- DI · data sufficiency ---------- */
   { section:"di", topic:"di-ds", diff:"warm", q:"Data-sufficiency questions ask whether the statements are ___ to answer.", options:["sufficient","interesting","long","true"], answer:0, explain:"DS tests sufficiency, not the final numeric value." },
