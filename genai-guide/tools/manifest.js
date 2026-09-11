@@ -56,6 +56,7 @@ const MODULES = [
     { slug: "advanced-retrieval",             title: "Late interaction, multi-vector & GraphRAG", nav: "Advanced retrieval", id: "rag-advanced" },
     { slug: "graphrag",                       title: "GraphRAG: graphs meet retrieval",     nav: "GraphRAG",          id: "rag-graph", widgets: ["genai-ragflow.js"] },
     { slug: "agentic-rag",                    title: "Agentic RAG",                         nav: "Agentic RAG",       id: "rag-agentic", widgets: ["genai-ragflow.js"] },
+    { slug: "architectures-and-workflows",    title: "RAG architectures & workflows",       nav: "Architectures & workflows", id: "rag-workflows" },
     { slug: "rag-vs-finetuning-vs-longcontext", title: "RAG vs fine-tune vs long context", nav: "RAG vs fine-tune",  id: "rag-vs" },
   ]},
   { key: "agents", label: "Agents", pages: [

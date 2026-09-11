@@ -36,6 +36,7 @@ window.LESSONS = [
   { id: "rag-advanced", title: "Late interaction, multi-vector & GraphRAG", url: "rag/advanced-retrieval.html", module: "rag", tool: "rag" },
   { id: "rag-graph", title: "GraphRAG: graphs meet retrieval", url: "rag/graphrag.html", module: "rag", tool: "rag" },
   { id: "rag-agentic", title: "Agentic RAG", url: "rag/agentic-rag.html", module: "rag", tool: "rag" },
+  { id: "rag-workflows", title: "RAG architectures & workflows", url: "rag/architectures-and-workflows.html", module: "rag", tool: "rag" },
   { id: "rag-vs", title: "RAG vs fine-tune vs long context", url: "rag/rag-vs-finetuning-vs-longcontext.html", module: "rag", tool: "rag" },
   { id: "ag-overview", title: "Agents — overview", url: "agents/index.html", module: "agents", tool: "agents" },
   { id: "ag-fundamentals", title: "Anatomy of an agent", url: "agents/agent-fundamentals.html", module: "agents", tool: "agents" },
