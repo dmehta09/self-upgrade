@@ -31,6 +31,7 @@ const MODULES = [
     { slug: "time-speed-distance",                       title: "Time, speed & distance",                 nav: "Time, speed & distance", id: "qa-tsd",      widgets: ["drill.js"] },
     { slug: "time-and-work",                             title: "Time & work",                            nav: "Time & work",            id: "qa-work",     widgets: ["drill.js"] },
     { slug: "permutations-combinations-probability",     title: "Permutations, combinations & probability", nav: "P&C & probability",    id: "qa-pnc",      widgets: ["drill.js"] },
+    { slug: "geometry-and-mensuration",                  title: "Geometry & mensuration",                  nav: "Geometry & mensuration", id: "qa-geometry", widgets: ["drill.js"] },
   ]},
   { key: "reasoning", label: "Logical Reasoning", pages: [
     { slug: "series-and-analogies",        title: "Series, analogies & classification", nav: "Series & analogies",     id: "lr-series",    widgets: ["drill.js"] },

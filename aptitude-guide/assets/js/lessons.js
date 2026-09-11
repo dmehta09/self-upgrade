@@ -15,6 +15,7 @@ window.LESSONS = [
   { id: "qa-tsd", title: "Time, speed & distance", url: "quant/time-speed-distance.html", module: "quant", tool: "quant" },
   { id: "qa-work", title: "Time & work", url: "quant/time-and-work.html", module: "quant", tool: "quant" },
   { id: "qa-pnc", title: "Permutations, combinations & probability", url: "quant/permutations-combinations-probability.html", module: "quant", tool: "quant" },
+  { id: "qa-geometry", title: "Geometry & mensuration", url: "quant/geometry-and-mensuration.html", module: "quant", tool: "quant" },
   { id: "lr-series", title: "Series, analogies & classification", url: "reasoning/series-and-analogies.html", module: "reasoning", tool: "reasoning" },
   { id: "lr-coding", title: "Coding–decoding", url: "reasoning/coding-decoding.html", module: "reasoning", tool: "reasoning" },
   { id: "lr-blood", title: "Blood relations", url: "reasoning/blood-relations.html", module: "reasoning", tool: "reasoning" },

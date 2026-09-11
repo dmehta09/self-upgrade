@@ -142,7 +142,9 @@ Author commands (after this pass):
 
 **Verified outdated (fixed this pass):** `create_react_agent` as recommended default → `create_agent` + middleware note; “LangGraph Platform” → LangSmith Deployment.
 
-**Still add later:** full middleware lesson, MCP cross-link depth, context engineering (`trim_messages`), Agent Server mental model.
+**Still add later:** MCP cross-link depth, context engineering (`trim_messages`) polish, Agent Server mental model.
+
+**Shipped:** middleware lesson, interview gotchas bank, `create_agent` + LangSmith Deployment naming.
 
 ### GenAI Field Guide
 
@@ -150,7 +152,7 @@ Author commands (after this pass):
 
 **Risk:** speculative model brand names in landscape/model-table — use capability language in interviews.
 
-**Nav nits:** finetuning map should list GRPO page; production “three pages” vs four — backlog.
+**Nav nits:** ~~finetuning map should list GRPO page; production “three pages” vs four~~ — fixed (maps already list GRPO + four production pages).
 
 **Engines:** do **not** rebuild attention heatmap / ragflow / servelab / sampling / vectors.
 
@@ -164,9 +166,11 @@ Author commands (after this pass):
 
 ### Aptitude & Reasoning
 
-**Coverage:** quant (8) · reasoning (7) · verbal (4) · DI (3) · 108-Q bank · formula/flashcards.
+**Coverage:** quant (9) · reasoning (7) · verbal (4) · DI (3) · 113-Q bank · formula/flashcards.
 
-**Gaps:** geometry/mensuration, coded inequalities, authentic hard RC, multi-set DI, larger stretch pool.
+**Gaps:** coded inequalities, authentic hard RC, multi-set DI, larger stretch pool.
+
+**Shipped:** [geometry & mensuration](aptitude-guide/quant/geometry-and-mensuration.html) lesson + drill questions.
 
 ---
 
@@ -253,12 +257,13 @@ Author commands (after this pass):
 - [x] DSA Python coding-round bank
 - [x] LangStack interview gotchas verbal bank
 - [x] FastAPI interview gotchas verbal bank
+- [x] Aptitude geometry & mensuration lesson
 
 ### Still open
 
 1. ~~GenAI: soften landscape brand names; fix finetuning/production module maps; HyDE cross-link~~ (done in senior wave)
 2. ~~DSA: Min Window, Meeting Rooms, LRU, Dijkstra, 2D DP, fix Stock pattern label~~ (done)
-3. Aptitude: geometry, coded inequalities, harder stretch bank (parked for 4y+)
+3. ~~Aptitude: geometry~~ (done) — still open: coded inequalities, harder stretch bank (parked for deep RC)
 4. ~~FastAPI: Auth II, async tests, compose+Postgres~~ (done)
 5. ~~LangStack: middleware lesson, MCP cross-link, context engineering~~ (done)
 6. ~~Densify viz captions / whiteboard~~ (done on key pages)

@@ -15,7 +15,7 @@ window.APTI_TOPIC_NAMES = {
   "fo-speed": "Speed math",
   "qa-numbers": "Numbers", "qa-percent": "Percentages", "qa-ratio": "Ratio & mixtures",
   "qa-averages": "Averages & ages", "qa-commerce": "Profit/interest", "qa-tsd": "Time-speed-distance",
-  "qa-work": "Time & work", "qa-pnc": "P&C / probability",
+  "qa-work": "Time & work", "qa-pnc": "P&C / probability", "qa-geometry": "Geometry",
   "lr-series": "Series & analogies", "lr-coding": "Coding–decoding", "lr-blood": "Blood relations",
   "lr-direction": "Direction sense", "lr-deduction": "Syllogisms", "lr-seating": "Seating & puzzles",
   "lr-spatial": "Clocks/calendars/cubes",
@@ -86,6 +86,13 @@ window.APTI_QUESTIONS = [
   { section:"quant", topic:"qa-pnc", diff:"warm", q:"Arrange 5 distinct books on a shelf:", options:["120","60","24","20"], answer:0, explain:"5! = 120." },
   { section:"quant", topic:"qa-pnc", diff:"warm", q:"Probability of an even number on a fair die?", options:["<sup>1</sup>&frasl;<sub>2</sub>","<sup>1</sup>&frasl;<sub>3</sub>","<sup>2</sup>&frasl;<sub>3</sub>","<sup>1</sup>&frasl;<sub>6</sub>"], answer:0, explain:"3 of 6 faces (2,4,6) are even." },
   { section:"quant", topic:"qa-pnc", diff:"core", q:"Two coins tossed. P(exactly one head)?", options:["<sup>1</sup>&frasl;<sub>2</sub>","<sup>1</sup>&frasl;<sub>4</sub>","<sup>3</sup>&frasl;<sub>4</sub>","<sup>1</sup>&frasl;<sub>3</sub>"], answer:0, explain:"HT or TH = 2 of 4 outcomes." },
+
+  /* ---------- QUANT · geometry ---------- */
+  { section:"quant", topic:"qa-geometry", diff:"warm", q:"Area of a rectangle 8 m by 5 m?", options:["40 m&sup2;","26 m&sup2;","13 m&sup2;","80 m&sup2;"], answer:0, explain:"Area = l &times; b = 8 &times; 5 = 40." },
+  { section:"quant", topic:"qa-geometry", diff:"warm", q:"Perimeter of a square of side 9?", options:["36","81","18","27"], answer:0, explain:"4 &times; 9 = 36." },
+  { section:"quant", topic:"qa-geometry", diff:"core", q:"Right triangle legs 6 and 8. Hypotenuse?", options:["10","14","&radic;100 only","9"], answer:0, explain:"3-4-5 &times;2 &rarr; 6-8-10." },
+  { section:"quant", topic:"qa-geometry", diff:"core", q:"Circle diameter 14, &pi; = 22/7. Area?", options:["154","44","88","308"], answer:0, explain:"r = 7; (22/7)&times;49 = 154." },
+  { section:"quant", topic:"qa-geometry", diff:"stretch", q:"Wire length 44 bent into a circle (&pi; = 22/7). Radius?", options:["7","14","22","11"], answer:0, explain:"2&pi;r = 44 &rarr; 2&times;(22/7)&times;r = 44 &rarr; r = 7." },
 
   /* ---------- REASONING · series & analogies ---------- */
   { section:"reasoning", topic:"lr-series", diff:"warm", q:"Next term: 2, 4, 8, 16, ?", options:["32","24","20","30"], answer:0, explain:"Each term doubles." },
