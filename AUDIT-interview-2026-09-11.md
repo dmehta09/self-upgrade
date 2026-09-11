@@ -56,7 +56,7 @@ Author commands (after this pass):
 
 **How:** Timed drill first → say the shortcut out loud → mark Known only if you can re-derive in &lt;30s.
 
-**Skip today:** Full verbal RC encyclopedia; multi-set DI stretch (see backlog).
+**Skip today:** Pure encyclopedia RC reading; optional larger stretch pool only.
 
 ---
 
