@@ -1,6 +1,6 @@
 # Senior Backend Scenario Q&A
 
-Interview rehearsal guide: **120 production scenario cards** across 12 domains, FastAPI-first with Nest/Node contrast notes.
+Interview rehearsal guide: **162 production scenario cards** across 13 domains (ownership 28 + projects deep dive 24), FastAPI-first with Nest/Node contrast notes.
 
 ## Use
 
@@ -8,7 +8,7 @@ Open `index.html` (or via the hub). Recommended loop: **method → one domain cl
 
 ## Authoring / extending
 
-Questions live in `tools/banks/dNN-*.json`. Each card uses the Senior Answer Card schema (`first30s`, `modelAnswer`, `sayIt`, `traps`, `followUps`, …).
+Questions live in `tools/banks/dNN-*.json`. Each card uses the Senior Answer Card schema (`first30s`, `modelAnswer`, `sayIt`, `traps`, `followUps`, …). Quality bar and rewrite checklist: [`tools/AUTHORING.md`](tools/AUTHORING.md).
 
 ```bash
 # from repo root

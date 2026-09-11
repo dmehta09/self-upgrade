@@ -44,7 +44,7 @@ function sidebar(p) {
   let s = `    <aside class="sidebar" id="sidebar">\n`;
   s += `      <a class="brand" href="${p}index.html" aria-label="${BRAND} home">\n`;
   s += `        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/></svg></span>\n`;
-  s += `        <span class="brand-text"><b>${BRAND}</b><span>120 production scenarios · FastAPI-first</span></span>\n`;
+  s += `        <span class="brand-text"><b>${BRAND}</b><span>162 production scenarios · FastAPI-first</span></span>\n`;
   s += `      </a>\n`;
   groups.forEach(function (g) {
     const cls = g.cls ? " " + g.cls : "";
@@ -159,7 +159,7 @@ function renderPage(page, sections, pages, i) {
   const p = pre(page.file);
   const dataTool = page.tool ? ` data-tool="${page.tool}"` : "";
   const dataLesson = page.lesson ? ` data-lesson="${page.lesson}"` : "";
-  const desc = BRAND + " — " + page.title + ". A sharp, crisp visual guide to John Ousterhout's Senior Backend Scenario Q&A: complexity, deep modules, information hiding, comments & naming — each idea in plain English then precise, with Python examples.";
+  const desc = BRAND + " — " + page.title + ". Production scenario interview cards (FastAPI-first, Nest/Node notes): structured answers with tradeoffs, failure modes, and operability — rehearse closed-book, then reveal.";
   return `<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>

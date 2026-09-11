@@ -6,6 +6,16 @@ window.SBE_DRILL = [
     "domainTitle": "Production Debugging & Incident Investigation",
     "q": "Your request flow is DNS -> AWS Load Balancer -> Nginx -> EC2 -> Docker -> application. You receive a 502 response. How will you debug it step by step?",
     "first30s": "I treat 502 as 'proxy got a bad/empty upstream response,' not a client timeout. I'll pick one failing request id, then walk DNS → ALB target health → nginx upstream → container port → app process, proving each hop with a concrete signal before moving inward.",
+    "modelAnswer": [
+      "Confirm the 502 source: response headers / ALB access logs vs nginx access.log. Note whether ALB generated it (target reset) or nginx (upstream prematurely closed).",
+      "Check ALB target group health: Unhealthy targets, deregistration, failing health checks, security group blocking health path, or wrong port/path.",
+      "On the instance: curl -v localhost:<nginx> and localhost:<container> with the same Host/path. Connection refused vs reset vs HTTP error narrows Docker vs app.",
+      "Read nginx error.log for upstream timed out / connect() failed / no live upstreams / SSL handshake — pair with the $request_id or X-Request-Id.",
+      "docker ps / docker events: exited containers, restarts, OOMKilled. Inspect app logs for crash at that timestamp.",
+      "Verify listen address: app bound to 127.0.0.1 only, wrong published port, or nginx proxy_pass to a dead container IP after recreate.",
+      "Check recent deploys/config: nginx reload with bad upstream, new AMI, changed target port, or ALB stickiness sending to a bad node.",
+      "Mitigate: drain bad targets, roll back last change, fix health check path, then re-verify one synthetic request end-to-end with correlation id."
+    ],
     "sayIt": "A 502 means some hop returned an invalid gateway response — usually connection refused, reset, or crash mid-write — not a patient timeout. I correlate one request id across ALB and nginx, prove target health and local curl to the container, then fix the dead upstream before touching application business logic.",
     "traps": [
       "Jumping straight into application business logic without checking ALB target health or nginx upstream errors",
@@ -19,6 +29,16 @@ window.SBE_DRILL = [
     "domainTitle": "Production Debugging & Incident Investigation",
     "q": "Users intermittently receive 504 responses, while application health checks remain green. How will you determine where the timeout occurs?",
     "first30s": "504 means a gateway gave up waiting — I map every timeout knob (ALB idle, nginx proxy_read_timeout, app/server, outbound HTTP client) and find which one fired first using timestamps and correlation ids. Green health only proves the cheap probe path, not that workers finish real requests in time.",
+    "modelAnswer": [
+      "Pull one 504 sample: ALB access log target_processing_time / request_processing_time vs nginx $upstream_response_time and $request_time.",
+      "Compare timeout budgets: ALB idle timeout (often 60s), nginx proxy_connect/send/read_timeout, uvicorn/gunicorn timeout, httpx/aiohttp client timeouts to deps.",
+      "If ALB time ≈ ALB idle and nginx never logged completion → bottleneck before nginx finished, or nginx itself hung waiting on upstream.",
+      "If nginx error.log shows upstream timed out → app or something behind nginx exceeded proxy_read_timeout while health still passed on /health.",
+      "Instrument slow handlers: DB query time, lock waits, outbound API p95 — hanging workers keep /health green if health bypasses the pool or hits a separate process.",
+      "Check connection pool exhaustion and thread/async worker saturation under concurrency spikes that match the intermittent window.",
+      "Reproduce with load: raise concurrency until 504s appear; confirm whether raising only nginx timeout masks the symptom or moves the failure to the client.",
+      "Fix the true slow hop (query, dep, pool size) or align timeouts intentionally (client < nginx < ALB) with fail-fast, not infinite waits."
+    ],
     "sayIt": "Intermittent 504s with green health are almost always a timeout-budget mismatch on the real path — slow dependency or saturated workers — not a dead process. I line up ALB and nginx timings for one request id, find which timer fired first, then fix the slow work instead of blindly raising every timeout.",
     "traps": [
       "Raising all timeouts until 504s disappear without finding the slow dependency",
@@ -32,6 +52,16 @@ window.SBE_DRILL = [
     "domainTitle": "Production Debugging & Incident Investigation",
     "q": "Nginx is running, but one API route returns the Nginx default 404 page instead of the backend response. How will you trace the request?",
     "first30s": "Default nginx 404 means the request never matched a location that proxies to the app — or the upstream returned nothing and a static/default server answered. I'll dump the effective server/location selection for that Host and URI, then prove whether the backend even saw the request.",
+    "modelAnswer": [
+      "Capture Host header, exact path, method, and whether HTTP vs HTTPS — default_server and SNI mismatches often hit the wrong server block.",
+      "nginx -T (or include dump) and find which server{} and location{} win for that URI; look for missing trailing slash, regex location order, or alias vs root mistakes.",
+      "Confirm proxy_pass exists for that location and that try_files / static root is not short-circuiting before proxy.",
+      "Check access.log: upstream status empty vs 404 from upstream — default HTML 'nginx' page is usually nginx itself, not FastAPI's JSON 404.",
+      "Hit the container directly with the same path; if app returns JSON 404, the route isn't registered; if app 200, nginx routing is wrong.",
+      "Verify strip-prefix behavior: proxy_pass http://upstream/api/ vs http://upstream; without URI rewrite, /api/v1 may become wrong path on the app.",
+      "Reload only after validating config; use a canary location or temporary return 418 to prove which block matched.",
+      "Fix the winning location/upstream, add a regression curl in CI for that Host+path, and alert on nginx 404 rate for API vhosts."
+    ],
     "sayIt": "An nginx-branded 404 almost always means the wrong server or location won, not that FastAPI threw NotFound. I prove Host and URI selection with nginx -T, curl the container with the same path, and fix proxy_pass or location precedence before changing application routes.",
     "traps": [
       "Assuming the app route is missing because the browser shows 404 — without checking the response body fingerprint",
@@ -45,6 +75,16 @@ window.SBE_DRILL = [
     "domainTitle": "Production Debugging & Incident Investigation",
     "q": "An application works when called directly on its port but fails through the load balancer. What would you check and in what order?",
     "first30s": "Direct-port success isolates the app; failure via LB means edge config — listeners, target groups, security groups, health checks, Host/TLS, or path routing. I compare one request that works to localhost with one that fails through the ALB and diff headers, ports, and health.",
+    "modelAnswer": [
+      "Confirm direct success: curl instance_ip:app_port and docker-published port; note status, body, and timing.",
+      "ALB listener rules: host/path conditions, HTTPS cert, redirects, and whether traffic hits the intended target group.",
+      "Target group: protocol/port matching the process, health check path/matcher (200 vs 302), interval, and healthy host count.",
+      "Security groups: ALB SG → instance SG on the app/nginx port; NACL; public vs private subnet reachability from ALB.",
+      "If nginx is in path: ALB → nginx port works? nginx → app fails? Re-run hop isolation.",
+      "Header/TLS differences: X-Forwarded-Proto/For, Host, sticky sessions, HTTP/2, request body size limits, WAF blocks.",
+      "Idle timeout / deregistration: long requests fail only via ALB; connection drains mid-deploy.",
+      "Fix the mismatched hop (usually health check path or SG), verify ALB access logs show 200, then remove temporary direct-port access."
+    ],
     "sayIt": "If localhost works and the load balancer fails, I treat the app as innocent until proven otherwise and walk listener → target group → security group → health check → nginx. Most of these incidents are wrong port, wrong health path, or SG rules — not application bugs.",
     "traps": [
       "Rewriting application code before verifying target group port and health check matcher",
@@ -58,6 +98,16 @@ window.SBE_DRILL = [
     "domainTitle": "Production Debugging & Incident Investigation",
     "q": "One EC2 instance behind the load balancer is failing while the others work normally. How would you isolate the fault?",
     "first30s": "I quarantine the bad target so users stop hitting it, then compare that host to a healthy peer: processes, disk, time, container state, and recent node-local changes. Fleet-wide config bugs don't usually single out one instance.",
+    "modelAnswer": [
+      "Identify the bad target from ALB target health / 5xx spiked host; deregister or set unhealthy weight to stop traffic.",
+      "Compare curl through ALB with Availability-Zone / target sticky disabled vs direct to the instance IP.",
+      "On the bad node: docker ps, nginx -t, disk full (df -h), inode exhaustion, clock skew, file descriptor limits.",
+      "diff against a healthy sibling: AMI/launch template version, user-data, env files, mounted secrets, nginx upstream file.",
+      "Check instance-local events: OOM, kernel logs, NVMe failures, ENI issues, security group accidentally unique to that instance.",
+      "App metrics labeled by instance_id/host: error rate, restart count, GC, connection errors to Redis/DB from that AZ.",
+      "If AZ-specific: subnet route, NAT, VPC endpoint, or AZ outage — not just 'the box'.",
+      "Replace or repair the node (ASG instance refresh), verify healthy, re-register, and add host-dimension alerts so one bad canary is obvious."
+    ],
     "sayIt": "One bad instance is a gift — I drain it from the target group immediately, then diff that host against a healthy twin. Disk full, drifted container, or AZ networking usually explains it; I don't restart the whole fleet first.",
     "traps": [
       "Rolling all instances when only one target is unhealthy",
@@ -71,6 +121,16 @@ window.SBE_DRILL = [
     "domainTitle": "Production Debugging & Incident Investigation",
     "q": "Production API latency increases from 100 ms to 2 seconds immediately after a deployment. How would you prove whether the deployment caused it?",
     "first30s": "I align latency charts to the exact deploy marker and compare canary versus baseline, not vibes. Proof means the regression starts at deploy time, affects only new versions or new config, and rolls back when we revert — with the same traffic shape.",
+    "modelAnswer": [
+      "Mark deploy timestamp (CI, ECS/ASG deploy, or feature flag). Overlay p50/p95 latency, error rate, and saturation.",
+      "Split metrics by version/build SHA, task definition, or canary target group — only new version slow ⇒ deploy-caused.",
+      "Check what changed: dependency versions, ORM queries, N+1, removed cache, sync calls in async path, lower worker count, new middleware.",
+      "Compare DB: slow query log, lock waits, plan changes after migration shipped in the same deploy.",
+      "Rule out coincidence: traffic spike, dependency incident, noisy neighbor — look at shared graphs without a deploy marker.",
+      "Run controlled rollback or shift 100% to previous target group; latency returning to 100 ms is strong causal proof.",
+      "If canary-only: hold canary, dump profiles/traces (OpenTelemetry) for the new build's hot spans.",
+      "Document root cause, add a latency SLO burn alert on deploy, and require canary + automatic rollback next time."
+    ],
     "sayIt": "Correlation with deploy time isn't enough — I need version-dimensioned latency and a successful rollback or canary contrast. If only the new SHA is slow and reverting restores p95, the deployment caused it; then I dig into the diff for queries, cache, or blocking I/O.",
     "traps": [
       "Blaming the deploy because it was recent without version-split metrics",
@@ -84,6 +144,16 @@ window.SBE_DRILL = [
     "domainTitle": "Production Debugging & Incident Investigation",
     "q": "Your API returns 200 responses but users report that requests occasionally hang until the client times out. How would you investigate?",
     "first30s": "Hangs with eventual 200 or client-side timeouts mean the server accepted work but didn't finish in time — often queueing, blocked workers, or a missing response flush. I'll look at in-flight request age, worker utilization, and traces for spans that never end, not just status-code dashboards.",
+    "modelAnswer": [
+      "Instrument in-flight gauge and request age histogram; alert when age exceeds SLO while status still pending.",
+      "Check whether clients time out first (browser/ALB) while the app later logs a 200 — classic slow handler finishing after the client left.",
+      "Inspect concurrency: uvicorn workers, anyio thread limits, DB pool wait, Redis connection pool — all busy waiting on I/O.",
+      "Distributed traces: find orphaned/long spans (DB, HTTP client) around hang windows; enable sampling for slow traces.",
+      "nginx access: requests with large $request_time and empty/partial upstream; upstream keepalive issues.",
+      "Look for deadlocks: asyncio tasks waiting on each other, sync ORM inside async route, or lock ordered wrong under load.",
+      "Reproduce with concurrent load matching production; a single curl will miss pool exhaustion.",
+      "Mitigate with deadlines (asyncio.wait_for / httpx timeout), shed load, fix blocking call, and return 503 when queue depth is too high instead of hanging."
+    ],
     "sayIt": "Occasional hangs aren't visible on a 200-rate graph — I need in-flight age and traces. Usually every worker is stuck on a slow dependency or a sync call in an async path, so clients time out while health stays green and some requests still finish as 200 late.",
     "traps": [
       "Only graphing HTTP status codes and declaring the API healthy",
@@ -97,6 +167,16 @@ window.SBE_DRILL = [
     "domainTitle": "Production Debugging & Incident Investigation",
     "q": "The service has normal CPU and memory but p95 and p99 latency suddenly increase. What signals would you inspect?",
     "first30s": "Flat CPU/memory with a bad tail means waiting, not computing — I inspect dependency latency, queue/pool wait, locks, GC/event-loop lag, and noisy neighbors. Mean can look fine while p99 burns the SLO.",
+    "modelAnswer": [
+      "Break latency by span: app handler, DB, Redis, HTTP deps — find which component's p95 moved.",
+      "Connection pool metrics: checkout wait time, pool size vs in-use, timeouts acquiring connections.",
+      "DB: lock waits, slow queries, buffer cache hit, vacuum/autovacuum spikes, connection count.",
+      "Event-loop lag / asyncio delay metrics; GC pause if using a threaded or JVM sidecar (less common in CPython but relevant for workers).",
+      "Queue depth: Kafka consumer lag, Celery/RQ depth, or internal anyio task queues.",
+      "Network: DNS latency spikes, TLS handshake time, AZ packet loss, NAT gateway exhaustion.",
+      "Saturation elsewhere: thread pool for run_in_executor, file descriptors, ephemeral port exhaustion.",
+      "Correlate with deploys, traffic shape (fanout), and dependency status pages; fix the waiting hop and add tail-latency SLOs."
+    ],
     "sayIt": "When resources look fine but p95 explodes, the process is blocked on I/O or locks. I split latency by dependency and pool wait — the answer is usually a slow DB, exhausted connection pool, or outbound API — not 'add more CPU'.",
     "traps": [
       "Scaling CPU horizontally when the bottleneck is DB locks or pool wait",
@@ -110,6 +190,16 @@ window.SBE_DRILL = [
     "domainTitle": "Production Debugging & Incident Investigation",
     "q": "A container repeatedly restarts in production. How would you determine whether the cause is OOM, health checks, process crashes, or infrastructure?",
     "first30s": "I classify the restart using docker/kube exit codes and events first — OOMKilled, non-zero exit, or health-check kill look different. Then I align timestamps with app logs, probe failures, and node events so I don't guess.",
+    "modelAnswer": [
+      "docker inspect / kubectl describe: LastState, OOMKilled, ExitCode, RestartCount, reason (Error vs OOMKilled).",
+      "docker events / kube events around restarts: health unhealthy, killed, deadline exceeded.",
+      "Distinguish liveness kill (probe fail) from crash: app logs show clean listen then probe 404/5xx vs traceback then exit.",
+      "Memory: cgroup limit vs RSS/working set; sudden jump ⇒ leak or cache; flat then OOM ⇒ limit too low for peak.",
+      "Process crash: uncaught exception, segfault (native deps), failed migration on boot — read previous container logs.",
+      "Infrastructure: node pressure, spot interruption, disk pressure, docker daemon restart, failed image pull after GC.",
+      "ALB/target: flapping health if container isn't ready — fix readiness vs liveness so traffic doesn't hit booting tasks.",
+      "Remediate specifically: raise memory or fix leak, correct probe path, fix crash, or replace bad node; add restart-reason metrics."
+    ],
     "sayIt": "Restart loops are a taxonomy problem: OOMKilled, exit code, or probe kill. I read the container's last state and events before changing application code, then fix the matching cause — memory limit, bad liveness path, crash on boot, or a sick node.",
     "traps": [
       "Increasing replicas without reading OOMKilled or ExitCode",
@@ -123,6 +213,16 @@ window.SBE_DRILL = [
     "domainTitle": "Production Debugging & Incident Investigation",
     "q": "A production problem occurs only during high concurrency and cannot be reproduced with one request. How would you investigate it?",
     "first30s": "Concurrency bugs need concurrent load, shared-resource metrics, and race-aware tracing. I'll reproduce with controlled parallelism, watch pools/locks/limits, and capture dumps when contention peaks — a single curl will never show it.",
+    "modelAnswer": [
+      "Define the symptom under load: error type, latency cliff, or wrong data — and the concurrency threshold where it starts.",
+      "Load-test in staging with production-like pools (DB, Redis, httpx limits) and ramp RPS/concurrency.",
+      "Watch shared resources: DB connections, row locks, unique constraint races, Redis hot keys, rate limits, file descriptors, ephemeral ports.",
+      "Check async pitfalls: shared mutable state without locks, non-thread-safe clients used across tasks, missing idempotency under double-submit.",
+      "Capture evidence at peak: slow-query log, pg_stat_activity, thread/task dump, connection pool wait histograms.",
+      "Feature-flag mitigations: lower concurrency, shed load, serialize critical section, or enable idempotency keys.",
+      "Add regression test: concurrent integration test that fails before the fix (e.g. 100 parallel creates).",
+      "Fix root cause (pooling, locking, idempotency, backpressure) and set alerts on pool wait and lock time, not only CPU."
+    ],
     "sayIt": "If it only fails under concurrency, I refuse to debug with one request. I ramp load, watch connection pools and locks, and look for races or exhaustion — then I ship a concurrent regression test so we don't 'fix' it with a quiet afternoon.",
     "traps": [
       "Trying to reproduce only with Postman one-at-a-time",
@@ -136,6 +236,16 @@ window.SBE_DRILL = [
     "domainTitle": "Async Python / FastAPI / Node.js / TypeScript",
     "q": "A class has an API method wrapped by a logging function, but the logging code runs immediately instead of after the API response. What could be wrong?",
     "first30s": "The wrapper is almost certainly treating an async method like a sync function — calling it without await, or decorating so the wrapper returns a coroutine and logs 'done' before the await happens. I'll inspect whether the method and decorator are both async and where the log line sits relative to await.",
+    "modelAnswer": [
+      "Check if the API method is async def; calling it returns a coroutine, so sync logging after the call runs before the body executes.",
+      "Inspect the decorator: if it does result = func(*args) then log('done') without awaiting, logs fire immediately.",
+      "Ensure the wrapper is async def wrapper(...): result = await func(...); log(...); return result.",
+      "If using a sync decorator factory, return an async wrapper when inspect.iscoroutinefunction(func).",
+      "Watch for @decorator without parentheses vs factory mistakes that call the logger at decoration time (import time), not request time.",
+      "Verify FastAPI still sees an async route after decoration (functools.wraps / __wrapped__).",
+      "Add a failing unit test: mock sleep in the route and assert log timestamp is after completion.",
+      "Fix and confirm access logs / structured 'duration_ms' match real latency."
+    ],
     "sayIt": "If the log says completed before the response exists, the wrapper didn't await. Async methods need async-aware decorators that await the call, then log — otherwise you only logged scheduling the coroutine.",
     "traps": [
       "Logging at decoration/import time instead of call time",
@@ -149,6 +259,16 @@ window.SBE_DRILL = [
     "domainTitle": "Async Python / FastAPI / Node.js / TypeScript",
     "q": "A function calls an async method without await. What behavior would you expect?",
     "first30s": "In Python you get an un-awaited coroutine object — usually a RuntimeWarning and no side effects from that call. In JavaScript you get a floating Promise that may reject as unhandled. Either way, the caller continues immediately with the wrong type of value.",
+    "modelAnswer": [
+      "Python: async_method() returns a coroutine; without await/create_task it does not run the body.",
+      "Expect RuntimeWarning: coroutine was never awaited when the object is GC'd.",
+      "If the return value is used, you pass a coroutine object downstream (serialization errors, truthy object bugs).",
+      "create_task without retaining/awaiting can still run but errors become 'Task exception was never retrieved'.",
+      "JavaScript/TypeScript: missing await yields a Promise; sync code proceeds; rejections need .catch or await.",
+      "In FastAPI routes, forgetting await on httpx/db calls returns instantly with incomplete work.",
+      "Lint/CI: enable ruff/flake8-async or TypeScript @typescript-eslint to catch floating promises.",
+      "Fix: await, or explicitly schedule with asyncio.create_task and supervise completion/errors."
+    ],
     "sayIt": "No await means no wait — in Python the coroutine never runs; in Node the Promise is fire-and-forget. I treat un-awaited async calls as bugs unless I deliberately create a supervised background task.",
     "traps": [
       "Thinking the async function runs synchronously until the first await",
@@ -162,6 +282,16 @@ window.SBE_DRILL = [
     "domainTitle": "Async Python / FastAPI / Node.js / TypeScript",
     "q": "A decorator logs execution time as almost zero even though the wrapped API takes several seconds. How would you debug the decorator?",
     "first30s": "Near-zero duration means the timer stopped when the coroutine was created, not when it finished. I'll put start/stop around await func(...) and confirm the decorator detects coroutine functions.",
+    "modelAnswer": [
+      "Print type(result) after calling func — if it's a coroutine, the timer didn't include real work.",
+      "Rewrite wrapper as async and await; measure with time.perf_counter around the await.",
+      "If the route is sync def doing blocking I/O, duration may be real inside threadpool — separate issue from async decorator.",
+      "Ensure functools.wraps preserves async nature so FastAPI schedules correctly.",
+      "Check for double-wrapping or middleware that also times and confuses which layer logs.",
+      "Validate with asyncio.sleep(2) inside the route — decorator must report ~2s.",
+      "Prefer structured metrics (histogram) over print for production timing.",
+      "Add a unit test asserting duration >= sleep time."
+    ],
     "sayIt": "A decorator that reports zero on a multi-second API didn't await. Timing must wrap the awaited call; otherwise you measured how long it took to build a coroutine object.",
     "traps": [
       "Using time.time() around a non-awaited call",
@@ -175,6 +305,16 @@ window.SBE_DRILL = [
     "domainTitle": "Async Python / FastAPI / Node.js / TypeScript",
     "q": "A logging wrapper prints 'completed' before an async method actually completes. How would you redesign it?",
     "first30s": "I'd make the wrapper async-native: await the callee, log success/failure in a finally, and preserve exceptions. Optionally support background tasks only with explicit create_task and a completion callback — never implicit.",
+    "modelAnswer": [
+      "Redesign as async context-manager or async decorator that awaits the function.",
+      "Log start before await; log completed/failed in finally with duration and correlation id.",
+      "Re-raise exceptions after logging so FastAPI error handlers still run.",
+      "For fire-and-forget, require explicit schedule_background(coro) that attaches done callbacks.",
+      "Avoid printing from sync code that receives a Promise/coroutine.",
+      "In libraries, use inspect.iscoroutinefunction to choose wrapper type.",
+      "Emit structured logs (JSON) with request_id from contextvars.",
+      "Test with delayed async mock to assert log order: start → work → completed."
+    ],
     "sayIt": "I redesign the wrapper so 'completed' can only print after await returns or raises. If we need background work, that's an explicit supervised task with its own completion log — not a sneaky missing await.",
     "traps": [
       "Logging completed in a finally that runs before await (wrong structure)",
@@ -188,6 +328,16 @@ window.SBE_DRILL = [
     "domainTitle": "Async Python / FastAPI / Node.js / TypeScript",
     "q": "A try/catch catches synchronous errors but misses failures from an async operation. What is wrong?",
     "first30s": "The async operation isn't being awaited inside the try — so the rejection happens later, outside the sync try/except. I'll move await into the try or attach explicit error handling on the task/promise.",
+    "modelAnswer": [
+      "Show the anti-pattern: try { const p = asyncOp(); } catch — catch never sees async rejection.",
+      "Correct: try { await asyncOp(); } catch (e) { ... }.",
+      "Python equivalent: try/except around await; bare call doesn't raise until awaited.",
+      "If using create_task, add task.add_done_callback or await the task inside try.",
+      "Promise chains need .catch or await in async functions; empty catch on sync block is useless.",
+      "FastAPI: exceptions from awaited deps propagate to exception handlers; unawaited ones become warnings.",
+      "For gather, decide return_exceptions vs raising first error.",
+      "Add lint rules for floating promises / unawaited coroutines."
+    ],
     "sayIt": "try/except only catches what runs inside it. If you don't await, the failure happens on another turn of the event loop and your catch is already gone — await inside the try, or supervise the task explicitly.",
     "traps": [
       "Wrapping create_task in try/except without awaiting the task",
@@ -201,6 +351,16 @@ window.SBE_DRILL = [
     "domainTitle": "Async Python / FastAPI / Node.js / TypeScript",
     "q": "A Node.js service uses array.forEach(async item => ... ) and expects the caller to wait for all operations. What is wrong?",
     "first30s": "forEach doesn't await the Promises your async callback returns, so the caller continues immediately while work is still in flight. I'd switch to for...of with await, or map + Promise.all / allSettled with a concurrency limit.",
+    "modelAnswer": [
+      "Explain forEach signature: callback return values are ignored.",
+      "Demonstrate: forEach starts all async ops and returns undefined immediately.",
+      "Replace with for (const item of items) { await work(item); } for sequential.",
+      "Or await Promise.all(items.map(work)) for parallel — watch unbounded concurrency.",
+      "Prefer Promise.allSettled when partial failure is OK; inspect rejected reasons.",
+      "For large arrays, use a pool (p-limit, generic-pool) so you don't open 10k sockets.",
+      "Ensure errors propagate to the Express/Nest handler via await.",
+      "Add a regression test that fails if the HTTP response returns before side effects finish."
+    ],
     "sayIt": "forEach plus async is a classic false sense of waiting — the loop doesn't await. I use for...of or Promise.all with a concurrency cap, and I make sure the request handler awaits that aggregate Promise.",
     "traps": [
       "Thinking async forEach magically sequentializes",
@@ -214,6 +374,16 @@ window.SBE_DRILL = [
     "domainTitle": "Async Python / FastAPI / Node.js / TypeScript",
     "q": "You need to call five independent third-party APIs from a FastAPI endpoint. How would you execute them?",
     "first30s": "Independent I/O should run concurrently with per-call timeouts and clear partial-failure policy. I'd asyncio.gather or TaskGroup the five httpx calls, bound total time, and decide whether any failure fails the request or returns degraded data.",
+    "modelAnswer": [
+      "Use one shared httpx.AsyncClient with connection limits for the process/app lifespan.",
+      "Launch five coroutines with explicit Timeout(connect=..., read=...).",
+      "asyncio.gather(*calls, return_exceptions=True) or TaskGroup depending on fail-fast needs.",
+      "Set an overall deadline with asyncio.wait_for around the gather if the client SLO is tight.",
+      "Map exceptions to 502/504/partial response; never hang on one slow vendor.",
+      "Cache idempotent GETs when safe; add circuit breaker if a vendor is down.",
+      "Emit per-dependency latency metrics labeled by vendor.",
+      "Avoid sequential awaits unless ordering/quota requires it."
+    ],
     "sayIt": "Five independent APIs are a gather with timeouts, not a chain of awaits. I share an AsyncClient, fail fast on the budget that matters to the user, and degrade or error based on whether each dependency is critical.",
     "traps": [
       "Creating a new httpx client per request without pooling",
@@ -227,6 +397,16 @@ window.SBE_DRILL = [
     "domainTitle": "Async Python / FastAPI / Node.js / TypeScript",
     "q": "You need to process 10,000 async operations but only want 20 in flight at any time. How would you design the concurrency limit?",
     "first30s": "I'd gate each operation with an asyncio.Semaphore(20) or a worker pool consuming a queue — never gather 10k tasks unbounded. The limit should reflect downstream quotas and local FD/connection caps.",
+    "modelAnswer": [
+      "Create sem = asyncio.Semaphore(20); wrap each op in async with sem: await work(item).",
+      "Optionally use a queue with 20 workers for backpressure and clearer metrics.",
+      "Avoid asyncio.gather(*[work(i) for i in range(10000)]) without a semaphore — memory and sockets explode.",
+      "Tune 20 based on vendor rate limits, DB pool size, and experimentally measured p95.",
+      "Track in_flight gauge and queue depth; reject or spill to a durable queue when overloaded.",
+      "Handle cancellation: on request abort, don't leave 20 orphaned tasks without timeout.",
+      "For CPU-bound map, use ProcessPoolExecutor with a small max_workers instead of asyncio semaphore.",
+      "In Node, use p-limit(20) or a generic pool with the same idea."
+    ],
     "sayIt": "Ten thousand coroutines without a semaphore is an outage. I cap in-flight work at twenty with a semaphore or worker queue, sized to the dependency's quota and our connection pools.",
     "traps": [
       "Gathering all tasks then hoping the OS schedules kindly",
@@ -240,6 +420,16 @@ window.SBE_DRILL = [
     "domainTitle": "Async Python / FastAPI / Node.js / TypeScript",
     "q": "A Node.js endpoint uses Promise.all for 1,000 outbound requests and production becomes unstable. What could be happening?",
     "first30s": "Unbounded parallel outbound calls exhaust sockets, file descriptors, memory, and downstream rate limits — then the event loop and health checks suffer. Promise.all also fail-fasts on the first rejection while leaving other requests in flight.",
+    "modelAnswer": [
+      "1,000 concurrent sockets → EMFILE, agent maxSockets queueing, or ephemeral port exhaustion.",
+      "Downstream 429s and retries amplify load (retry storm).",
+      "Memory spikes holding all response buffers until all settle.",
+      "Promise.all rejects on first failure while other HTTP calls continue consuming resources.",
+      "Libuv threadpool / DNS contention if many hostnames resolve at once.",
+      "Fix: concurrency limit (e.g. 20–50), shared keep-alive agent, timeouts, and bulkheads per dependency.",
+      "Move bulk fan-out off the request path into a queue workers process.",
+      "Add metrics: active sockets, 429 rate, event-loop delay."
+    ],
     "sayIt": "Promise.all of a thousand outbound calls is a thundering herd at yourself and your vendor. Cap concurrency, set timeouts, and don't do bulk fan-out on the user-facing request path.",
     "traps": [
       "Raising UV_THREADPOOL_SIZE as the first fix",
@@ -253,6 +443,16 @@ window.SBE_DRILL = [
     "domainTitle": "Async Python / FastAPI / Node.js / TypeScript",
     "q": "An async endpoint performs CPU-heavy work and blocks unrelated requests. How would you redesign it?",
     "first30s": "CPU work on the event loop blocks every other coroutine on that worker. I'd move the heavy lift to a process pool, separate worker service, or precompute — and keep the request path to enqueue + poll/webhook.",
+    "modelAnswer": [
+      "Confirm with event-loop lag metrics while the endpoint runs.",
+      "Offload via asyncio.to_thread only for light/blocking I/O — CPU-bound prefers ProcessPoolExecutor to escape the GIL.",
+      "Better: accept request, enqueue job (RQ/Celery/ARQ/Bull), return 202 + job id.",
+      "Scale CPU workers independently from API replicas.",
+      "Chunk work and stream progress if users need feedback.",
+      "Cache results when inputs repeat; avoid recomputing on the request path.",
+      "Keep health checks on a separate process or ensure workers aren't all blocked (multiple uvicorn workers still share nothing for CPU across processes — more processes help).",
+      "Document SLO: interactive APIs never do multi-hundred-ms CPU inline."
+    ],
     "sayIt": "Async isn't parallel CPU. I pull heavy compute off the event loop into a process pool or job queue and make the HTTP API async in the workflow sense — 202 and status — so unrelated requests keep moving.",
     "traps": [
       "Wrapping CPU work in async def and expecting concurrency miracles",
@@ -266,6 +466,16 @@ window.SBE_DRILL = [
     "domainTitle": "Third-Party APIs & Dependency Failures",
     "q": "Your application integrates three third-party APIs and one becomes slow. How would you prevent it from degrading the entire request path?",
     "first30s": "Slow dependencies exhaust shared workers and connection pools — I isolate them with timeouts, per-dependency concurrency limits, and optional circuit breaking so the other two APIs and our handlers keep moving.",
+    "modelAnswer": [
+      "Put aggressive timeouts on the slow vendor's client (connect + read), separate from other clients.",
+      "Bulkhead: dedicated asyncio.Semaphore / httpx limits / thread pool for that dependency.",
+      "Run independent calls concurrently; don't let the slow one sit on the critical path if the feature is optional.",
+      "Circuit breaker: open when p95 or error rate exceeds threshold; return cached/degraded data.",
+      "Fail partial: return 200 with missing widget vs block checkout if that vendor is non-critical.",
+      "Monitor per-dependency latency and in-flight; alert before global p95 burns.",
+      "Move non-interactive calls off-request into queues when possible.",
+      "Load-test with one dependency delayed (toxiproxy/fault injection) to prove isolation."
+    ],
     "sayIt": "One slow vendor should not own our worker pool. I give it its own timeout and concurrency bulkhead, degrade that feature when the breaker opens, and keep the rest of the request healthy.",
     "traps": [
       "Sharing one global timeout and one connection pool across all vendors",
@@ -279,6 +489,16 @@ window.SBE_DRILL = [
     "domainTitle": "Third-Party APIs & Dependency Failures",
     "q": "A third-party API normally responds in 200 ms but sometimes takes 15 seconds. How would you design the integration?",
     "first30s": "Design for the tail, not the mean: short client timeouts, retries only when safe, hedges or async fallback for rare spikes, and SLOs that assume p99 can be awful. A 15s wait is usually worse than a fast failure.",
+    "modelAnswer": [
+      "Set read timeout around a small multiple of healthy p99 (e.g. 1–2s), not 15s.",
+      "Classify the call: user-critical sync vs acceptable eventually — push the latter to a queue.",
+      "For sync path: timeout → cached value / default / 503 with Retry-After.",
+      "Optional hedging: duplicate request to a secondary after 300ms if the API is idempotent and cost-acceptable.",
+      "Record latency histogram; alert on p95, not only averages.",
+      "Negotiate vendor SLA and status webhooks; don't discover 15s only from user complaints.",
+      "Ensure nginx/ALB timeouts are higher than your client timeout so users get your error, not a generic 504.",
+      "Document degraded mode behavior in the API contract."
+    ],
     "sayIt": "I won't budget 15 seconds for a call that is usually 200 ms — that turns rare vendor lag into our outage. Short timeout, safe fallback, and move non-critical work async.",
     "traps": [
       "Matching timeout to the worst observed 15s 'just in case'",
@@ -292,6 +512,16 @@ window.SBE_DRILL = [
     "domainTitle": "Third-Party APIs & Dependency Failures",
     "q": "A payment provider times out, but you do not know whether the payment was actually processed. How would you design the workflow?",
     "first30s": "Timeouts create uncertainty — I never invent a second charge. I use idempotency keys, persist a pending payment intent, and reconcile with the provider's status API or webhooks before confirming success to the user.",
+    "modelAnswer": [
+      "Create a local payment record in pending with a unique idempotency key before calling the provider.",
+      "Send the same key on all retries so the provider dedupes.",
+      "On timeout: leave status pending_uncertain; do not mark paid or immediately create a new charge.",
+      "Reconcile: poll provider GET-by-idempotency-key / payment id, or wait for signed webhooks.",
+      "Expose user state honestly: 'processing' not 'failed' until reconciliation says so.",
+      "Background reconciler with backoff; alert on pending older than N minutes.",
+      "Make fulfillment (inventory, email) wait on confirmed paid — never on HTTP 200 from an uncertain call.",
+      "Runbook: manual tools to inspect provider dashboard by idempotency key during incidents."
+    ],
     "sayIt": "After a payment timeout I assume the charge might have succeeded. Same idempotency key, pending state, reconcile via status or webhook — never a blind second capture.",
     "traps": [
       "Retrying with a new idempotency key after timeout",
@@ -305,6 +535,16 @@ window.SBE_DRILL = [
     "domainTitle": "Third-Party APIs & Dependency Failures",
     "q": "An external API returns intermittent 5xx errors. How would you decide whether and how to retry?",
     "first30s": "I retry only if the operation is idempotent or safe to duplicate, with exponential backoff and jitter, capped attempts, and respect for Retry-After. Non-idempotent POSTs need idempotency keys or no automatic retry.",
+    "modelAnswer": [
+      "Classify method/semantics: GET/PUT with idempotency ⇒ retryable; POST charge without key ⇒ don't auto-retry.",
+      "Retry on 502/503/504 and selected network errors; usually not on 400/401/403/404.",
+      "Use exponential backoff + full jitter; honor Retry-After on 429/503.",
+      "Cap attempts (e.g. 3) and total retry budget inside the request SLO.",
+      "Prefer idempotency keys when the vendor supports them for POST.",
+      "Stop retrying when circuit breaker is open.",
+      "Log attempt count and final outcome; metric retry rate by dependency.",
+      "Document which errors are retried in the client library so all callers share policy."
+    ],
     "sayIt": "Intermittent 5xx gets a small number of jittered retries only when safe. No key, no retry on money-moving POSTs — and I never retry harder than the dependency can handle.",
     "traps": [
       "Retrying every POST by default",
@@ -318,6 +558,16 @@ window.SBE_DRILL = [
     "domainTitle": "Third-Party APIs & Dependency Failures",
     "q": "When can retries make an outage worse?",
     "first30s": "Retries amplify load when the dependency is already saturated — especially synchronized client retries, missing jitter, or retrying non-idempotent calls that create duplicate side effects. That's how a blip becomes a multi-hour incident.",
+    "modelAnswer": [
+      "Thundering herd: all instances retry at the same delay after a timeout.",
+      "Retry storms: each layer (browser, API, worker) retries independently without a shared budget.",
+      "Non-idempotent retries duplicate orders, emails, or charges.",
+      "Retrying while circuit should be open keeps beating a dead dependency.",
+      "Huge fan-out (Promise.all 1000) + retry multiplies traffic 3–5x.",
+      "Hot-key contention: retries pile onto the same failing shard.",
+      "Mitigations: jitter, caps, breaker, hedge carefully, backoff at every layer, load shedding.",
+      "Prefer queued processing with limited concurrency over eager request-path retries."
+    ],
     "sayIt": "Retries are a privilege, not a default. Without jitter, budgets, and idempotency, they turn a vendor hiccup into a self-DDoS — so I cap, spread, and trip a breaker.",
     "traps": [
       "Adding more retries as the first response to rising 5xx",
@@ -331,6 +581,16 @@ window.SBE_DRILL = [
     "domainTitle": "Third-Party APIs & Dependency Failures",
     "q": "One dependency is unavailable for 30 minutes. How should your application behave for requests that depend on it?",
     "first30s": "Thirty minutes is longer than any sensible sync retry — fail fast or degrade intentionally. Critical paths should return a clear error or queued acceptance; non-critical paths should serve cache or hide the feature.",
+    "modelAnswer": [
+      "Trip circuit breaker quickly after sustained failures; stop waiting on full timeouts each request.",
+      "Critical dependency (payments, auth): return 503 with Retry-After / status page link; don't pretend success.",
+      "Non-critical: cached data, last-known-good, or omit the section with a degraded flag.",
+      "Accept-and-queue when work can complete later (e.g. send email) — return 202.",
+      "Protect core invariants: don't mark paid, ship, or delete without the dependency confirming.",
+      "Communicate: feature flags to disable the integration UX during the outage.",
+      "Keep reconciling pending work when the vendor recovers.",
+      "Post-incident: adjust timeouts/breaker thresholds using the 30-minute timeline."
+    ],
     "sayIt": "For a half-hour outage I fail fast or go degraded — I don't burn workers on hopeless retries. Critical flows get an honest 503 or queued processing; everything else serves cache or turns the feature off.",
     "traps": [
       "Leaving users spinning on spinners for the entire 30 minutes",
@@ -344,6 +604,16 @@ window.SBE_DRILL = [
     "domainTitle": "Third-Party APIs & Dependency Failures",
     "q": "How would you implement circuit breaking for an unreliable dependency?",
     "first30s": "A circuit breaker tracks recent failures/latency, opens to fail fast, half-opens to probe, and closes on success. I'll define thresholds from SLOs, isolate state per dependency, and emit metrics for open/half-open transitions.",
+    "modelAnswer": [
+      "States: closed (normal) → open (fail fast) → half-open (limited probes) → closed.",
+      "Trip on error rate, consecutive failures, or extreme latency — measured on a rolling window.",
+      "On open: immediate fallback/error without outbound I/O; sleep for open duration.",
+      "Half-open: allow one or N trial calls; success closes, failure re-opens.",
+      "Scope breakers per dependency and optionally per tenant/shard to avoid global trips.",
+      "Combine with timeouts — breakers don't replace deadlines.",
+      "Libraries: resilience4j-inspired patterns, aiobreaker, opossum (Node) — or a small in-process implementation with Redis for multi-instance coordination when needed.",
+      "Alert when open; dashboards show rejected-fast vs upstream errors."
+    ],
     "sayIt": "Circuit breaking is fail-fast with a recovery probe. I open on sustained errors, stop calling the vendor, serve fallback, then half-open carefully so we don't flap or storm.",
     "traps": [
       "One global breaker for all dependencies",
@@ -357,6 +627,16 @@ window.SBE_DRILL = [
     "domainTitle": "Third-Party APIs & Dependency Failures",
     "q": "Two external providers offer the same capability. How would you design failover between them?",
     "first30s": "I'd treat them as active/standby or weighted primary with health-aware failover, keeping response mapping and idempotency consistent. Failover must not double side effects — keys and reconciliation matter as much as DNS switching.",
+    "modelAnswer": [
+      "Normalize both providers behind an interface (ports/adapters) with a common domain model.",
+      "Primary with health score (latency, errors); fail over when breaker opens or SLO burns.",
+      "Idempotency: store which provider owns a given operation; don't replay the same logical op to both blindly.",
+      "For reads: failover is easy; for writes: prefer sticky provider per entity until terminal state.",
+      "Map errors and statuses carefully — provider A 'pending' ≠ provider B 'failed'.",
+      "Run periodic synthetic probes to the secondary so cold standby isn't broken.",
+      "Config/feature-flag traffic split for canarying the secondary.",
+      "Observe cost and rate limits — failover can slam the backup's quota."
+    ],
     "sayIt": "Failover is an interface plus safe ownership of each operation. I trip off the primary when its breaker opens, stick writes to one provider per intent, and keep the secondary warm with synthetics so failover isn't a surprise.",
     "traps": [
       "Calling both providers on every write 'for safety'",
@@ -370,6 +650,16 @@ window.SBE_DRILL = [
     "domainTitle": "Third-Party APIs & Dependency Failures",
     "q": "A provider imposes strict rate limits and your traffic suddenly increases 20x. How would you protect your system?",
     "first30s": "I shed and shape load before we get banned: client-side rate limiting, queues, caching, and bulkheads keyed to the provider's quota. A 20x spike without a queue will burn the rate limit and then cascade into our own 5xx.",
+    "modelAnswer": [
+      "Enforce an outbound rate limiter (token bucket) matching the provider's documented RPS/quota.",
+      "Buffer excess in a durable queue; process at sustained allowed rate.",
+      "Cache idempotent GETs aggressively; collapse duplicate in-flight requests (singleflight).",
+      "Priority lanes: checkout beats batch sync when quota is scarce.",
+      "Backoff on 429 using Retry-After; never busy-spin.",
+      "Graceful degradation: disable non-essential features that call the provider.",
+      "Request more quota / burst capacity from the vendor with evidence graphs.",
+      "Load-test the limiter so our API returns 503/429 cleanly instead of hanging."
+    ],
     "sayIt": "When traffic jumps 20x against a strict vendor quota, I rate-limit outbound calls and queue the rest. Better an honest 503 or delayed job than a ban and a total outage.",
     "traps": [
       "Scaling API replicas 20x and multiplying outbound RPS",
@@ -383,6 +673,16 @@ window.SBE_DRILL = [
     "domainTitle": "Third-Party APIs & Dependency Failures",
     "q": "How would you make an external API integration idempotent from your application's point of view?",
     "first30s": "Idempotency means retries don't create duplicate side effects. I generate a stable key per business intent, persist it before the call, send it to the provider when supported, and dedupe webhook/response handling on my side.",
+    "modelAnswer": [
+      "Define the idempotency scope: one key per user intent (place order, capture payment), not per HTTP attempt.",
+      "Persist key + request hash + state in your DB with a unique constraint before outbound I/O.",
+      "Send Idempotency-Key / provider equivalent on mutating calls.",
+      "On replay: return the original result if the same key+hash arrives; conflict if same key different body.",
+      "Dedupe inbound webhooks by event id with an processed_events table.",
+      "Make local effects transactional with state transitions (pending→succeeded).",
+      "TTL/retention for keys long enough to cover retries and late webhooks.",
+      "Test chaos: timeout, retry, duplicate webhook — assert single side effect."
+    ],
     "sayIt": "From our side, idempotency is a durable key tied to business intent, unique constraints, and deduped webhooks. Retries may hit the network twice, but inventory and money move once.",
     "traps": [
       "Using random keys on each retry",
@@ -396,6 +696,16 @@ window.SBE_DRILL = [
     "domainTitle": "API Design & Backend Architecture",
     "q": "How would you design an idempotent create-order API?",
     "first30s": "Clients will retry — so create-order needs an Idempotency-Key scoped to the intent, durable dedupe, and a deterministic response on replay. I'll sketch header, unique constraint, request hash, and state machine before talking about Kafka or microservices.",
+    "modelAnswer": [
+      "Require Idempotency-Key header (UUID from client) on POST /orders.",
+      "Begin transaction: insert into idempotency_keys(key, request_hash, status) with UNIQUE(key).",
+      "If key exists with same hash, return the stored order response (200/201 as originally).",
+      "If key exists with different hash, return 409 conflict.",
+      "Create order row + reserve inventory in the same transaction or with compensating workflow.",
+      "Call payment with the same idempotency key; keep order pending until paid if needed.",
+      "Return 201 with order id and Location; persist response body for replays.",
+      "Expire keys after a retention window (e.g. 24–72h) with care for late retries."
+    ],
     "sayIt": "Idempotent create-order is a durable key plus unique constraint, not hope. Same key and body returns the same order; same key different body is 409; payments reuse the key so retries don't double-charge.",
     "traps": [
       "Generating the idempotency key on the server per attempt",
@@ -409,6 +719,16 @@ window.SBE_DRILL = [
     "domainTitle": "API Design & Backend Architecture",
     "q": "An API operation can take 20 minutes. Would you keep the HTTP request open? How would you design it?",
     "first30s": "I would not keep HTTP open for 20 minutes — ALB, nginx, and clients will time out. Accept the work asynchronously: 202, job id, status endpoint, and optional webhook or WebSocket for completion.",
+    "modelAnswer": [
+      "POST /reports returns 202 Accepted with { job_id, status_url } immediately after durable enqueue.",
+      "Persist job record (queued/running/succeeded/failed) before ACK to the queue when possible.",
+      "Workers process with heartbeat/lease so crashed workers redeliver safely (idempotent job handler).",
+      "GET /jobs/{id} returns status, progress, error, and result location when done.",
+      "Optional webhook/callback URL or subscribe channel for completion.",
+      "Align timeouts: request path milliseconds; workers free to run 20 minutes with their own deadlines.",
+      "Authorize status reads so users only see their jobs.",
+      "Provide cancel if business allows; document retention of results."
+    ],
     "sayIt": "Twenty minutes does not belong on an open HTTP socket. I accept with 202, process in a worker, and let the client poll or get a webhook — proxies won't punish us with 504s.",
     "traps": [
       "Raising every proxy timeout to 30 minutes",
@@ -422,6 +742,16 @@ window.SBE_DRILL = [
     "domainTitle": "API Design & Backend Architecture",
     "q": "How would you design an asynchronous job-submission API with job status tracking?",
     "first30s": "Same spine as long operations: validated submit, durable job record, queue, worker updates, status API with clear terminal states. I'll also cover errors, retries, and idempotent submission so double-clicks don't spawn two jobs.",
+    "modelAnswer": [
+      "POST /jobs with payload schema validation; support Idempotency-Key for submit.",
+      "States: queued → running → succeeded | failed | canceled (explicit enum).",
+      "Store created_at, started_at, finished_at, progress, error_code, result_ref.",
+      "Workers update state with optimistic locking / lease to avoid double runners.",
+      "GET list with filters (mine, status); GET by id; optional SSE/websocket for progress.",
+      "Dead-letter after N failures; surface last_error to operators.",
+      "Metrics: queue depth, time-to-start, time-to-finish, failure rate.",
+      "OpenAPI documents status machine and polling recommendations (intervals, backoff)."
+    ],
     "sayIt": "A job API is a state machine with a queue behind it. Clients get an id immediately, poll a boring status resource, and we make submission idempotent so retries don't duplicate work.",
     "traps": [
       "Using only in-memory job maps on one instance",
@@ -435,6 +765,16 @@ window.SBE_DRILL = [
     "domainTitle": "API Design & Backend Architecture",
     "q": "How would you design pagination for a table containing hundreds of millions of rows?",
     "first30s": "I avoid deep OFFSET. Keyset/cursor pagination on a stable indexed sort (e.g. created_at, id), bounded page size, and no COUNT(*) on every request. Total counts, if needed, are estimated or async.",
+    "modelAnswer": [
+      "Choose a deterministic sort key: (created_at DESC, id DESC) with a matching index.",
+      "API: GET /items?limit=50&cursor=opaque_token encoding the last key seen.",
+      "Query: WHERE (created_at, id) < (:ts, :id) ORDER BY created_at DESC, id DESC LIMIT 51.",
+      "If 51 rows, return next_cursor from row 50; do not scan the rest of the table.",
+      "Keep cursors opaque/signed to prevent clients inventing filters that break indexes.",
+      "Avoid exact total count on hot paths; use estimated counts or omit.",
+      "For jumps to arbitrary page numbers, accept they are expensive or unsupported at this scale.",
+      "Monitor p95 of list queries; add covering indexes for common filters + sort."
+    ],
     "sayIt": "At hundreds of millions of rows I paginate with keyset cursors on an indexed sort key, not OFFSET. Clients get a next cursor; I don't COUNT the galaxy on every page view.",
     "traps": [
       "OFFSET/LIMIT deep paging in production",
@@ -448,6 +788,16 @@ window.SBE_DRILL = [
     "domainTitle": "API Design & Backend Architecture",
     "q": "When would you choose cursor pagination over offset pagination?",
     "first30s": "Cursor when the dataset is large, pages are deep, or results must stay stable under inserts/deletes. Offset is fine for tiny admin tables or true 'page 7 of 10' UI on small collections.",
+    "modelAnswer": [
+      "Choose cursor/keyset for feeds, audit logs, orders, any high-cardinality table.",
+      "Offset causes drifting pages when rows insert/delete above the current page.",
+      "Offset cost grows with page depth; cursor seeks the index.",
+      "Offset is OK for low-cardinality admin UIs with total pages under a few hundred.",
+      "Hybrid: offset for page 1–3 UX, but most APIs should still expose cursors.",
+      "Cursors struggle with arbitrary 'jump to page 50' — product should prefer 'load more'/'next'.",
+      "Document that cursors may expire if encoding includes filters/versions.",
+      "Be honest with PM: infinite scroll maps to cursors; numbered pages at scale do not."
+    ],
     "sayIt": "Cursors for scale and stability; offset for small, static lists. If users can page into the middle of millions of rows, offset is already the wrong design.",
     "traps": [
       "Defaulting to offset because ORMs make it easy",
@@ -461,6 +811,16 @@ window.SBE_DRILL = [
     "domainTitle": "API Design & Backend Architecture",
     "q": "How would you design consistent error responses across a large FastAPI/NestJS codebase?",
     "first30s": "One error envelope and centralized handlers — not ad-hoc JSON per route. Every error carries a stable machine code, human message, optional details, HTTP status, and correlation id so clients and support share a vocabulary.",
+    "modelAnswer": [
+      "Define a schema: { error: { code, message, details?, correlation_id } }.",
+      "FastAPI: exception handlers for RequestValidationError, domain errors, and catch-all.",
+      "Nest: ExceptionFilter hierarchy mapping domain exceptions to HTTP.",
+      "Map codes to statuses once (VALIDATION_ERROR→400, NOT_FOUND→404, CONFLICT→409, DEPENDENCY→502/503).",
+      "Never leak stack traces or SQL to clients; log them server-side with the same correlation_id.",
+      "OpenAPI components.document the error schema; generate clients that understand codes.",
+      "Lint/code review: ban bare HTTPException(detail=str(e)) without a code.",
+      "Include correlation_id from middleware (X-Request-Id) in every error body."
+    ],
     "sayIt": "Consistency comes from a single envelope and centralized handlers. Routes throw typed domain errors; the framework edge turns them into the same JSON shape with a correlation id.",
     "traps": [
       "Different error shapes per microservice with no translation at the BFF",
@@ -474,6 +834,16 @@ window.SBE_DRILL = [
     "domainTitle": "API Design & Backend Architecture",
     "q": "How would you separate validation errors, business errors, dependency errors, and unexpected errors?",
     "first30s": "Four classes, four client behaviors: 422/400 fix the request, 409/422 business rule, 502/503 retry or degrade, 500 file a bug. I'll map each to exception types, logs, and metrics so on-call knows whether to page the vendor or us.",
+    "modelAnswer": [
+      "Validation: schema/input problems → 400/422, code VALIDATION_ERROR, details as field list; no pager.",
+      "Business: conflict, insufficient funds, state machine violation → 409/422 with stable business codes.",
+      "Dependency: timeouts, 5xx from vendors → 502/503, code DEPENDENCY_UNAVAILABLE, maybe Retry-After.",
+      "Unexpected: unhandled bugs → 500, generic message, full stack in logs/Sentry with correlation_id.",
+      "Implement distinct exception types so handlers don't guess from strings.",
+      "Metrics labeled by class; alert on unexpected and dependency, not on validation spikes from bad bots.",
+      "Do not convert dependency failures into 500 — that misleads operators.",
+      "Document the taxonomy in the API guidelines for all teams."
+    ],
     "sayIt": "Validation is the client's fault, business rules are domain conflicts, dependencies are someone else's SLO, and unexpected is ours. Separating them in types and status codes makes both UX and paging correct.",
     "traps": [
       "Returning 500 for 'sku out of stock'",
@@ -487,6 +857,16 @@ window.SBE_DRILL = [
     "domainTitle": "API Design & Backend Architecture",
     "q": "One endpoint is generating excessive database traffic. How would you redesign it?",
     "first30s": "First measure: which queries, QPS, and whether it's N+1, missing cache, chatty pagination, or over-fetching. Then redesign with fewer round-trips — join/batch, cache, denormalize read models, or split the chatty UI need from the write path.",
+    "modelAnswer": [
+      "Trace the endpoint: count queries per request, rows read, and p95 DB time.",
+      "Fix N+1 with joinedload/selectinload or a single SQL join/aggregation.",
+      "Return only needed fields; stop SELECT * for list endpoints.",
+      "Add read-through cache (Redis) for hot keys with TTL and invalidation on writes.",
+      "Introduce a read model / materialized view if the endpoint aggregates many tables.",
+      "Batch APIs: allow clients to fetch many ids in one call instead of loops.",
+      "Rate-limit abusive patterns; add pagination cursor limits.",
+      "If fan-out is inherent, move to async precompute and serve snapshot."
+    ],
     "sayIt": "I don't 'add indexes' blindly — I count queries per request. Usually it's N+1 or a hot list without cache; I batch, cache, or precompute a read model so one user action isn't a hundred SQL round-trips.",
     "traps": [
       "Caching before understanding write invalidation",
@@ -500,6 +880,16 @@ window.SBE_DRILL = [
     "domainTitle": "API Design & Backend Architecture",
     "q": "How would you structure a large FastAPI or NestJS application so controllers do not contain business logic?",
     "first30s": "Controllers are HTTP adapters: parse, authz, call an application service, map results/errors. Business rules live in services/use-cases/domain, with repositories at the edge — same idea in FastAPI modules and Nest providers.",
+    "modelAnswer": [
+      "Layers: transport (routers/controllers) → application/use-case services → domain → infrastructure (DB, HTTP clients).",
+      "FastAPI routers depend on service classes via Depends; no raw SQL in route functions.",
+      "Nest: controllers inject services; services inject repositories — avoid logic in controllers.",
+      "DTOs/schemas at the edge; domain entities/value objects inward.",
+      "Transactions orchestrated in application services, not in controllers.",
+      "Shared exception types bubble to centralized handlers.",
+      "Package by module/bounded context (orders, billing) rather than one giant utils.",
+      "Test use-cases without TestClient/HTTP when logic is heavy."
+    ],
     "sayIt": "If a route function knows SQL and discount rules, the structure is wrong. Controllers adapt HTTP; services own business decisions; repositories speak to the database — FastAPI Depends and Nest DI both support that if we use them with discipline.",
     "traps": [
       "Anemic 'service' that is just a pass-through while logic stays in the controller",
@@ -513,6 +903,16 @@ window.SBE_DRILL = [
     "domainTitle": "API Design & Backend Architecture",
     "q": "How would you decide what belongs in the synchronous request path versus asynchronous processing?",
     "first30s": "Sync only what the user must know before the response to make a correct next decision. Everything else — emails, analytics, slow reports, non-critical enrichment — goes async with clear eventual consistency and failure handling.",
+    "modelAnswer": [
+      "Ask: does the client need this result to continue safely? If yes, sync (with tight timeouts).",
+      "Money/inventory invariants that must hold before 201 → sync transaction or explicit pending state.",
+      "Side effects user can learn later (email, notifications, search indexing) → queue.",
+      "Work longer than ~1–2s user budget → async job API.",
+      "Fan-out to many deps → often async or partial sync with degraded fields.",
+      "Document consistency: read-your-writes vs eventual for each feature.",
+      "Provide compensation/retry for async failures; surface dead letters.",
+      "Measure: if sync path p95 threatens SLO, reclassify work as async."
+    ],
     "sayIt": "Synchronous means the user can't proceed without it. Emails, indexes, and 20-minute reports are async. I keep the request path short, durable where it matters, and honest about eventual consistency.",
     "traps": [
       "Awaiting Slack notifications on the checkout path",
@@ -526,11 +926,21 @@ window.SBE_DRILL = [
     "domainTitle": "PostgreSQL: Performance, Transactions & Concurrency",
     "q": "A PostgreSQL query is fast with one million rows but becomes slow with one hundred million. How would you investigate?",
     "first30s": "Scale changed the plan or I/O profile — I would capture the slow query, run EXPLAIN (ANALYZE, BUFFERS) on production-like data, and check whether we flipped to seq scan, nested loop explosion, or bad cardinality estimates.",
-    "sayIt": "At 100M the plan or cache behavior changed. EXPLAIN ANALYZE with BUFFERS tells me if it's a bad join, missing index, or I/O — I fix the plan before throwing hardware at it.",
+    "modelAnswer": [
+      "Hypothesis: at 100M the planner flipped (seq scan / nested-loop blow-up) or the working set outgrew cache — not 'Postgres suddenly got slow.' Capture the exact SQL + bind params from production logs first.",
+      "Reproduce on a restore or clone with realistic volume and the same parameters; run EXPLAIN (ANALYZE, BUFFERS) at 1M vs 100M and diff the plan trees side by side.",
+      "Evidence to hunt: Seq Scan on large tables, Nested Loop with huge inner rows, Hash/Sort Method: external, and estimated vs actual rows off by orders of magnitude (stale ANALYZE or correlated predicates).",
+      "Index angle: missing composite matching WHERE/JOIN/ORDER BY, wrong column order, or index-only scan blocked by an unclean visibility map — because a usable index at 1M can lose to seq scan when selectivity estimates change.",
+      "Failure modes: table/index bloat after heavy UPDATE/DELETE, autovacuum lag, and cold shared_buffers so BUFFERS shows shared read ≫ hit even when the plan shape looks fine.",
+      "Tradeoff: add the right index or rewrite (sargable predicates, avoid SELECT *) vs partition by time/tenant when most queries are range-scoped — partitioning helps prune; it does not fix a missing filter index.",
+      "Fix loop: CREATE INDEX CONCURRENTLY / rewrite / ANALYZE (and extended stats if correlated), then re-EXPLAIN until actual time and I/O drop on the hot path.",
+      "Prevent/ops: alert on p95 of this query class, track seq_scan vs idx_scan in pg_stat_user_tables, and game-day a 2× data restore so plan flips are caught before traffic finds them."
+    ],
+    "sayIt": "At 100M the plan or cache behavior usually changed, not the hardware baseline. I compare EXPLAIN ANALYZE with BUFFERS at both scales, fix estimate skew or missing indexes, and only then talk about partitioning or bigger boxes — with metrics so the next growth cliff is visible early.",
     "traps": [
-      "Adding random indexes without reading the plan",
-      "Assuming 'it worked at 1M' means the same plan still applies",
-      "Tuning only on EXPLAIN without ANALYZE (estimates lie)"
+      "Adding random indexes without reading the plan — write amplification rises while the real node stays hot",
+      "Assuming 'it worked at 1M' means the same plan still applies — cardinality cliffs flip joins silently",
+      "Tuning only on EXPLAIN without ANALYZE — estimates lie and you optimize a fantasy plan"
     ]
   },
   {
@@ -539,11 +949,21 @@ window.SBE_DRILL = [
     "domainTitle": "PostgreSQL: Performance, Transactions & Concurrency",
     "q": "How would you use EXPLAIN or EXPLAIN ANALYZE to debug a slow PostgreSQL query?",
     "first30s": "EXPLAIN shows the planned tree; EXPLAIN ANALYZE runs it and shows actual time and rows. I always want BUFFERS so I can separate CPU from disk.",
-    "sayIt": "I run EXPLAIN ANALYZE with BUFFERS, find the hottest node, and fix estimate skew or I/O — not guesswork indexes.",
+    "modelAnswer": [
+      "Clarify: EXPLAIN is the planner's guess; EXPLAIN ANALYZE executes and reports actual time/rows — always add BUFFERS so you separate CPU-bound plan shape from disk I/O.",
+      "Run EXPLAIN (ANALYZE, BUFFERS) on a safe replica or low-traffic window; FORMAT TEXT for readability; wrap mutating statements in a TX you ROLLBACK.",
+      "Read bottom-up: find the node with the largest actual time; compare estimated vs actual rows — large skew means bad stats, missing extended statistics, or non-sargable predicates.",
+      "Flag Seq Scan on big tables, Nested Loop with huge inner loops, and Hash/Sort that spill to temp files — because those are the usual latency amplifiers under concurrency.",
+      "BUFFERS read: high shared read vs hit means cold cache or working set larger than memory; high hit with high time means CPU/plan shape (bad join order, function-per-row).",
+      "Tradeoff: fix with index/rewrite vs raise work_mem for one session — bumping work_mem globally can OOM under parallel load, so prefer plan fixes first.",
+      "Iterate: make predicates sargable, add/adjust indexes, ANALYZE, or break the query into stages; re-run until the hottest node's actual time collapses.",
+      "Prevent/ops: sample plans from pg_stat_statements outliers into a runbook, alert when a known query's mean_exec_time regresses after deploy, and never ship index changes without a before/after ANALYZE capture."
+    ],
+    "sayIt": "I run EXPLAIN ANALYZE with BUFFERS, find the hottest node and estimate skew, then fix the plan or I/O story — not guesswork indexes. The interview answer is the loop: measure, change one thing, re-measure, and keep the artifact for the next regression.",
     "traps": [
-      "Using EXPLAIN alone and trusting estimates",
-      "Ignoring BUFFERS and blaming 'CPU' when it's disk",
-      "Running ANALYZE on the primary at peak without thinking about load"
+      "Using EXPLAIN alone and trusting estimates — you optimize a plan that never ran",
+      "Ignoring BUFFERS and blaming CPU when shared read dominates — you miss cache/I/O",
+      "Running ANALYZE on the primary at peak without thinking about load — you can amplify the outage"
     ]
   },
   {
@@ -552,11 +972,21 @@ window.SBE_DRILL = [
     "domainTitle": "PostgreSQL: Performance, Transactions & Concurrency",
     "q": "Two users try to purchase the last available item at exactly the same time. How would you prevent overselling?",
     "first30s": "This is a concurrency invariant: stock must never go negative. I would make the decrement atomic under a row lock or a single conditional UPDATE, not read-modify-write in the app.",
-    "sayIt": "I never trust check-then-update in app memory. One conditional UPDATE or SELECT FOR UPDATE on the stock row, short transaction, sold-out if zero rows.",
+    "modelAnswer": [
+      "Hypothesis: classic check-then-act race — both sessions read stock=1 and both write stock=0. App-memory RMW cannot enforce the invariant.",
+      "Preferred fix: one atomic statement — UPDATE inventory SET stock = stock - 1 WHERE sku = $1 AND stock >= 1 RETURNING *; zero rows means sold out, no separate SELECT race.",
+      "Alternative: BEGIN; SELECT … FOR UPDATE; check; UPDATE; COMMIT — pessimistic serialization on that SKU row when you need multi-statement business logic in the same TX.",
+      "Tradeoff: conditional UPDATE is simplest and shortest; FOR UPDATE is clearer when you also insert order lines under the same lock — but both beat raising isolation alone for this single-row invariant.",
+      "Failure mode: holding FOR UPDATE across Stripe/payment HTTP — lock duration explodes, checkout queues, deadlocks rise. Use a short reserve/hold with TTL, then confirm/release.",
+      "Defense in depth: CHECK (stock >= 0) so a buggy path still fails closed; unique reservation tokens if you model holds as rows.",
+      "Idempotency: key the purchase on (order_id) or client token so retries after timeout do not double-decrement when the first TX actually committed.",
+      "Prevent/ops: metric sold_out_conflict_rate and lock wait time on inventory; alert on CHECK violations; load-test two-buyer last-unit scenarios in CI/game-day."
+    ],
+    "sayIt": "I never trust check-then-update in app memory for the last unit. One conditional UPDATE or a short SELECT FOR UPDATE on the stock row, never hold that lock across payment I/O, and treat zero rows as sold-out with idempotent retries so the inventory invariant survives concurrency and flaky networks.",
     "traps": [
-      "Read stock in app, decrement, write back without locking",
-      "Holding FOR UPDATE while calling Stripe",
-      "Relying only on unique constraints that don't model quantity"
+      "Read stock in app, decrement, write back without locking — silent oversell under concurrency",
+      "Holding FOR UPDATE while calling Stripe — checkout latency becomes lock wait for everyone",
+      "Relying only on unique constraints that don't model quantity — uniqueness ≠ non-negative stock"
     ]
   },
   {
@@ -565,11 +995,21 @@ window.SBE_DRILL = [
     "domainTitle": "PostgreSQL: Performance, Transactions & Concurrency",
     "q": "When would you use optimistic locking versus pessimistic locking?",
     "first30s": "Optimistic: version column, retry on conflict — best when conflicts are rare. Pessimistic: SELECT FOR UPDATE — best when contention is expected and you must serialize.",
-    "sayIt": "Optimistic version columns when collisions are rare; FOR UPDATE when I know two writers will fight over the same row and must serialize.",
+    "modelAnswer": [
+      "Clarify: both prevent lost updates; they differ in when they serialize — optimistic detects conflict at write time; pessimistic blocks readers/writers early with a row lock.",
+      "Optimistic: version (or updated_at) column; UPDATE … WHERE id = $1 AND version = $2; 0 rows ⇒ conflict → reload/retry or 409 to client. Cheap when collisions are rare.",
+      "Use optimistic for user-edited documents, admin forms, and low-contention aggregates where most writes do not collide and UX can absorb a retry.",
+      "Pessimistic: SELECT … FOR UPDATE (or FOR NO KEY UPDATE) inside a short transaction when races are expected — inventory, seats, wallet balance — because waiting is cheaper than spinning retries.",
+      "Tradeoff: optimistic scales better under low conflict but thrashes under hot rows; pessimistic guarantees order but increases wait time and deadlock risk if locks span too much work.",
+      "Failure modes: silent overwrite when app ignores 0-row updates; pessimistic locks held across HTTP; confusing MVCC snapshots with mutual exclusion (reads don't lock unless FOR UPDATE).",
+      "Hybrid: optimistic by default in the domain model; escalate to row locks on hot money paths; FOR UPDATE SKIP LOCKED for worker queues that should skip busy jobs.",
+      "Prevent/ops: metric optimistic_conflict_rate and lock_wait_ms; alert when conflicts spike after a feature launch; load-test the hot SKU before choosing only optimistic."
+    ],
+    "sayIt": "I pick optimistic version columns when collisions are rare and the client can retry, and SELECT FOR UPDATE when I already know writers will fight over the same row and must serialize. The staff answer names the failure modes — ignored 0-row updates and locks held across I/O — and backs the choice with conflict and wait metrics.",
     "traps": [
-      "Optimistic locking with silent overwrite on 0-row updates",
-      "Pessimistic locks held across HTTP round-trips",
-      "Confusing MVCC snapshots with mutual exclusion"
+      "Optimistic locking with silent overwrite on 0-row updates — clients think they saved; data lied",
+      "Pessimistic locks held across HTTP round-trips — queues and deadlocks under load",
+      "Confusing MVCC snapshots with mutual exclusion — READ COMMITTED does not serialize writers"
     ]
   },
   {
@@ -578,11 +1018,21 @@ window.SBE_DRILL = [
     "domainTitle": "PostgreSQL: Performance, Transactions & Concurrency",
     "q": "A read-then-update workflow produces lost updates under concurrency. How would you redesign it?",
     "first30s": "Lost update means two transactions read the same version and both write — last write wins. I redesign to a single atomic UPDATE or add a version check.",
-    "sayIt": "Lost updates are a smell of check-then-act. I make the write atomic or version it so concurrent writers cannot silently clobber each other.",
+    "modelAnswer": [
+      "Clarify the bug: T1 and T2 both read balance=100; both compute 90; both write 90 — one debit vanished. READ COMMITTED does not prevent this app-level RMW pattern.",
+      "First redesign: push the delta into SQL — SET counter = counter + $1 / balance = balance - $1 — so the engine serializes the row update without a separate read in app memory.",
+      "If business logic needs the old value: SELECT … FOR UPDATE then update in the same short transaction, or optimistic WHERE version = :read_version and bump version (surface 409).",
+      "Tradeoff: atomic SQL is clearest for counters; versioning is better when the new value is a complex merge; SERIALIZABLE can catch some anomalies but is heavier and still needs retry — app-level versioning is usually clearer for classic lost updates.",
+      "Write skew note: lost update is same-row clobber; write skew is multi-row invariant failure under snapshot isolation — different fix (locks or SERIALIZABLE SSI), don't conflate them in the interview.",
+      "Failure modes: retrying blindly without re-reading; UNIQUE constraints that don't encode numeric invariants; ORM save() after find() that reintroduces RMW.",
+      "API design: expose incrementBalance()/applyDelta() in the service layer so callers cannot accidentally get+set; make handlers idempotent with a request key.",
+      "Prevent/ops: concurrent worker tests that assert final state; monitor conflict/retry rates and balance reconciliation jobs; alert on invariant violations from nightly checksums."
+    ],
+    "sayIt": "Lost updates are a smell of check-then-act in application memory. I make the write atomic or version it so concurrent writers cannot silently clobber each other, keep retries re-entrant, and prove the invariant with concurrent tests and conflict metrics — not by hoping READ COMMITTED is enough.",
     "traps": [
-      "Assuming READ COMMITTED prevents lost updates (it doesn't for this pattern)",
-      "Retrying blindly without re-reading state",
-      "Using UNIQUE constraints as a substitute for numeric invariants"
+      "Assuming READ COMMITTED prevents lost updates (it doesn't for this pattern) — last writer still wins",
+      "Retrying blindly without re-reading state — you re-apply a stale computation",
+      "Using UNIQUE constraints as a substitute for numeric invariants — uniqueness ≠ correct totals"
     ]
   },
   {
@@ -591,11 +1041,21 @@ window.SBE_DRILL = [
     "domainTitle": "PostgreSQL: Performance, Transactions & Concurrency",
     "q": "How would you choose between READ COMMITTED, REPEATABLE READ, and SERIALIZABLE for a business operation?",
     "first30s": "Default READ COMMITTED for most OLTP. REPEATABLE READ when a transaction needs a stable snapshot. SERIALIZABLE when multi-row invariants must look as if transactions ran one at a time.",
-    "sayIt": "I stay on READ COMMITTED unless the business needs a snapshot or true serializability — and I design for retries when I raise isolation.",
+    "modelAnswer": [
+      "Clarify Postgres reality: default is READ COMMITTED. Isolation is a per-transaction choice for anomalies you refuse to handle in app locks/SQL — not a global 'make it safe' dial.",
+      "READ COMMITTED: each statement sees the latest committed rows; fine for simple CRUD. Still allows non-repeatable reads, phantoms across statements, and classic lost-update RMW unless you lock or version.",
+      "REPEATABLE READ in Postgres: one snapshot for the whole transaction (good for consistent multi-step reads/reports). It does NOT generally abort with serialization_failure like SSI — and it still allows write skew (two TXs read overlapping sets, each writes a different row, both commit, invariant breaks).",
+      "SERIALIZABLE (SSI): strongest; Postgres tracks read/write dependencies and aborts with SQLSTATE 40001 (serialization_failure) when a commit would violate serializability — including many write-skew cases RR would allow.",
+      "Tradeoff: prefer atomic SQL / SELECT FOR UPDATE / optimistic versions on hot single-row paths because they are cheaper and clearer than raising isolation globally; use SERIALIZABLE when the invariant truly spans multiple rows and locks would be awkward.",
+      "Failure modes: raising isolation 'to be safe' without retry on 40001; assuming MySQL RR anomaly semantics; using SERIALIZABLE as a substitute for idempotency keys; long SSI transactions that abort under load.",
+      "Operational pattern: set isolation only on the unit-of-work that needs it; keep TX short; on 40001 retry with backoff and a fresh read — RR rarely needs 40001 handling in PG unless you also hit rare serialization edges from concurrent updates to the same rows under snapshot rules.",
+      "Prevent/ops: metric serialization_failure_count (40001) and retry success rate; alert when abort rate rises after a feature; game-day a write-skew scenario (two doctors on-call style) under RR vs SERIALIZABLE to prove which level you actually need."
+    ],
+    "sayIt": "I stay on READ COMMITTED unless the business needs a stable snapshot or true serializability across rows. In Postgres, REPEATABLE READ gives a snapshot but still allows write skew and does not behave like SSI abort-heavy isolation; SERIALIZABLE is what aborts with 40001 to protect multi-row invariants — and I only raise isolation with an explicit retry path and metrics.",
     "traps": [
-      "Raising isolation 'to be safe' without retry logic",
-      "Thinking RR in Postgres matches MySQL RR anomaly set exactly",
-      "Using SERIALIZABLE as a substitute for application idempotency"
+      "Raising isolation 'to be safe' without retry logic — SERIALIZABLE aborts become user-facing 500s",
+      "Thinking RR in Postgres matches MySQL RR or throws serialization_failure like SSI — you mis-design for write skew",
+      "Using SERIALIZABLE as a substitute for application idempotency — retries without keys double side effects"
     ]
   },
   {
@@ -604,11 +1064,21 @@ window.SBE_DRILL = [
     "domainTitle": "PostgreSQL: Performance, Transactions & Concurrency",
     "q": "Two transactions deadlock in production. How would you investigate and reduce the likelihood of future deadlocks?",
     "first30s": "Postgres detects deadlocks and aborts one transaction. I pull the deadlock detail from logs, map the lock order, and make all code paths acquire locks in a consistent order.",
-    "sayIt": "Deadlocks are lock-order cycles. I read the log, enforce a global lock order, shrink transactions, and retry the loser idempotently.",
+    "modelAnswer": [
+      "Hypothesis: lock-order cycle (A holds row1 waits row2; B holds row2 waits row1). Postgres aborts one TX with deadlock_detected — treat that as a signal, not a rare fluke.",
+      "Evidence: enable/inspect deadlock logs (log_lock_waits, deadlock details): relations, PIDs, lock modes, and the statements involved; correlate with app request ids if logged.",
+      "Reproduce with the same statement order under concurrency; draw the wait-for graph until the cycle is obvious — usually multi-row money moves or ORM batch saves in different orders.",
+      "Fix: canonical lock ordering (e.g. always lock account ids sorted), shorter transactions, and fewer multi-row updates in one TX; prefer single-statement updates where possible.",
+      "Tradeoff: SKIP LOCKED for worker queues (skip busy rows) vs FOR UPDATE (wait) — queues should not deadlock each other over job rows; money paths need strict order, not skip.",
+      "Failure modes: retrying forever without backoff/idempotency; holding locks while doing HTTP I/O; blaming Postgres instead of inconsistent lock order across services.",
+      "Code hygiene: centralize transfer/money-move in one method so all call sites share lock order; avoid interleaved locks from nested service calls.",
+      "Prevent/ops: metric/alert on deadlock count; safe idempotent retry of the aborted TX; game-day concurrent transfers crossing the same accounts to verify order stays stable after refactors."
+    ],
+    "sayIt": "Deadlocks are lock-order cycles, not a mysterious Postgres bug. I read the deadlock detail, enforce a global lock order, shrink transactions, and retry the loser idempotently — then watch deadlock rate so the next cross-account feature does not reintroduce the cycle.",
     "traps": [
-      "Retrying forever without backoff or idempotency",
-      "Blaming 'Postgres is broken' instead of application lock order",
-      "Holding locks while doing HTTP I/O"
+      "Retrying forever without backoff or idempotency — amplify load and double-apply side effects",
+      "Blaming 'Postgres is broken' instead of application lock order — the cycle is in your code paths",
+      "Holding locks while doing HTTP I/O — turns brief row locks into systemic queues"
     ]
   },
   {
@@ -617,11 +1087,21 @@ window.SBE_DRILL = [
     "domainTitle": "PostgreSQL: Performance, Transactions & Concurrency",
     "q": "Your application opens far more PostgreSQL connections than expected. How would you find the source and fix it?",
     "first30s": "I'd query pg_stat_activity for count by application_name/state, then trace app pools — missing pooling, pool-per-pod explosion, or leaked connections.",
-    "sayIt": "Connection storms are usually pool math or leaks. I count pg_stat_activity, fix pool sizing, and put PgBouncer in front so Postgres isn't the connection radiator.",
+    "modelAnswer": [
+      "Hypothesis: pool math (replicas × workers × pool_size) exceeded max_connections, or leaks (idle in transaction) are holding slots — not mysterious client storms alone.",
+      "Evidence: SELECT application_name, state, count(*) FROM pg_stat_activity GROUP BY 1,2; hunt idle in transaction, connection spikes after deploys, and unknown application_name values.",
+      "Map expected max deliberately; cap pool_size per process; set statement_timeout and idle_in_transaction_session_timeout so stuck sessions release.",
+      "Introduce PgBouncer (transaction pooling for most apps) so Postgres sees far fewer server connections than app clients — because raising max_connections burns RAM and context-switch budget.",
+      "Tradeoff: transaction vs session pooling — session pooling needed for temp tables / session GUCs / some prepared-statement patterns; transaction pooling breaks those, so audit ORM features first.",
+      "Fix leaks: ensure connections return to the pool per request, no long idle-in-transaction, ORM session scoped correctly; one Nest/Node process ≠ one eternal pool if you fork workers.",
+      "Failure modes: raising max_connections instead of pooling; ignoring idle-in-transaction as a holder; deploying more pods without shrinking pool_size.",
+      "Prevent/ops: alert on connection saturation and idle-in-transaction age; load-test pool settings before Black Friday; set application_name for attribution in every service."
+    ],
+    "sayIt": "Connection storms are usually pool math or leaks, not a need for a bigger max_connections. I count pg_stat_activity by app and state, fix pool sizing and idle-in-transaction, put PgBouncer in front, and alert before Postgres is the connection radiator for the whole fleet.",
     "traps": [
-      "Raising max_connections instead of pooling",
-      "Session pooling features incompatible with transaction pooling (temp tables, prepared stmts) without checking",
-      "Ignoring idle in transaction as a connection holder"
+      "Raising max_connections instead of pooling — RAM and latency degrade while the leak continues",
+      "Session features with transaction pooling (temp tables, prepared stmts) without checking — subtle production breakage",
+      "Ignoring idle in transaction as a connection holder — slots stay busy with no useful work"
     ]
   },
   {
@@ -630,11 +1110,21 @@ window.SBE_DRILL = [
     "domainTitle": "PostgreSQL: Performance, Transactions & Concurrency",
     "q": "How would you perform a schema migration or index creation on a large production table without unacceptable downtime?",
     "first30s": "Avoid ACCESS EXCLUSIVE locks that block writes for long periods. Use CREATE INDEX CONCURRENTLY, additive migrations, and batch backfills.",
-    "sayIt": "No big-bang locks on hot tables. CONCURRENTLY for indexes, batched backfills for data, additive schema first.",
+    "modelAnswer": [
+      "Hypothesis: long ACCESS EXCLUSIVE locks (plain CREATE INDEX / table rewrite) are what cause 'migration downtime' — not the DDL keyword itself.",
+      "Prefer additive changes: nullable new columns, new tables, new indexes — avoid rewriting the whole table in one transaction when old and new app versions must coexist.",
+      "Indexes: CREATE INDEX CONCURRENTLY (and DROP INDEX CONCURRENTLY); never wrap CONCURRENTLY in an explicit transaction; monitor for INVALID indexes and REINDEX CONCURRENTLY if a build fails.",
+      "Backfills: batched UPDATEs by primary-key ranges with throttling and a progress table — because one UPDATE of every row bloats the heap and holds locks/WAL pressure for hours.",
+      "Tradeoff: CONCURRENTLY is slower and takes more total work vs blocking CREATE INDEX — pick CONCURRENTLY on hot tables; off-peak blocking only for cold/small tables.",
+      "Observe: pg_stat_progress_create_index, pg_locks, replication lag, and write latency SLO during the change; pause/throttle if lag or p95 writes breach budget.",
+      "Modern Postgres note: many ADD COLUMN … DEFAULT cases are metadata-only now, but verify version-specific behavior before assuming zero rewrite — validate on a clone first.",
+      "Prevent/ops: migration runbook with rollback (drop new index, leave additive columns), alert on INVALID indexes, and game-day the concurrent build on a restored large table before prod."
+    ],
+    "sayIt": "No big-bang locks on hot tables. I use CONCURRENTLY for indexes, batched backfills for data, and additive schema first — watching lag and lock progress so the migration stays inside write-latency SLO instead of becoming an accidental outage.",
     "traps": [
-      "Running CREATE INDEX (non-concurrent) on a 100M-row hot table",
-      "Wrapping CONCURRENTLY inside a transaction (fails)",
-      "Single UPDATE that rewrites every row and bloats the table"
+      "Running CREATE INDEX (non-concurrent) on a 100M-row hot table — writers block for the whole build",
+      "Wrapping CONCURRENTLY inside a transaction (fails) — migration aborts and leaves confusion",
+      "Single UPDATE that rewrites every row and bloats the table — WAL/autovacuum storm after 'success'"
     ]
   },
   {
@@ -643,11 +1133,21 @@ window.SBE_DRILL = [
     "domainTitle": "PostgreSQL: Performance, Transactions & Concurrency",
     "q": "How would you design a zero-downtime database migration when old and new application versions must run simultaneously?",
     "first30s": "Expand-contract: ship schema both versions understand, dual-write or backfill, switch reads, then remove the old shape after old pods are gone.",
-    "sayIt": "Rolling deploys need expand-contract. Schema stays compatible with both versions until the fleet and backfill are done — then contract.",
+    "modelAnswer": [
+      "Clarify the constraint: rolling deploys mean N and N+1 app versions hit the DB together — any rename/drop in the same deploy as code that needs it breaks old pods mid-rollout.",
+      "Expand: add new columns/tables/indexes compatible with old code (old code ignores new fields). Prefer additive, nullable, or defaulted shapes that both versions can tolerate.",
+      "Dual-write or dual-read: deploy code that writes both old and new shapes (or writes new and backfills asynchronously); feature-flag the read path so you can flip without another schema deploy.",
+      "Backfill historical rows in idempotent batches with a resume cursor; verify with checksums/counts/sampled equality before trusting the cutover.",
+      "Switch: flip reads to the new shape under the flag; deploy code that only needs the new schema once the fleet and backfill are healthy.",
+      "Contract: drop old columns/tables only after all instances, jobs, and replicas no longer reference them — because early DROP is the classic zero-downtime failure mode.",
+      "Tradeoff/failure modes: dual-write inconsistency if one path fails; blue/green does not license breaking old readers; long dual-write windows increase bug surface — keep the window short with progress metrics.",
+      "Prevent/ops: migration checklist in CI (expand vs contract PRs separated), alert on dual-write error rate and backfill lag, and game-day a mixed-version traffic test before contracting."
+    ],
+    "sayIt": "Rolling deploys need expand-contract: schema stays compatible with both versions until the fleet and backfill are done, then you contract. I separate expand and contract into different deploys, dual-write or backfill with verification, and only drop the old shape when metrics say nothing still depends on it.",
     "traps": [
-      "Renaming/dropping columns in the same deploy that changes app code",
-      "Assuming blue/green means you can break old readers immediately",
-      "Backfill without idempotency or resume cursors"
+      "Renaming/dropping columns in the same deploy that changes app code — old pods 500 mid-rollout",
+      "Assuming blue/green means you can break old readers immediately — traffic overlap still exists",
+      "Backfill without idempotency or resume cursors — crash forces a full restart and dual-write drift"
     ]
   },
   {
@@ -656,11 +1156,21 @@ window.SBE_DRILL = [
     "domainTitle": "MongoDB: Modeling, Indexing & Scaling",
     "q": "A MongoDB collection has 100 million documents and a frequently used query became slow. What would you inspect first?",
     "first30s": "I would capture the exact filter/sort/projection, run explain('executionStats'), and check whether we still hit an index or started scanning millions of docs.",
-    "sayIt": "First explain executionStats. If docsExamined ≫ nReturned, the index or query shape is wrong — I fix that before talking about sharding.",
+    "modelAnswer": [
+      "Hypothesis: the query shape changed, selectivity collapsed, or the working set outgrew RAM — not 'Mongo suddenly needs more shards.' Capture the exact filter/sort/collation/projection from production first.",
+      "Run explain('executionStats'): winning plan, IXSCAN vs COLLSCAN, keysExamined / docsExamined / nReturned ratio — docsExamined ≫ nReturned is the smoking gun.",
+      "Check index list against ESR (Equality → Sort → Range): compound order, partial/sparse indexes, and whether a sort forces an in-memory SORT stage.",
+      "Tradeoff: one compound index for the hot query vs many single-field indexes — extras cost write amplification and RAM while still missing the sort key.",
+      "Failure modes: collation mismatch, case-insensitive needs without the right index, and covered-query hopes without projecting only indexed fields.",
+      "Also inspect working set vs WiredTiger cache, replication lag, and whether collection growth recently pushed the hot set out of memory.",
+      "Fix: create the matching compound index (background/rolling), tighten projection, re-explain until examine ratio is near 1; only then consider schema or shard changes.",
+      "Prevent/ops: alert on this query's p95 and COLLSCAN rate; track unused vs missing indexes in a weekly review; game-day explain on a 100M restore after query changes."
+    ],
+    "sayIt": "First explain with executionStats. If docsExamined is far above nReturned, the index or query shape is wrong — I fix that before talking about sharding. The staff move is proving the plan, matching ESR, and putting latency and scan-rate metrics on the hot path so the next regression is obvious.",
     "traps": [
-      "Adding indexes blindly without explain",
-      "Sorting in memory because the index doesn't include the sort key",
-      "Blaming 'Mongo is slow' when the query is a collection scan"
+      "Adding indexes blindly without explain — writes slow down while the COLLSCAN remains",
+      "Sorting in memory because the index doesn't include the sort key — p95 explodes under concurrency",
+      "Blaming 'Mongo is slow' when the query is a collection scan — you skip the cheap fix"
     ]
   },
   {
@@ -669,11 +1179,21 @@ window.SBE_DRILL = [
     "domainTitle": "MongoDB: Modeling, Indexing & Scaling",
     "q": "How would you decide between embedding and referencing for a MongoDB document model?",
     "first30s": "Embed when data is read together, has clear ownership, and stays bounded. Reference when shared, independently updated, or unbounded.",
-    "sayIt": "Modeling follows queries. Embed co-read bounded data; reference shared or unbounded data — and denormalize snapshots when history must not change.",
+    "modelAnswer": [
+      "Clarify: modeling follows access patterns, not the ER diagram — ask which fields one API read must return atomically, and how often they update independently.",
+      "Embed when data is co-read, clearly owned by the parent, and bounded (line items on an order, address snapshot, small config) — you get single-document atomicity and fewer round-trips.",
+      "Reference when data is shared across parents, independently lifecycle'd, large, or unbounded (users, media metadata, infinite event histories) — because growth and fan-out updates punish embedding.",
+      "Hybrid: embed a denormalized snapshot (product name/price at order time) plus a reference to the source of truth — history stays stable even when the catalog changes.",
+      "Tradeoff: embed = faster reads / harder multi-doc consistency elsewhere; ref = flexible / $lookup cost and eventual consistency for denormalized copies.",
+      "Failure modes: unbounded arrays embedded 'for convenience' hitting 16MB; referencing everything and $lookup-joining like SQL on hot paths; forgetting whether stale denormalized fields are intentional.",
+      "Revisit triggers: document size growth, hot-document update contention, or expensive fan-out updates when a shared field changes — those signal a model flip.",
+      "Prevent/ops: document-size and avg-array-length metrics; alert approaching BSON limit; review new schemas against the top query list in design review / game-day read patterns."
+    ],
+    "sayIt": "I model from queries: embed co-read bounded owned data for atomic reads, reference shared or unbounded data, and denormalize snapshots when history must not change. The decision is revisited when size, contention, or fan-out updates hurt — with document-size metrics so the 16MB cliff is not a surprise.",
     "traps": [
-      "Embedding unbounded arrays 'for convenience'",
-      "Referencing everything and $lookup-joining like SQL by default",
-      "Forgetting denormalized snapshots go stale on purpose (or not)"
+      "Embedding unbounded arrays 'for convenience' — document rewrites slow and 16MB failures appear",
+      "Referencing everything and $lookup-joining like SQL by default — hot-path latency multiplies",
+      "Forgetting denormalized snapshots go stale on purpose (or not) — either silent wrong data or costly fan-out"
     ]
   },
   {
@@ -682,11 +1202,21 @@ window.SBE_DRILL = [
     "domainTitle": "MongoDB: Modeling, Indexing & Scaling",
     "q": "An aggregation pipeline is slow in production. How would you identify the expensive stage and optimize it?",
     "first30s": "I explain the aggregation, find the stage with the biggest time/docs, and push $match/$sort early with indexes — avoid blowing up with $lookup or unbounded $group.",
-    "sayIt": "Find the expensive stage, filter early with an index, and treat $lookup/$unwind/$group as suspects until proven cheap.",
+    "modelAnswer": [
+      "Hypothesis: a late $match, $lookup blow-up, $unwind on large arrays, or $group spill is dominating — prove it before rewriting the whole pipeline.",
+      "Run aggregate([...], { explain: true }) / executionStats and identify the stage with the biggest time and docs-in/docs-out amplification.",
+      "Push selective $match (and $sort+$limit) as early as possible so later stages see fewer docs; ensure a compound index supports that match/sort (ESR again).",
+      "Suspects: $lookup that fans out like N+1, $unwind exploding arrays, $group spilling to disk — because allowDiskUse as a permanent crutch hides a modeling problem.",
+      "Tradeoff: fix the pipeline vs pre-aggregate into a materialized collection for a permanent dashboard hot path — materialized writes cost space; ad-hoc heavy $group costs CPU every request.",
+      "Project only needed fields early; avoid huge intermediate documents that thrash WT cache between stages.",
+      "Prefer indexed find for simple filters; aggregation is for multi-stage transforms — don't use it as a default ORM escape hatch.",
+      "Prevent/ops: alert on aggregation p95 and allowDiskUse frequency; track stage-level explain in a runbook; game-day the pipeline on production-sized data after schema changes."
+    ],
+    "sayIt": "I find the expensive stage, filter early with an index, and treat $lookup, $unwind, and $group as guilty until proven cheap. If the pipeline is a permanent hot path, I consider a materialized collection rather than living on disk spills — and I keep latency metrics so regressions show up in review, not in an outage.",
     "traps": [
-      "$match after $lookup on the full collection",
-      "Using aggregation when a compound index + find would suffice",
-      "Ignoring allowDiskUse as a permanent crutch"
+      "$match after $lookup on the full collection — you pay full scan then throw rows away",
+      "Using aggregation when a compound index + find would suffice — extra stages for no gain",
+      "Ignoring allowDiskUse as a permanent crutch — hides $group/spill problems until disk dies"
     ]
   },
   {
@@ -695,11 +1225,21 @@ window.SBE_DRILL = [
     "domainTitle": "MongoDB: Modeling, Indexing & Scaling",
     "q": "How would you choose MongoDB indexes from real query patterns rather than from the schema alone?",
     "first30s": "I inventory the top queries by frequency and latency, then design compound indexes for those predicates — schema fields alone don't tell me selectivity or sort order.",
-    "sayIt": "Indexes follow the workload. I rank real queries, build compound keys with ESR, and delete indexes that only look good on the schema.",
+    "modelAnswer": [
+      "Clarify: schema fields do not imply selectivity or sort order — indexes follow the workload. Inventory top queries by frequency × latency from slow logs / APM (filter keys, sort, projection).",
+      "Apply ESR: Equality fields first, then Sort, then Range — build compound indexes that let the planner satisfy filter+sort without an in-memory SORT.",
+      "Prefer one compound index that serves a critical query over many single-field indexes — because each index costs write amplification, cache pressure, and longer migrations.",
+      "Use partial indexes for hot subsets (e.g. status: 'open'), TTL for expiring data, and unique indexes that match real uniqueness (often tenant-scoped, not global).",
+      "Tradeoff: covering projections (index-only) vs narrower indexes — covering helps reads but widens keys and write cost; only cover proven hot paths.",
+      "Failure modes: left-prefix mistakes (equality order wrong so the index is unused), collation/case-insensitive mismatch, multikey array indexes exploding key count.",
+      "Drop unused indexes after verifying with $indexStats / planner evidence over a full business cycle — never drop on one quiet afternoon.",
+      "Prevent/ops: PR checklist when a new repository query is added; alert writeLatency vs index count; quarterly index review with unused-index report and game-day explain of top 10 queries."
+    ],
+    "sayIt": "Indexes follow the workload, not the schema diagram. I rank real queries, build compound keys with ESR, prefer one good compound over many singles, and delete indexes that only look tidy — with write-latency and unused-index reviews so the collection stays fast as the query mix shifts.",
     "traps": [
-      "Indexing every field 'just in case'",
-      "Left-prefix mistakes (index unused because equality order wrong)",
-      "Ignoring collation / case-insensitive needs"
+      "Indexing every field 'just in case' — writes and RAM die under insert load",
+      "Left-prefix mistakes (index unused because equality order wrong) — COLLSCAN with 'we have indexes'",
+      "Ignoring collation / case-insensitive needs — planner skips the index you thought you built"
     ]
   },
   {
@@ -708,11 +1248,21 @@ window.SBE_DRILL = [
     "domainTitle": "MongoDB: Modeling, Indexing & Scaling",
     "q": "A document contains an array that grows indefinitely and is frequently queried. How would you redesign the model?",
     "first30s": "Unbounded arrays are a modeling smell — I'd move events into a child collection keyed by parent id, or bucket by time, and keep only a bounded recent slice embedded if needed.",
-    "sayIt": "Infinite arrays don't belong in one document. Child collection or time buckets, maybe a small embedded preview for the hot read.",
+    "modelAnswer": [
+      "Diagnose: document size growth, slow $push/$pull rewrites, multikey index bloat, and risk of the 16MB BSON limit — unbounded arrays are a modeling smell, not a query tweak.",
+      "Extract the array into a child collection: { parentId, …, createdAt } with compound index { parentId: 1, createdAt: -1 } so pagination is a targeted find, not a whole-document load.",
+      "Optionally keep a bounded embedded preview (last N via $slice on write or application cap) for the hot parent read without storing lifetime history inline.",
+      "For high-volume time series, prefer bucketing (one doc per hour/day with a capped events array) vs one-doc-per-event when scan patterns are range-heavy — because buckets reduce doc count for range reads.",
+      "Tradeoff: child collection = flexible pagination / extra reads; buckets = fewer docs for ranges / more complex updates; embed-only = fails at unbounded growth.",
+      "Migrate with dual-write or batched copy + checkpoint; update APIs to page the child collection; never $unwind huge arrays on hot aggregations.",
+      "Failure modes: capping with $slice in queries while still storing unbounded data; one document per user accumulating lifetime history; multikey indexes on huge arrays crushing RAM.",
+      "Prevent/ops: metric avg/p99 array length and document size; alert before 16MB; game-day pagination against the child collection SLO after cutover."
+    ],
+    "sayIt": "Infinite arrays do not belong in one document. I move history to a child collection or time buckets, keep a small embedded preview for the hot read, migrate with checkpoints, and watch document size and array length so the 16MB cliff never becomes a production incident.",
     "traps": [
-      "Capping with $slice in queries but still storing unbounded data",
-      "Using $unwind on huge arrays in hot aggregations",
-      "One document per user that accumulates lifetime history"
+      "Capping with $slice in queries but still storing unbounded data — reads look fine until writes hit 16MB",
+      "Using $unwind on huge arrays in hot aggregations — memory and CPU explode",
+      "One document per user that accumulates lifetime history — hot document contention forever"
     ]
   },
   {
@@ -721,11 +1271,21 @@ window.SBE_DRILL = [
     "domainTitle": "MongoDB: Modeling, Indexing & Scaling",
     "q": "How would you choose a shard key for a high-write MongoDB workload?",
     "first30s": "I need high cardinality and even write distribution so inserts don't hammer one chunk/shard, while still supporting targeted queries with that key.",
-    "sayIt": "Shard key = cardinality + even writes + targeted reads. I won't shard on status or plain timestamps that create hot shards.",
+    "modelAnswer": [
+      "Clarify goals: high cardinality + even write distribution + support for targeted hot queries — sharding without the query path in mind just creates scatter-gather tax.",
+      "List write pattern and top queries that must be targeted; the shard key must appear in those predicates or you will fan out forever.",
+      "Avoid monotonic-only keys (Date, ObjectId time, auto-inc) that create a right-hand hotspot; avoid low-cardinality keys (status, country) that create jumbo chunks.",
+      "Common patterns: compound { tenantId, _id } for tenant isolation + uniqueness; hashed field when range queries aren't needed; never assume more shards fix a bad key.",
+      "Tradeoff: hashed = even inserts / weak range queries; ranged compound = good tenant locality / risk of whale-tenant skew — isolate whales if needed.",
+      "Failure modes: picking a key that forces scatter-gather on every API read; sharding too early before indexes/query shape are fixed; jumbo chunks that won't split.",
+      "Validate with a load test of write distribution and chunk counts before committing; plan for resharding cost if wrong — choosing carefully beats early sharding.",
+      "Prevent/ops: monitor per-shard ops/sec and chunk imbalance; alert on hotspot skew; include shard-key fields in repository helpers so developers cannot omit them."
+    ],
+    "sayIt": "A shard key must combine cardinality, even writes, and targeted reads. I will not shard on status or plain timestamps that create hot shards, and I prove distribution under load — because adding shards never fixes a hotspot key, it often multiplies scatter-gather pain.",
     "traps": [
-      "Sharding on low-cardinality fields",
-      "Assuming more shards fix a hotspot key",
-      "Picking a key that forces scatter-gather on every API read"
+      "Sharding on low-cardinality fields — few fat chunks that will not split usefully",
+      "Assuming more shards fix a hotspot key — you multiply cost without fixing skew",
+      "Picking a key that forces scatter-gather on every API read — latency scales with shard count"
     ]
   },
   {
@@ -734,11 +1294,21 @@ window.SBE_DRILL = [
     "domainTitle": "MongoDB: Modeling, Indexing & Scaling",
     "q": "What characteristics can make a MongoDB shard key a hotspot?",
     "first30s": "Low cardinality, monotonically increasing values, or a popular tenant/key that attracts most writes — all funnel inserts to one chunk or shard.",
-    "sayIt": "Hotspots come from monotonic inserts, low cardinality, or traffic skew. The key must spread writes, not just unique them.",
+    "modelAnswer": [
+      "Clarify: a hotspot means most inserts/updates route to one chunk or shard — unique keys can still hotspot if they are monotonic or traffic-skewed.",
+      "Monotonic keys (Date, ObjectId time portion, auto-inc) send new writes to the highest chunk — classic right-hand insert hotspot as the cluster grows.",
+      "Low cardinality (enum status, boolean, country) creates few fat chunks that cannot split usefully into balanced work units.",
+      "Real-world skew: one celebrity tenantId or viral key dominates traffic even with otherwise good cardinality — tenantId alone is not enough without a high-cardinality suffix or whale isolation.",
+      "Hot documents: constant updates to one shard-key value pin load on one shard regardless of insert distribution elsewhere.",
+      "Tradeoff/mitigations: hashed keys (even writes, weaker ranges), compound keys with high-cardinality suffix, isolate whales to dedicated shards/DBs, or rethink access patterns before resharding.",
+      "Detection: per-shard ops/sec imbalance, jumbo chunks, elevating mongos/shard CPU on one member — 'unique' in explain does not mean 'well distributed.'",
+      "Prevent/ops: alert on shard ops skew and jumbo chunk count; load-test monotonic vs hashed candidates; game-day a whale-tenant surge before locking the key in production."
+    ],
+    "sayIt": "Hotspots come from monotonic inserts, low cardinality, or traffic skew — uniqueness alone does not spread writes. I design keys that distribute, watch per-shard ops for imbalance, and isolate whales or hash when ranges allow — because more shards will not heal a right-hand or celebrity-key hotspot.",
     "traps": [
-      "Thinking 'unique' equals 'well distributed'",
-      "Hashing away range queries you still need without a plan",
-      "Ignoring one mega-tenant after choosing tenantId alone"
+      "Thinking 'unique' equals 'well distributed' — monotonic unique keys still right-hand hotspot",
+      "Hashing away range queries you still need without a plan — dashboards become full scatter",
+      "Ignoring one mega-tenant after choosing tenantId alone — that tenant melts one shard"
     ]
   },
   {
@@ -747,11 +1317,21 @@ window.SBE_DRILL = [
     "domainTitle": "MongoDB: Modeling, Indexing & Scaling",
     "q": "A query becomes scatter/gather in a sharded cluster. What does that mean for performance and how would you reduce it?",
     "first30s": "Scatter-gather means mongos fans the query to many/all shards and merges results — latency and load scale with shard count. I reduce it by including the shard key in queries or redesigning the key/access path.",
-    "sayIt": "Scatter-gather fans out to every shard. Hot paths must be targeted by shard key — otherwise each read taxes the whole cluster.",
+    "modelAnswer": [
+      "Clarify: scatter-gather means mongos fans the query to many/all shards and merges results — latency and cluster load scale with shard count, not with one shard's work.",
+      "Confirm in explain: shards touched, sorting/merging on mongos, high cumulative docs examined — secondary indexes do not replace shard-key routing.",
+      "Fix hot paths: add shard-key equality (or selective prefix) so queries become targeted; lint/wrappers that require tenantId (or key fields) in find criteria.",
+      "Tradeoff: for pagination/sort without the shard key, expect merge cost — prefer targeted queries, precomputed views, or a duplicate query-optimized collection.",
+      "If the business query can never include the shard key, reconsider the key or accept scatter only for rare admin/reporting paths with strict limits.",
+      "Failure modes: adding shards to 'fix' scatter-gather (often makes it worse); global sorts without limits; assuming an index makes a query targeted.",
+      "Amplification view: each missing-key read becomes N shard reads + mongos merge — under load this is a cluster-wide amplification bug, not a single-collection issue.",
+      "Prevent/ops: monitor mongos CPU and per-shard ops; alert when hot API routes touch >1 shard; game-day targeted vs scatter explain after deploys that change filters."
+    ],
+    "sayIt": "Scatter-gather fans out to every shard and merges on mongos, so hot paths must include the shard key. I prove shard touch count in explain, force key fields in the data access layer, and watch mongos CPU — adding shards without fixing targeting usually makes the tax worse, not better.",
     "traps": [
-      "Assuming secondary indexes make queries targeted (they don't replace shard key routing)",
-      "Adding shards to 'fix' scatter-gather (often makes it worse)",
-      "Sorting globally without limits on scatter queries"
+      "Assuming secondary indexes make queries targeted (they don't replace shard key routing) — still fans out",
+      "Adding shards to 'fix' scatter-gather (often makes it worse) — more merge work per read",
+      "Sorting globally without limits on scatter queries — mongos becomes the bottleneck"
     ]
   },
   {
@@ -760,11 +1340,21 @@ window.SBE_DRILL = [
     "domainTitle": "MongoDB: Modeling, Indexing & Scaling",
     "q": "You need to update tens of millions of MongoDB documents. How would you make the migration safe, resumable, and observable?",
     "first30s": "Batched bulkWrite by _id ranges with a checkpoint, idempotent updates, rate limits, and metrics — never one multi-update that can't resume.",
-    "sayIt": "Big migrations are checkpointed bulkWrite loops — idempotent, throttled, observable, and resumable from last _id.",
+    "modelAnswer": [
+      "Hypothesis: a single updateMany across tens of millions cannot resume cleanly and will thrash WT cache / replication — design a checkpointed loop instead.",
+      "Make transforms idempotent (safe to re-run) and optionally stamp a migration version field so partial progress is detectable.",
+      "Iterate with a cursor/_id range; bulkWrite ordered:false in batches (e.g. 500–1000); persist lastProcessedId checkpoint after each successful batch.",
+      "Throttle (sleep/token bucket) to protect WiredTiger cache and secondary lag; pause automatically when lag or CPU exceeds SLO.",
+      "Tradeoff: slower wall-clock vs online safety — full-speed migrations that page onboarding for lag are failed migrations.",
+      "Observe: documents/sec, error rate, replication lag, percent complete; dead-letter failed _ids for replay; single-migrator lock so two jobs don't double-load.",
+      "Verify with sampling/checksums before declaring done; support crash resume from checkpoint without reprocessing the whole collection.",
+      "Prevent/ops: dashboard the migration SLO (lag budget, docs/sec); alert on lag breach; dry-run on a restore and game-day pause/resume before prod."
+    ],
+    "sayIt": "Big migrations are checkpointed bulkWrite loops — idempotent, throttled, observable, and resumable from the last _id. I never ship a blind updateMany on tens of millions; I watch replication lag and pause against SLO so the migration stays an online job, not an outage.",
     "traps": [
-      "updateMany on the whole collection with no resume story",
-      "Unordered bulk without tracking per-doc failures",
-      "Migrating at full speed until secondary lag pages someone"
+      "updateMany on the whole collection with no resume story — crash forces a full restart and unknown partial state",
+      "Unordered bulk without tracking per-doc failures — silent holes in the migration",
+      "Migrating at full speed until secondary lag pages someone — availability debt for speed"
     ]
   },
   {
@@ -773,11 +1363,21 @@ window.SBE_DRILL = [
     "domainTitle": "MongoDB: Modeling, Indexing & Scaling",
     "q": "How would you design multi-tenant data isolation in MongoDB?",
     "first30s": "Choose isolation tier: shared collection with tenantId, database-per-tenant, or cluster-per-tenant for the noisiest/compliance-heavy customers — enforce tenant predicates in every query.",
-    "sayIt": "tenantId on every doc and every query, indexes and shard key aligned, auth-bound tenant — escalate to DB- or cluster-per-tenant when compliance or noise demands it.",
+    "modelAnswer": [
+      "Clarify tiers: shared collection + tenantId (default), database-per-tenant (compliance/noisy neighbors), cluster-per-tenant (strongest) — pick by risk and cost, not fashion.",
+      "Default model: tenantId on every document; compound indexes starting with tenantId; shard key often includes tenantId so hot queries stay targeted.",
+      "Enforce isolation in the data access layer (mandatory filter from auth context), not only in controllers/UI — never trust client-supplied tenantId alone.",
+      "Unique indexes must be tenant-scoped ({ tenantId, email }) or you leak global uniqueness constraints across customers.",
+      "Tradeoff: shared collections are cheapest ops but need discipline; DB/cluster-per-tenant raises ops cost and improves noisy-neighbor and compliance boundaries.",
+      "Failure modes: UI-only filtering; missing tenantId on one repository method; one mega-tenant melting a shared shard (hotspot) — plan whale isolation early.",
+      "Test for cross-tenant leakage with automated query audits; consider schema validation / wrappers that reject filters without tenantId.",
+      "Prevent/ops: alert on queries missing tenantId (if logged), monitor jumbo-tenant shard skew, and game-day a cross-tenant access attempt in staging before every isolation change."
+    ],
+    "sayIt": "I put tenantId on every document and every query, align indexes and shard key with it, and bind tenant from the authenticated session — escalating to DB- or cluster-per-tenant when compliance or noise demands it. Isolation fails closed in the data access layer, with audits and skew metrics so a missing filter or whale tenant cannot become a silent breach or hotspot.",
     "traps": [
-      "Filtering tenant only in the UI",
-      "Unique indexes that aren't tenant-scoped (email global vs per-tenant)",
-      "One mega-tenant melting a shared shard"
+      "Filtering tenant only in the UI — any direct API/repo bug becomes cross-tenant leakage",
+      "Unique indexes that aren't tenant-scoped (email global vs per-tenant) — signup failures and data collisions",
+      "One mega-tenant melting a shared shard — availability incident dressed as 'Mongo scale'"
     ]
   },
   {
@@ -786,11 +1386,21 @@ window.SBE_DRILL = [
     "domainTitle": "Redis, Caching & Rate Limiting",
     "q": "When should an API use Redis instead of querying PostgreSQL directly?",
     "first30s": "When the same read is hot, tolerates slight staleness, and DB cost or latency dominates — not for every query by default.",
-    "sayIt": "Redis for hot, slightly stale reads and coordination. Postgres for truth and transactions — I cache when the hit rate and latency win are proven.",
+    "modelAnswer": [
+      "Clarify the job: Redis earns its place when the same key is read at high QPS, the payload is cheap to serialize, and the business tolerates TTL-bounded staleness — not because 'we should cache everything.'",
+      "Hypothesis before adding Redis: p95/p99 DB time, rows scanned, and estimated hit rate on stable keys (session, product config, permission bitsets, feed fragments) justify the ops cost.",
+      "Evidence path: measure origin QPS and latency with and without cache on a canary; only keep Redis when hit rate and p95 delta clear a documented bar.",
+      "Tradeoff vs read replicas: replicas help complex/ad-hoc SQL and stronger freshness; Redis wins on microsecond hot-path lookups and ephemeral coordination — because replicas still pay SQL planning and connection cost.",
+      "Failure mode: caching unique one-off queries or money ledgers creates low hit rate, stale balances, and a second source of truth that diverges under failover.",
+      "Fix: keep PostgreSQL as system of record for durable transactional writes; use cache-aside with explicit TTL/invalidation, never dual-write critical balances only to Redis.",
+      "Also use Redis where it is the right primitive: rate limits, distributed locks, short-lived idempotency keys — coordination, not durable ledger.",
+      "Prevent/ops: track cache hit rate, origin QPS after rollout, and p95 latency SLO; alert when hit rate collapses or DB QPS rises as if the cache were bypassed."
+    ],
+    "sayIt": "I put Redis on hot, repeatable reads that tolerate slight staleness after the hit-rate and latency win are proven — not by default. Postgres stays the system of record for durable transactions; Redis also owns ephemeral coordination like rate limits and locks. If hit rate or freshness SLOs cannot clear a bar, I use replicas or stay on Postgres.",
     "traps": [
-      "Caching everything including low-hit unique keys",
-      "Treating Redis as the system of record for balances",
-      "No TTL and no invalidation plan"
+      "Caching everything including low-hit unique keys — burns memory and ops complexity with no p95 win",
+      "Treating Redis as the system of record for balances — durability and failover semantics are weaker than Postgres for money",
+      "No TTL and no invalidation plan — silent staleness that only shows up as customer-facing wrong data"
     ]
   },
   {
@@ -799,11 +1409,21 @@ window.SBE_DRILL = [
     "domainTitle": "Redis, Caching & Rate Limiting",
     "q": "Redis goes down during peak traffic. How should the application degrade?",
     "first30s": "Fail fast on Redis with timeouts, then either serve stale/local data, skip non-critical cache, or shed load — never unbounded synchronous fallback to the DB.",
-    "sayIt": "Redis down: timeout fast, degrade by feature, and cap DB fallback — an uncapped fallback is an outage multiplier.",
+    "modelAnswer": [
+      "Clarify: Redis unavailable is an expected failure mode, not a surprise — the question is which features fail open vs closed and how hard Postgres gets hit.",
+      "Evidence first: short connect/command timeouts and a circuit breaker around Redis so request threads do not pile up waiting on a dead pool.",
+      "Per-feature policy: cache reads may fail-open to DB with a concurrency cap; rate limiting and auth abuse paths usually fail-closed — because open limits during outage invite floods.",
+      "Tradeoff: serving last-known-good from process-local soft state buys availability vs freshness; skipping non-critical endpoints sheds load vs trying to preserve every feature.",
+      "Failure mode: uncapped synchronous DB fallback turns a Redis blip into a Postgres avalanche and a wider outage.",
+      "Fix: bulkhead fallback with a semaphore, load-shed optional routes, and optionally longer L1 TTL while Redis is open-circuit.",
+      "Warm carefully on recovery: controlled refill or lazy population so reconnect does not stampede both Redis and DB.",
+      "Prevent/ops: alert on Redis health, breaker open rate, and DB QPS spike during fallback; rehearse degradation in game days with pass/fail on DB ceiling."
+    ],
+    "sayIt": "When Redis dies I timeout fast, apply a written fail-open or fail-closed policy per feature, and cap every DB fallback. An uncapped 'just query Postgres' path multiplies the outage. I alert on breaker state and DB QPS, then rehearse warm-up so recovery does not create a second stampede.",
     "traps": [
-      "Infinite retries to Redis on the request path",
-      "Failing open on rate limiting (abuse flood)",
-      "No circuit breaker → thread pool exhaustion"
+      "Infinite retries to Redis on the request path — exhausts thread pools and turns a blip into latency death",
+      "Failing open on rate limiting — abuse traffic floods auth and writes while Redis is down",
+      "No circuit breaker → thread pool exhaustion — every request waits on Redis connect timeout"
     ]
   },
   {
@@ -812,11 +1432,22 @@ window.SBE_DRILL = [
     "domainTitle": "Redis, Caching & Rate Limiting",
     "q": "How would you implement cache-aside for a read-heavy endpoint?",
     "first30s": "Read Redis by key; on miss load Postgres, SET with TTL, return. Invalidate or overwrite on writes. Add stampede protection for hot keys.",
-    "sayIt": "Cache-aside: GET, miss to DB, SET with TTL; invalidate on write; singleflight so misses don't herd.",
+    "modelAnswer": [
+      "Clarify cache-aside: the app owns population — GET Redis; on miss load Postgres, SET with TTL, return — Postgres remains source of truth, Redis is a disposable acceleration layer.",
+      "Key design: namespaced, versioned keys including tenant/id (e.g. prod:user:{id}:profile:v2) so schema changes and multi-tenant bleed cannot share a key accidentally.",
+      "Read path steps: GET → hit return; miss → singleflight/lock for hot keys → DB → SET EX ttl (+ jitter) → return; negative-cache empty/not-found with a short TTL so hot 404s do not hammer the DB.",
+      "Write path and consistency window: COMMIT in Postgres, then DEL or SET the key; accept a brief race where concurrent readers can refill stale data until TTL or a second invalidation — because Redis and Postgres are not one transaction.",
+      "Invalidation graph: map every derived key (profile, list membership, permission bitset); forgetting secondary keys is the usual 'we invalidated but still stale' failure — tags help but can be expensive at scale.",
+      "Stampede vs ordinary miss: popular keys need NX lock or in-process singleflight on miss; jitter alone is not enough when one celebrity key expires.",
+      "Tradeoff vs write-through: write-through shrinks some races but couples write latency to Redis; cache-aside keeps writes on the DB critical path and accepts invalidate races with TTL as backstop.",
+      "Prevent/ops: metrics for hit rate, miss latency, DB QPS on misses, null-cache hit rate, and stampede lock wait; alert when miss rate or origin QPS spikes after deploys."
+    ],
+    "sayIt": "Cache-aside is GET, miss to Postgres, SET with TTL, and invalidate after commit — with an explicit consistency window and an invalidation graph for derived keys. I null-cache short, singleflight hot misses, and watch hit rate plus origin QPS so a broken invalidation shows up as metrics, not only as user reports.",
     "traps": [
-      "Caching without TTL",
-      "Updating DB but forgetting invalidation",
-      "Caching personalized responses under a shared key"
+      "Caching without TTL — missed invalidations become permanent wrong answers",
+      "Updating DB but forgetting invalidation — consistency window becomes unbounded until someone notices",
+      "Caching personalized responses under a shared key — cross-tenant data leaks and wrong UX",
+      "No null-cache on hot not-found — repeated misses amplify DB load on the worst keys"
     ]
   },
   {
@@ -825,11 +1456,21 @@ window.SBE_DRILL = [
     "domainTitle": "Redis, Caching & Rate Limiting",
     "q": "How would you handle stale cache data after a PostgreSQL update?",
     "first30s": "Invalidate or overwrite the cache key in the same request after a successful DB commit — and accept TTL as a backstop for missed invalidations.",
-    "sayIt": "Commit first, then invalidate or SET the new value. TTL is the safety net for races and missed deletes.",
+    "modelAnswer": [
+      "Clarify: after a successful Postgres COMMIT, the cache is wrong until you DEL/SET or TTL expires — treat that as a designed window, not an accident.",
+      "Preferred fix: in the request (or post-commit hook), DELETE affected keys or SET the fresh value only after commit succeeds — invalidating before commit leaves holes on rollback.",
+      "Evidence of completeness: maintain an invalidation graph or key inventory for the entity (detail, lists, aggregates); hierarchical tags help but add write amplification.",
+      "Tradeoff: short TTL heals missed deletes quickly vs higher miss rate; long TTL needs reliable invalidation or you ship stale reads for hours.",
+      "Replica failure mode: invalidate then read-your-writes from a lagging replica can refill the cache with old data — version-stamp payloads or read primary after write.",
+      "For schema changes, bump key version (v2) so old payloads cannot be deserialized as new shape.",
+      "When freshness is a hard SLO, skip cache on that path rather than pretending TTL equals strong consistency.",
+      "Prevent/ops: measure stale-read complaints, post-write cache hit of old version, and invalidation error rate; alert when DEL fails or refill-from-replica races spike."
+    ],
+    "sayIt": "I commit Postgres first, then invalidate or overwrite every key in the entity's invalidation graph, with TTL as the safety net for races and missed deletes. Replica lag can refill stale values, so I version payloads or read primary after write when freshness matters. Metrics on stale reads and failed DELs catch silent invalidation bugs.",
     "traps": [
-      "Invalidating before commit (rollback leaves hole or race)",
-      "Infinite TTL with best-effort invalidation only",
-      "Forgetting secondary keys derived from the entity"
+      "Invalidating before commit — rollback leaves a hole or concurrent readers cache pre-image forever until TTL",
+      "Infinite TTL with best-effort invalidation only — one missed DEL becomes permanent staleness",
+      "Forgetting secondary keys derived from the entity — detail is fresh while list/search stays stale"
     ]
   },
   {
@@ -838,11 +1479,22 @@ window.SBE_DRILL = [
     "domainTitle": "Redis, Caching & Rate Limiting",
     "q": "What is a cache stampede scenario and how would you prevent it?",
     "first30s": "Stampede is many requests missing the same key at once and all hitting the DB. Prevent with singleflight, a lock, probabilistic early refresh, or serving stale while one refreshes.",
-    "sayIt": "Stampede = thundering herd on miss. One refresher via lock or singleflight; others wait or get stale.",
+    "modelAnswer": [
+      "Clarify stampede: hot key TTL expires or cold start → N concurrent misses → N identical origin queries — a thundering herd on Postgres, not Redis CPU saturation alone.",
+      "Distinguish hot-key: a hot key that always hits still hammers one Redis shard/CPU; stampede is synchronized miss → origin overload. Fixes differ (L1/shard vs singleflight/lock/SWR).",
+      "In-process singleflight: coalesce loaders on one instance; losers wait on the same future — cheap but insufficient across many app instances.",
+      "Distributed lock: SET lock:{key} NX EX <ttl>; winner loads DB and fills cache; waiters retry GET with a bounded waiter timeout — lock TTL must outlive worst refresh but expire if the winner dies (no deadlock).",
+      "Stale-while-revalidate: keep soft TTL / stale payload; serve stale to waiters while one refresher runs — availability over freshness when the business allows.",
+      "Tradeoff: probabilistic early refresh reduces synchronized expiry vs extra origin load; jitter helps many keys but will not save one celebrity key.",
+      "Failure modes: lock without TTL (deadlock), waiters with infinite retry (latency storm), treating stampede as 'add Redis nodes' (miss still hits DB).",
+      "Prevent/ops: monitor miss spikes, lock acquire fail rate, waiter timeouts, and origin QPS on expiry boundaries; game-day expire a hot key and verify single-origin refresh."
+    ],
+    "sayIt": "Stampede is a synchronized miss herd on the origin; hot-key is sustained traffic on one Redis slot — different problems. I use singleflight plus an NX lock with TTL, bounded waiter timeout, and stale-while-revalidate when freshness allows. Lock TTL and waiter budgets are part of the design, and I watch miss spikes at expiry.",
     "traps": [
-      "Only jittering TTL but not locking the hottest key",
-      "Lock without TTL (deadlock if refresher dies)",
-      "Retry loops without backoff while lock held"
+      "Only jittering TTL but not locking the hottest key — celebrity keys still stampede on expiry",
+      "Lock without TTL — refresher crash deadlocks the key until manual intervention",
+      "Retry loops without backoff/waiter timeout while lock held — turns stampede into a latency storm",
+      "Confusing stampede with hot-key CPU saturation — scaling Redis nodes does not fix synchronized DB misses"
     ]
   },
   {
@@ -851,11 +1503,21 @@ window.SBE_DRILL = [
     "domainTitle": "Redis, Caching & Rate Limiting",
     "q": "A popular Redis key becomes a hot key. How would you handle it?",
     "first30s": "A hot key saturates one shard/CPU. I'd add a local in-process cache, or split the keyspace across N sibling keys and aggregate.",
-    "sayIt": "Hot keys need L1 caching or key sharding — scaling the cluster alone won't help if one key owns one slot.",
+    "modelAnswer": [
+      "Clarify: a hot key concentrates GET/INCR traffic on one cluster hash slot/CPU — horizontal shard count does not help if one key owns one slot.",
+      "Evidence: Redis hot-key metrics, proxy stats, elevated latency on one node, and CPU skew across the cluster — confirm before redesigning keys.",
+      "First mitigation: L1 in-process cache with short TTL on app instances to absorb read QPS without changing the data model.",
+      "Shard the keyspace: replicate a read-mostly blob onto key:0..N-1 and pick randomly; for counters, INCR a random shard and SUM on read (approximate or exact merge tradeoff).",
+      "Tradeoff: L1 is simple and loses cross-instance coherence quickly; sharding increases write fan-out and read merge cost vs single-key simplicity.",
+      "Failure modes: hash tags that pin many hot entities onto one slot; storing a huge value that amplifies network CPU; global locks on every hot-key read.",
+      "Fix size/shape: compress, split fields, or move rarely changing config to local files/feature flags when Redis is the wrong store.",
+      "Prevent/ops: dashboards for per-node CPU and hot-key reports; alert on slot imbalance; revisit key design when a celebrity entity appears in top-N."
+    ],
+    "sayIt": "Hot keys need L1 caching or deliberate key sharding — adding Redis nodes alone will not split one key's hash slot. I confirm with hot-key and per-node CPU metrics, then absorb reads in-process or fan out to sibling keys with an explicit merge story. Hash tags and oversized values are common ways we accidentally create the hotspot.",
     "traps": [
-      "Adding Redis nodes without splitting the key",
-      "Hash tags that force many hot keys onto one slot",
-      "Global locks on the hot key for every read"
+      "Adding Redis nodes without splitting the key — the hot slot moves hosts but stays hot",
+      "Hash tags that force many hot keys onto one slot — Cluster mode concentrates load by design of the tag",
+      "Global locks on the hot key for every read — serializes the hottest path and worsens latency"
     ]
   },
   {
@@ -864,11 +1526,21 @@ window.SBE_DRILL = [
     "domainTitle": "Redis, Caching & Rate Limiting",
     "q": "How would you choose TTLs for data with different freshness requirements?",
     "first30s": "TTL follows the business freshness SLO: seconds for volatile counters, minutes for profiles, hours for rare config — always with jitter and an invalidation story for critical updates.",
-    "sayIt": "TTL is a freshness SLA. Short + invalidate for volatile data, longer for static, jitter everything, short negative cache for misses.",
+    "modelAnswer": [
+      "Clarify: TTL is a freshness SLA expressed as time — classify data by how wrong a stale read can be before it is a bug.",
+      "Buckets: strict freshness (skip cache or seconds + hard invalidate), eventual (minutes), near-static (hours/days); document per key-family policy.",
+      "Set TTL slightly above typical update interval; use explicit DEL on writes when the SLO is tighter than TTL alone can guarantee.",
+      "Always add random jitter (±10–20%) so millions of keys do not expire in the same second and stampede the origin.",
+      "Negative caching: short TTL for misses/404s — long enough to protect DB, short enough that creates appear quickly.",
+      "Tradeoff vs eviction policy: volatile-LRU still needs TTLs for correctness; allkeys-lru without TTL turns memory pressure into random staleness deletion without a freshness story.",
+      "Failure mode: one global TTL or eternal keys for changing data — either constant stampede risk or unbounded staleness.",
+      "Prevent/ops: review TTLs against hit rate, stale-read rate, and miss spikes at expiry; alert when a key family drifts from its documented freshness SLO."
+    ],
+    "sayIt": "TTL is a freshness SLA, not a random constant: short plus invalidate for volatile data, longer for static, jitter everywhere, and short negative cache for hot misses. Eviction policy is memory management, not a substitute for that SLA. I revisit TTLs when hit rate or stale-read metrics say the policy drifted.",
     "traps": [
-      "One global TTL for all keys",
-      "No jitter on millions of keys with the same expiry",
-      "Eternal keys for data that does change"
+      "One global TTL for all keys — over-fresh expensive paths and under-fresh critical paths at once",
+      "No jitter on millions of keys with the same expiry — synchronized stampede every TTL boundary",
+      "Eternal keys for data that does change — invalidation bugs become permanent production incidents"
     ]
   },
   {
@@ -877,11 +1549,21 @@ window.SBE_DRILL = [
     "domainTitle": "Redis, Caching & Rate Limiting",
     "q": "How would you design a distributed per-user and per-IP rate limiter using Redis?",
     "first30s": "I'd use Redis atomic counters or a sliding-window ZSET, with separate keys for userId and IP, evaluated in the gateway/middleware before expensive work.",
-    "sayIt": "Per-user and per-IP keys with atomic INCR or sliding-window Lua, checked early in the middleware, with an explicit Redis-down policy.",
+    "modelAnswer": [
+      "Clarify goal: enforce per-user and per-IP budgets early (gateway/middleware) before expensive work, with atomic Redis ops so multi-instance counts do not race.",
+      "Fixed window: INCR key; on first INCR set EXPIRE windowSeconds; reject when count > limit — simple, but bursty at window boundaries.",
+      "Sliding window: ZADD timestamps, ZREMRANGEBYSCORE old, ZCARD — smoother; wrap in Lua so the multi-step update is atomic across clients.",
+      "Keys and policy: rl:user:{id}:{bucket} and rl:ip:{ip}:{bucket}; evaluate both (AND) because IP-only fails under NAT and user-only fails pre-auth.",
+      "Tradeoff: fixed window is cheap vs sliding accuracy; token bucket via Lua gives smoother refill when UX needs it.",
+      "Redis-down policy: usually fail-closed on login/abuse paths — fail-open invites credential stuffing during the outage.",
+      "Hot IP under attack: shard or approximate the IP key; return standard remaining/reset headers for clients.",
+      "Prevent/ops: metrics for reject rate, top offenders, Redis latency on RL path, and fail-closed engagements; alert when RL Redis errors spike or reject rate collapses unexpectedly."
+    ],
+    "sayIt": "I enforce per-user and per-IP limits with atomic INCR or sliding-window Lua in middleware before expensive work, and I pick fail-closed for abuse-sensitive paths when Redis is down. Fixed windows are fine until boundary bursts hurt; then I pay for sliding/token-bucket accuracy. Reject rate and Redis errors on the limiter path are first-class alerts.",
     "traps": [
-      "Non-atomic get/set rate counters",
-      "Only IP limits (NAT) or only user limits (pre-auth flood)",
-      "Failing open on login endpoints during Redis outage"
+      "Non-atomic get/set rate counters — concurrent instances under-count and allow floods",
+      "Only IP limits (NAT) or only user limits (pre-auth flood) — attackers route around the single dimension",
+      "Failing open on login endpoints during Redis outage — turns dependency loss into an abuse window"
     ]
   },
   {
@@ -890,11 +1572,21 @@ window.SBE_DRILL = [
     "domainTitle": "Redis, Caching & Rate Limiting",
     "q": "Two application instances update the same Redis-based counter concurrently. How would you make the operation safe?",
     "first30s": "Use Redis atomic primitives — INCR/INCRBY or a Lua script — never GET, add in process, SET.",
-    "sayIt": "INCR or Lua — not get-add-set. Redis atomic ops are the concurrency control.",
+    "modelAnswer": [
+      "Clarify the race: GET → add in app → SET across instances loses updates; safety must live inside Redis's single-threaded command execution.",
+      "Prefer INCR/INCRBY/DECR for a single counter — one round-trip, atomic, correct under concurrency without application locks.",
+      "Conditional multi-step RMW (compare-and-set, multi-key invariants): use Lua EVAL so check+write runs atomically server-side — this is the peer for conditional logic, not bare MULTI/EXEC.",
+      "MULTI/EXEC alone queues commands without optimistic concurrency; for check-then-act you need WATCH+MULTI (retry on conflict) or, more often, Lua — do not teach MULTI/EXEC as equivalent to Lua for conditional RMW.",
+      "Tradeoff: INCR is simplest; Lua adds scripting complexity but expresses multi-key atomicity; WATCH+MULTI works but retry storms under contention are painful vs Lua.",
+      "Money / audit failure mode: Redis AOF/RDB and async replication are not Postgres crash-safe ledger semantics — keep durable financial counters in Postgres and use Redis for approximate or rate metrics.",
+      "Cluster caveat: multi-key Lua requires keys in the same hash slot (hash tags); otherwise the script is rejected.",
+      "Prevent/ops: concurrency tests with multiple workers; monitor script errors, WRONGTYPE, and divergence vs a durable source of truth when the counter matters for billing."
+    ],
+    "sayIt": "Concurrent counter updates belong to INCR or to Lua for conditional multi-step RMW — never get-add-set in the app. Bare MULTI/EXEC is not the same as Lua for check-and-set; use WATCH+MULTI or Lua when you need conditions. If the number is money, Postgres is the ledger and Redis is at best a cache or approximate metric.",
     "traps": [
-      "GET + SET across instances",
-      "Using MULTI without understanding WATCH for optimistic cases",
-      "Storing counters only in Redis when finance needs auditability"
+      "GET + SET across instances — classic lost-update race under concurrency",
+      "Treating bare MULTI/EXEC as peer to Lua for conditional RMW — no compare-and-set without WATCH or Lua",
+      "Storing counters only in Redis when finance needs auditability — persistence/replication limits are not a ledger"
     ]
   },
   {
@@ -903,11 +1595,22 @@ window.SBE_DRILL = [
     "domainTitle": "Redis, Caching & Rate Limiting",
     "q": "How would you prevent a cache outage from causing a database avalanche?",
     "first30s": "Treat Redis failure as expected: circuit-break, admit only a bounded number of DB fallbacks, shed non-critical traffic, and keep a small local stale cache.",
-    "sayIt": "Avalanche prevention is bounded fallback: breakers, semaphores, stale serve, and shedding — not 'just query Postgres.'",
+    "modelAnswer": [
+      "Clarify avalanche: Redis down or mass expiry → uncapped miss path → Postgres saturates → cascading API failure — the outage multiplier is unbounded fallback, not Redis itself.",
+      "Fail fast: timeouts + circuit breaker on Redis so the app stops waiting and enters a known degradation mode.",
+      "Bulkhead: semaphore on cache-miss/DB-fallback concurrency — size from Postgres max_connections, pool size, and safe QPS headroom (e.g. admit only N% of normal miss concurrency).",
+      "Shed order: drop optional/expensive list/search first, preserve auth and critical reads, serve stale L1 where safe — ordered shedding beats random 500s.",
+      "Tradeoff: fail-open cache with a tight semaphore preserves partial UX vs fail-closed features that cannot be correct without Redis.",
+      "Coalesce remaining misses (singleflight) during partial outages so 1000 waiters do not become 1000 identical queries.",
+      "Failure mode: retry storms and unlimited fallback recreate the avalanche after you thought you fixed Redis.",
+      "Prevent/ops: game-day kill Redis in staging with pass/fail = DB QPS stays under ceiling and critical SLO holds; alert on fallback rate, semaphore rejects, and origin saturation."
+    ],
+    "sayIt": "Avalanche prevention is bounded fallback: breakers, a sized semaphore, ordered load shedding, and stale serve — not 'just query Postgres.' I size the bulkhead from DB headroom, coalesce misses, and run a game-day with a clear pass/fail on DB QPS. Fallback rate and semaphore rejects are the metrics that prove the guardrails work.",
     "traps": [
-      "Silent unlimited DB fallback",
-      "Retry storms compounding load",
-      "No distinction between critical and optional reads"
+      "Silent unlimited DB fallback — converts Redis loss into a full database outage",
+      "Retry storms compounding load — amplify QPS exactly when Postgres has no spare capacity",
+      "No distinction between critical and optional reads — shed order is random and critical paths die first",
+      "Game-day without a DB QPS pass/fail — rehearsal that cannot fail teaches nothing"
     ]
   },
   {
@@ -916,11 +1619,21 @@ window.SBE_DRILL = [
     "domainTitle": "Kafka / Messaging / Event-Driven Architecture",
     "q": "A Kafka consumer is processing messages slower than producers are publishing them. How would you diagnose and scale it?",
     "first30s": "I'd check consumer group lag by partition, see whether we're CPU-bound in processing or blocked on I/O, then scale partitions/consumers or speed up the handler — lag is the north star.",
-    "sayIt": "Lag tells me I'm falling behind. I find whether it's handler time or skew, then add partitions/consumers or make each message cheaper.",
+    "modelAnswer": [
+      "Clarify: backlog is consumer group lag (produced − committed) growing over time — diagnose whether every partition lags or one hot partition does before scaling anything.",
+      "Evidence: describe the group per partition; chart lag age and records; profile handler time (DB, HTTP, serialization, commit sync vs async, batch size).",
+      "Scale horizontally only with headroom: more consumers help only up to partition count; plan partition increases carefully because they change key→partition mapping for new messages.",
+      "Tradeoff: make each message cheaper (batch DB writes, pipeline, fewer round-trips) vs adding partitions/ops complexity — optimize before you re-partition production topics.",
+      "Skew failure mode: one partition lags while others are idle — more consumers cannot share that partition; fix keying or isolate whales.",
+      "Fetch/batch failure mode: huge fetch sizes that look like throughput wins can spike GC and DB pools — measure end-to-end, not only poll rate.",
+      "Fix path: remove per-message chatty I/O, then add partitions if parallelism is the bottleneck, then add consumers to match.",
+      "Prevent/ops: alert on lag SLO (records and age), per-partition imbalance, and handler p95; page when lag age breaches the business freshness budget."
+    ],
+    "sayIt": "Lag is the north star: I confirm whether the whole group or one partition is falling behind, then profile the handler before adding capacity. Consumers beyond partition count sit idle, and key skew will not yield to horizontal scale. I alert on lag age against a freshness SLO, not only on CPU.",
     "traps": [
-      "Adding consumers without adding partitions",
-      "Auto-scaling consumers blindly on CPU while lag is key-skew",
-      "Raising fetch sizes without measuring GC/DB impact"
+      "Adding consumers without adding partitions — idle consumers and unchanged lag",
+      "Auto-scaling consumers blindly on CPU while lag is key-skew — scales the wrong dimension",
+      "Raising fetch sizes without measuring GC/DB impact — throughput theater that melts pools"
     ]
   },
   {
@@ -929,11 +1642,21 @@ window.SBE_DRILL = [
     "domainTitle": "Kafka / Messaging / Event-Driven Architecture",
     "q": "A consumer processes the same event twice. How should the application handle duplicates?",
     "first30s": "Treat duplicates as normal under at-least-once. Make processing idempotent with a dedupe key stored where the side effect lives.",
-    "sayIt": "Duplicates are expected. I key every side effect and upsert under a unique constraint so the second delivery is a no-op.",
+    "modelAnswer": [
+      "Clarify: under at-least-once, rebalances, retries, and commit failures make duplicates normal — design for them, do not treat them as broker bugs.",
+      "Idempotency key: stable event id / orderId+type / producer UUID unique per business effect; never mint a new UUID inside the consumer on each attempt.",
+      "DB side effects (inbox pattern): INSERT processed_events(event_id) with UNIQUE in the same transaction as the business write; ON CONFLICT skip — dedupe and effect commit together.",
+      "Outbox/inbox pairing: producers use outbox for reliable emit; consumers use inbox/dedupe table for reliable apply — both sides need keys when the pipe is at-least-once.",
+      "Non-DB side effects: email, charge, webhook — use provider idempotency keys or Redis SET NX with TTL aligned to retry window; memory-only dedupe dies on restart.",
+      "EOS scope: Kafka transactions / exactly-once reduce duplicates across Kafka←→Kafka or Kafka←→transactional sinks in-scope; they do not magically make arbitrary HTTP side effects exactly-once without app keys.",
+      "Anti-pattern: commit offsets earlier to 'avoid' duplicates — that trades duplicates for silent loss.",
+      "Prevent/ops: metric duplicate_skip_total vs apply_total; alert on sudden duplicate storms after rebalances; retain idempotency keys for the retry/replay window SLO."
+    ],
+    "sayIt": "Duplicates are expected under at-least-once, so every side effect carries a stable idempotency key. DB work uses an inbox unique constraint in the same transaction; non-DB work needs provider keys or durable SET NX. Kafka EOS narrows duplicates inside its scope — it does not replace business idempotency for arbitrary side effects.",
     "traps": [
-      "Assuming Kafka exactly-once means the business effect is exactly-once without work",
-      "Dedupe in memory only (lost on restart)",
-      "Side effects outside the dedupe transaction"
+      "Assuming Kafka exactly-once means the business effect is exactly-once without work — EOS scope does not cover arbitrary side effects",
+      "Dedupe in memory only — restart or other instances re-apply the effect",
+      "Side effects outside the dedupe transaction — crash between apply and mark-seen double-applies"
     ]
   },
   {
@@ -942,11 +1665,22 @@ window.SBE_DRILL = [
     "domainTitle": "Kafka / Messaging / Event-Driven Architecture",
     "q": "A consumer updates PostgreSQL and crashes before committing its Kafka offset. What could happen?",
     "first30s": "On restart the message is redelivered. If the DB write already committed, you get a duplicate side effect unless the consumer is idempotent.",
-    "sayIt": "DB committed, offset not: redelivery. That's at-least-once — idempotency makes it safe; committing early makes loss possible.",
+    "modelAnswer": [
+      "Clarify timelines: crash after Postgres COMMIT and before offset commit ⇒ broker still offers the message ⇒ redelivery ⇒ duplicate apply attempt unless idempotent.",
+      "Opposite path: crash before DB commit ⇒ redelivery replays safely if the first write never landed — at-least-once favors reprocessing over loss.",
+      "enable.auto.commit danger: background auto-commit can advance offsets while a batch is still processing — a crash then skips unprocessed records (loss) or creates confusing partial windows; prefer explicit commit after success.",
+      "Partial batch: processing records 1..N in one poll, crash mid-batch — committed offset position decides which subset redelivers; commit only what succeeded, or use per-record commits carefully.",
+      "Revoke/rebalance: partition revoke mid-handler extends the same window — another consumer may start from the last committed offset while your DB write already landed.",
+      "Anti-pattern: commit offset first (or in finally before knowing DB success) ⇒ crash ⇒ message skipped ⇒ data loss.",
+      "Standard fix: commit-after-success + idempotent writes (unique constraints / inbox); optionally store offsets in the DB transaction for a single commit point.",
+      "Prevent/ops: disable risky auto-commit on stateful consumers; metric rebalance rate and duplicate applies; alert when commit lag after DB success grows; test kill -9 mid-batch in staging."
+    ],
+    "sayIt": "If Postgres committed and the offset did not, redelivery is guaranteed — that is at-least-once, and idempotency makes it safe. Auto-commit, revoke mid-batch, and partial poll windows widen the hazard; committing early turns the same crash into data loss. I commit after success and rehearse kill-mid-batch.",
     "traps": [
-      "Believing 'we commit sync so duplicates can't happen'",
-      "Committing offsets in a finally block before knowing DB success",
-      "No unique constraints on the write path"
+      "Believing 'we commit sync so duplicates can't happen' — sync commit after DB still races with crash between the two",
+      "enable.auto.commit=true on stateful consumers — offsets can advance past in-flight work and lose messages",
+      "Committing offsets in a finally block before knowing DB success — converts crashes into silent skips",
+      "No unique constraints on the write path — redelivery double-applies money or emails"
     ]
   },
   {
@@ -955,11 +1689,21 @@ window.SBE_DRILL = [
     "domainTitle": "Kafka / Messaging / Event-Driven Architecture",
     "q": "How would you design an idempotent Kafka consumer?",
     "first30s": "Stable event id, transactional side effect + dedupe record, commit offsets only after success, and bounded retries for poison messages.",
-    "sayIt": "Idempotent consumer = unique event id + transactional dedupe with the side effect + offset commit after success + DLQ for poison.",
+    "modelAnswer": [
+      "Clarify: idempotent consumer means redelivery is a no-op for the business effect — not that Kafka will never deliver twice.",
+      "Require producers to send a unique eventId (or deterministic hash of natural key + revision); consumers must not generate a new key per attempt.",
+      "In one DB transaction: insert dedupe/inbox row (UNIQUE eventId) + apply business writes; skip cleanly on conflict.",
+      "External calls: only with their own idempotency keys; otherwise move side effects behind an outbox or make them safely retryable.",
+      "Offset policy: commit Kafka offsets only after the transaction succeeds, or write offsets into the same DB transaction — never auto-commit ahead of work.",
+      "Poison path: bounded retries then DLQ + commit/skip so one bad record cannot stall the partition forever.",
+      "Tradeoff: store-offset-in-DB simplifies atomicity vs dual commit points; slightly more ops complexity for the offset table.",
+      "Prevent/ops: metrics for duplicate skips, DLQ depth, handler failures, and lag; alert when poison rate or DLQ backlog breaches SLO."
+    ],
+    "sayIt": "An idempotent consumer pairs a stable event id with a transactional inbox and the business write, then commits offsets only after success. External calls need their own keys, and poison messages get a retry budget then DLQ so the partition keeps moving. Duplicate-skip and DLQ depth metrics prove the design under rebalances.",
     "traps": [
-      "Idempotency key that's not unique across retries (e.g. random UUID generated in consumer)",
-      "External payment call inside handler without provider idempotency key",
-      "Infinite retry blocking the partition"
+      "Idempotency key that's not unique across retries (e.g. random UUID generated in consumer) — every retry looks new",
+      "External payment call inside handler without provider idempotency key — double charge on redelivery",
+      "Infinite retry blocking the partition — one poison message stops all later offsets"
     ]
   },
   {
@@ -968,11 +1712,21 @@ window.SBE_DRILL = [
     "domainTitle": "Kafka / Messaging / Event-Driven Architecture",
     "q": "How would you choose a Kafka partition key for an order or user domain?",
     "first30s": "Pick a key that preserves the ordering you need and spreads load — usually orderId for order lifecycle, userId for per-user streams — and watch for hot keys.",
-    "sayIt": "Partition key = ordering scope. orderId for order timelines, userId for user timelines — never one key for the whole topic.",
+    "modelAnswer": [
+      "Clarify: Kafka ordering is per partition only — the key chooses both the ordering scope and the load distribution.",
+      "Use orderId when order state-machine causality matters; userId when per-user sequencing (feeds, balances) matters — document the choice so all producers agree.",
+      "Evidence of fit: enough distinct keys to utilize partitions; cardinality too low (status, country) creates permanent skew.",
+      "Tradeoff: a single global key serializes the topic for total order vs kills throughput; random keys maximize spread vs destroy per-entity order.",
+      "Hot-key failure: celebrity userId/orderId pins load to one partition — plan salting or isolation knowing you sacrifice that key's strict order if you salt.",
+      "Null/empty keys: sticky or round-robin behavior may break ordering assumptions producers thought they had.",
+      "Migration: changing keys mid-stream splits an entity across partitions — needs a cutover plan, not a silent config flip.",
+      "Prevent/ops: monitor produce bytes and lag per partition; alert on imbalance; keep producer guidelines in the schema/contract review."
+    ],
+    "sayIt": "Partition key equals ordering scope: orderId for order timelines, userId for user timelines — never one key for the whole topic and never a low-cardinality field. I watch per-partition lag for celebrity skew and treat key changes as migrations. Producer agreement on the key is part of the contract.",
     "traps": [
-      "Random keys when you needed per-entity ordering",
-      "Using a low-cardinality status field as key",
-      "Changing key mid-stream without a migration plan"
+      "Random keys when you needed per-entity ordering — state machines race across partitions",
+      "Using a low-cardinality status field as key — permanent hot partitions and idle ones",
+      "Changing key mid-stream without a migration plan — splits entity history and breaks consumers"
     ]
   },
   {
@@ -981,11 +1735,21 @@ window.SBE_DRILL = [
     "domainTitle": "Kafka / Messaging / Event-Driven Architecture",
     "q": "One Kafka partition is receiving much more traffic than the others. How would you diagnose and fix the imbalance?",
     "first30s": "That's key skew. I'd measure produce rates per partition, find the hot keys, then re-key, split whales, or add processing isolation — more consumers alone won't fix one hot partition.",
-    "sayIt": "Hot partition is key skew. Find the key, change keying or isolate the whale — extra consumers can't share one partition.",
+    "modelAnswer": [
+      "Clarify: imbalance is key skew — one partition's bytes-in/message rate/lag dominates while sibling partitions idle.",
+      "Evidence: broker partition metrics, consumer lag heatmap, and sampled keys from the hot partition to find celebrity userId/orderId or a constant producer key.",
+      "Fix options: higher-cardinality key; salt hot keys (accept lost per-key order); dedicated topic/consumer for whales; split entity processing.",
+      "Tradeoff: salting spreads load vs breaks ordering for that entity; isolation preserves order for the whale on a dedicated path at ops cost.",
+      "Failure mode: adding consumers expecting the hot partition to split — within a group one partition still has one owner.",
+      "Increasing partitions redistributes new keys but will not split an existing hot key's stream without changing the key.",
+      "Producer hygiene: ban constant keys and document sticky partitioning behavior so 'helpful' defaults do not recreate skew.",
+      "Prevent/ops: dashboards for partition imbalance ratio; alert when one partition's lag age diverges; review top keys periodically."
+    ],
+    "sayIt": "A hot partition is key skew until proven otherwise: find the key, then re-key, salt with eyes open, or isolate the whale. Extra consumers cannot share one partition, and more partitions will not split an existing hot key. Imbalance alerts on produce rate and lag catch it before SLO burn.",
     "traps": [
-      "Scaling consumer count expecting the hot partition to split",
-      "Salting keys without accepting lost per-key order",
-      "Ignoring producer-side constant keys"
+      "Scaling consumer count expecting the hot partition to split — one partition still one consumer in the group",
+      "Salting keys without accepting lost per-key order — subtle state-machine races later",
+      "Ignoring producer-side constant keys — root cause stays while you retune consumers"
     ]
   },
   {
@@ -994,11 +1758,21 @@ window.SBE_DRILL = [
     "domainTitle": "Kafka / Messaging / Event-Driven Architecture",
     "q": "How would you design retries without allowing one poison message to block unrelated processing?",
     "first30s": "Bounded retries with backoff, then DLQ — never infinite retry on the same record while holding up the partition.",
-    "sayIt": "Retry transient errors with a budget, then DLQ and move on — one bad message must not stall the partition.",
+    "modelAnswer": [
+      "Clarify: within a partition, processing is sequential for a single consumer — infinite retry on one poison record blocks every later offset.",
+      "Classify errors: transient (timeouts, 429, deadlock) vs permanent (deserialization, schema, bad payload) — only transients enter the retry budget.",
+      "Retry with exponential backoff and max attempts (headers or side store); avoid sleeping the consumer thread so long that heartbeats miss and cause rebalances.",
+      "After budget: publish to DLQ/retry topic with reason/payload/headers; commit/skip the original so the main partition advances.",
+      "Tradeoff: in-place retry preserves order vs can stall; retry topic isolates poison at the cost of ordering across the delay.",
+      "Ops: process DLQ asynchronously with alerts and a documented replay runbook — DLQ without owners is a silent trash can.",
+      "Ordering caveat: skipping poison acknowledges that later messages may apply without the failed one — make that business-visible.",
+      "Prevent/ops: metric retry_count, DLQ depth, poison rate; alert on DLQ backlog SLO; game-day inject a bad payload and verify lag on healthy records stays flat."
+    ],
+    "sayIt": "I retry only transient errors with a budget, then DLQ and commit forward so one poison pill cannot stall the partition. Long sleeps that miss heartbeats cause rebalances that make things worse. DLQ depth and a replay runbook are part of the design, not afterthoughts.",
     "traps": [
-      "Infinite retries on deserialization errors",
-      "Blocking the consumer thread on long sleeps",
-      "DLQ without alerts or replay procedure"
+      "Infinite retries on deserialization errors — partition lag grows forever on undrinkable poison",
+      "Blocking the consumer thread on long sleeps — missed heartbeats → rebalance storms",
+      "DLQ without alerts or replay procedure — failures become invisible data loss"
     ]
   },
   {
@@ -1007,11 +1781,21 @@ window.SBE_DRILL = [
     "domainTitle": "Kafka / Messaging / Event-Driven Architecture",
     "q": "When would you choose Kafka versus SQS, RabbitMQ, or a synchronous API call?",
     "first30s": "Sync API for request/response latency paths. SQS for simple durable queues on AWS. Rabbit for flexible routing/work queues. Kafka for high-throughput event logs, replay, and many independent consumers.",
-    "sayIt": "Sync for immediate answers, SQS/Rabbit for work queues, Kafka when I need a replayable event log and independent consumer groups at scale.",
+    "modelAnswer": [
+      "Clarify the need: immediate answer, simple work queue, flexible routing, or replayable multi-consumer event log — the tool follows the shape of the problem.",
+      "Synchronous HTTP/gRPC when the caller needs a short, immediate response and fan-out is not required.",
+      "SQS: managed at-least-once queue, easy workers, limited fan-out/replay — strong default for AWS job queues without log semantics.",
+      "RabbitMQ: routing keys, competing consumers, classic work-queue patterns; not an infinite retained log by default.",
+      "Kafka: durable partitioned log, consumer groups, offset replay, high throughput streaming and independent fan-out — justified when those properties matter.",
+      "Tradeoff: Kafka ops and conceptual weight vs SQS simplicity; sync simplicity vs burst absorption and decoupling.",
+      "Failure mode: Kafka-for-every-tiny-job or sync HTTP for multi-minute fan-out workflows — wrong abstraction tax shows up as cost and incidents.",
+      "Prevent/ops: document selection criteria in ADRs; measure whether consumers actually replay/fan-out; revisit if a Kafka topic has one consumer and no retention need."
+    ],
+    "sayIt": "I use sync APIs when the caller needs an immediate answer, SQS or Rabbit when I need a work queue, and Kafka when I need a replayable partitioned log with independent consumer groups at scale. Kafka is not a default RPC substitute, and SQS is not Kafka's replay model. The ADR should state which property justified the choice.",
     "traps": [
-      "Using Kafka for every tiny async job",
-      "Using sync calls for multi-minute workflows",
-      "Assuming SQS gives the same replay model as Kafka"
+      "Using Kafka for every tiny async job — pays cluster and ops cost without replay/fan-out value",
+      "Using sync calls for multi-minute workflows — ties client timeouts to backend batch work",
+      "Assuming SQS gives the same replay model as Kafka — retention and consumer-group semantics differ"
     ]
   },
   {
@@ -1020,11 +1804,21 @@ window.SBE_DRILL = [
     "domainTitle": "Kafka / Messaging / Event-Driven Architecture",
     "q": "How would you evolve an event schema without breaking existing consumers?",
     "first30s": "Prefer additive, backward-compatible changes with a schema registry — consumers must tolerate new fields; removals need a coordinated expand-contract.",
-    "sayIt": "Additive evolution under registry compatibility rules. Breaking changes take expand-contract and versioned event types — never silent field deletes.",
+    "modelAnswer": [
+      "Clarify: event schemas are contracts across teams — breaking changes without expand-contract strand old consumers on poison payloads.",
+      "Use Avro/Protobuf/JSON Schema with a registry and compatibility mode (BACKWARD/FORWARD/FULL) enforced in CI before produce.",
+      "Safe changes: add optional fields with defaults; avoid rename/remove/type changes without a version plan.",
+      "Expand-contract: publish both old and new fields, upgrade consumers, then drop old fields — never silent deletes.",
+      "Envelope: eventType + schemaVersion; do not overload one event name with incompatible meanings.",
+      "Tradeoff: BACKWARD lets consumers upgrade first vs FORWARD favors producers first — pick from who you can coordinate.",
+      "Failure mode: in-place renames and reused event names cause deserialization poison and DLQ floods.",
+      "Prevent/ops: canary producers; contract tests against new schemas in pipeline; alert on schema-id / deserialization error rate."
+    ],
+    "sayIt": "I evolve events additively under registry compatibility rules, with expand-contract for anything breaking. Field renames and silent deletes are how you poison every consumer at once. CI compatibility checks and deserialization error alerts catch drift before a full rollout.",
     "traps": [
-      "Renaming fields in place",
-      "No compatibility checks in CI",
-      "Reusing event names for different semantics"
+      "Renaming fields in place — old consumers fail deserialization and stall or DLQ",
+      "No compatibility checks in CI — breakages discovered in production by lag and errors",
+      "Reusing event names for different semantics — subscribers apply the wrong business meaning"
     ]
   },
   {
@@ -1033,11 +1827,21 @@ window.SBE_DRILL = [
     "domainTitle": "Kafka / Messaging / Event-Driven Architecture",
     "q": "How would you use the outbox pattern to keep database state and published events consistent?",
     "first30s": "In the same Postgres transaction as the business write, insert an outbox row; a separate publisher drains the outbox to Kafka so you never dual-write across two systems unsafely.",
-    "sayIt": "Outbox: one DB transaction for state + event row, async relay to Kafka. No dual-write hope.",
+    "modelAnswer": [
+      "Clarify the dual-write timeline: commit DB then fail to publish (or publish then fail to commit) leaves state and events permanently diverged — hope is not a protocol.",
+      "Outbox fix: BEGIN; business rows + INSERT outbox(id, topic, payload, headers); COMMIT — one atomic commit point in Postgres.",
+      "Publisher drains via poll (SELECT … FOR UPDATE SKIP LOCKED) or CDC (Debezium); produce to Kafka; mark published only after broker ack.",
+      "Tradeoff: CDC lowers poll lag and load vs more infra; polling is simpler to operate vs higher publish latency under load.",
+      "Idempotent produce: use stable Kafka key + idempotent producer (and/or outbox row id as key) so publisher retries do not create unbounded logical dup chaos for consumers.",
+      "Consumers stay idempotent anyway — outbox reduces dual-write loss/duplication at the source but does not remove at-least-once on the consume side.",
+      "Failure mode: delete outbox rows before Kafka ack, or publish from the HTTP request without outbox — recreates the dual-write race.",
+      "Prevent/ops: lag SLO from outbox inserted_at → Kafka produce; alert on outbox depth and oldest unpublished age; dashboard dual-write forbidden in code review."
+    ],
+    "sayIt": "Outbox keeps state and events aligned by writing both in one Postgres transaction, then relaying asynchronously with idempotent produce keys. CDC versus poll is an ops tradeoff on lag and complexity, not a different consistency story. I alert on outbox depth and publish lag SLO so a stuck publisher is visible before consumers starve.",
     "traps": [
-      "Publishing to Kafka inside the request without an outbox",
-      "Deleting outbox rows before Kafka ack",
-      "No metrics on outbox depth"
+      "Publishing to Kafka inside the request without an outbox — classic dual-write race on crash",
+      "Deleting outbox rows before Kafka ack — crash loses the event after DB commit",
+      "No metrics on outbox depth / publish lag — stuck relay looks like 'Kafka is fine' while events never leave"
     ]
   },
   {
@@ -1046,6 +1850,14 @@ window.SBE_DRILL = [
     "domainTitle": "Distributed Systems & Failure Handling",
     "q": "Service A succeeds but service B fails halfway through a business workflow. How would you recover without corrupting state?",
     "first30s": "I treat this as a saga, not a distributed transaction. Name the workflow id, list completed steps, and define compensations for each success so we can unwind or resume without double-applying effects.",
+    "modelAnswer": [
+      "Model the business flow as an orchestrated (or choreographed) saga: each local step commits in its own DB transaction and records progress against a workflow_id.",
+      "On B failure after A succeeded: either retry B with the same idempotency key, or run A's compensation (e.g. release reservation, void hold) if B is terminal.",
+      "Persist saga state (PENDING / STEP_A_DONE / COMPENSATING / FAILED / COMPLETED) so a crash mid-recovery can resume safely.",
+      "Make every step and compensation idempotent: unique constraints or upserts keyed by workflow_id + step name.",
+      "Emit metrics and alerts on stuck sagas; operators need a replay/compensate path, not manual SQL.",
+      "Prefer orchestration in FastAPI for complex money flows (clear ownership); choreography only when teams own independent domains and accept eventual repair."
+    ],
     "sayIt": "I wouldn't reach for 2PC across services. I'd run a saga with idempotent steps and compensations keyed by a workflow id, so a mid-flight failure either retries the failed step or unwinds completed ones without corrupting inventory or money.",
     "traps": [
       "Proposing XA/2PC across microservices as the default.",
@@ -1058,6 +1870,14 @@ window.SBE_DRILL = [
     "domainTitle": "Distributed Systems & Failure Handling",
     "q": "When should a system prefer strong consistency, and when is eventual consistency acceptable?",
     "first30s": "I start from the business invariant: if two concurrent writers can create an illegal state (oversell, double-pay, duplicate ledger), I need strong consistency on that write path. Everything else can be eventual with clear repair.",
+    "modelAnswer": [
+      "Prefer strong consistency for financial ledgers, inventory decrement, unique username assignment, and any invariant that must never be temporarily false for user-visible correctness.",
+      "Use a single source of truth (one Postgres row/partition, SERIALIZABLE or careful locking, or a consensus store) for those critical writes.",
+      "Eventual consistency is fine for feeds, search indexes, analytics counters, recommendation caches, and cross-region replicas where stale reads are tolerable.",
+      "When eventual: define lag SLO, conflict policy (LWW, merge, CRDT), and a reconciliation job that repairs drift.",
+      "Hybrid is common: strong write to primary, async project to read models; clients that need fresh data read-your-writes from primary or wait on a version token.",
+      "Say the CAP tradeoff in product terms: during partition, do we refuse writes (CP) or accept divergent writes and merge later (AP)?"
+    ],
     "sayIt": "Strong consistency for money and stock; eventual for projections and caches. I'd put the invariant in one strongly consistent write path and let read models catch up with an explicit lag budget and repair job.",
     "traps": [
       "Saying 'eventual consistency everywhere' without naming what can be wrong temporarily.",
@@ -1070,6 +1890,14 @@ window.SBE_DRILL = [
     "domainTitle": "Distributed Systems & Failure Handling",
     "q": "How would you make an end-to-end workflow safe when both API requests and asynchronous messages can be duplicated?",
     "first30s": "Duplicates are normal—client retries, LB retries, at-least-once queues. I design one idempotency key that travels from HTTP through the outbox into every consumer so side effects apply once.",
+    "modelAnswer": [
+      "Require clients to send Idempotency-Key (or derive from natural business key) on mutating FastAPI endpoints; store key → response/status in Postgres with a unique constraint.",
+      "On replay of the same key, return the original result without re-executing side effects.",
+      "When publishing async work, include the same key (or a deterministic event_id) in the message payload and outbox row.",
+      "Consumers upsert into a processed_events table (or unique business constraint) before/within the same transaction as the side effect.",
+      "Make downstream calls idempotent too (payment providers, email with message-id) so a retried consumer does not double-charge or double-send.",
+      "Propagate correlation_id for tracing; never use only timestamps for dedupe."
+    ],
     "sayIt": "I'd carry one idempotency key from the HTTP API through the outbox into every consumer, with unique constraints at each write. Retries become safe no-ops instead of double side effects.",
     "traps": [
       "Idempotency only on the API while queue consumers re-apply effects freely.",
@@ -1082,6 +1910,14 @@ window.SBE_DRILL = [
     "domainTitle": "Distributed Systems & Failure Handling",
     "q": "What does 'exactly once' mean in a practical distributed system, and where can it break down?",
     "first30s": "True exactly-once across independent systems is essentially impossible under crashes and networks. In practice we mean effectively-once: at-least-once delivery plus an idempotent effect.",
+    "modelAnswer": [
+      "Clarify: brokers may claim EOS within a closed ecosystem (e.g. Kafka transactions), but end-to-end with HTTP + DB + email still needs application dedupe.",
+      "Practical recipe: unique message/business id + idempotent write (INSERT … ON CONFLICT / conditional update) + commit offsets/acks after durable effect.",
+      "Breaks when: side effects are non-idempotent (SMS send without provider message-id), multi-step updates without a single transactional boundary, or dedupe store TTL expires while retries continue.",
+      "Breaks when: process crashes after side effect but before recording dedupe/ack → redelivery must no-op.",
+      "Breaks when: two different keys map to the same business action, or clocks/partitions reorder dependent events.",
+      "Interview close: say 'effectively once' and name your dedupe table and unique constraints."
+    ],
     "sayIt": "I treat exactly-once as effectively-once: at-least-once delivery with an idempotent write and a dedupe key. It breaks when the side effect isn't idempotent or you ack before the durable write.",
     "traps": [
       "Claiming the message broker guarantees exactly-once for all downstream side effects.",
@@ -1094,6 +1930,14 @@ window.SBE_DRILL = [
     "domainTitle": "Distributed Systems & Failure Handling",
     "q": "How would you prevent cascading failures when a downstream service becomes slow?",
     "first30s": "Slow dependencies exhaust thread/connection pools and amplify latency. I fail fast with timeouts, isolate with bulkheads, and trip a circuit breaker so we shed waiters instead of melting the whole process.",
+    "modelAnswer": [
+      "Set aggressive, measured timeouts on every outbound call (connect + read) shorter than the caller's remaining budget.",
+      "Limit concurrency per dependency (bulkhead / semaphore) so one slow peer cannot consume all workers.",
+      "Add a circuit breaker: after error-rate or slow-call threshold, open and fail fast / serve fallback for a cool-down.",
+      "Use bounded retries with jitter only on idempotent/safe calls; never retry storms on 500s without a breaker.",
+      "Isolate thread/async pools and DB pools; monitor queue depth, pool wait, and dependency p99.",
+      "Prefer degradation (cached/stale/default) over blocking the critical user path; page on breaker open duration."
+    ],
     "sayIt": "Timeouts, bulkheads, and a circuit breaker—fail fast, cap in-flight calls to the sick dependency, and degrade instead of letting one slow service exhaust our pools.",
     "traps": [
       "Infinite retries without backoff or breaker.",
@@ -1106,6 +1950,14 @@ window.SBE_DRILL = [
     "domainTitle": "Distributed Systems & Failure Handling",
     "q": "How would you design backpressure when incoming work is greater than worker capacity?",
     "first30s": "Backpressure means producers slow down or buffer in a controlled place when consumers can't keep up—never an unbounded in-memory queue that OOMs the process.",
+    "modelAnswer": [
+      "Push work to a durable queue (SQS/Kafka) with a defined max lag SLO; scale consumers on lag/depth, not only CPU.",
+      "At the HTTP edge: limit concurrency (uvicorn workers, asyncio semaphores); return 429/503 when saturated instead of accepting infinite work.",
+      "Use bounded in-process queues with drop/reject policies; never queue.Queue without maxsize for production ingress.",
+      "Propagate pressure: if Redis/DB pool wait exceeds budget, stop accepting new non-critical jobs.",
+      "Separate interactive API capacity from batch/async capacity so batch cannot starve user traffic.",
+      "Observe: queue depth, age of oldest message, reject rate, consumer lag—alert before meltdown."
+    ],
     "sayIt": "I'd absorb spikes in a durable queue with lag-based autoscaling, bound in-process concurrency, and return 429 at the edge when we're saturated—unbounded memory queues are not backpressure.",
     "traps": [
       "Buffering everything in process memory 'temporarily'.",
@@ -1118,6 +1970,14 @@ window.SBE_DRILL = [
     "domainTitle": "Distributed Systems & Failure Handling",
     "q": "How would you design graceful load shedding during an overload event?",
     "first30s": "Load shedding deliberately drops or degrades lower-value work so the core path stays healthy. I'd shed early, signal clearly, and protect auth'd critical writes first.",
+    "modelAnswer": [
+      "Define priority classes: health/auth/checkout > reads > batch/export/analytics.",
+      "Shed at the edge first (ALB/WAF/rate limits, API gateway) before app CPU melts.",
+      "In-app: when event-loop lag, queue age, or pool wait crosses thresholds, reject low-priority with 503 + Retry-After.",
+      "Degrade features: disable expensive recommendations, serve cached reads, skip non-essential fan-out.",
+      "Keep health checks cheap and independent so the instance isn't killed while shedding correctly.",
+      "Runbook + game day: verify shedding activates and recovers; page on sustained shed rate."
+    ],
     "sayIt": "Graceful shedding means dropping low-priority work early with 503/Retry-After while protecting checkout and auth. I'd trigger on lag and pool wait, not after the process is already thrashing.",
     "traps": [
       "Returning 200 with empty bodies silently (clients don't back off).",
@@ -1130,6 +1990,14 @@ window.SBE_DRILL = [
     "domainTitle": "Distributed Systems & Failure Handling",
     "q": "How would you choose timeouts and retry policies across a chain of dependent services?",
     "first30s": "I work a timeout budget from the outermost SLA inward. Each hop gets a slice; inner calls must finish before the outer deadline, and retries must fit inside the remaining budget.",
+    "modelAnswer": [
+      "Start from client/UX SLA (e.g. 3s p99). Reserve margin for LB/proxy; assign remaining budget down the call graph.",
+      "Set child timeout < parent remaining time; propagate a deadline (header or context) so deep hops abort early.",
+      "Retries: only on idempotent/safe operations; exponential backoff + jitter; cap attempts so total time ≤ budget.",
+      "Avoid retry-on-timeout amplifying load—pair with breakers; prefer fail fast when budget nearly exhausted.",
+      "Align Nginx/ALB idle timeouts with app budgets (ALB > Nginx > app outbound) to avoid opaque 504s.",
+      "Instrument per-hop latency and deadline-exceeded counts; tune from production histograms, not guesses."
+    ],
     "sayIt": "Timeouts are a budget, not a single magic number. I'd slice the outer SLA across hops, propagate deadlines, and only retry when the remaining budget and idempotency allow it.",
     "traps": [
       "Same 30s timeout on every hop with three retries each (minutes of amplification).",
@@ -1142,6 +2010,14 @@ window.SBE_DRILL = [
     "domainTitle": "Distributed Systems & Failure Handling",
     "q": "How would you design a job so work is not lost when a worker process crashes or the EC2 instance is terminated?",
     "first30s": "Durability lives in the queue, not the worker. I'd use visibility timeouts, heartbeats for long jobs, and idempotent handlers so a crash simply redelivers.",
+    "modelAnswer": [
+      "Enqueue durable messages (SQS/Kafka) before acknowledging the user-facing write (or via transactional outbox).",
+      "On receive: extend visibility/heartbeat while working; if the worker dies, visibility expires and another worker gets the message.",
+      "Process idempotently so redelivery after partial work is safe.",
+      "Handle SIGTERM on EC2/ECS: stop taking new jobs, finish or release current message, then exit (deregistration delay covers in-flight).",
+      "Dead-letter after N failures; alert on DLQ depth; never delete a message before durable success.",
+      "Store progress checkpoints for long jobs so resume doesn't restart from zero."
+    ],
     "sayIt": "Jobs survive crashes because the queue owns the work: visibility timeout plus heartbeat, idempotent handlers, and clean SIGTERM that releases the message. Workers are disposable.",
     "traps": [
       "Storing the only copy of work in process memory or a local disk scratch file.",
@@ -1154,6 +2030,14 @@ window.SBE_DRILL = [
     "domainTitle": "Distributed Systems & Failure Handling",
     "q": "How would you design a reliable scheduled job that can safely recover after missed executions?",
     "first30s": "Schedulers miss runs—deploys, outages, clock skew. I design catch-up that is idempotent and cursor-based, not 'run once at cron time and hope'.",
+    "modelAnswer": [
+      "Persist schedule state: last_success_watermark / next_run_at in DB; cron is a trigger, not the source of truth.",
+      "On wake: compute the work window from watermark → now; process in chunks with idempotent keys per window/item.",
+      "Use leader election or a DB lock so multiple instances don't double-run the same catch-up.",
+      "Cap catch-up rate (backpressure) so a long outage doesn't stampede downstream systems.",
+      "Distinguish 'missed' vs 'failed': failed batches go to retry/DLQ; missed windows are enumerated and closed only after success.",
+      "Alert if watermark lag exceeds SLO; support manual replay of a time range."
+    ],
     "sayIt": "A reliable scheduler stores a watermark, catch-up from last success to now with idempotent chunked work, and a lock so only one leader runs. Cron alone is not recovery.",
     "traps": [
       "Assuming the cron always fires and skipping watermark tracking.",
@@ -1166,6 +2050,14 @@ window.SBE_DRILL = [
     "domainTitle": "AWS / Nginx / Networking",
     "q": "How would you design a highly available backend using Route 53, ALB, EC2/ECS, Nginx, PostgreSQL, Redis, and S3?",
     "first30s": "I'd put DNS on Route 53 health-checking an ALB spanning two AZs, run FastAPI behind Nginx on ECS/EC2 in private subnets, and use Multi-AZ RDS, clustered Redis, and S3 for durable objects.",
+    "modelAnswer": [
+      "Route 53 alias to ALB (or failover/weighted if multi-region); health checks on the ALB/target group.",
+      "ALB in public subnets across ≥2 AZs; target group to Nginx+app tasks/instances in private subnets across the same AZs.",
+      "Nginx terminates or proxies to uvicorn/gunicorn; keep config identical via AMI/user-data or container image.",
+      "RDS PostgreSQL Multi-AZ for automatic standby failover; app uses the cluster endpoint with connection retry.",
+      "Redis: ElastiCache Multi-AZ/failover group for sessions/cache; treat cache as disposable, DB as source of truth.",
+      "S3 for media/artifacts (versioning + SSE); no local disk as durable store. IAM task roles, not long-lived keys."
+    ],
     "sayIt": "HA for me is Multi-AZ at every hop: Route 53 to a cross-AZ ALB, private ECS/EC2 with Nginx, RDS Multi-AZ, Redis failover, and S3. One AZ loss should drop capacity, not the product.",
     "traps": [
       "Single-AZ RDS or a lone EC2 'for cost' with no failover story.",
@@ -1178,6 +2070,14 @@ window.SBE_DRILL = [
     "domainTitle": "AWS / Nginx / Networking",
     "q": "How would you decide whether TLS should terminate at the load balancer or Nginx?",
     "first30s": "Default: terminate TLS at the ALB with an ACM certificate for operational simplicity. Re-encrypt to Nginx/app only when compliance requires encryption in transit on the private hop.",
+    "modelAnswer": [
+      "ALB termination: ACM auto-renewal, easy HTTPS listener, HTTP to targets on a private network—good for most SaaS APIs.",
+      "Nginx termination: when you need custom TLS policies, mTLS, or the ALB is TCP/NLB and cannot do HTTP features you need.",
+      "ALB → Nginx re-encrypt (TLS to target): defense-in-depth / regulated environments; costs CPU and cert management on targets.",
+      "Never send cleartext across untrusted networks; inside a locked-down VPC, HTTP to targets is a conscious tradeoff, not ignorance.",
+      "Document trust: apps must still know original proto via X-Forwarded-Proto for redirect/cookie Secure flags.",
+      "Prefer ACM on ALB; if terminating at Nginx, automate cert issuance (ACM PCA, Let's Encrypt carefully) and rotation."
+    ],
     "sayIt": "I'd terminate at the ALB with ACM unless compliance forces TLS to the instance—then re-encrypt to Nginx. Either way I honor X-Forwarded-Proto for secure cookies and redirects.",
     "traps": [
       "Terminating at ALB then assuming the app sees HTTPS without trusting proxy headers.",
@@ -1190,6 +2090,14 @@ window.SBE_DRILL = [
     "domainTitle": "AWS / Nginx / Networking",
     "q": "How would you troubleshoot a request that works by IP address but not through the domain name?",
     "first30s": "That pattern screams DNS, TLS/SNI, or Host-header routing—not the app itself. I'd verify what name resolves to, then what certificate and virtual host that name selects.",
+    "modelAnswer": [
+      "dig/nslookup the hostname; confirm it points at the expected ALB/CloudFront, not a stale IP or wrong account.",
+      "Compare curl -v by IP vs by Host: `curl -vk https://IP -H 'Host: api.example.com'` to separate DNS from vhost.",
+      "Check TLS: certificate CN/SAN must include the hostname; SNI must be sent (modern clients do).",
+      "ALB listener rules and Nginx `server_name` may only match the hostname; default server may 404/wrong cert on bare IP.",
+      "Check Route 53 record type (alias vs A), propagation, and split-horizon/private zones if on VPN.",
+      "Browser-only failures: HSTS, cached DNS, or corporate proxy—verify with curl from the same network."
+    ],
     "sayIt": "If IP works but the domain doesn't, I chase DNS first, then TLS SANs/SNI, then ALB/Nginx Host-based rules. The app is usually fine—the name path isn't.",
     "traps": [
       "Immediately restarting the app or redeploying ECS.",
@@ -1202,6 +2110,14 @@ window.SBE_DRILL = [
     "domainTitle": "AWS / Nginx / Networking",
     "q": "How would you preserve and validate client IP information across a proxy/load-balancer chain?",
     "first30s": "Client IP is only trustworthy if we know how many hops append X-Forwarded-For and we ignore anything clients spoof. I'd configure real_ip at Nginx and trust proxy at FastAPI with an explicit hop count.",
+    "modelAnswer": [
+      "ALB appends the client IP to X-Forwarded-For; the immediate peer IP is the ALB node.",
+      "Nginx: `set_real_ip_from` for VPC CIDRs / ALB; `real_ip_header X-Forwarded-For`; `real_ip_recursive on` as appropriate.",
+      "FastAPI/uvicorn: configure proxy headers / trusted hosts so `request.client` reflects the real client after N trusted hops.",
+      "Never blindly trust the leftmost XFF from the open internet without verifying the chain.",
+      "Prefer ALB's `X-Amzn-Trace-Id` plus structured logs; for rate limits, use the validated client IP.",
+      "Document the hop count in runbooks; mis-counting causes rate limits to key on the ALB IP (one bucket for everyone)."
+    ],
     "sayIt": "I only trust X-Forwarded-For from known load-balancer CIDRs with a fixed hop count. Spoofed client-supplied XFF is ignored so rate limits and audit logs key on the real client.",
     "traps": [
       "Using the first XFF entry blindly (attacker-controlled).",
@@ -1214,6 +2130,14 @@ window.SBE_DRILL = [
     "domainTitle": "AWS / Nginx / Networking",
     "q": "How would you decide between ALB, NLB, and API Gateway for a backend service?",
     "first30s": "ALB for HTTP APIs with path routing and WAF; NLB for raw TCP/ultra-low latency/static private IP; API Gateway when you want managed auth, throttling, and serverless/productized API edges.",
+    "modelAnswer": [
+      "ALB: L7 HTTP/HTTPS, host/path routing, OIDC, WAF, target groups to ECS/EC2/Lambda—default for FastAPI microservices.",
+      "NLB: L4 TCP/UDP, preserves source IP (with caveats), extreme scale/low latency, AWS PrivateLink—good for databases' proxies, gRPC at scale, or non-HTTP.",
+      "API Gateway (HTTP/REST/WebSocket): API keys, usage plans, JWT authorizers, request validation, fan-out to Lambda/HTTP; higher per-request cost, great for public API products.",
+      "Combine: API GW → VPC link → NLB/ALB for private services when you need GW features plus container backends.",
+      "Choose on protocol, routing needs, auth/throttle features, latency budget, and cost model—not fashion.",
+      "For a single internal FastAPI service behind Cognito/custom auth in-app, ALB alone is usually enough."
+    ],
     "sayIt": "ALB for normal HTTP FastAPI, NLB when I need L4/PrivateLink/static IP, API Gateway when the product needs managed API edge features. I pick from requirements, not defaults.",
     "traps": [
       "Using API Gateway for every internal service and paying latency/cost without using its features.",
@@ -1226,6 +2150,14 @@ window.SBE_DRILL = [
     "domainTitle": "AWS / Nginx / Networking",
     "q": "How would you keep application servers private while exposing the system securely to the internet?",
     "first30s": "Public subnet holds only the ALB (and maybe NAT/bastion). App tasks live in private subnets with no public IPs; egress goes through NAT; security groups allow ALB→app only.",
+    "modelAnswer": [
+      "Split VPC: public subnets (ALB, NAT Gateway) and private subnets (ECS/EC2, RDS, Redis).",
+      "Security groups: ALB accepts 443 from world (or CloudFront); app SG accepts only from ALB SG on app port; RDS accepts only from app SG.",
+      "No SSH from 0.0.0.0/0—use SSM Session Manager or a tightly locked bastion.",
+      "NAT Gateway for outbound package mirrors, webhooks, third-party APIs; VPC endpoints for S3/ECR/Secrets to cut NAT cost and exposure.",
+      "WAF on ALB for common exploits/rate rules; Force HTTPS at the listener.",
+      "Private DNS inside VPC for service discovery; never publish private instance IPs in public DNS."
+    ],
     "sayIt": "Internet stops at the ALB. Apps and data stores stay in private subnets with SG chains ALB→app→RDS, egress via NAT or VPC endpoints, and admin access via SSM—not open SSH.",
     "traps": [
       "Assigning public IPs to ECS tasks 'so health checks work' (fix the ALB health check path instead).",
@@ -1238,6 +2170,14 @@ window.SBE_DRILL = [
     "domainTitle": "AWS / Nginx / Networking",
     "q": "How would you design autoscaling for a backend where CPU is not a reliable signal of demand?",
     "first30s": "CPU-idle services still drown—queue lag, in-flight requests, and p99 latency are better signals. I'd publish custom CloudWatch metrics and scale on those with sensible cooldowns.",
+    "modelAnswer": [
+      "Identify the real bottleneck: SQS depth, Kafka lag, active DB connections, request concurrency, event-loop lag.",
+      "Emit custom metrics from the app or queue (ApproximateNumberOfMessagesVisible, consumer lag, concurrent requests).",
+      "Target tracking or step scaling on that metric; keep CPU as a secondary safeguard.",
+      "Scale out early on lag; scale in slowly to avoid thrash; set min capacity for cold-start protection.",
+      "For ECS: scale services on ALB RequestCountPerTarget or custom metrics; ensure deploy + scale policies don't fight.",
+      "Load-test to correlate metric → capacity; alert when scaling hits max and lag still grows (shed load)."
+    ],
     "sayIt": "When CPU lies, I scale on queue lag or concurrent requests via custom CloudWatch metrics, with slow scale-in and a floor capacity. CPU stays a backup signal only.",
     "traps": [
       "Only scaling on CPU for an I/O-bound FastAPI service.",
@@ -1250,6 +2190,14 @@ window.SBE_DRILL = [
     "domainTitle": "AWS / Nginx / Networking",
     "q": "How would you make an EC2-based deployment highly available across Availability Zones?",
     "first30s": "Spread instances across at least two AZs behind a cross-AZ ALB, use an ASG with multi-AZ subnets, and put stateful dependencies on Multi-AZ managed services.",
+    "modelAnswer": [
+      "ASG spanning private subnets in ≥2 AZs; ALB target group with instances in each AZ.",
+      "Capacity balanced: don't put min=1 in a single AZ; use capacity rebalancing / diverse instance types if needed.",
+      "Health checks: ALB HTTP health on /health that verifies critical deps carefully (avoid flapping on blips).",
+      "RDS Multi-AZ, ElastiCache failover, EFS/S3 instead of AZ-local disk for shared assets.",
+      "AMI/Launch Template identical; user-data/cloud-init registers to ALB automatically.",
+      "Test AZ loss: verify remaining AZ can take 100% (or accept degraded capacity with known SLO)."
+    ],
     "sayIt": "Multi-AZ HA means ASG+ALB across subnets, Multi-AZ data stores, and enough spare capacity that losing one AZ still meets SLO. Identical Launch Templates so replacements are boring.",
     "traps": [
       "Two instances in the same AZ thinking that's HA.",
@@ -1262,6 +2210,14 @@ window.SBE_DRILL = [
     "domainTitle": "AWS / Nginx / Networking",
     "q": "How would you design zero-downtime deployment on EC2 behind an ALB?",
     "first30s": "I'd use rolling replace with connection draining: register healthy new instances, deregister old ones, wait deregistration_delay until in-flight requests finish, then terminate.",
+    "modelAnswer": [
+      "Launch new instances from the new AMI/Launch Template; wait until ALB health checks pass.",
+      "Deregister old targets; set deregistration_delay (e.g. 30–120s) ≥ p99 request time + buffer.",
+      "App handles SIGTERM: stop taking new work (or rely on ALB stopping new connections), finish in-flight, close pools.",
+      "For ASG instance refresh / rolling update: set min healthy %, checkpoints, and bake health checks that prove the new version.",
+      "Run dual versions only if migrations are forward-compatible (expand/contract).",
+      "Verify with synthetic traffic during deploy; auto-rollback on health/alarm failure."
+    ],
     "sayIt": "Zero-downtime on EC2+ALB is drain-then-kill: healthy new targets first, deregistration delay covering in-flight p99, and SIGTERM-aware processes. Never terminate before the ALB stops sending traffic.",
     "traps": [
       "ASG terminating instances immediately on refresh without draining.",
@@ -1274,6 +2230,14 @@ window.SBE_DRILL = [
     "domainTitle": "AWS / Nginx / Networking",
     "q": "One AWS Availability Zone fails during peak traffic. What components must fail over and what should you test beforehand?",
     "first30s": "I'd walk the dependency list: ALB nodes, ASG capacity in remaining AZs, RDS failover, Redis failover, and NAT. Game-day those failovers under load before peak season.",
+    "modelAnswer": [
+      "ALB: multi-AZ by design—confirm targets exist in surviving AZs and cross-zone balancing behavior.",
+      "Compute: ASG should launch replacements in healthy AZs; ensure subnet IP capacity and service quotas allow it.",
+      "RDS Multi-AZ: expect brief failover downtime (DNS/connection blip); apps must retry with backoff.",
+      "ElastiCache: failover to replica; expect cache coldness and possible stampede—use request coalescing/soft TTLs.",
+      "NAT Gateway is AZ-specific: apps in a dead AZ lose that NAT; surviving AZ NAT must handle egress or use HA NAT design.",
+      "Game days: simulate AZ impairment, watch error budgets, verify alarms/runbooks, and document capacity headroom (N-1)."
+    ],
     "sayIt": "AZ failure is a capacity and failover event: remaining AZ apps take traffic, RDS/Redis fail over with retries, and NAT/IP capacity must already be sized. I'd prove it with a game day, not a slide.",
     "traps": [
       "Assuming Multi-AZ RDS means zero connection errors (clients must reconnect).",
@@ -1286,6 +2250,14 @@ window.SBE_DRILL = [
     "domainTitle": "Security & Multi-Tenancy",
     "q": "How would you secure a public FastAPI or NestJS API against common abuse and unauthorized access?",
     "first30s": "I'd layer edge controls with app controls: TLS, authn on protected routes, authz per action, rate limits, input validation, and least-privilege DB/IAM—never 'security through obscurity'.",
+    "modelAnswer": [
+      "Terminate TLS at the edge; redirect HTTP; set security headers (HSTS, etc.) appropriately.",
+      "Authenticate with Bearer JWT/session; FastAPI dependencies / Nest guards on every protected route.",
+      "Authorize explicitly (RBAC/ReBAC); deny by default; validate payloads with Pydantic / class-validator.",
+      "Rate-limit by IP and by user/tenant at API GW/WAF and in-app; protect login and expensive endpoints harder.",
+      "CORS allowlist; disable verbose errors in prod; structured audit logs with correlation ids.",
+      "Dependency scanning, secret-free config, and least-privilege IAM for the runtime role."
+    ],
     "sayIt": "Public APIs get defense in depth: TLS, authn, authz, validation, and rate limits at the edge and in the app. Deny by default and never trust client-supplied tenancy or roles.",
     "traps": [
       "Only checking auth on the frontend.",
@@ -1298,6 +2270,14 @@ window.SBE_DRILL = [
     "domainTitle": "Security & Multi-Tenancy",
     "q": "How would you design access-token and refresh-token handling for a large application?",
     "first30s": "Short-lived access tokens for API calls; longer-lived refresh tokens used only at the token endpoint, preferably rotating and stored httpOnly/secure. Access tokens stay small and verifiable.",
+    "modelAnswer": [
+      "Access JWT: 5–15 minutes, signed (RS256/ES256), claims: sub, tenant, roles/scopes, jti, exp.",
+      "Refresh token: opaque or JWT stored server-side (hash in DB), bound to device/session; rotate on every use.",
+      "Browser: refresh in httpOnly Secure SameSite cookie; access in memory (or also cookie with CSRF strategy).",
+      "Mobile/native: secure storage OS APIs; still rotate refresh tokens.",
+      "Resource servers validate access tokens locally (JWKS) without hitting DB each time; revocation via short TTL + denylist for emergencies.",
+      "Separate audiences/issuers for admin vs customer APIs; never put secrets in JWT payloads."
+    ],
     "sayIt": "Short access JWTs plus rotating refresh tokens—refresh only hits the auth service, access is verified via JWKS. Rotation and short TTL limit the blast radius of theft.",
     "traps": [
       "Week-long access tokens in localStorage.",
@@ -1310,6 +2290,14 @@ window.SBE_DRILL = [
     "domainTitle": "Security & Multi-Tenancy",
     "q": "How would you revoke a refresh token or session without forcing every user to log in again?",
     "first30s": "Revoke one session or one token family—not the whole user population. I'd denylist the refresh jti/family and optionally denylist access jtis until their short TTL expires.",
+    "modelAnswer": [
+      "Model sessions: session_id / refresh family_id per device; logout deletes or marks that row revoked.",
+      "On refresh rotation, detect reuse of an old refresh → revoke the entire family (stolen token signal).",
+      "Access tokens: short TTL so revocation is eventual; for emergency, maintain a Redis denylist of jti/user until exp.",
+      "Admin 'logout all devices' revokes all families for the user; current access dies within TTL or denylist.",
+      "Password change / security event triggers global session revoke for that user only.",
+      "Don't rotate signing keys for one user logout—that forces mass re-auth; use key rotation for compromise of the issuer key."
+    ],
     "sayIt": "I revoke at session/family granularity: kill that refresh chain in the DB and denylist access jtis if needed. Short access TTLs mean other users keep working uninterrupted.",
     "traps": [
       "Rotating the global JWT signing key to log out one user.",
@@ -1322,6 +2310,14 @@ window.SBE_DRILL = [
     "domainTitle": "Security & Multi-Tenancy",
     "q": "How would you protect login and password-reset endpoints against brute-force attacks?",
     "first30s": "These endpoints are high-value and unauthenticated. I'd combine rate limits, account lockout/backoff, CAPTCHA after thresholds, constant-time responses, and monitoring—not just a strong password policy.",
+    "modelAnswer": [
+      "Rate-limit by IP and by username/email (Redis counters) with exponential backoff; return generic errors.",
+      "After N failures: temporary lock or CAPTCHA/challenge; alert on distributed spray patterns.",
+      "Password reset: single-use time-limited tokens, rate-limit requests, do not reveal whether an email exists (or use careful anti-enumeration strategy).",
+      "Use Argon2/bcrypt with proper cost; never invent crypto; constant-time compare.",
+      "WAF/API GW rules for known bad bots; optional device fingerprinting for risk-based MFA.",
+      "Log auth failures with correlation; page on spikes; MFA for privileged accounts."
+    ],
     "sayIt": "Brute-force protection is layered rate limits, backoff/lockout, CAPTCHA at thresholds, and safe password-reset tokens—plus MFA for high privilege. Generic errors avoid account enumeration.",
     "traps": [
       "Locking only by IP (easy to bypass with botnets) or only by account (easy DoS of a victim).",
@@ -1334,6 +2330,14 @@ window.SBE_DRILL = [
     "domainTitle": "Security & Multi-Tenancy",
     "q": "How would you enforce tenant isolation so one SaaS customer can never access another customer's records?",
     "first30s": "Tenant identity comes from the verified token, not the request body. Every query and object key includes that tenant_id, with defense-in-depth at the ORM and storage layers.",
+    "modelAnswer": [
+      "Put tenant_id (or org_id) in access-token claims after membership check at login.",
+      "FastAPI dependency injects TenantContext; repositories always filter WHERE tenant_id = :ctx.",
+      "Add DB constraints/RLS (Postgres row-level security) as a backstop so a buggy query still cannot cross tenants.",
+      "Object storage keys prefixed by tenant; IAM/presign scoped to that prefix.",
+      "Forbid client-supplied tenant overrides; admin cross-tenant tools use separate break-glass roles and audit logs.",
+      "Automated tests: attempt cross-tenant GET/PATCH by ID and expect 404/403; include in CI."
+    ],
     "sayIt": "Isolation starts with tenant from the token, then every SQL and S3 key is scoped to it—ideally with Postgres RLS as a seatbelt. Client-sent tenant IDs are never authoritative.",
     "traps": [
       "Looking up by resource UUID alone without tenant predicate.",
@@ -1346,6 +2350,14 @@ window.SBE_DRILL = [
     "domainTitle": "Security & Multi-Tenancy",
     "q": "How would you design authorization when users can have both roles and resource-level permissions?",
     "first30s": "I'd combine RBAC for coarse capabilities with ReBAC/resource ACLs for instance-level checks—evaluate deny-by-default in one policy layer the API always calls.",
+    "modelAnswer": [
+      "RBAC: roles like admin, billing, viewer mapped to permissions (invoice:read).",
+      "ReBAC/ACL: relationships such as user U is editor of document D; check on that resource id.",
+      "Centralize Authorize(action, resource) used by FastAPI dependencies—controllers never ad-hoc if-else forever.",
+      "Support role grant at tenant scope plus per-resource shares; explicit deny if needed.",
+      "Cache permission decisions carefully with invalidation on membership changes.",
+      "Audit who granted what; prefer policy-as-data (CASL, Oso, Cedar, OpenFGA) over scattered checks."
+    ],
     "sayIt": "Roles cover broad capabilities; relationships cover 'can edit this record'. One authorize() entry point on every mutation keeps FastAPI handlers honest and testable.",
     "traps": [
       "Only checking roles and forgetting shared documents outside the role.",
@@ -1358,6 +2370,14 @@ window.SBE_DRILL = [
     "domainTitle": "Security & Multi-Tenancy",
     "q": "How would you securely handle secrets for AWS credentials, database passwords, and third-party API keys?",
     "first30s": "Secrets live in AWS Secrets Manager or SSM Parameter Store, injected at runtime via IAM roles—not baked into images or git. Prefer role assumption over long-lived access keys.",
+    "modelAnswer": [
+      "EC2/ECS/Lambda task roles with least privilege; avoid static AWS keys on servers.",
+      "DB passwords and API keys in Secrets Manager; rotate on a schedule; app refreshes cache on rotation.",
+      "Inject via env from task definition secrets, or fetch at startup with short in-memory cache.",
+      "Separate secrets per environment; deny prod secret IAM to non-prod roles.",
+      "Encrypt at rest (KMS CMKs); audit GetSecretValue via CloudTrail.",
+      "Locally: developer .env gitignored or 1Password/direnv—never commit."
+    ],
     "sayIt": "IAM roles beat access keys; Secrets Manager beats .env in git. Least privilege, rotation, and CloudTrail on secret reads are the baseline.",
     "traps": [
       "Long-lived AWS keys in environment variables committed to the repo.",
@@ -1370,6 +2390,14 @@ window.SBE_DRILL = [
     "domainTitle": "Security & Multi-Tenancy",
     "q": "A secret is accidentally committed to source control. What actions should follow?",
     "first30s": "Treat it as compromised immediately: rotate/revoke first, then remove from git history, then audit usage. .gitignore alone is not remediation.",
+    "modelAnswer": [
+      "Revoke/rotate the secret in the provider (AWS key deactivate, DB password change, API key regenerate) before or while cleaning git.",
+      "Purge from git history (BFG/git filter-repo) and force-protect main; invalidate caches/mirrors/forks.",
+      "Scan CloudTrail/provider logs for unauthorized use during the exposure window.",
+      "Redeploy services with the new secret; confirm old secret fails.",
+      "Add pre-commit secret scanning (gitleaks) and CI blockers; educate the author without blame theater.",
+      "Incident write-up: timeline, blast radius, preventive controls."
+    ],
     "sayIt": "Rotate first—assume the secret is public. Then scrub history, audit access, redeploy, and add scanning so it can't happen silently again.",
     "traps": [
       "Deleting the file in a new commit but leaving history intact with the secret.",
@@ -1382,6 +2410,14 @@ window.SBE_DRILL = [
     "domainTitle": "Security & Multi-Tenancy",
     "q": "How would you protect a webhook endpoint from spoofed or replayed requests?",
     "first30s": "Verify an HMAC signature over the raw body with a shared secret, enforce a timestamp window, and dedupe event IDs so replays fail closed.",
+    "modelAnswer": [
+      "Provider shares a signing secret; compute HMAC-SHA256 over raw body (or signed payload string) and compare with constant-time equals.",
+      "Include timestamp (and optional nonce) in the signed content; reject if skew > 5 minutes.",
+      "Store processed event_id for idempotency; duplicate deliveries become no-ops.",
+      "Use a dedicated FastAPI route that reads raw body before JSON parse so signatures match.",
+      "TLS only; optionally restrict source IPs if the vendor publishes them (defense in depth, not sole control).",
+      "Rotate webhook secrets with dual-secret acceptance during cutover."
+    ],
     "sayIt": "Webhooks need HMAC over the raw body, a tight timestamp window, and event-id dedupe. Without that, anyone who can POST your URL can forge events.",
     "traps": [
       "Verifying against JSON.dumps(parsed) instead of the raw bytes (canonicalization mismatch or bypass).",
@@ -1394,6 +2430,14 @@ window.SBE_DRILL = [
     "domainTitle": "Security & Multi-Tenancy",
     "q": "How would you securely serve private images or documents stored in S3?",
     "first30s": "Keep the bucket private. Authorize in the app, then issue a short-lived presigned URL (or stream via the app/CloudFront signed URLs) scoped to that object.",
+    "modelAnswer": [
+      "Block public access on the bucket; encrypt with SSE-S3/SSE-KMS.",
+      "FastAPI checks authz/tenant ownership of the object metadata in DB.",
+      "Generate presigned GET with 60–300s expiry and minimal permissions; return URL or 302.",
+      "For browsers at scale: CloudFront with signed URLs/cookies and Origin Access Control to S3.",
+      "Never proxy large files through the API unless required for watermarking/audit—presign is cheaper.",
+      "Audit downloads for sensitive docs; use separate prefixes per tenant; virus-scan uploads on ingest."
+    ],
     "sayIt": "Private bucket, authorize in FastAPI, then short-lived presigned GET—or CloudFront signed URLs at scale. No public-read ACLs on customer documents.",
     "traps": [
       "Public-read bucket 'because the app needs to show images'.",
@@ -1405,11 +2449,22 @@ window.SBE_DRILL = [
     "domain": "ownership",
     "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
     "q": "You are given a major new feature and two junior interns. How would you approach, decompose, delegate, review, and deliver it?",
-    "first30s": "I'd own the outcome: clarify success metrics, spike the risky seams, cut vertical slices juniors can finish, and review early for interfaces—not only polish at the end.",
-    "sayIt": "I keep the risky design and integration, give juniors well-bounded slices with contracts, and review early so we don't discover architectural mistakes on merge day.",
+    "first30s": "I'd own the outcome end-to-end: clarify success metrics and non-goals, spike the risky seams myself, cut vertical slices juniors can finish in 1–3 days, and review early for contracts—not only polish at the end.",
+    "modelAnswer": [
+      "Clarify / open: align on users, success metrics, non-goals, and definition of done including observability—because vague epics produce thrash vs a thin written contract that juniors can execute against.",
+      "Spike unknowns myself (authz, data model, external API, migration risk) and publish a short design with FastAPI router shapes, error model, and DTO contracts before assigning implementation.",
+      "Break into vertical slices (endpoint + validation + persistence + tests) sized to 1–3 days; assign juniors clear APIs rather than horizontal layers that block until merge day.",
+      "Tradeoff: pair on the first slice to establish patterns they can copy vs letting them invent architecture—pairing costs a day up front because unsupervised invention costs weeks of rewrite.",
+      "Failure modes: juniors stuck silently >1 day, unsafe concurrency/tenancy slipping through, and 'works on my laptop' without integration—detect with daily unblock sync and CI against shared fixtures.",
+      "Review PRs for correctness, tenancy/security, and operability first; style nits last. I own integration, feature flags, and the production checklist.",
+      "Prevent/ops: track slice cycle time and PR review lag as delivery health; require a dashboard stub and alert placeholder before calling the feature done.",
+      "Close with a game-day or canary checklist I own: rollback path, runbook link, and who pages if error rate or latency SLO burns after launch."
+    ],
+    "sayIt": "I keep risky design and integration, give juniors well-bounded vertical slices with contracts, review early for safety, and own ship/operability so we don't discover architecture mistakes on merge day.",
     "traps": [
-      "Throwing a vague epic at interns and disappearing into meetings.",
-      "Only reviewing style nits while missing broken API contracts."
+      "Throwing a vague epic at interns and disappearing — they invent conflicting designs and you rediscover architecture on merge day.",
+      "Only reviewing style nits while missing broken API contracts — polish hides tenancy and integrity bugs that hit production first.",
+      "Delegating the spike and public API to juniors 'for growth' — irreversible mistakes teach the wrong lesson at customer cost."
     ]
   },
   {
@@ -1417,11 +2472,22 @@ window.SBE_DRILL = [
     "domain": "ownership",
     "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
     "q": "Requirements are ambiguous but the delivery date is fixed. How would you reduce risk before implementation?",
-    "first30s": "I'd timebox discovery, write assumptions as acceptance criteria, propose a thinnest lovable slice, and get a lightweight stakeholder confirm—then build against that contract.",
+    "first30s": "I'd timebox discovery, write assumptions as acceptance criteria, propose the thinnest lovable slice that hits the date, and get a lightweight stakeholder confirm—then build against that contract rather than guessing in code.",
+    "modelAnswer": [
+      "Clarify: list open questions ranked by blast radius (billing rules and schema > button copy) because low-signal polish questions should not block irreversible design.",
+      "Timebox research/spikes in hours, not weeks; convert answers into written assumptions and out-of-scope so silent guesses don't explode in QA week.",
+      "Draft acceptance criteria and share async for lightweight confirm; choose a vertical MVP that hits the date and park nice-to-haves explicitly with owners.",
+      "Tradeoff: start confirmed core now vs freezing until a perfect PRD—paralysis misses the date; blind coding burns rework because assumptions were never checked.",
+      "Bias irreversible decisions (public API, schema) toward expand/contract and versioning rather than one-way tight coupling when data is incomplete.",
+      "Failure modes: stakeholders disagree mid-confirm, residual ambiguity on edge cases, and scope creep disguised as 'clarification'—detect with a decision log and change-cost callouts.",
+      "Prevent/ops: publish a risk register (assumption, owner, confirm-by date) and track open high-blast questions as a delivery metric until closed.",
+      "Monitor residual risk in weekly status as options+impact, not a green status %; alert stakeholders when a confirm-by date slips past the implementation critical path."
+    ],
     "sayIt": "Fixed date plus ambiguity means write assumptions, confirm a thin slice, and protect irreversible decisions. I won't pretend uncertainty away or freeze until a perfect PRD.",
     "traps": [
-      "Building three speculative variants 'just in case'.",
-      "Silent assumptions that explode in QA week."
+      "Building three speculative variants 'just in case' — multiplies work and still leaves the real decision unmade.",
+      "Silent assumptions that explode in QA week — rework lands on the critical path with no stakeholder ownership of the miss.",
+      "Treating status as percent complete while high-blast questions remain open — hides schedule risk until it's too late to cut scope."
     ]
   },
   {
@@ -1429,11 +2495,22 @@ window.SBE_DRILL = [
     "domain": "ownership",
     "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
     "q": "How would you break a large feature into tasks that junior developers can implement safely and independently?",
-    "first30s": "Independence comes from stable contracts and vertical slices. I'd publish API/DB interfaces first, then tasks that each deliver a testable piece without needing to invent cross-cutting design.",
+    "first30s": "Independence comes from stable contracts and vertical slices. I'd publish API/DB interfaces first, then tasks that each deliver a testable piece without inventing cross-cutting design.",
+    "modelAnswer": [
+      "Define boundaries first: routes, DTOs, table ownership, events—checked into a short design doc or OpenAPI stub because independence without interfaces is parallel confusion.",
+      "Cut vertical slices (endpoint + validation + persistence + test) rather than horizontal 'all DB' / 'all API' layers that serialize on merge day.",
+      "Size tasks to 1–3 days with fixtures, acceptance checks, and a named reviewer; sequence foundations (expand migrate) → core path → edges → polish.",
+      "Tradeoff: more up-front contract work vs faster parallel coding—contracts cost a day because missing them costs integration week and rewrite.",
+      "Provide golden-path examples in-repo; forbid inventing new auth/tenancy patterns—failure mode is every junior creating a bespoke security model.",
+      "Shared migrations and cross-slice dependencies get a single owner and expand/contract order so two people don't fight the same schema PR.",
+      "Prevent/ops: feature flag or trunk integration so independent work merges continuously; track blocked-task age and integration failures as process metrics.",
+      "Add contract tests in CI and a mid-flight integration spike before either side is 'done'; alert on contract-test failures as a merge blocker."
+    ],
     "sayIt": "Juniors stay safe when contracts exist first and tasks are vertical, small, and copy an established pattern. Independence without interfaces is just parallel confusion.",
     "traps": [
-      "Horizontal tasks that block on each other until the last day.",
-      "Tasks that require inventing the auth model from scratch."
+      "Horizontal tasks that block on each other until the last day — looks parallel until integration reveals nothing works together.",
+      "Tasks that require inventing the auth model from scratch — juniors guess tenancy and ship latent data leaks.",
+      "No shared fixture or contract test — drift stays invisible until a painful end-to-end demo."
     ]
   },
   {
@@ -1441,11 +2518,22 @@ window.SBE_DRILL = [
     "domain": "ownership",
     "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
     "q": "What parts of the feature would you own personally and what would you delegate?",
-    "first30s": "I own risk, contracts, and production readiness. I delegate well-scoped implementation inside those rails and still review the dangerous edges.",
-    "sayIt": "I keep the irreversible and high-blast-radius decisions, delegate patterned implementation, and co-own anything that can corrupt data or leak tenants. Outcome stays on me.",
+    "first30s": "I own risk, contracts, and production readiness. I delegate well-scoped implementation inside those rails and still review the dangerous edges—outcome stays with me even when I don't type every line.",
+    "modelAnswer": [
+      "Own personally: problem framing, architecture spike, public API/schema, security/tenancy model, rollout/rollback plan—because these are high blast-radius and often irreversible.",
+      "Own: data migration strategy, failure modes, metrics/alerts, incident runbook, and release checklist; operable delivery is not an ops handoff after demo.",
+      "Delegate: CRUD handlers following patterns, UI wiring, happy-path tests, docs polish—work with clear rails and copyable examples.",
+      "Co-own or pair: tricky queries, concurrency, idempotency, payments—tradeoff is growth opportunity vs silent data corruption; pair when the failure mode is irreversible.",
+      "Never fully delegate 'figure out authz' or 'pick the consistency model' without oversight—failure mode is a polite PR that leaks tenants.",
+      "Stay available as blocker-remover; ownership means outcome and risk communication, not being the typing bottleneck on every file.",
+      "Prevent/ops: publish an ownership map (RACI-lite) for contracts, migrations, and on-call; track decision log entries for irreversible choices.",
+      "Measure review coverage on dangerous edges and require runbook + SLO stub before merge of the last slice; debt backlog age for anything temporarily delegated without rails."
+    ],
+    "sayIt": "I keep irreversible and high-blast-radius decisions, delegate patterned implementation, and co-own anything that can corrupt data or leak tenants. Outcome stays on me.",
     "traps": [
-      "Delegating everything then blaming juniors for architectural failure.",
-      "Owning every line and becoming the bottleneck."
+      "Delegating everything then blaming juniors for architectural failure — ownership theater; the outcome was still yours.",
+      "Owning every line and becoming the bottleneck — team throughput collapses and nobody grows.",
+      "Delegating authz 'temporarily' without a review gate — temporary becomes the production security model."
     ]
   },
   {
@@ -1453,11 +2541,22 @@ window.SBE_DRILL = [
     "domain": "ownership",
     "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
     "q": "A junior engineer proposes an architecture you believe will fail under scale. How would you handle the situation?",
-    "first30s": "I'd coach with evidence, not authority theater: pressure-test their design against concrete failure modes, offer a simpler alternative, and leave them ownership of the improved approach.",
+    "first30s": "I'd coach with evidence, not authority theater: pressure-test their design against concrete failure modes, offer a minimal fix that preserves their good ideas, and leave them authorship of the improved approach.",
+    "modelAnswer": [
+      "Ask them to walk peak load, failure, multi-tenant, and retry paths—teach via questions so the critique lands as engineering, not ego.",
+      "Show a concrete scenario (N+1, single-node state, unbounded queue, hot partition) where the proposal breaks, with rough numbers when possible.",
+      "Propose a minimal change that keeps their good ideas but removes the hazard—tradeoff: rewrite their design vs surgical fix; prefer surgical because ownership and learning stick.",
+      "If time allows, spike both for a day with metrics—data beats opinion when the disagreement is capacity, not safety.",
+      "Failure modes of bad coaching: public shutdown that kills initiative, or accepting a known-bad design to 'be nice' that later pages the team.",
+      "Document the decision and rationale in a short ADR so the team learns the pattern; escalate only if they insist on a clearly unsafe path after coaching.",
+      "Prevent/ops: add a lightweight design review checklist for scale/failure modes before large PRs; track design-review follow-through as a quality metric.",
+      "If the spike ships, monitor the chosen SLI (p95 latency, queue age, error rate) in canary and keep a rollback; schedule a game-day for the feared failure mode."
+    ],
     "sayIt": "I challenge with scenarios and numbers, not ego. We converge on a design that survives load, and the junior still feels authorship of the fix.",
     "traps": [
-      "Publicly shutting them down without teaching.",
-      "Accepting a known-bad design to 'be nice'."
+      "Publicly shutting them down without teaching — they stop proposing, and you lose future signal.",
+      "Accepting a known-bad design to 'be nice' — kindness that ships an outage is not mentorship.",
+      "Winning the argument on credentials alone without numbers — juniors comply resentfully and repeat the mistake elsewhere."
     ]
   },
   {
@@ -1465,11 +2564,22 @@ window.SBE_DRILL = [
     "domain": "ownership",
     "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
     "q": "The ideal architecture needs six weeks but the business needs something in two weeks. How would you decide what to ship?",
-    "first30s": "I'd separate must-hold invariants from nice architecture. Ship a two-week vertical slice that is safe and measurable, with an explicit backlog for the remaining four weeks.",
+    "first30s": "I'd separate must-hold invariants from nice architecture. Ship a two-week vertical slice that is safe and measurable, with an explicit backlog and dates for the remaining four weeks—not a fake full-platform promise.",
+    "modelAnswer": [
+      "Name non-negotiables first: security, tenancy, data integrity, rollback—never trade these away because temporary authz holes become permanent breach surface.",
+      "Cut scope: one persona, one path, feature flags, documented manual ops if needed—value now vs generality later.",
+      "Choose reversible shortcuts (module in monolith now, extract later) over irreversible ones (bad public API, wrong tenancy key)—because expand/contract beats rewrite.",
+      "Tradeoff: 2-week safe slice + dated debt vs promising the six-week design in two weeks—the latter fails both trust and quality when reality hits.",
+      "Write the debt list with owners and repayment dates; get explicit PM buy-in that week-3+ work is scheduled, not hoped.",
+      "Instrument the MVP so metrics tell whether the six-week design is still justified—learn before overbuilding.",
+      "Failure modes: 'temporary' path living a year, silent quality cuts, and fake commitments—detect via debt backlog age and SLO error budget on the thin path.",
+      "Prevent/ops: track debt items with owners/dates; alert when repayment slips; canary the slice and keep a runbook for the manual-ops fallback."
+    ],
     "sayIt": "Two weeks means a safe thin slice plus honest debt—not a fragile full vision. Invariants stay; polish and generality wait with a dated plan.",
     "traps": [
-      "Heroically promising the six-week design in two weeks.",
-      "Shipping without authz 'temporary' that becomes permanent."
+      "Heroically promising the six-week design in two weeks — trust collapses when the fake plan slips.",
+      "Shipping without authz 'temporary' that becomes permanent — the shortcut becomes the breach.",
+      "Leaving debt with no owner or date — temporary architecture becomes the forever architecture."
     ]
   },
   {
@@ -1477,11 +2587,22 @@ window.SBE_DRILL = [
     "domain": "ownership",
     "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
     "q": "A feature is almost complete when a major requirement changes. How would you reassess scope and implementation?",
-    "first30s": "I'd stop and re-estimate against the new requirement: what salvage, what rewrite, what date moves. Then propose options with cost—don't silently bolt incompatible behavior on.",
+    "first30s": "I'd stop and re-estimate against the new requirement: what salvage, what rewrite, what date moves. Then propose options with cost—don't silently bolt incompatible behavior onto a half-finished design.",
+    "modelAnswer": [
+      "Clarify whether the old requirement is obsolete or concurrent; write the new acceptance criteria before touching code so thrash has a target.",
+      "Map impact: API contracts, schema, UX, migrations already shipped, and feature flags already on—know what is reversible vs already in prod.",
+      "Options with calendar cost: (A) adapt current design, (B) dual behavior behind flags, (C) cut and restart a thin new slice—tradeoff speed vs cleanliness depends on how entangled the old path is.",
+      "Protect production: if half-shipped schema conflicts, use expand/contract; avoid dual-write mess without an explicit cutover and backfill plan.",
+      "Failure modes: silent night heroics absorbing infinite scope, dead code paths for the old requirement, and date theater without resetting tests.",
+      "Reset acceptance tests and communicate date/risk to stakeholders immediately with a decision log entry—don't surprise them at launch.",
+      "Prevent/ops: require a change-impact checklist when requirements flip late; track change-request lead time and escaped rework as planning metrics.",
+      "Monitor the dual-path period with explicit metrics/alerts per behavior flag; schedule deletion of the obsolete path with an owner and date."
+    ],
     "sayIt": "Mid-flight change means pause, impact map, and explicit options with dates. I won't duct-tape incompatible requirements and call it done.",
     "traps": [
-      "Quietly stretching nights to absorb infinite scope.",
-      "Leaving dead code paths for the old requirement without flags or deletion plan."
+      "Quietly stretching nights to absorb infinite scope — hides the real cost and burns the team.",
+      "Leaving dead code paths for the old requirement without flags or deletion plan — latent bugs and confusion forever.",
+      "Bolting incompatible behavior onto the old API without versioning — clients break in ways you can't roll back cleanly."
     ]
   },
   {
@@ -1489,11 +2610,22 @@ window.SBE_DRILL = [
     "domain": "ownership",
     "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
     "q": "Two engineers are building related components and their APIs are drifting apart. How would you prevent integration problems?",
-    "first30s": "I'd freeze a shared contract early—OpenAPI/JSON Schema or proto—plus a consumer-driven test. Drift dies when the handshake is executable, not tribal knowledge.",
+    "first30s": "I'd freeze a shared contract early—OpenAPI/JSON Schema or proto—plus a consumer-driven or schema test in CI. Drift dies when the handshake is executable, not tribal knowledge.",
+    "modelAnswer": [
+      "Agree on request/response shapes, error model, and idempotency keys in a short design review before either side deep-implements.",
+      "Check in an OpenAPI stub or shared package; generate clients if possible so types are single-sourced rather than verbally synced.",
+      "Add contract tests in CI (schema validation or Pact-style) so unilateral changes fail the build—because standup agreements don't enforce themselves.",
+      "Tradeoff: early contract freeze vs maximum coding freedom—freeze the handshake because late freedom creates integration week chaos.",
+      "Schedule a mid-flight integration spike before either side is 'done'; failure mode is waiting for merge day for the first end-to-end call.",
+      "Own the boundary as senior: breaking changes require versioning or expand/contract; document decisions in the PR/ADR.",
+      "Prevent/ops: daily 10-minute sync while the interface is soft; track contract-test failures and integration bug escape rate as process metrics.",
+      "Alert on contract CI failures as merge blockers; after GA, monitor producer/consumer error rates and schema skew dashboards."
+    ],
     "sayIt": "Prevent drift with a checked-in contract and CI that fails when either side changes it unilaterally. Integration week should be boring.",
     "traps": [
-      "Waiting until merge day to try the first end-to-end call.",
-      "Verbal agreements in standup with no schema artifact."
+      "Waiting until merge day to try the first end-to-end call — discovers weeks of drift when calendar pressure peaks.",
+      "Verbal agreements in standup with no schema artifact — memory is not a contract.",
+      "Allowing either side to 'just add a field' without versioning — silent producer/consumer skew in production."
     ]
   },
   {
@@ -1501,11 +2633,22 @@ window.SBE_DRILL = [
     "domain": "ownership",
     "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
     "q": "A production bug is discovered just before release. How would you decide whether to delay the release or proceed?",
-    "first30s": "I'd classify severity and blast radius, check for workarounds and rollback confidence, then make an explicit go/no-go with the PM—not a vibes decision.",
+    "first30s": "I'd classify severity and blast radius, check for workarounds and rollback confidence, then make an explicit go/no-go with the PM—not a vibes decision or a launch-party schedule.",
+    "modelAnswer": [
+      "Severity ladder: data loss / security / PII > major wrong results > degraded UX > cosmetic—because not all bugs deserve the same delay cost.",
+      "Blast radius: percent of users, paying tenants, irreversible side effects, exploitability if security-related.",
+      "Mitigations: feature flag off, config kill switch, hotfix in hours, manual workaround—proceed only if mitigated and monitored.",
+      "Tradeoff: delay vs ship-with-mitigation—delay when integrity/security is at risk; ship when severity is low and rollback is clean, because always-delay destroys date trust.",
+      "Release mechanics: can we roll back cleanly? Are migrations forward-only dangerous? Expand/contract unfinished = higher delay bias.",
+      "Failure modes: launching a known Sev-1 behind a symbolic date, or delaying trivial UI bugs and training the org that dates are fake.",
+      "Record the go/no-go in a decision log with owner; schedule the fix; communicate the new time if delayed.",
+      "Prevent/ops: require severity × blast × workaround × rollback checklist in the release runbook; alert on the bug's symptom SLI during/after launch if you proceed mitigated."
+    ],
     "sayIt": "Ship-or-delay is risk math: severity, blast radius, workaround, and rollback. I won't launch a known data-corrupting bug to hit a symbolic date.",
     "traps": [
-      "Always ship because 'we can patch tomorrow'.",
-      "Always delay for trivial UI bugs and destroying trust in dates."
+      "Always ship because 'we can patch tomorrow' — tomorrow's patch can't undo corrupted data.",
+      "Always delay for trivial UI bugs — destroys trust in dates and teaches teams to sandbag.",
+      "Skipping a written go/no-go — nobody owns the residual risk when production pages."
     ]
   },
   {
@@ -1514,10 +2657,987 @@ window.SBE_DRILL = [
     "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
     "q": "How would you ensure a feature is operable in production, not just functionally correct in development?",
     "first30s": "Done means operable: golden signals, actionable alerts, a runbook, and a rollback path. I'd bake those into the definition of done before calling the feature complete.",
+    "modelAnswer": [
+      "Define SLIs/SLOs for the feature (latency, error rate, lag) and dashboards from day one—because a demo on empty staging data is not production evidence.",
+      "Emit structured logs/metrics/traces with correlation ids on success and failure paths; include tenant/request identity safely.",
+      "Alert on symptoms users feel (burn rate, queue age, error budget), not only CPU; every alert links a runbook with mitigation steps.",
+      "Document failure modes: dependency down, poison message, bad deploy, migration partial—tradeoff investing in runbooks now vs paging without a playbook later.",
+      "Ship behind a flag; verify in canary/prod with synthetic checks; know how to roll back or migrate safely (expand/contract).",
+      "Load-test critical paths; confirm indexes and timeouts match real traffic—failure mode is QA-green then production timeout storms.",
+      "Prevent/ops: definition-of-done gate requires dashboard + alert + runbook URL + rollback owner before merge of 'done'.",
+      "Game-day the top failure mode; monitor SLO burn after launch and schedule a follow-up on alert noise within a week."
+    ],
     "sayIt": "A feature isn't done until it has metrics, alerts, and a runbook. Functional demos in dev don't survive contact with production dependencies and real concurrency.",
     "traps": [
-      "Calling done when QA passed on staging with empty data.",
-      "Alerts with no owner or runbook (pages that teach nothing)."
+      "Calling done when QA passed on staging with empty data — production concurrency and cardinality are the real test.",
+      "Alerts with no owner or runbook — pages that teach nothing burn the on-call and train people to ignore them.",
+      "Shipping without a flag or rollback story — the only recovery is a risky forward fix under incident pressure."
+    ]
+  },
+  {
+    "id": "d12-q11",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "How do you define ownership for a backend service, and what do you do when a production problem has no clear owner?",
+    "first30s": "Ownership means outcomes for a service's reliability, changes, and customer impact—not just who last merged. When nobody owns a production problem, I temporarily take incident command, restore service, then fix the ownership gap so it cannot recur.",
+    "modelAnswer": [
+      "Define ownership as: who can change it, who gets paged, who accepts risk tradeoffs, and who owes the runbook/SLO—not merely the original author of the repo.",
+      "Publish a service catalog entry: purpose, tier, on-call, deploy path, dependencies, and escalation—because tribal knowledge fails at 2am.",
+      "When a problem has no clear owner: declare incident commander, mitigate first, then assign a temporary DRI for the follow-up—never leave a Sev floating in Slack.",
+      "Tradeoff: take temporary ownership yourself vs escalate immediately to a director—take it when you can mitigate; escalate when blast radius or cross-team authority exceeds your reach.",
+      "Failure modes: 'everyone owns it' means nobody owns it; orphan services with no on-call; and silent handoffs after reorgs that leave pages unanswered.",
+      "After mitigate: write a short ownership RFC—primary team, backup, and what 'good' looks like for SLO and change management.",
+      "Prevent/ops: track services missing owners or stale on-call rotations as a reliability metric; alert on pages with no acknowledged commander within N minutes.",
+      "Monitor incident follow-up rate for orphaned services; game-day ownership gaps; keep a decision log for any permanent reassignment."
+    ],
+    "sayIt": "Service ownership is outcomes plus on-call plus SLO—not git blame. Orphan incidents get a temporary DRI immediately, then a permanent owner so the next page isn't a scavenger hunt.",
+    "traps": [
+      "Assuming the last committer owns production — authorship ≠ on-call accountability when the person left the team.",
+      "Leaving 'no owner' threads open overnight — customer impact continues while everyone waits for someone else.",
+      "Assigning ownership without SLO or runbook — a name in a wiki without operability is ownership theater."
+    ]
+  },
+  {
+    "id": "d12-q12",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "Two stakeholders give conflicting requirements, or Product asks for a complex feature when a simpler solution may solve the real problem. How do you handle it?",
+    "first30s": "I'd reframe to the underlying user/job outcome, surface the conflict explicitly with options and costs, and drive a decision—not quietly build both or over-engineer a complex feature when a simpler path meets the real need.",
+    "modelAnswer": [
+      "Clarify the job-to-be-done and success metric behind each ask—because conflicting features often share one outcome that a simpler design can hit.",
+      "Write both requirements side by side with incompatibilities, blast radius, and calendar cost; make the conflict visible rather than political.",
+      "Propose options: (A) simpler solution that tests the hypothesis, (B) full complex feature, (C) sequenced A→B—tradeoff speed-to-learning vs complete vision.",
+      "When Product pushes complex: ask what decision the complexity enables; if none, recommend the thin path with instrumentation to learn.",
+      "Failure modes: building both in secret, optimizing for the loudest stakeholder, and shipping complexity that solves the wrong problem.",
+      "Facilitate a timeboxed decision meeting with a written recommendation; if deadlock persists, escalate with the options doc—not vague frustration.",
+      "Prevent/ops: keep a decision log for conflicting asks; track how often 'complex' ships without a validating metric.",
+      "Instrument the simpler path's outcome metric and alert if it fails the hypothesis early so the complex follow-up is evidence-based, not opinion."
+    ],
+    "sayIt": "Conflicts get a written options doc tied to the real user outcome. I bias to the simplest path that learns fast, and escalate with costs when stakeholders stay incompatible.",
+    "traps": [
+      "Quietly implementing both requirements — doubles cost and still leaves strategy undecided.",
+      "Defaulting to the most complex design to please everyone — complexity without validated need becomes permanent debt.",
+      "Avoiding the conflict conversation — schedule slips while engineers guess which stakeholder will win."
+    ]
+  },
+  {
+    "id": "d12-q13",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "You are given a six-month backend initiative. How would you break it into milestones, find the critical path, and let engineers work in parallel safely?",
+    "first30s": "I'd define outcome milestones with demos, map dependencies to find the critical path, freeze contracts early for parallel workstreams, and keep integration continuous so month six isn't a big-bang merge.",
+    "modelAnswer": [
+      "Start from outcomes: 4–6 milestones each with a demoable vertical slice and success metric—not a six-month Gantt of tasks that never ships value.",
+      "Dependency map: schema, public APIs, shared libraries, and cross-team asks; the longest dependency chain is the critical path you protect weekly.",
+      "Freeze contracts on the critical path first (OpenAPI, events, tenancy model) so parallel teams aren't inventing incompatible shapes.",
+      "Tradeoff: more sequencing on foundations vs maximum parallel coding day one—sequence the irreversible pieces because false parallelism creates rewrite month.",
+      "Staff parallel streams behind those contracts with clear owners; shared migrations get a single DRI and expand/contract rules.",
+      "Failure modes: milestone theater without integration, critical-path ignorance, and parallel streams drifting until a painful integration month.",
+      "Prevent/ops: weekly critical-path review; track milestone slip, blocked dependency age, and contract-test health as delivery metrics.",
+      "Require mid-milestone integration spikes and canary criteria per milestone; alert when blocked external dependency age exceeds the buffer on the critical path."
+    ],
+    "sayIt": "Six months works when milestones are outcomes, the critical path is explicit, and contracts unlock safe parallelism. I won't celebrate six parallel tracks that only meet in month six.",
+    "traps": [
+      "Planning only tasks with no outcome milestones — busy for six months without a shippable narrative.",
+      "Ignoring the critical path while staffing easy parallel work — the long pole still determines the date.",
+      "No contract freeze — parallel engineers produce three APIs for one idea."
+    ]
+  },
+  {
+    "id": "d12-q14",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "You committed to four weeks and realize at week two it will take eight. How do you communicate risk and recover the project?",
+    "first30s": "I'd stop status-percentage theater immediately: show evidence for the new estimate, present options (cut scope / add help / move date), recommend one, and drive a decision within a day—then rebuild the plan with a recovery milestone.",
+    "modelAnswer": [
+      "Surface early with facts: what changed (unknowns discovered, dependency slip, underestimation), remaining work, and confidence—not a surprising week-four apology.",
+      "Replace '% done' with remaining effort, critical-path items, and risks; executives need options, not optimism.",
+      "Options: (A) cut scope to original date, (B) add constrained help on non-critical path, (C) move date—tradeoff customer value vs quality vs calendar.",
+      "Recommend one option with rationale; ask for an explicit decision the same day so the team isn't thrashing.",
+      "Failure modes: hoping to catch up with nights, hiding risk until demo week, and adding people to the critical path without onboarding buffer (Brooks).",
+      "Rebuild the plan: new milestone, kill list, and ownership; write a short decision log entry for trust repair.",
+      "Prevent/ops: track estimate-vs-actual and early-risk-raise rate as delivery health; require mid-point risk reviews on multi-week commits.",
+      "Monitor recovery with burndown on remaining critical-path items and alert if the new buffer burns faster than planned."
+    ],
+    "sayIt": "Week-two honesty with options beats week-four surprise. I communicate remaining work and recommend cut/date/help—then execute the decided recovery plan.",
+    "traps": [
+      "Hoping nights will close a 4-week gap — burnout hides the miss until quality and people break.",
+      "Reporting green status % while critical path doubled — trains leadership to distrust engineering.",
+      "Adding unonboarded people to the critical path — communication overhead can slow the recovery."
+    ]
+  },
+  {
+    "id": "d12-q15",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "Facing an impossible deadline, when would you reduce scope or accept technical debt—and how do you ensure the debt is repaid?",
+    "first30s": "I'd cut scope first when the outcome still holds; accept debt only on reversible shortcuts with an owner, metric, and repayment date—never on security, tenancy, or integrity. Untracked debt is just a future outage.",
+    "modelAnswer": [
+      "Prefer scope reduction that preserves the user outcome over silent quality cuts—because missing a persona is recoverable; missing authz is not.",
+      "Accept debt when: reversible (module boundary, manual ops, weaker caching), time-boxed, and the deadline is truly immovable after options review.",
+      "Refuse debt when: security/tenancy/data integrity, irreversible public API mistakes, or no owner for repayment—tradeoff shipping vs sleeping through a breach.",
+      "Write each debt item: description, risk, owner, repayment date, and the metric that shows it's still hurting.",
+      "Failure modes: 'temporary' forever, debt without budget, and scope not actually cut while debt piles up.",
+      "Get explicit product/eng agreement that repayment is scheduled work—not a wish after launch parties.",
+      "Prevent/ops: maintain a debt backlog with age and risk tags; alert when repayment dates slip; review debt age in planning.",
+      "Tie repayment to an SLO or incident follow-up when debt is reliability-related; game-day the risky shortcut before it becomes unspoken architecture."
+    ],
+    "sayIt": "Impossible deadlines get scope cuts first; debt only when reversible, owned, dated, and never on integrity. Repayment is scheduled work with a metric—not a sticky note.",
+    "traps": [
+      "Accepting integrity debt to hit a symbolic date — the outage cost dwarfs the deadline win.",
+      "Logging debt in chat with no backlog entry — repayment never enters a sprint.",
+      "Cutting quality silently instead of negotiating scope — stakeholders think the full feature shipped safely."
+    ]
+  },
+  {
+    "id": "d12-q16",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "How do you make an important technical decision when data is incomplete, and which decisions must be reversible versus reviewed broadly?",
+    "first30s": "I'd timebox gathering the highest-blast evidence, prefer reversible designs, write the decision with assumptions, and escalate broad review only for irreversible high-blast choices—not every bikeshed.",
+    "modelAnswer": [
+      "Separate decisions by reversibility and blast radius: public API/schema/tenancy need broad review; internal module shape can be reversible and local.",
+      "Timebox evidence: spike, sample metrics, competitor constraints—hours to a few days, not infinite analysis paralysis.",
+      "When data remains incomplete: choose expand/contract, feature flags, and interfaces that allow migration—because vs locking a one-way door.",
+      "Write an ADR-lite: context, options, decision, assumptions, revisit triggers—so the team can reverse when evidence arrives.",
+      "Tradeoff: wait for perfect data vs decide-and-instrument—waiting misses the date; deciding without revisit criteria creates dogma.",
+      "Failure modes: irreversible choice made in a hallway, broad review on trivial choices (slow), and no instrumentation to invalidate assumptions.",
+      "Prevent/ops: classify decisions (reversible/local vs irreversible/broad); track decision log completeness for high-blast items.",
+      "Monitor the assumption's validating metric after ship; schedule a revisit date; alert if the reversible path's error budget burns and forces the broader redesign early."
+    ],
+    "sayIt": "Incomplete data means bias to reversible choices, write assumptions, and instrument to learn. Broad review is for irreversible blast radius—not for every naming debate.",
+    "traps": [
+      "Making irreversible schema/API calls in a private chat — the org inherits a hallway decision.",
+      "Broad-reviewing every trivial choice — decision latency kills delivery while risk stays low.",
+      "Deciding without a revisit metric — assumptions calcify into unexamined architecture."
+    ]
+  },
+  {
+    "id": "d12-q17",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "You disagree with a senior engineer, your manager, or a product manager on approach. How do you push back, and when do you disagree-and-commit?",
+    "first30s": "I'd push back with a crisp options write-up tied to risk and outcomes, seek a decision owner, then disagree-and-commit when the choice is reversible and safe—escalating only for irreversible safety or integrity risk.",
+    "modelAnswer": [
+      "Push back privately first with evidence: failure mode, blast radius, cost, and an alternative—because vs debating personalities in a crowd.",
+      "Tailor altitude: with PM emphasize user/risk/date; with manager emphasize team capacity and operability; with senior eng emphasize mechanisms and failure modes.",
+      "Ask explicitly who decides; document your recommendation in a short note so dissent is recorded without theater.",
+      "Disagree-and-commit when: decision is reversible, safety/integrity intact, and further debate burns more value than the difference—then execute fully, not passively.",
+      "Escalate when: data loss, security, compliance, or irreversible public contract risk—silence is not loyalty when customers break.",
+      "Failure modes: endless arguing after a decision, quiet sabotage, or premature commit on a Sev-1 hazard.",
+      "Prevent/ops: use a decision log for contested calls; track how often dissent was recorded then validated by later incidents.",
+      "After commit, monitor the agreed success metric; if the feared failure mode appears, reopen with data rather than 'I told you so' politics."
+    ],
+    "sayIt": "I push with written options and risk, then disagree-and-commit on reversible safe calls. I escalate—not sulk—when integrity or irreversible blast radius is on the line.",
+    "traps": [
+      "Publicly undermining a decided approach — destroys trust and still doesn't change the decision cleanly.",
+      "Disagree-and-commit on a known data-corrupting design — commitment is not an excuse for negligence.",
+      "Never committing after losing a debate — the team pays a tax of half-hearted execution."
+    ]
+  },
+  {
+    "id": "d12-q18",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "Your project needs changes from other teams and you are blocked. How do you coordinate multi-team delivery and unblock without escalating prematurely?",
+    "first30s": "I'd make the dependency explicit with a contract, date, and owner; offer to reduce their work with a PR or stub; create a parallel path; and escalate only with a written impact timeline after good-faith unblocking attempts.",
+    "modelAnswer": [
+      "Name the dependency early: what you need, acceptance criteria, and the date it hits your critical path—surprises are what force premature escalation.",
+      "Propose the smallest change (API field, event, permission) and offer a draft PR or OpenAPI stub to lower their cost of helping.",
+      "Build a parallel path: mock/stub, feature flag, or degraded mode so your team keeps moving while waiting—because vs idle until they free up.",
+      "Tradeoff: wait vs temporary workaround—workaround if reversible; wait if their contract is the irreversible source of truth.",
+      "Cadence: short written sync, shared ticket with SLA, and a single DRI on each side; avoid drive-by Slack pings as the only plan.",
+      "Failure modes: escalating on day one, silent waiting until demo week, and integrating against an unstable unofficial API.",
+      "Escalate with facts: attempts made, impact to date/customers, and asked decision—managers unblock systems, not feelings.",
+      "Prevent/ops: track external blocked-age and dependency SLA miss rate; alert when a critical dependency sits unacknowledged past the agreed response window."
+    ],
+    "sayIt": "Multi-team delivery needs explicit contracts, a parallel path, and escalation with an impact timeline—not early panic or silent hope. I try to make helping cheap before I pull rank.",
+    "traps": [
+      "Escalating before offering a concrete, small ask — burns political capital and looks like blame.",
+      "Waiting silently until the demo — your critical path was invisible to the other team.",
+      "Building on an unofficial undocumented endpoint — the 'unblock' becomes a production break when they change it."
+    ]
+  },
+  {
+    "id": "d12-q19",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "How do you explain an engineering trade-off or technical debt to a non-technical stakeholder who wants it 'done quickly'?",
+    "first30s": "I'd translate to user and business outcomes: risk, time-to-value, and cost of delay—using options with calendar impact, not jargon. 'Done quickly' becomes which outcome they want now versus what breaks later.",
+    "modelAnswer": [
+      "Drop implementation jargon; speak in user impact, revenue/risk, and time—because vs explaining B-trees to someone who asked for a date.",
+      "Offer 2–3 options with outcomes: ship thin now, ship durable in N weeks, or ship thin now + scheduled repayment—make the tradeoff choosable.",
+      "Quantify roughly: incident likelihood, support load, or blocked future features if we cut the unsafe corner.",
+      "Tradeoff framing: speed now vs rework/outage later; invite them to pick consciously rather than inheriting a silent cut.",
+      "Failure modes: saying 'no' without options, drowning them in tech detail, or agreeing to unsafe 'quick' and blaming them later.",
+      "Agree on a written choice and the repayment/scope cut; confirm what 'done' means in their language (user story + operable).",
+      "Prevent/ops: keep a one-page tradeoff template (options, risks, dates); track how often quick paths create incident follow-ups.",
+      "After ship, share a simple metric (error rate, time-to-restore, debt age) so future 'quick' debates are evidence-based."
+    ],
+    "sayIt": "Non-technical stakeholders get options in outcome language—what users feel and what it costs later—not lectures. I make the quick path an explicit choice with a repayment plan.",
+    "traps": [
+      "Flooding stakeholders with implementation detail — they tune out and still push 'just ship it'.",
+      "Giving a hard no with no options — forces them to escalate past you.",
+      "Agreeing to unsafe quick without naming risk — you own the outage politically and operationally."
+    ]
+  },
+  {
+    "id": "d12-q20",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "A junior engineer opens a 2,000-line PR. How do you review it, what feedback is mandatory vs optional, and what makes you block a merge?",
+    "first30s": "I'd stop the mega-PR pattern: ask for vertical slices, review high-blast issues first, keep nits optional, and block on correctness, security/tenancy, data integrity, and missing operability—not on style preferences.",
+    "modelAnswer": [
+      "First response: request a split into reviewable slices or a guided tour of commits—because 2k lines hide irreversible mistakes and exhaust reviewers.",
+      "Review order: authz/tenancy, data mutations, API contracts, failure/retries, then tests, then style—mandatory vs optional follows blast radius.",
+      "Mandatory feedback: security, correctness, tenancy isolation, breaking contracts, missing migrations safety, secrets, and absent tests for dangerous paths.",
+      "Optional: naming, minor refactors, stylistic preferences—tradeoff teaching taste vs blocking delivery on bikesheds.",
+      "Block merge when: data loss/leak risk, broken rollback, no flag for risky behavior, or contracts drifting without versioning.",
+      "Failure modes: rubber-stamping from fatigue, only nitting style, or rewriting their PR yourself and destroying learning.",
+      "Prevent/ops: set a soft PR size guideline and CI checks; track mega-PR frequency and post-merge incident rate from large diffs.",
+      "Require dashboard/alert stubs for user-facing paths before merge; monitor review turnaround so size pressure doesn't push rubber stamps."
+    ],
+    "sayIt": "Mega-PRs get sliced. I block on safety and contracts, teach on design, and leave nits optional. Fatigue rubber-stamps are how juniors' mistakes become production incidents.",
+    "traps": [
+      "Rubber-stamping because the diff is exhausting — the worst bugs hide in large PRs.",
+      "Blocking only on style while approving a tenancy hole — priorities inverted.",
+      "Silently rewriting the PR yourself — faster short-term, zero learning, future mega-PRs continue."
+    ]
+  },
+  {
+    "id": "d12-q21",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "A production incident hits while you are the senior on call. How do you organize response—mitigation versus root cause—and what permanent change do you drive afterward?",
+    "first30s": "I'd run incident command: mitigate user impact first, parallelize investigation without blocking rollback, communicate on a cadence, then drive a blameless follow-up that produces a systemic fix—not only a hotfix hero story.",
+    "modelAnswer": [
+      "Declare severity, IC, and comms owner; mitigate first (rollback, flag off, failover, capacity)—because root-causing while customers burn extends the outage.",
+      "Parallel tracks: mitigation actions vs diagnosis; don't hold the rollback for a perfect theory.",
+      "Tradeoff: rollback vs forward fix—rollback when recent change is suspect and reversible; forward fix when data migration makes rollback worse.",
+      "Communicate status on a fixed cadence with impact and next check-in; failure mode is silence or speculative chatter.",
+      "After mitigate: timeline, contributing factors, and action items with owners/dates—blameless but not consequence-free for systems.",
+      "Permanent change: guardrail in CI, alert, runbook, or architecture fix matching the failure class—not 'be more careful'.",
+      "Prevent/ops: track MTTM/MTTR, incident follow-up completion rate, and repeat-incident tags; alert if follow-ups slip.",
+      "Schedule a game-day for the failure mode; monitor the new alert's precision so it pages on the real symptom without noise."
+    ],
+    "sayIt": "Incidents: mitigate first, diagnose in parallel, communicate on a cadence, then turn the outage into a systemic guardrail. Hero hotfixes without follow-up guarantee a sequel.",
+    "traps": [
+      "Root-causing for an hour before mitigating — customers experience your curiosity as downtime.",
+      "Skipping the follow-up after a hotfix — the same failure returns on the next deploy.",
+      "Blaming individuals in the postmortem — learning stops and near-misses go underground."
+    ]
+  },
+  {
+    "id": "d12-q22",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "Tell me about a failure or missed deadline framework: how should a senior discuss personal mistakes and what must change afterward?",
+    "first30s": "I'd use an evidence framework—not a hero story: situation and stakes, personal decisions I owned, tradeoffs I got wrong, outcome metrics, and the systemic change that followed. Interviewers want accountability and learning velocity.",
+    "modelAnswer": [
+      "Situation → stakes: what was committed, who was impacted, and what 'good' looked like—anchor in facts, not vibes.",
+      "Personal decisions: what you chose (scope, silence, architecture, staffing)—own the lever you controlled rather than blaming 'process' abstractly.",
+      "Tradeoffs you misjudged: e.g. optimism vs early risk raise, speed vs validation, because vs when a different choice was available.",
+      "Outcome metrics: slip days, incident Sev, error budget burn, customer impact—quantify so the story isn't theatrical.",
+      "What you changed afterward: decision log habit, midpoint risk review, test/alert, staffing model—proof of learning.",
+      "Failure modes in the telling: fake humility without change, blaming others, or claiming perfection with no scar tissue.",
+      "Prevent/ops language: how you now track estimate-vs-actual, incident follow-up rate, or decision-log completeness so the miss can't silently recur.",
+      "Close with a monitorable habit: e.g. mandatory week-2 risk review on multi-week commits, with escalation if buffer burns."
+    ],
+    "sayIt": "Seniors discuss failure as situation, owned decisions, misjudged tradeoffs, measured outcomes, and a concrete systemic change. Scar tissue with a metric beats a polished non-story.",
+    "traps": [
+      "Telling a story where you were only the hero fixer — hides judgment and sounds rehearsed.",
+      "Blaming Product/management with no personal lever — interviewers hear low ownership.",
+      "Describing a failure with no subsequent process or metric change — learning didn't stick."
+    ]
+  },
+  {
+    "id": "d12-q23",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "How do you identify harmful technical debt and convince product to allocate time to repay it?",
+    "first30s": "I'd rank debt by customer/risk impact and delivery tax—not aesthetics—then pitch repayment as protected capacity tied to a metric Product already cares about: incidents, cycle time, or blocked roadmap features.",
+    "modelAnswer": [
+      "Identify harmful debt via signals: repeat incidents, rising cycle time on a hot path, fear of deploys, and escaping defects—not 'ugly code' alone.",
+      "Quantify: incident count, MTTR, eng days lost per feature on the dusty module, or error budget burn attributable to the debt.",
+      "Separate cosmetic refactors from risk debt (integrity, security, operability) and delivery tax debt (slow change)—Product funds the latter two first.",
+      "Tradeoff: big-bang rewrite vs incremental strangler with flags—prefer incremental because vs multi-month freezes that miss the market.",
+      "Pitch in outcome language: 'X% of Sev-2s' or 'Y days added per feature' and propose a fixed capacity slice (e.g. 20%) with a completion metric.",
+      "Failure modes: endless cleanups without user impact, crying wolf on low-risk debt, and one giant rewrite with no intermediate value.",
+      "Prevent/ops: maintain a risk-ranked debt backlog with age; alert when high-risk debt age exceeds policy; review in planning with Product.",
+      "After funding, monitor the agreed metric (incident rate, lead time) and report progress so repayment keeps its budget next quarter."
+    ],
+    "sayIt": "Harmful debt shows up in incidents and slow delivery. I convince Product with quantified tax and a time-boxed repayment tied to their metrics—not a taste-driven rewrite.",
+    "traps": [
+      "Pitching refactors as 'best practice' without user impact — Product correctly deprioritizes you.",
+      "Proposing a six-month rewrite with no intermediate milestone — too big to fund, too risky to finish.",
+      "Mixing low-risk cosmetic debt with Sev-driving debt — dilutes the urgency of what actually hurts."
+    ]
+  },
+  {
+    "id": "d12-q24",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "The team repeatedly makes the same production mistake. How do you turn that into a systemic process or tooling fix?",
+    "first30s": "I'd treat recurrence as a system smell: find the shared missing guardrail, then add a forcing function—lint, CI check, template, or runbook—so the mistake becomes hard to repeat. Training alone is not a permanent fix.",
+    "modelAnswer": [
+      "Aggregate repeats: same class of incident, same PR miss, same deploy footgun—tag them so 'random' errors become a pattern.",
+      "Ask why the mistake is easy: missing checklist, unclear ownership, no test, or toil pressure—because vs blaming individuals each time.",
+      "Design a forcing function: CI gate, codeowner review on dangerous paths, scaffold/template, or canary requirement—automation beats reminders.",
+      "Tradeoff: heavy process vs lightweight guardrail—prefer the smallest tool that blocks the failure class without drowning throughput.",
+      "Roll out with a short RFC, owner, and success metric (repeat incidents → 0 over N weeks).",
+      "Failure modes: another training slide, a wiki nobody reads, or a bureaucratic gate unrelated to the real miss.",
+      "Prevent/ops: track repeat-incident rate by tag; alert when the same tag fires twice in a window; review tooling gaps in postmortems.",
+      "Game-day the fix; monitor that the CI/alert pages on the real condition and doesn't create fatigue that people bypass."
+    ],
+    "sayIt": "Repeat mistakes need forcing functions—CI, templates, ownership—not pep talks. I measure repeat tags to zero and keep the guardrail small enough that people don't route around it.",
+    "traps": [
+      "Responding with only 'please be careful' — carefulness decays under load; systems don't.",
+      "Adding heavyweight process unrelated to the failure — throughput drops and the bug class remains.",
+      "No metric for repeat rate — you can't tell if the fix worked."
+    ]
+  },
+  {
+    "id": "d12-q25",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "A monolith is getting hard to change. How do you decide whether to split into services—and when is that the wrong move?",
+    "first30s": "I'd diagnose whether the pain is modularity, ownership, or scaling. Split only when a clear boundary, independent deploy need, and operability maturity exist—otherwise modularize the monolith. Premature services trade one complexity for distributed failure modes.",
+    "modelAnswer": [
+      "Clarify the pain: slow deploys, ownership conflicts, scaling hotspots, or just messy modules—different pains need different cures.",
+      "Prefer modular monolith first: clear module boundaries, CODEOWNERS, separate data access—because vs network hops without solving coupling.",
+      "Split when: independent scale/lifecycle, separate failure domains needed, or team ownership can't share a deploy without constant blocking—and contracts are ready.",
+      "Wrong move when: the team can't operate one system well yet, boundaries are unclear, or the goal is 'microservices fashion'—distributed monolith is worse.",
+      "Tradeoff: service split gains deploy independence vs adds latency, consistency, and on-call surface—pay that tax only for a real boundary.",
+      "Failure modes: splitting along technical layers instead of domains, shared DB across 'services', and no observability on the new network edge.",
+      "Prevent/ops: if splitting, require SLOs, tracing, and runbooks per service before cutover; track deploy frequency and cross-service error rates.",
+      "Strangler with flags and expand/contract; monitor the seam's latency/error SLO and keep a rollback to the modular path during migration."
+    ],
+    "sayIt": "Hard-to-change monoliths often need modularity and ownership first. I split only for real boundaries with operability ready—otherwise you invent a distributed monolith.",
+    "traps": [
+      "Splitting because 'monoliths don't scale' without a measured hotspot — you scale operational pain instead.",
+      "Multiple services sharing one database — you bought a network without buying independence.",
+      "Extracting services before basic metrics/alerts exist — now every outage is a distributed whodunit."
+    ]
+  },
+  {
+    "id": "d12-q26",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "How do you connect backend engineering work to business or customer outcomes, and how do you know a project succeeded?",
+    "first30s": "I'd start from the customer/business metric the work should move, instrument a baseline, ship iteratively against that metric, and call success when the outcome moves within agreed bounds—not when the last ticket closes.",
+    "modelAnswer": [
+      "Translate every initiative to an outcome hypothesis: conversion, latency SLO, cost, support volume, or reliability—because vs 'ship the service' as the goal.",
+      "Baseline before build; define leading eng metrics (error rate, p95) and lagging business metrics you influence.",
+      "Design the thinnest vertical slice that can falsify or support the hypothesis; avoid multi-month builds with no learning checkpoint.",
+      "Tradeoff: engineering elegance vs outcome speed—choose elegance when it protects the outcome metric long-term, not as a vanity end state.",
+      "Success criteria written up front with Product: metric, threshold, time window, and non-goals—ticket burn-down alone is not success.",
+      "Failure modes: shipping on time to the wrong outcome, measuring only vanity counters, and declaring victory at merge.",
+      "Prevent/ops: dashboards linking deploy markers to outcome metrics; review outcome movement in the project closeout.",
+      "Alert if the leading SLI degrades after launch even when the feature 'works'; schedule a follow-up if the business metric doesn't move by the agreed window."
+    ],
+    "sayIt": "Projects succeed when the agreed customer or business metric moves—not when Jira hits zero. I baseline, ship thin, and judge with the outcome window we wrote down.",
+    "traps": [
+      "Defining success as 'all stories done' — you can finish the wrong product on time.",
+      "No baseline before launch — you cannot tell movement from noise.",
+      "Optimizing only internal eng metrics with no customer link — local maxima that miss the business."
+    ]
+  },
+  {
+    "id": "d12-q27",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "You have incomplete information and limited time to make a production decision, and an executive wants an answer now. What is your approach?",
+    "first30s": "I'd give a timeboxed recommendation with explicit confidence, assumptions, and a reversible default—plus what I'd verify next. Executives get a decision-quality answer now, not false certainty or an unbounded research request.",
+    "modelAnswer": [
+      "State what you know, what you don't, and the decision deadline—transparency beats fake precision under executive pressure.",
+      "Recommend the reversible, lowest-blast option by default (flag off, rollback, rate-limit, degrade) when data is thin—because vs irreversible commits under uncertainty.",
+      "Give confidence explicitly (low/med/high) and the one or two checks that would raise it in the next N minutes/hours.",
+      "Tradeoff: answer now with caveats vs asking for more time—answer now for mitigate/go-no-go; ask for time only when the irreversible choice can wait a short spike.",
+      "Offer options with consequences in business language; name the decision owner if it isn't you.",
+      "Failure modes: confident guessing, freezing without a temporary mitigate, or flooding the room with undifferentiated detail.",
+      "Log the decision and assumptions immediately so the org can revisit when data arrives.",
+      "Prevent/ops: after the immediate action, monitor the symptom SLI closely; set a revisit time; alert if the temporary mitigate's error budget or queue age worsens."
+    ],
+    "sayIt": "Under pressure I give a reversible recommendation with confidence and assumptions—not false certainty. Then I verify fast and watch the symptom metric like a hawk.",
+    "traps": [
+      "Projecting high confidence without data — executives remember the certainty, not your private doubts, when it fails.",
+      "Refusing to recommend anything until perfect data — the outage continues while you research.",
+      "Choosing an irreversible path because it sounded decisive in the room — decisiveness is not the same as correctness."
+    ]
+  },
+  {
+    "id": "d12-q28",
+    "domain": "ownership",
+    "domainTitle": "Delivery, Ownership & Senior Engineering Judgment",
+    "q": "Product insists on shipping a feature you believe is unsafe. How do you handle it?",
+    "first30s": "I'd document the concrete harm (data loss, security, compliance, irreversible customer damage), propose a safe alternative that still moves their outcome, and escalate with a written risk decision if they still insist—I won't silently ship a known Sev-1.",
+    "modelAnswer": [
+      "Translate 'unsafe' into specific failure modes and blast radius (who gets hurt, how, whether reversible)—vague discomfort loses to roadmap pressure.",
+      "Propose alternatives: flag + limited cohort, delayed ship with mitigation, or reduced scope that preserves the outcome without the hazard.",
+      "Tradeoff: partnership vs hard gate—partner on outcomes; hard-gate on integrity/security/compliance where you have duty of care.",
+      "Write a short risk memo: recommendation, residual risk if shipped, and who accepts that risk—force an explicit owner.",
+      "If Product still insists: escalate to eng leadership/security with the memo; do not quietly merge and hope.",
+      "Failure modes: silent compliance then blame, absolute refusal without alternatives, or shipping with no monitoring on the feared failure.",
+      "If leadership accepts residual risk in writing: ship only behind maximum mitigations (flag, cohort, kill switch) and heightened monitoring.",
+      "Prevent/ops: alert on the feared symptom SLI at tighter thresholds; runbook ready; schedule an immediate follow-up review; track risk-acceptance decisions in the decision log."
+    ],
+    "sayIt": "Unsafe ships get a written harm statement, a safer alternative, and escalated risk acceptance—not silent obedience. If leadership accepts residual risk, I still demand flags, cohorts, and tight alerts.",
+    "traps": [
+      "Quietly shipping then saying 'Product made me' — you still pressed merge; ownership doesn't transfer that easily.",
+      "Refusing without a safer path that hits part of the outcome — you become a blocker instead of a partner.",
+      "Accepting verbal 'it'll be fine' with no written risk owner — nobody is accountable when it breaks."
+    ]
+  },
+  {
+    "id": "d13-q01",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "Walk through the end-to-end architecture of a document intelligence RAG platform from ingest to generate. Who owns what between NestJS and FastAPI?",
+    "first30s": "I'd narrate a staged pipeline: ingest and tenancy in NestJS, parse/table/chunk/embed/retrieve/generate in a FastAPI AI worker, with typed contracts, idempotent jobs, and org-scoped storage at every hop.",
+    "modelAnswer": [
+      "Clarify the pipeline stages and ownership: NestJS owns auth, org tenancy, job orchestration, and product APIs; FastAPI owns parse, table extraction, chunking, embedding, retrieval, and generation because those are CPU/GPU-heavy and model-versioned.",
+      "Ingest accepts documents per org, persists metadata and S3 object keys, and enqueues a job with an idempotency key so retries never double-bill embedding or duplicate index rows.",
+      "Parse/table extraction preserves structure before semantic chunking; chunks carry document_id, org_id, page/section, and table refs so retrieve can filter before similarity search.",
+      "Embed and index into an org-scoped vector store; retrieve combines vector hits with metadata filters; generate uses versioned prompts and structured outputs back to Nest for persistence.",
+      "Tradeoff: monolith one process vs Nest orchestrator + FastAPI worker—split because model deps, scale axes, and blast radius differ; cost is HMAC/service auth and schema versioning across the hop.",
+      "Failure modes: silent partial ingest, cross-org chunk leakage, and generate succeeding while Nest never records results—detect with job state machine and end-to-end correlation ids.",
+      "Prevent/ops: dashboard job stage latency and failure rate per stage; alert when embed or retrieve lag exceeds SLO or when dead-letter depth crosses threshold.",
+      "Runbook covers reprocess-by-document_id, prompt/model rollback, and a game-day that injects worker timeouts to verify Nest compensating cleanup and retry budgets."
+    ],
+    "sayIt": "Nest owns tenancy and orchestration; FastAPI owns the AI stages. Every hop is org-scoped, idempotent, and observable by stage so we can reprocess safely without guessing where the pipeline stalled.",
+    "traps": [
+      "Letting FastAPI invent org_id from the upload payload — unsigned tenant context is a cross-tenant leak waiting to happen.",
+      "Collapsing all stages into one HTTP request — timeouts and partial writes become undiagnosable and unblockable.",
+      "Skipping idempotency on reprocess — duplicate embeddings and conflicting chunk versions corrupt retrieval quality silently."
+    ]
+  },
+  {
+    "id": "d13-q02",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "On planning PDFs, why prefer table extraction over naive PDF text extraction for LLM grounding?",
+    "first30s": "I'd contrast structure-preserving extractors with text dumps: tables carry label–value alignment that prose flattening destroys, so retrieval and generation start wrong before the model even reasons.",
+    "modelAnswer": [
+      "Clarify the failure: naive PDF text often serialises cells left-to-right or out of reading order, so a 'Budget' label and a currency amount detach—LLMs then invent plausible but wrong figures.",
+      "Table extraction keeps row/column/header relationships, enabling chunking that cites table_id, row, and cell ranges instead of orphaned sentences.",
+      "For planning PDFs, merged cells, multi-line headers, and footnotes are semantic; structure-aware parsers flag uncertainty instead of silently dropping alignment.",
+      "Tradeoff: OCR/table pipelines cost more latency and ops complexity vs cheap text extract—pay it because wrong numbers in plans are high-blast integrity failures, not cosmetic RAG misses.",
+      "Downstream design: store both rendered markdown/HTML of tables and structured JSON so hybrid retrieve can boost table chunks when queries mention metrics or line items.",
+      "Failure modes: false-confident flat text, header rows treated as data, and currency/unit loss—detect with golden PDF fixtures and numeric checksum probes in CI.",
+      "Prevent/ops: track table-extraction confidence and human-review rate as quality metrics; alert when extraction confidence drops below threshold after a parser upgrade.",
+      "Monitor grounded-answer evals on a fixed planning corpus after each parse model change; runbook includes rollback to last known-good extractor and reprocess of affected document_ids."
+    ],
+    "sayIt": "Structure is the ground truth for planning numbers. I preserve tables so retrieval cites real cells; naive text dumps manufacture confident hallucinations.",
+    "traps": [
+      "Shipping vector search on flattened text and calling hallucinations a 'prompt issue' — the data lost structure before the prompt existed.",
+      "Ignoring merged cells and multi-page tables — partial rows look complete and poison embeddings.",
+      "No golden-PDF regression suite — parser upgrades silently degrade the highest-value documents."
+    ]
+  },
+  {
+    "id": "d13-q03",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "How would you design semantic chunking and metadata for planning PDFs on a document intelligence RAG platform?",
+    "first30s": "I'd chunk by semantic units—sections, tables, figures—not fixed token windows, and attach org, document, section, page, table, and sensitivity metadata so filters prune before similarity.",
+    "modelAnswer": [
+      "Clarify goals: chunks must be self-contained enough for retrieval yet small enough to fit context; planning PDFs need section-aware splits plus whole-table or row-group chunks for numeric fidelity.",
+      "Semantic chunking uses headings, list boundaries, and table regions; overlapping windows only at narrative prose, never mid-cell, because mid-cell splits destroy value alignment.",
+      "Metadata minimum: org_id, document_id, version, page_range, section_path, chunk_type (prose|table|caption), sensitivity, and extraction_confidence for filter and audit.",
+      "Tradeoff: larger table chunks preserve context vs smaller row chunks improve precision—hybridise: store parent table summary plus child row groups linked by parent_chunk_id.",
+      "Index design: vector on content; filterable fields on metadata; deny queries missing org_id at the API so the vector store never becomes the tenancy enforcer of last resort.",
+      "Failure modes: overlong chunks that drown signal, orphan table rows, and metadata drift after reprocess—detect with chunk-size histograms and parent/child integrity checks.",
+      "Prevent/ops: dashboard median chunk tokens and filter hit-rate; alert when chunk_type mix shifts sharply after a parser change.",
+      "SLO on retrieve latency with metadata filters enabled; runbook for rechunk-by-document_id when embedding or chunker versions bump."
+    ],
+    "sayIt": "Chunk by meaning, not by arbitrary tokens, and make metadata the first retrieval gate. Planning PDFs especially need table-aware parents and children, always org-scoped.",
+    "traps": [
+      "Fixed 500-token windows through tables — splits numbers from labels and tanks answer quality.",
+      "Metadata only in the prompt, not in the index filters — similarity search returns cross-section noise and riskier cross-tenant bugs if org is missing.",
+      "No parent/child links for tables — you cannot reassemble context or reprocess a single table safely."
+    ]
+  },
+  {
+    "id": "d13-q04",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "Compare hybrid retrieval (vector + metadata filters + relevance scoring) to vector-only search for document intelligence RAG.",
+    "first30s": "I'd argue vector-only is a recall starting point, not a product: metadata filters enforce tenancy and document scope, then a relevance layer re-ranks so generation sees grounded, permitted chunks.",
+    "modelAnswer": [
+      "Clarify: vector-only returns nearest embeddings; hybrid applies hard filters (org, document set, chunk_type, time) then scores with vector similarity plus optional lexical/boost signals.",
+      "Filters are security and product correctness first—org_id and ACL are not 'optional ranking features'—then quality: boost table chunks for numeric queries, recency for versioned plans.",
+      "Relevance scoring merges dense similarity with BM25 or structured boosts and may use a cross-encoder re-ranker on the shortlist because top-k embedding hits still include near-miss sections.",
+      "Tradeoff: hybrid adds latency and index complexity vs vector-only simplicity—accept cost because wrong-tenant or wrong-document hits are integrity incidents, not UX nits.",
+      "Operationalise: log filter predicates, candidate counts pre/post filter, and final scores so you can debug empty results vs over-filtered queries.",
+      "Failure modes: filters too tight (empty context), filters too loose (noisy context), and score ties that flip answers—detect with offline eval sets and online groundedness sampling.",
+      "Prevent/ops: monitor retrieve p95, empty-result rate, and cross-org zero-hit assertions; alert when empty-result rate spikes after a metadata schema change.",
+      "Dashboard top abort reasons (no candidates post-filter vs LLM refusal); game-day injects missing org filter to prove the API fails closed rather than vector-scanning the world."
+    ],
+    "sayIt": "Hybrid retrieval is how RAG stays tenant-safe and answerable. Vectors find candidates; metadata and scoring decide what the model is allowed to see.",
+    "traps": [
+      "Vector-only across a shared index — tenancy becomes a prompt instruction, which is not an access control.",
+      "Filtering only after generation — wastes tokens and can leak snippets into logs or traces.",
+      "No logging of pre/post filter counts — empty answers look like model failure when the filter was wrong."
+    ]
+  },
+  {
+    "id": "d13-q05",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "How do you make LLM calls production-grade with structured outputs, versioned prompts, bounded retries, and typed errors?",
+    "first30s": "I'd treat the model like an unreliable dependency: versioned prompts, schema-validated outputs, explicit error types, and bounded retries with backoff—never 'parse whatever JSON it returned'.",
+    "modelAnswer": [
+      "Clarify contracts: each prompt has an id/version, input schema, and output schema; Nest and FastAPI share typed error codes (validation, rate_limit, model_timeout, unsafe_content) rather than free-text failures.",
+      "Structured outputs (JSON schema / tool mode) are validated before persistence; on schema miss, classify as retryable vs poison and route accordingly.",
+      "Versioned prompts live in config with changelog; pin model+prompt versions on jobs so reprocess is reproducible and A/B is intentional, not accidental drift.",
+      "Bounded retries: only transient errors, exponential backoff + jitter, max attempts, and idempotency keys so duplicate successes do not double-write.",
+      "Tradeoff: strict schemas reject some good answers vs loose parsing that corrupts stores—prefer fail-fast validation because silent bad JSON becomes silent bad product data.",
+      "Failure modes: infinite retry storms, prompt edits changing production mid-flight, and swallowing model errors as empty 200s—detect with attempt counters and error-class metrics.",
+      "Prevent/ops: alert on elevated schema-validation failure rate and on retry exhaustion; track prompt version as a label on latency and quality dashboards.",
+      "SLO on generate success rate after retries; runbook maps each typed error to page/owner and includes kill-switch to freeze a bad prompt version."
+    ],
+    "sayIt": "Prompts and schemas are versioned APIs. I validate structured outputs, classify typed errors, and bound retries so the model cannot silently corrupt or melt the worker pool.",
+    "traps": [
+      "json.loads on free-form model text with no schema — one extra trailing comma poisons an entire document version.",
+      "Unlimited retries on 429 — turns a rate limit into a self-inflicted outage.",
+      "Editing the live prompt without version pin — yesterday's evals stop predicting today's answers."
+    ]
+  },
+  {
+    "id": "d13-q06",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "How do you ensure per-document and per-action idempotency when reprocessing documents on a RAG platform?",
+    "first30s": "I'd key every side effect—store write, embed upsert, index delete/replace, notify—by document_id+action+content_version so retries and reprocess jobs converge to one correct state.",
+    "modelAnswer": [
+      "Clarify: reprocessing is normal (parser upgrade, failed mid-pipeline); without idempotency you get duplicate chunks, double embedding cost, and conflicting versions in retrieve.",
+      "Per-document keys: (org_id, document_id, content_hash|version); per-action keys: (document_id, stage, version) recorded in a job ledger before external side effects.",
+      "Replace semantics for indexes: delete-by-document_id then upsert new chunks in one logical unit, or versioned namespaces with atomic pointer flip after success.",
+      "Tradeoff: ledger + careful upserts vs 'just run again'—ledger cost is mandatory because vector stores and S3 do not give you business-level exactly-once.",
+      "Downstream consumers (notifications, billing meters) must also key on action ids; never emit 'document_processed' twice for the same version without a new version bump.",
+      "Failure modes: partial stage success, ledger write after side effect, and clock-skewed 'latest wins'—detect with stage checksums and reconcile jobs.",
+      "Prevent/ops: metric duplicate-suppress hits and reprocess success rate; alert when the same document_id exceeds retry threshold without terminal state.",
+      "Dashboard stuck-in-stage jobs; runbook for force-complete vs safe-replay, and game-day that crashes mid-embed to prove replace semantics leave one coherent version."
+    ],
+    "sayIt": "Reprocess is a first-class path. I ledger per-document and per-action keys and use replace semantics so retries converge—never accumulate duplicate chunks.",
+    "traps": [
+      "Generating a new UUID inside the worker per attempt — every retry looks like new work and doubles embeddings.",
+      "Appending chunks on reprocess instead of replace — retrieve quality collapses under duplicate near-identical vectors.",
+      "Acking the queue before the ledger commit — crashes recreate work without dedupe."
+    ]
+  },
+  {
+    "id": "d13-q07",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "Design org-scoped multi-tenancy and HMAC authentication between NestJS and FastAPI. What isolation failure modes matter most?",
+    "first30s": "I'd make org_id a hard dimension on every store and cache key, authenticate Nest→FastAPI with HMAC service identity, and assume any missing filter is a Sev-1 design bug.",
+    "modelAnswer": [
+      "Clarify trust boundary: browsers never talk to FastAPI; Nest authenticates users, derives org_id from session/RBAC, and calls FastAPI with HMAC-signed headers including org_id, timestamp, and body hash.",
+      "FastAPI verifies signature, skew window, and that path/body org_id matches the signed claim—reject on mismatch; never trust unsigned JSON fields for tenancy.",
+      "Data isolation: separate vector namespaces or mandatory org filter, S3 prefixes per org, Redis key prefixes, and DB row predicates; defense in depth across all four.",
+      "Tradeoff: shared cluster with strict filters vs fully isolated clusters—start shared+strict for cost, isolate noisy/high-risk tenants when blast radius demands it.",
+      "Failure modes: worker trusting client org_id, shared embedding index without filter, cache keys missing org, and signed-but-stale requests replayed—detect with canary cross-tenant probes in staging.",
+      "Logging redacts document content but keeps org_id + correlation_id so incidents are diagnosable without leaking payloads.",
+      "Prevent/ops: continuous test that a token for org A cannot retrieve org B chunks; alert on HMAC failures and on queries executed without org predicate.",
+      "Monitor authz deny rate and cross-tenant canary results on a dashboard; runbook covers key rotation and emergency disable of a compromised worker identity."
+    ],
+    "sayIt": "Tenancy is enforced in signatures and storage keys, not in prompts. HMAC proves Nest called us; org-scoped indexes and caches prove we cannot leak across customers.",
+    "traps": [
+      "Passing org_id only in the JSON body without signing — attackers who reach the worker pick any tenant.",
+      "One global vector collection with optional metadata filter — one missed filter is a multi-tenant breach.",
+      "Caching embeddings by content hash alone — identical public PDFs could leak across orgs if ACLs differ."
+    ]
+  },
+  {
+    "id": "d13-q08",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "How do you design S3 handoff between NestJS and FastAPI with compensating cleanup when the downstream stage fails?",
+    "first30s": "I'd treat S3 objects as staging artifacts with ownership and TTL: Nest writes, FastAPI reads, and compensating actions delete or quarantine orphans when the job terminal-fails.",
+    "modelAnswer": [
+      "Clarify handoff: Nest uploads original + intermediate artifacts under org-prefixed keys, records keys on the job, and passes signed references—not unbounded public URLs—to FastAPI.",
+      "FastAPI reads via short-lived credentials or pre-signed GET scoped to that key; it never lists the whole bucket as a substitute for a job contract.",
+      "On success, Nest promotes artifacts to durable locations and indexes; on terminal failure, compensating cleanup deletes staging keys or moves them to a quarantine prefix for forensics.",
+      "Tradeoff: eager delete vs quarantine TTL—quarantine helps debug poison PDFs; TTL caps cost; choose quarantine+TTL for production.",
+      "Saga-style: each stage records 'wrote:key' in the ledger so compensation is precise; never 'delete whole prefix' after a partial multi-doc batch.",
+      "Failure modes: orphan objects after worker crash, deleting durable inputs on retryable errors, and permission gaps that leave public ACLs—detect with bucket inventory vs job ledger reconcile.",
+      "Prevent/ops: metric orphan-bytes and compensation success rate; alert when staging prefix growth exceeds threshold or reconcile lag grows.",
+      "Dashboard S3 vs ledger drift; runbook for manual quarantine purge; game-day kills FastAPI mid-parse to prove Nest compensation runs and retries remain idempotent."
+    ],
+    "sayIt": "S3 is a staged handoff with a ledger, not a junk drawer. Success promotes; failure compensates with delete or quarantine so orphans do not become a silent cost and compliance problem.",
+    "traps": [
+      "Leaving staging forever 'for debugging' — unbounded cost and broader data exposure surface.",
+      "Deleting the source object on the first worker timeout — destroys evidence and blocks safe retry.",
+      "Pre-signed URLs with long TTL and broad prefixes — expands the blast radius if a URL leaks."
+    ]
+  },
+  {
+    "id": "d13-q09",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "How would you operate federated GraphQL across 7+ NestJS services on an institutional LMS—gateway ownership and schema evolution?",
+    "first30s": "I'd put a gateway in charge of composition and authz at the edge, while each Nest service owns its schema slice, publish contract, and backwards-compatible evolution rules.",
+    "modelAnswer": [
+      "Clarify ownership: gateway owns authentication, query budgeting, composition, and client-facing errors; domain services own types/resolvers for courses, users, enrolments, chat, search, etc.",
+      "Schema evolution: additive changes preferred; deprecations with sunset dates; breaking changes require dual-run fields or a new major and coordinated client migration.",
+      "Federation contracts: each service publishes a subgraph; CI composition checks catch key conflicts and missing @key fields before deploy.",
+      "Tradeoff: BFF per client vs one federated graph—federation reduces duplicate joins across LMS domains but concentrates edge risk; mitigate with complexity limits and persisted queries.",
+      "Failure modes: noisy-neighbour queries, schema drift breaking composition, and partial outages returning inconsistent graphs—detect with subgraph health and gateway error-class metrics.",
+      "Authz stays in resolvers/services for object-level rules; gateway enforces coarse tenant/session presence so a missing token never fans out to seven internals.",
+      "Prevent/ops: monitor gateway p95, subgraph error rates, and composition CI failures; alert when any subgraph exceeds error threshold or schema publish fails.",
+      "SLO on gateway availability separate from individual services; runbook for schema rollback and for shedding expensive operations during incidents."
+    ],
+    "sayIt": "The gateway composes and protects; services own their slices. We evolve additively with composition CI so seven Nest subgraphs do not become seven ways to break the client.",
+    "traps": [
+      "Letting any service push breaking schema without composition checks — clients fail in production first.",
+      "Putting all business authz only in the gateway — object-level rules rot and leak across resolvers.",
+      "Unbounded nested queries — one client request fans into a self-inflicted LMS outage."
+    ]
+  },
+  {
+    "id": "d13-q10",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "How do you keep Elasticsearch course search consistent with Mongo as the source of truth on an institutional LMS?",
+    "first30s": "I'd treat Mongo as SoT and ES as a derived index: reliable change capture, idempotent upserts/deletes, lag metrics, and rebuild playbooks—never dual-write without a reconcile story.",
+    "modelAnswer": [
+      "Clarify: course create/update/delete commits in Mongo first; an outbox or change stream publishes index commands so ES is eventually consistent with bounded lag.",
+      "Indexer consumers upsert by course_id idempotently; deletes tombstone by id; mapping changes go through versioned indexes with alias flip.",
+      "Consistency model told to product: search may lag writes by N seconds; read-your-writes for authors can bypass ES via Mongo for the edit UI.",
+      "Tradeoff: sync dual-write in the request vs async outbox—prefer outbox because ES blips must not fail enrolments or course saves.",
+      "Failure modes: poison messages, mapping explosions, and silent lag growth—detect with outbox age, consumer lag, and sample Mongo↔ES checksum jobs.",
+      "Rebuild path: reindex from Mongo into a new index, verify counts/sample hashes, then atomic alias swap with rollback alias.",
+      "Prevent/ops: alert on consumer lag and outbox depth; dashboard search freshness and index doc count vs Mongo active courses.",
+      "SLO on lag threshold for catalogue freshness; runbook for pause/unpause consumers and for alias rollback after a bad mapping deploy."
+    ],
+    "sayIt": "Mongo is truth; Elasticsearch is a projection. Outbox plus lag alerts and rebuild aliases keep search useful without making ES a write dependency.",
+    "traps": [
+      "Dual-writing ES inside the HTTP handler — ES downtime blocks course administration.",
+      "No rebuild/alias strategy — mapping changes become multi-hour outages.",
+      "Ignoring delete events — withdrawn courses linger in search and confuse learners."
+    ]
+  },
+  {
+    "id": "d13-q11",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "Design WebSocket chat for 1000+ concurrent users on an institutional LMS: persistence, reliable delivery, and fan-out/backpressure.",
+    "first30s": "I'd separate connection fan-out from durable persistence: write path commits messages first, then fans out with backpressure, and clients recover via catch-up cursors—not by hoping sockets stay up.",
+    "modelAnswer": [
+      "Clarify roles: gateway/socket tier holds connections; chat service persists messages and receipts; Redis/pubsub or a broker fans events across nodes for 1000+ concurrent users.",
+      "Reliable delivery: assign monotonic per-room sequence or cursor; client ACKs; on reconnect, catch-up query from last cursor so disconnects do not drop history.",
+      "Persistence before fan-out for messages that must not vanish; ephemeral typing indicators can be best-effort and rate-limited.",
+      "Backpressure: per-connection outbound buffers with drop/slow-consumer disconnect policies; server-side rate limits on send to protect persistence and fan-out.",
+      "Tradeoff: sticky sessions vs fully pub/sub mesh—prefer pub/sub so scale-out does not pin rooms to one box; cost is slightly higher fan-out complexity.",
+      "Failure modes: hot rooms melting a node, unbounded reconnect storms, and duplicate delivery on retry—detect with connection count, outbound buffer depth, and duplicate-suppress metrics.",
+      "Prevent/ops: alert on connection spike, message persist lag, and fan-out error rate; dashboard concurrent sockets and room hotness.",
+      "SLO on persist success and catch-up latency after reconnect; runbook for shedding non-critical events and for draining a bad node without dropping durable messages."
+    ],
+    "sayIt": "Persist first, fan out second, catch up by cursor. Backpressure and rate limits keep a hot room from taking down the institutional LMS chat tier.",
+    "traps": [
+      "Fan-out before durable write — acknowledged UI messages disappear on crash.",
+      "Infinite server buffers for slow clients — memory death under 1000+ sockets.",
+      "No catch-up cursor — every blip forces full history reload or silent gaps."
+    ]
+  },
+  {
+    "id": "d13-q12",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "Mongo activity collection is ~16M documents / ~160GB. How would you design a live vs archive split?",
+    "first30s": "I'd define a hot working-set window for learner-facing reads, move cold activity to archive storage with the same logical schema, and cut over only behind lag/metric gates.",
+    "modelAnswer": [
+      "Clarify access patterns: dashboards and recent learner feeds need hot data; compliance and rare audits need cold history—optimize storage and indexes for the hot predicate first.",
+      "Live collection keeps recent N months (or size-bounded) with indexes tailored to hot queries; archive collection/cluster stores older docs, possibly compressed or in cheaper storage.",
+      "Migration job moves by time watermark in batches with idempotent upserts to archive and deletes/marks from live only after archive ack and checksum.",
+      "Tradeoff: time-based split vs size-based—time is explainable to product; size caps protect the primary; combine with both a date watermark and a max live size alarm.",
+      "Reads: application query layer routes by timestamp; dual-read during transition for boundary ranges to avoid missing edge documents.",
+      "Failure modes: wrong watermark deleting unarchived docs, index bloat remaining on live, and app bugs querying only live for historical exports—detect with count reconcile and sample hash jobs.",
+      "Prevent/ops: dashboard live size, archive lag behind watermark, and reconcile deltas; alert when live GB exceeds threshold or archive lag grows.",
+      "SLO on archive lag and zero unexplained reconcile delta; runbook for pause mover, restore-from-archive probe, and game-day partial cutover rollback."
+    ],
+    "sayIt": "Split by access pattern: hot live indexes for the working set, cold archive for history, with watermarked movers and reconcile gates so we never delete what we have not archived.",
+    "traps": [
+      "Deleting from live before archive durability is proven — unrecoverable learner history loss.",
+      "One giant TTL index as the only strategy — uncontrolled deletes without reconcile or restore drills.",
+      "Leaving unused historical indexes on live — you pay RAM for data you already intended to cool."
+    ]
+  },
+  {
+    "id": "d13-q13",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "You claim ~71% working-set reduction with zero learner-metric delta. How do you prove safety before and after cutover?",
+    "first30s": "I'd define the learner metrics up front, run shadow/dual-read comparisons, gate cutover on parity thresholds, and keep a fast rollback—savings without evidence is just a risky story.",
+    "modelAnswer": [
+      "Clarify metrics that matter: enrolment completion rates, activity-powered dashboard correctness, search/chat-adjacent counters if tied to activity, and support ticket volume—not only disk GB freed.",
+      "Before cutover: dry-run mover, dual-read shadow mode comparing live-only vs live+archive results on sampled learner feeds, and checksum counts for moved ranges.",
+      "Prove zero delta: pre/post dashboards with the same windows; statistical guardrails (no significant change beyond agreed epsilon) reviewed with stakeholders.",
+      "Tradeoff: longer shadow period vs faster savings—prefer shadow until parity holds across weekly learner cycles because LMS usage is bursty around terms.",
+      "Cutover gates: archive lag SLO green, reconcile delta=0, shadow mismatch rate under threshold, restore probe passed in staging and production canary orgs.",
+      "Failure modes: metric that ignores a silent empty feed, sampling bias missing edge orgs, and celebrating GB freed while learners see gaps—detect with synthetic learners and org-stratified samples.",
+      "Prevent/ops: publish a parity dashboard through shadow and T+14 days; alert on mismatch rate or on learner-facing empty-result spikes.",
+      "Runbook for immediate routing rollback to pre-split reads; game-day injects archive unreadability to verify fail-safe behaviour and alerts."
+    ],
+    "sayIt": "Disk savings are not the proof—learner-metric parity is. Shadow compares, stratified samples, and rollback-ready routing are how a ~71% working-set cut stays safe.",
+    "traps": [
+      "Using only disk metrics as success — learners can break while Grafana looks green on GB.",
+      "Global average parity that hides one large org's regression — stratify samples.",
+      "No rollback flag — discovering mismatch after prune is too late."
+    ]
+  },
+  {
+    "id": "d13-q14",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "Why would you reject a compaction that risks ~21K enrolments for roughly ~0.3% storage savings?",
+    "first30s": "I'd frame it as asymmetric risk: a tiny efficiency win cannot justify a blast radius that large—seniors kill 'clever' jobs when expected value is negative.",
+    "modelAnswer": [
+      "Clarify the math: ~0.3% storage savings is negligible cost relief; ~21K enrolments at risk is a trust and operations catastrophe with support, refunds, and regulatory fallout on an institutional LMS.",
+      "Judgment rule: if blast radius includes durable learner state and rollback is uncertain, require overwhelming benefit and proven dry-runs—this proposal fails both.",
+      "Ask for evidence: how was enrolment risk estimated, what is restore time objective, who pages, and what dry-run showed on a canary org?",
+      "Tradeoff framing for stakeholders: cheaper disks or archive tiering vs gambling enrolments—present safer alternatives that achieve savings without touching enrolment integrity.",
+      "Safer paths: live/archive for activity (not enrolments), index hygiene, TTL only on truly ephemeral collections, storage class changes that do not rewrite source-of-truth docs.",
+      "Failure modes if forced: partial compaction, silent referential breaks, and 'we can fix forward' without a restore probe—refuse and escalate if pressured.",
+      "Prevent/ops: encode a risk gate in the runbook—jobs touching enrolment graphs need explicit metric, blast estimate, and rollback drill before scheduling.",
+      "Monitor for unauthorized dangerous jobs via change management alerts; track near-miss proposals as a culture metric so the org learns to kill bad expected value early."
+    ],
+    "sayIt": "I reject asymmetric bets: ~0.3% savings versus ~21K enrolments is not engineering thrift—it is negligence. We take storage wins that do not wager the enrolment graph.",
+    "traps": [
+      "Optimising for storage dashboards while ignoring learner-state blast radius — wrong objective function.",
+      "Assuming backups equal safe rollback without a timed restore drill — backups that have never been restored are hopes.",
+      "Agreeing under schedule pressure 'just this once' — creates precedent for the next worse job."
+    ]
+  },
+  {
+    "id": "d13-q15",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "Design data-lifecycle operations for the institutional LMS: distributed locks, run ledgers, dry-run and restore probes.",
+    "first30s": "I'd treat lifecycle jobs as controlled change: one lock owner, an append-only run ledger, mandatory dry-run, and restore probes before any prune becomes default.",
+    "modelAnswer": [
+      "Clarify lifecycle stages: classify → move/archive → verify → prune → report; each stage is separately restartable and idempotent.",
+      "Distributed locks (Redis/etcd) per collection/watermark prevent overlapping movers; lock TTL + fencing tokens so a dead worker cannot prune after a new owner starts.",
+      "Run ledger records run_id, actor, mode (dry-run|apply), watermark, counts, checksums, and outcome; every apply run must reference a successful dry-run fingerprint.",
+      "Dry-run computes would-move/would-delete sets without mutating; restore probes recover a sampled learner or org slice from archive into a sandbox and compare.",
+      "Tradeoff: slower gated lifecycle vs aggressive cleanup—gates win because LMS history mistakes are existential trust failures.",
+      "Failure modes: lock loss double-prune, dry-run/apply skew, and restore never practiced—detect with ledger anomalies and scheduled probe failures.",
+      "Prevent/ops: dashboard lifecycle runs, lock contention, and probe pass rate; alert on apply without dry-run reference or on probe failure.",
+      "SLO on max prune lag only after safety gates; runbook for halt-all-lifecycle, ledger forensics, and game-day restore under time pressure."
+    ],
+    "sayIt": "Lifecycle is a product with locks, ledgers, dry-runs, and restore probes. If we cannot restore a sample, we do not prune.",
+    "traps": [
+      "Cron without a lock — two pods prune the same window and race deletes.",
+      "Apply mode that drifts from the dry-run plan — you verified the wrong set.",
+      "Never running restore probes — discovery of backup failure happens during a real incident."
+    ]
+  },
+  {
+    "id": "d13-q16",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "Where would you put Redis on hot GraphQL paths in an institutional LMS—what to cache, how to invalidate, how to stop stampedes?",
+    "first30s": "I'd cache stable, high-read entities and permission-safe projections at the gateway or service layer, invalidate on write outboxes, and use single-flight/jitter to prevent stampedes.",
+    "modelAnswer": [
+      "Clarify candidates: course catalogue cards, public metadata, and permission-filtered menus—not per-learner highly mutable activity feeds unless carefully keyed and short-TTL.",
+      "Key design includes org_id, entity_id, authz version or role hash so two roles never share a forbidden projection.",
+      "Invalidation: writer updates Mongo then publishes invalidation events; delete keys or bump a generation version; TTL is a backstop, not the primary correctness mechanism for admin edits.",
+      "Stampede control: lock or single-flight on miss, staggered TTL jitter, and optional stale-while-revalidate for catalogue reads where brief staleness is acceptable.",
+      "Tradeoff: gateway edge cache vs service-local Redis—edge helps anonymous catalogue; service cache respects richer authz; often both with clear ownership.",
+      "Failure modes: caching personalized data under shared keys, invalidating before commit, and thundering herds on expiry—detect with hit-rate, miss storms, and wrong-user canaries.",
+      "Prevent/ops: monitor hit rate, miss latency, and lock wait; alert on miss storms and on Redis error rate with defined shed behaviour.",
+      "Dashboard GraphQL field latency with/without cache; runbook for flush-by-prefix and game-day Redis outage proving the LMS degrades safely without stampeding Mongo."
+    ],
+    "sayIt": "Cache shared, authz-safe projections with org-aware keys. Invalidate on write, jitter TTLs, and single-flight misses so Redis speeds GraphQL without becoming a consistency or stampede bomb.",
+    "traps": [
+      "Caching GraphQL responses without authz in the key — cross-learner data leaks.",
+      "Invalidating before Mongo commit — rollback leaves a hole that refills with stale data.",
+      "Synchronized TTL on millions of course keys — periodic Mongo stampedes every expiry boundary."
+    ]
+  },
+  {
+    "id": "d13-q17",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "How would you structure a healthcare diagnostics platform with modular DDD on FastAPI (patient, appointment, records, billing)?",
+    "first30s": "I'd bound contexts around patient, appointment, records, and billing with explicit anti-corruption layers, separate persistence where needed, and FastAPI routers that do not reach across aggregates casually.",
+    "modelAnswer": [
+      "Clarify bounded contexts: Patient (identity/demographics), Appointment (scheduling), Records (clinical artifacts), Billing (charges/claims)—each with its own models, invariants, and ubiquitous language.",
+      "FastAPI layout: per-context packages (domain, application, adapters); routers call application services, not other contexts' ORMs directly.",
+      "Integration via domain events or application APIs: e.g., AppointmentConfirmed emits an event Billing may consume—no shared mutable tables across contexts.",
+      "Tradeoff: modular monolith vs microservices first—start modular monolith on FastAPI for transactional clarity, split only when scale or ownership forces it.",
+      "Invariants: records access requires patient authz; billing never invents clinical facts; appointments cannot orphan required consent checks when policy demands them.",
+      "Failure modes: 'shared PatientModel imported everywhere', leaky transactions across contexts, and billing reading raw clinical notes—detect with import-linters and architecture tests.",
+      "Prevent/ops: track cross-context import violations in CI; monitor event publish/consume lag between appointment and billing.",
+      "Dashboard context-level error rates; runbook ownership per context so pages go to the right on-call, not a generic blob."
+    ],
+    "sayIt": "Modular DDD keeps clinical and billing languages apart. FastAPI packages own their invariants and talk through APIs/events—not shared tables—so the healthcare diagnostics platform can evolve safely.",
+    "traps": [
+      "One giant models.py for all contexts — boundaries exist only on slides.",
+      "Billing services joining clinical tables directly — compliance and coupling explode together.",
+      "Microservices before stable boundaries — distributed mess with the same muddled model."
+    ]
+  },
+  {
+    "id": "d13-q18",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "Describe a strangler-fig migration from NestJS/Cloud Functions toward Cloud Run for a healthcare diagnostics platform—cutover and dual-run risks.",
+    "first30s": "I'd strangler by route/capability: dual-run with shadow compares, percentage cutover, and instant rollback—never a big-bang flip of clinical traffic.",
+    "modelAnswer": [
+      "Clarify strangler: identify seams (auth, appointments API, records ingest); extract one capability at a time onto Cloud Run while Nest/Cloud Functions remain the facade.",
+      "Dual-run: shadow mode sends copies to Cloud Run, compares status/body hashes for non-mutating GETs; writes use careful replay or idempotent dual-write only with strong ledgering.",
+      "Cutover: percentage traffic via gateway/flag; error budget and latency gates; rollback is flag flip, not rebuild.",
+      "Tradeoff: longer dual-run cost vs big-bang speed—clinical systems prefer dual-run because silent behavioural drift is patient-impacting.",
+      "Risks: divergent auth assumptions, double side effects on writes, clock/config drift, and incomplete observability on the new runtime—detect with shadow mismatch metrics and canary orgs.",
+      "Data path: ensure Firestore/Mongo/SQL connections, IAM, and secrets are equivalent; warm Cloud Run to avoid cold-start SLO burns on first clinical requests.",
+      "Prevent/ops: dashboard shadow mismatch rate, Cloud Run error ratio, and cold-start p95; alert when mismatch exceeds threshold.",
+      "SLO gates on cutover steps; runbook for immediate traffic rollback and game-day kill of Cloud Run to prove facade fallback still serves critical reads."
+    ],
+    "sayIt": "Strangler means dual-run, compare, then percentage cutover with a flag rollback. On a healthcare diagnostics platform, big-bang rewrites are how you schedule an incident.",
+    "traps": [
+      "Big-bang DNS cutover without shadow — first production day is your integration test.",
+      "Dual-writing non-idempotent clinical side effects — duplicate labs or bills.",
+      "Ignoring cold starts on Cloud Run for synchronous clinical APIs — SLO burn looks like 'random' latency."
+    ]
+  },
+  {
+    "id": "d13-q19",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "How do you apply CQRS with Cloud Tasks/Pub/Sub on a healthcare diagnostics platform—fail-fast validation, DLQ, and retries?",
+    "first30s": "I'd validate commands synchronously at the write API, accept only after invariants pass, then dispatch async work via Tasks/Pub/Sub with idempotent handlers, bounded retries, and a DLQ that pages.",
+    "modelAnswer": [
+      "Clarify CQRS: write model handles commands with fail-fast validation (schema, authz, domain invariants); read models project from events for query-optimized views.",
+      "After commit, enqueue Cloud Tasks or Pub/Sub messages with idempotency keys; handlers update projections, notify, or call downstream lab systems.",
+      "Retries: transient errors with exponential backoff; poison messages after N attempts go to DLQ with payload + error class preserved for replay.",
+      "Tradeoff: sync do-everything vs async projections—async protects API latency but requires lag-tolerant reads and clear 'processing' states in UX.",
+      "Fail-fast belongs before enqueue: never put invalid clinical commands on the bus hoping a worker will sort them out.",
+      "Failure modes: retry amplification, unordered events breaking projections, and DLQ neglect—detect with queue age, DLQ depth, and projection lag metrics.",
+      "Prevent/ops: alert on DLQ depth > 0 for clinical topics and on projection lag beyond SLO; dashboard command success vs event handle success.",
+      "Runbook for replay-from-DLQ with idempotent handlers; game-day injects worker failures to prove retries settle and DLQ pages humans."
+    ],
+    "sayIt": "Validate commands up front, enqueue durable work second, and treat DLQ as a paging signal. CQRS on Cloud Tasks/Pub/Sub only works if handlers are idempotent and lag is visible.",
+    "traps": [
+      "Enqueueing first and validating in the worker — the bus fills with garbage and clinical ops drown.",
+      "Infinite retries without DLQ — poison labs block the subscription forever.",
+      "Non-idempotent handlers — every retry creates duplicate clinical side effects."
+    ]
+  },
+  {
+    "id": "d13-q20",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "Design lab-result ingestion with GPT vision transcription: JSON validation, unit normalisation, and risk-based human review.",
+    "first30s": "I'd treat vision output as untrusted: schema-validate, normalise units, score risk, and require human review for high-impact fields before results become clinically actionable.",
+    "modelAnswer": [
+      "Clarify pipeline: ingest image/PDF → GPT vision structured extract → JSON schema validate → unit normalisation → risk score → auto-accept or human review queue → commit to records.",
+      "Validation rejects missing required fields, impossible ranges, and unknown analytes; typed errors drive retry vs human escalation.",
+      "Unit normalisation maps mg/dL vs mmol/L etc. into canonical units with explicit conversion audit; never silently drop units.",
+      "Risk-based review: critical analytes, low model confidence, out-of-range values, or patient-matched anomalies force human confirmation; low-risk routine fields may auto-accept under policy.",
+      "Tradeoff: full human review vs selective automation—selective with audit trails scales; full review bottlenecks; zero review is unsafe.",
+      "Failure modes: confident wrong decimals, unit confusion, and auto-commit of critical values—detect with golden-image suites and reviewer disagreement rates.",
+      "Prevent/ops: metric auto-accept rate, review lag, and post-commit correction rate; alert when correction rate or low-confidence volume exceeds threshold.",
+      "Dashboard review queue SLO; runbook to raise review strictness kill-switch; game-day feeds known adversarial/noisy labs to prove fail-to-review behaviour."
+    ],
+    "sayIt": "Vision proposes; validation and units constrain; risk policy decides what humans must see. Clinical safety beats end-to-end automation vanity metrics.",
+    "traps": [
+      "Writing raw model JSON to the patient record — schema drift becomes clinical data drift.",
+      "Auto-accepting critical analytes on confidence alone — confidence is not calibration.",
+      "Normalising units without an audit trail — you cannot explain a value in a safety review."
+    ]
+  },
+  {
+    "id": "d13-q21",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "For HIPAA-aligned controls on a healthcare diagnostics platform (Firebase Auth, encryption, RBAC, audit), what do you actually verify in the design?",
+    "first30s": "I'd verify concrete control outcomes: who can access which PHI, where it is encrypted, how audit trails prove access, and how auth tokens map to RBAC—not a checklist of product logos.",
+    "modelAnswer": [
+      "Clarify: HIPAA-aligned design means enforceable minimum necessary access, encryption in transit/at rest, authentication, authorisation, and auditable access to ePHI—verify each with tests and threat scenarios.",
+      "Firebase Auth: confirm identity provider config, session/token lifetimes, MFA policy where required, and that API gateways reject unauthenticated clinical routes.",
+      "Encryption: TLS everywhere; at-rest encryption on datastore/object storage; secrets in a manager—not in source; verify key rotation ownership.",
+      "RBAC: role→permission matrix for patient, clinician, admin, billing; object-level checks (own patients vs all); deny by default in resolvers/services.",
+      "Audit: immutable access logs for PHI reads/writes with actor, patient ref, purpose, timestamp; verify logs are queryable for investigations and retained per policy.",
+      "Failure modes: broad service accounts, missing object checks, PHI in logs/metrics, and audit gaps on batch jobs—detect with threat modeling and automated access reviews.",
+      "Prevent/ops: alert on anomalous PHI access volume and on authz deny spikes; monitor audit pipeline lag so investigations are not blind.",
+      "Dashboard access anomalies; runbook for credential compromise; game-day attempts cross-patient reads to prove RBAC and audit both fire."
+    ],
+    "sayIt": "I verify outcomes: deny-by-default RBAC, encryption evidence, and auditability of PHI access. Tool names are not controls until tests and game-days prove them.",
+    "traps": [
+      "Equating 'we use Firebase Auth' with HIPAA compliance — identity alone is not minimum-necessary access.",
+      "Logging request bodies that contain lab results — your observability becomes a PHI spill.",
+      "Shared admin roles without object-level checks — one compromised account reads all patients."
+    ]
+  },
+  {
+    "id": "d13-q22",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "You improved a complex Firestore query by ~50%. What indexing and data-model tradeoffs typically unlock that?",
+    "first30s": "I'd explain composite indexes, denormalisation for read shapes, and avoiding fan-out queries—then name what write complexity and storage you accepted for the ~50% read win.",
+    "modelAnswer": [
+      "Clarify the slow shape: multi-field filters/sorts without a matching composite index, or client-side joins that multiply round trips on the healthcare diagnostics platform.",
+      "Indexing: add composite indexes aligned to equality→inequality→orderBy constraints; remove unused indexes that inflate write cost.",
+      "Model tradeoffs: denormalise fields onto documents that match the query (e.g., appointment list projections), or maintain a read-model collection updated via events.",
+      "Tradeoff: faster reads vs more write fan-out and consistency windows—acceptable when clinician UX is read-heavy and writes are bounded.",
+      "Measure honestly: p95 latency and read ops billed before/after on the same query volume; ensure the win is not a colder cache artefact.",
+      "Failure modes: exploding indexes, hot documents from denormalisation, and stale projections—detect with write latency and projection lag metrics.",
+      "Prevent/ops: dashboard query p95 and index list size; alert if write latency regresses past threshold after new indexes/denorm.",
+      "Runbook for index rollback/disable and for rebuilding projections; verify with a load test that the ~50% holds under concurrent clinicians."
+    ],
+    "sayIt": "Firestore gains usually come from the right composite index plus a read-shaped model. I pay in write fan-out deliberately, and I prove the ~50% with p95 under load—not a single warm query.",
+    "traps": [
+      "Adding every possible composite index — write amplification and deployment pain for unused paths.",
+      "Client-side filtering huge collections — looks fine in dev, melts in production concurrency.",
+      "Claiming 50% from a single local run without production-shaped load — measurement theatre."
+    ]
+  },
+  {
+    "id": "d13-q23",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "How do you use emulator-backed pytest toward ~92% coverage on a healthcare diagnostics platform—what do you mock vs run for real?",
+    "first30s": "I'd run domain logic and Firestore/Auth emulators for real integration boundaries, mock only unstable externals like GPT vision and third-party payers, and treat coverage as a floor—not a substitute for contract tests.",
+    "modelAnswer": [
+      "Clarify pyramid: pure domain unit tests are fast and numerous; emulator-backed tests cover Auth rules, Firestore queries, and task handlers against local emulators; a thin set of contract tests hits staging.",
+      "Real via emulators: security rules, composite queries, transactional writes, and idempotent consumers—these fail in ways mocks hide.",
+      "Mock: GPT vision, SMS, external clearinghouses—provide recorded fixtures and schema validators so mocks cannot silently drift from contracts.",
+      "Coverage ~92%: focus on critical packages (records, authz, billing invariants); do not chase 100% on generated clients or trivial DTOs at the expense of boundary tests.",
+      "Tradeoff: slower emulator CI vs pure mocks—pay CI minutes because healthcare false greens are expensive.",
+      "Failure modes: over-mocking Firestore, flaky emulator startup, and coverage theatre on dead code—detect with mutation testing on authz and with flaky-test budgets.",
+      "Prevent/ops: CI gate on coverage threshold for critical paths and on emulator suite green; track flaky rate as a reliability metric.",
+      "Dashboard CI duration vs flake rate; runbook for emulator version pins; periodically game-day a staging smoke that mirrors emulator scenarios on real managed services."
+    ],
+    "sayIt": "Emulators for our data/auth boundaries, mocks for expensive probabilistic externals, coverage as a critical-path floor. That is how you approach ~92% without lying to yourself.",
+    "traps": [
+      "Mocking Firestore so thoroughly that security rules never run — false confidence on PHI access.",
+      "Chasing line coverage on generated code while skipping emulator query tests — the ~50% query bug returns.",
+      "Unpinned emulator versions — CI greens locally and fails in pipeline randomly."
+    ]
+  },
+  {
+    "id": "d13-q24",
+    "domain": "projects",
+    "domainTitle": "My projects deep dive",
+    "q": "Give a cross-cutting production failure story framework (detect → mitigate → permanent fix) usable on the document intelligence RAG platform, institutional LMS, or healthcare diagnostics platform.",
+    "first30s": "I'd use an evidence framework—not autobiography: detect with SLIs, mitigate to stop bleeding, then permanent fix with owners, metrics, and a game-day so the same class of failure cannot silently return.",
+    "modelAnswer": [
+      "Clarify the framework: Detect (symptom + blast radius) → Mitigate (stop patient/learner/customer harm) → Diagnose (evidence) → Permanent fix (systemic) → Verify (metric + game-day)—portable across all three platforms.",
+      "Detect: name the SLI that moved (error rate, lag, empty retrieve, chat disconnects, projection lag, authz anomalies) and the dashboard/alert that should have fired—or the gap if it did not.",
+      "Mitigate first: feature flag off, traffic shed, reprocess pause, dual-run rollback, raise review strictness—choose the reversible control that shrinks blast radius fastest.",
+      "Diagnose with evidence: correlation ids, stage metrics, queue lag, canary org diffs—avoid blame narratives; write a timeline of facts.",
+      "Permanent fix changes the system: idempotency, filter, index, lock, schema gate, alert, or runbook—not only 'restarted the pod'.",
+      "Tradeoff: long RCA theatre vs quick mitigate—always mitigate first; schedule deep fix with owners and dates once harm is contained.",
+      "Prevent/ops: add or fix the alert that should have detected earlier; define threshold and page routing; attach a runbook link to the alert.",
+      "Close with verification: metric returns to SLO, shadow/canary stays clean, and a game-day re-injects the failure mode to prove detection and mitigation still work on that platform."
+    ],
+    "sayIt": "Detect with SLIs, mitigate to stop harm, then fix the system and prove it with alerts and a game-day. Same framework whether the blast is RAG retrieval, LMS data lifecycle, or clinical projections.",
+    "traps": [
+      "Jumping to root-cause debates while blast radius grows — patients/learners keep getting hurt during the argument.",
+      "Calling a restart the permanent fix — the same alert-less failure returns next week.",
+      "Autobiographical storytelling without metrics — interview theatre that does not transfer to the next outage."
     ]
   }
 ];

@@ -18,6 +18,7 @@ window.LESSONS = [
   { id: "sb-d10", title: "AWS, Nginx & networking", url: "domains/aws-nginx.html", module: "domains", tool: "domains" },
   { id: "sb-d11", title: "Security & multi-tenancy", url: "domains/security.html", module: "domains", tool: "domains" },
   { id: "sb-d12", title: "Delivery & senior judgment", url: "domains/ownership.html", module: "domains", tool: "domains" },
+  { id: "sb-d13", title: "My projects deep dive", url: "domains/projects.html", module: "domains", tool: "domains" },
 ];
 
 window.LESSON_MODULES = [

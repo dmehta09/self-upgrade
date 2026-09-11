@@ -401,402 +401,402 @@
   },
   {
     "front": "A PostgreSQL query is fast with one million rows but becomes slow with one hundred million. How would you investigate?",
-    "back": "At 100M the plan or cache behavior changed. EXPLAIN ANALYZE with BUFFERS tells me if it's a bad join, missing index, or I/O — I fix the plan before throwing hardware at it.",
+    "back": "At 100M the plan or cache behavior usually changed, not the hardware baseline. I compare EXPLAIN ANALYZE with BUFFERS at both scales, fix estimate skew or missing indexes, and only then talk about partitioning or bigger boxes — with metrics so the next growth cliff is visible early.",
     "tag": "d05"
   },
   {
     "front": "Trap — d05 / d05-q01: what's wrong with this instinct?",
-    "back": "Adding random indexes without reading the plan",
+    "back": "Adding random indexes without reading the plan — write amplification rises while the real node stays hot",
     "tag": "d05-trap"
   },
   {
     "front": "How would you use EXPLAIN or EXPLAIN ANALYZE to debug a slow PostgreSQL query?",
-    "back": "I run EXPLAIN ANALYZE with BUFFERS, find the hottest node, and fix estimate skew or I/O — not guesswork indexes.",
+    "back": "I run EXPLAIN ANALYZE with BUFFERS, find the hottest node and estimate skew, then fix the plan or I/O story — not guesswork indexes. The interview answer is the loop: measure, change one thing, re-measure, and keep the artifact for the next regression.",
     "tag": "d05"
   },
   {
     "front": "Trap — d05 / d05-q02: what's wrong with this instinct?",
-    "back": "Using EXPLAIN alone and trusting estimates",
+    "back": "Using EXPLAIN alone and trusting estimates — you optimize a plan that never ran",
     "tag": "d05-trap"
   },
   {
     "front": "Two users try to purchase the last available item at exactly the same time. How would you prevent overselling?",
-    "back": "I never trust check-then-update in app memory. One conditional UPDATE or SELECT FOR UPDATE on the stock row, short transaction, sold-out if zero rows.",
+    "back": "I never trust check-then-update in app memory for the last unit. One conditional UPDATE or a short SELECT FOR UPDATE on the stock row, never hold that lock across payment I/O, and treat zero rows as sold-out with idempotent retries so the inventory invariant survives concurrency and flaky networks.",
     "tag": "d05"
   },
   {
     "front": "Trap — d05 / d05-q03: what's wrong with this instinct?",
-    "back": "Read stock in app, decrement, write back without locking",
+    "back": "Read stock in app, decrement, write back without locking — silent oversell under concurrency",
     "tag": "d05-trap"
   },
   {
     "front": "When would you use optimistic locking versus pessimistic locking?",
-    "back": "Optimistic version columns when collisions are rare; FOR UPDATE when I know two writers will fight over the same row and must serialize.",
+    "back": "I pick optimistic version columns when collisions are rare and the client can retry, and SELECT FOR UPDATE when I already know writers will fight over the same row and must serialize. The staff answer names the failure modes — ignored 0-row updates and locks held across I/O — and backs the choice with conflict and wait metrics.",
     "tag": "d05"
   },
   {
     "front": "Trap — d05 / d05-q04: what's wrong with this instinct?",
-    "back": "Optimistic locking with silent overwrite on 0-row updates",
+    "back": "Optimistic locking with silent overwrite on 0-row updates — clients think they saved; data lied",
     "tag": "d05-trap"
   },
   {
     "front": "A read-then-update workflow produces lost updates under concurrency. How would you redesign it?",
-    "back": "Lost updates are a smell of check-then-act. I make the write atomic or version it so concurrent writers cannot silently clobber each other.",
+    "back": "Lost updates are a smell of check-then-act in application memory. I make the write atomic or version it so concurrent writers cannot silently clobber each other, keep retries re-entrant, and prove the invariant with concurrent tests and conflict metrics — not by hoping READ COMMITTED is enough.",
     "tag": "d05"
   },
   {
     "front": "Trap — d05 / d05-q05: what's wrong with this instinct?",
-    "back": "Assuming READ COMMITTED prevents lost updates (it doesn't for this pattern)",
+    "back": "Assuming READ COMMITTED prevents lost updates (it doesn't for this pattern) — last writer still wins",
     "tag": "d05-trap"
   },
   {
     "front": "How would you choose between READ COMMITTED, REPEATABLE READ, and SERIALIZABLE for a business operation?",
-    "back": "I stay on READ COMMITTED unless the business needs a snapshot or true serializability — and I design for retries when I raise isolation.",
+    "back": "I stay on READ COMMITTED unless the business needs a stable snapshot or true serializability across rows. In Postgres, REPEATABLE READ gives a snapshot but still allows write skew and does not behave like SSI abort-heavy isolation; SERIALIZABLE is what aborts with 40001 to protect multi-row invariants — and I only raise isolation with an explicit retry path and metrics.",
     "tag": "d05"
   },
   {
     "front": "Trap — d05 / d05-q06: what's wrong with this instinct?",
-    "back": "Raising isolation 'to be safe' without retry logic",
+    "back": "Raising isolation 'to be safe' without retry logic — SERIALIZABLE aborts become user-facing 500s",
     "tag": "d05-trap"
   },
   {
     "front": "Two transactions deadlock in production. How would you investigate and reduce the likelihood of future deadlocks?",
-    "back": "Deadlocks are lock-order cycles. I read the log, enforce a global lock order, shrink transactions, and retry the loser idempotently.",
+    "back": "Deadlocks are lock-order cycles, not a mysterious Postgres bug. I read the deadlock detail, enforce a global lock order, shrink transactions, and retry the loser idempotently — then watch deadlock rate so the next cross-account feature does not reintroduce the cycle.",
     "tag": "d05"
   },
   {
     "front": "Trap — d05 / d05-q07: what's wrong with this instinct?",
-    "back": "Retrying forever without backoff or idempotency",
+    "back": "Retrying forever without backoff or idempotency — amplify load and double-apply side effects",
     "tag": "d05-trap"
   },
   {
     "front": "Your application opens far more PostgreSQL connections than expected. How would you find the source and fix it?",
-    "back": "Connection storms are usually pool math or leaks. I count pg_stat_activity, fix pool sizing, and put PgBouncer in front so Postgres isn't the connection radiator.",
+    "back": "Connection storms are usually pool math or leaks, not a need for a bigger max_connections. I count pg_stat_activity by app and state, fix pool sizing and idle-in-transaction, put PgBouncer in front, and alert before Postgres is the connection radiator for the whole fleet.",
     "tag": "d05"
   },
   {
     "front": "Trap — d05 / d05-q08: what's wrong with this instinct?",
-    "back": "Raising max_connections instead of pooling",
+    "back": "Raising max_connections instead of pooling — RAM and latency degrade while the leak continues",
     "tag": "d05-trap"
   },
   {
     "front": "How would you perform a schema migration or index creation on a large production table without unacceptable downtime?",
-    "back": "No big-bang locks on hot tables. CONCURRENTLY for indexes, batched backfills for data, additive schema first.",
+    "back": "No big-bang locks on hot tables. I use CONCURRENTLY for indexes, batched backfills for data, and additive schema first — watching lag and lock progress so the migration stays inside write-latency SLO instead of becoming an accidental outage.",
     "tag": "d05"
   },
   {
     "front": "Trap — d05 / d05-q09: what's wrong with this instinct?",
-    "back": "Running CREATE INDEX (non-concurrent) on a 100M-row hot table",
+    "back": "Running CREATE INDEX (non-concurrent) on a 100M-row hot table — writers block for the whole build",
     "tag": "d05-trap"
   },
   {
     "front": "How would you design a zero-downtime database migration when old and new application versions must run simultaneously?",
-    "back": "Rolling deploys need expand-contract. Schema stays compatible with both versions until the fleet and backfill are done — then contract.",
+    "back": "Rolling deploys need expand-contract: schema stays compatible with both versions until the fleet and backfill are done, then you contract. I separate expand and contract into different deploys, dual-write or backfill with verification, and only drop the old shape when metrics say nothing still depends on it.",
     "tag": "d05"
   },
   {
     "front": "Trap — d05 / d05-q10: what's wrong with this instinct?",
-    "back": "Renaming/dropping columns in the same deploy that changes app code",
+    "back": "Renaming/dropping columns in the same deploy that changes app code — old pods 500 mid-rollout",
     "tag": "d05-trap"
   },
   {
     "front": "A MongoDB collection has 100 million documents and a frequently used query became slow. What would you inspect first?",
-    "back": "First explain executionStats. If docsExamined ≫ nReturned, the index or query shape is wrong — I fix that before talking about sharding.",
+    "back": "First explain with executionStats. If docsExamined is far above nReturned, the index or query shape is wrong — I fix that before talking about sharding. The staff move is proving the plan, matching ESR, and putting latency and scan-rate metrics on the hot path so the next regression is obvious.",
     "tag": "d06"
   },
   {
     "front": "Trap — d06 / d06-q01: what's wrong with this instinct?",
-    "back": "Adding indexes blindly without explain",
+    "back": "Adding indexes blindly without explain — writes slow down while the COLLSCAN remains",
     "tag": "d06-trap"
   },
   {
     "front": "How would you decide between embedding and referencing for a MongoDB document model?",
-    "back": "Modeling follows queries. Embed co-read bounded data; reference shared or unbounded data — and denormalize snapshots when history must not change.",
+    "back": "I model from queries: embed co-read bounded owned data for atomic reads, reference shared or unbounded data, and denormalize snapshots when history must not change. The decision is revisited when size, contention, or fan-out updates hurt — with document-size metrics so the 16MB cliff is not a surprise.",
     "tag": "d06"
   },
   {
     "front": "Trap — d06 / d06-q02: what's wrong with this instinct?",
-    "back": "Embedding unbounded arrays 'for convenience'",
+    "back": "Embedding unbounded arrays 'for convenience' — document rewrites slow and 16MB failures appear",
     "tag": "d06-trap"
   },
   {
     "front": "An aggregation pipeline is slow in production. How would you identify the expensive stage and optimize it?",
-    "back": "Find the expensive stage, filter early with an index, and treat $lookup/$unwind/$group as suspects until proven cheap.",
+    "back": "I find the expensive stage, filter early with an index, and treat $lookup, $unwind, and $group as guilty until proven cheap. If the pipeline is a permanent hot path, I consider a materialized collection rather than living on disk spills — and I keep latency metrics so regressions show up in review, not in an outage.",
     "tag": "d06"
   },
   {
     "front": "Trap — d06 / d06-q03: what's wrong with this instinct?",
-    "back": "$match after $lookup on the full collection",
+    "back": "$match after $lookup on the full collection — you pay full scan then throw rows away",
     "tag": "d06-trap"
   },
   {
     "front": "How would you choose MongoDB indexes from real query patterns rather than from the schema alone?",
-    "back": "Indexes follow the workload. I rank real queries, build compound keys with ESR, and delete indexes that only look good on the schema.",
+    "back": "Indexes follow the workload, not the schema diagram. I rank real queries, build compound keys with ESR, prefer one good compound over many singles, and delete indexes that only look tidy — with write-latency and unused-index reviews so the collection stays fast as the query mix shifts.",
     "tag": "d06"
   },
   {
     "front": "Trap — d06 / d06-q04: what's wrong with this instinct?",
-    "back": "Indexing every field 'just in case'",
+    "back": "Indexing every field 'just in case' — writes and RAM die under insert load",
     "tag": "d06-trap"
   },
   {
     "front": "A document contains an array that grows indefinitely and is frequently queried. How would you redesign the model?",
-    "back": "Infinite arrays don't belong in one document. Child collection or time buckets, maybe a small embedded preview for the hot read.",
+    "back": "Infinite arrays do not belong in one document. I move history to a child collection or time buckets, keep a small embedded preview for the hot read, migrate with checkpoints, and watch document size and array length so the 16MB cliff never becomes a production incident.",
     "tag": "d06"
   },
   {
     "front": "Trap — d06 / d06-q05: what's wrong with this instinct?",
-    "back": "Capping with $slice in queries but still storing unbounded data",
+    "back": "Capping with $slice in queries but still storing unbounded data — reads look fine until writes hit 16MB",
     "tag": "d06-trap"
   },
   {
     "front": "How would you choose a shard key for a high-write MongoDB workload?",
-    "back": "Shard key = cardinality + even writes + targeted reads. I won't shard on status or plain timestamps that create hot shards.",
+    "back": "A shard key must combine cardinality, even writes, and targeted reads. I will not shard on status or plain timestamps that create hot shards, and I prove distribution under load — because adding shards never fixes a hotspot key, it often multiplies scatter-gather pain.",
     "tag": "d06"
   },
   {
     "front": "Trap — d06 / d06-q06: what's wrong with this instinct?",
-    "back": "Sharding on low-cardinality fields",
+    "back": "Sharding on low-cardinality fields — few fat chunks that will not split usefully",
     "tag": "d06-trap"
   },
   {
     "front": "What characteristics can make a MongoDB shard key a hotspot?",
-    "back": "Hotspots come from monotonic inserts, low cardinality, or traffic skew. The key must spread writes, not just unique them.",
+    "back": "Hotspots come from monotonic inserts, low cardinality, or traffic skew — uniqueness alone does not spread writes. I design keys that distribute, watch per-shard ops for imbalance, and isolate whales or hash when ranges allow — because more shards will not heal a right-hand or celebrity-key hotspot.",
     "tag": "d06"
   },
   {
     "front": "Trap — d06 / d06-q07: what's wrong with this instinct?",
-    "back": "Thinking 'unique' equals 'well distributed'",
+    "back": "Thinking 'unique' equals 'well distributed' — monotonic unique keys still right-hand hotspot",
     "tag": "d06-trap"
   },
   {
     "front": "A query becomes scatter/gather in a sharded cluster. What does that mean for performance and how would you reduce it?",
-    "back": "Scatter-gather fans out to every shard. Hot paths must be targeted by shard key — otherwise each read taxes the whole cluster.",
+    "back": "Scatter-gather fans out to every shard and merges on mongos, so hot paths must include the shard key. I prove shard touch count in explain, force key fields in the data access layer, and watch mongos CPU — adding shards without fixing targeting usually makes the tax worse, not better.",
     "tag": "d06"
   },
   {
     "front": "Trap — d06 / d06-q08: what's wrong with this instinct?",
-    "back": "Assuming secondary indexes make queries targeted (they don't replace shard key routing)",
+    "back": "Assuming secondary indexes make queries targeted (they don't replace shard key routing) — still fans out",
     "tag": "d06-trap"
   },
   {
     "front": "You need to update tens of millions of MongoDB documents. How would you make the migration safe, resumable, and observable?",
-    "back": "Big migrations are checkpointed bulkWrite loops — idempotent, throttled, observable, and resumable from last _id.",
+    "back": "Big migrations are checkpointed bulkWrite loops — idempotent, throttled, observable, and resumable from the last _id. I never ship a blind updateMany on tens of millions; I watch replication lag and pause against SLO so the migration stays an online job, not an outage.",
     "tag": "d06"
   },
   {
     "front": "Trap — d06 / d06-q09: what's wrong with this instinct?",
-    "back": "updateMany on the whole collection with no resume story",
+    "back": "updateMany on the whole collection with no resume story — crash forces a full restart and unknown partial state",
     "tag": "d06-trap"
   },
   {
     "front": "How would you design multi-tenant data isolation in MongoDB?",
-    "back": "tenantId on every doc and every query, indexes and shard key aligned, auth-bound tenant — escalate to DB- or cluster-per-tenant when compliance or noise demands it.",
+    "back": "I put tenantId on every document and every query, align indexes and shard key with it, and bind tenant from the authenticated session — escalating to DB- or cluster-per-tenant when compliance or noise demands it. Isolation fails closed in the data access layer, with audits and skew metrics so a missing filter or whale tenant cannot become a silent breach or hotspot.",
     "tag": "d06"
   },
   {
     "front": "Trap — d06 / d06-q10: what's wrong with this instinct?",
-    "back": "Filtering tenant only in the UI",
+    "back": "Filtering tenant only in the UI — any direct API/repo bug becomes cross-tenant leakage",
     "tag": "d06-trap"
   },
   {
     "front": "When should an API use Redis instead of querying PostgreSQL directly?",
-    "back": "Redis for hot, slightly stale reads and coordination. Postgres for truth and transactions — I cache when the hit rate and latency win are proven.",
+    "back": "I put Redis on hot, repeatable reads that tolerate slight staleness after the hit-rate and latency win are proven — not by default. Postgres stays the system of record for durable transactions; Redis also owns ephemeral coordination like rate limits and locks. If hit rate or freshness SLOs cannot clear a bar, I use replicas or stay on Postgres.",
     "tag": "d07"
   },
   {
     "front": "Trap — d07 / d07-q01: what's wrong with this instinct?",
-    "back": "Caching everything including low-hit unique keys",
+    "back": "Caching everything including low-hit unique keys — burns memory and ops complexity with no p95 win",
     "tag": "d07-trap"
   },
   {
     "front": "Redis goes down during peak traffic. How should the application degrade?",
-    "back": "Redis down: timeout fast, degrade by feature, and cap DB fallback — an uncapped fallback is an outage multiplier.",
+    "back": "When Redis dies I timeout fast, apply a written fail-open or fail-closed policy per feature, and cap every DB fallback. An uncapped 'just query Postgres' path multiplies the outage. I alert on breaker state and DB QPS, then rehearse warm-up so recovery does not create a second stampede.",
     "tag": "d07"
   },
   {
     "front": "Trap — d07 / d07-q02: what's wrong with this instinct?",
-    "back": "Infinite retries to Redis on the request path",
+    "back": "Infinite retries to Redis on the request path — exhausts thread pools and turns a blip into latency death",
     "tag": "d07-trap"
   },
   {
     "front": "How would you implement cache-aside for a read-heavy endpoint?",
-    "back": "Cache-aside: GET, miss to DB, SET with TTL; invalidate on write; singleflight so misses don't herd.",
+    "back": "Cache-aside is GET, miss to Postgres, SET with TTL, and invalidate after commit — with an explicit consistency window and an invalidation graph for derived keys. I null-cache short, singleflight hot misses, and watch hit rate plus origin QPS so a broken invalidation shows up as metrics, not only as user reports.",
     "tag": "d07"
   },
   {
     "front": "Trap — d07 / d07-q03: what's wrong with this instinct?",
-    "back": "Caching without TTL",
+    "back": "Caching without TTL — missed invalidations become permanent wrong answers",
     "tag": "d07-trap"
   },
   {
     "front": "How would you handle stale cache data after a PostgreSQL update?",
-    "back": "Commit first, then invalidate or SET the new value. TTL is the safety net for races and missed deletes.",
+    "back": "I commit Postgres first, then invalidate or overwrite every key in the entity's invalidation graph, with TTL as the safety net for races and missed deletes. Replica lag can refill stale values, so I version payloads or read primary after write when freshness matters. Metrics on stale reads and failed DELs catch silent invalidation bugs.",
     "tag": "d07"
   },
   {
     "front": "Trap — d07 / d07-q04: what's wrong with this instinct?",
-    "back": "Invalidating before commit (rollback leaves hole or race)",
+    "back": "Invalidating before commit — rollback leaves a hole or concurrent readers cache pre-image forever until TTL",
     "tag": "d07-trap"
   },
   {
     "front": "What is a cache stampede scenario and how would you prevent it?",
-    "back": "Stampede = thundering herd on miss. One refresher via lock or singleflight; others wait or get stale.",
+    "back": "Stampede is a synchronized miss herd on the origin; hot-key is sustained traffic on one Redis slot — different problems. I use singleflight plus an NX lock with TTL, bounded waiter timeout, and stale-while-revalidate when freshness allows. Lock TTL and waiter budgets are part of the design, and I watch miss spikes at expiry.",
     "tag": "d07"
   },
   {
     "front": "Trap — d07 / d07-q05: what's wrong with this instinct?",
-    "back": "Only jittering TTL but not locking the hottest key",
+    "back": "Only jittering TTL but not locking the hottest key — celebrity keys still stampede on expiry",
     "tag": "d07-trap"
   },
   {
     "front": "A popular Redis key becomes a hot key. How would you handle it?",
-    "back": "Hot keys need L1 caching or key sharding — scaling the cluster alone won't help if one key owns one slot.",
+    "back": "Hot keys need L1 caching or deliberate key sharding — adding Redis nodes alone will not split one key's hash slot. I confirm with hot-key and per-node CPU metrics, then absorb reads in-process or fan out to sibling keys with an explicit merge story. Hash tags and oversized values are common ways we accidentally create the hotspot.",
     "tag": "d07"
   },
   {
     "front": "Trap — d07 / d07-q06: what's wrong with this instinct?",
-    "back": "Adding Redis nodes without splitting the key",
+    "back": "Adding Redis nodes without splitting the key — the hot slot moves hosts but stays hot",
     "tag": "d07-trap"
   },
   {
     "front": "How would you choose TTLs for data with different freshness requirements?",
-    "back": "TTL is a freshness SLA. Short + invalidate for volatile data, longer for static, jitter everything, short negative cache for misses.",
+    "back": "TTL is a freshness SLA, not a random constant: short plus invalidate for volatile data, longer for static, jitter everywhere, and short negative cache for hot misses. Eviction policy is memory management, not a substitute for that SLA. I revisit TTLs when hit rate or stale-read metrics say the policy drifted.",
     "tag": "d07"
   },
   {
     "front": "Trap — d07 / d07-q07: what's wrong with this instinct?",
-    "back": "One global TTL for all keys",
+    "back": "One global TTL for all keys — over-fresh expensive paths and under-fresh critical paths at once",
     "tag": "d07-trap"
   },
   {
     "front": "How would you design a distributed per-user and per-IP rate limiter using Redis?",
-    "back": "Per-user and per-IP keys with atomic INCR or sliding-window Lua, checked early in the middleware, with an explicit Redis-down policy.",
+    "back": "I enforce per-user and per-IP limits with atomic INCR or sliding-window Lua in middleware before expensive work, and I pick fail-closed for abuse-sensitive paths when Redis is down. Fixed windows are fine until boundary bursts hurt; then I pay for sliding/token-bucket accuracy. Reject rate and Redis errors on the limiter path are first-class alerts.",
     "tag": "d07"
   },
   {
     "front": "Trap — d07 / d07-q08: what's wrong with this instinct?",
-    "back": "Non-atomic get/set rate counters",
+    "back": "Non-atomic get/set rate counters — concurrent instances under-count and allow floods",
     "tag": "d07-trap"
   },
   {
     "front": "Two application instances update the same Redis-based counter concurrently. How would you make the operation safe?",
-    "back": "INCR or Lua — not get-add-set. Redis atomic ops are the concurrency control.",
+    "back": "Concurrent counter updates belong to INCR or to Lua for conditional multi-step RMW — never get-add-set in the app. Bare MULTI/EXEC is not the same as Lua for check-and-set; use WATCH+MULTI or Lua when you need conditions. If the number is money, Postgres is the ledger and Redis is at best a cache or approximate metric.",
     "tag": "d07"
   },
   {
     "front": "Trap — d07 / d07-q09: what's wrong with this instinct?",
-    "back": "GET + SET across instances",
+    "back": "GET + SET across instances — classic lost-update race under concurrency",
     "tag": "d07-trap"
   },
   {
     "front": "How would you prevent a cache outage from causing a database avalanche?",
-    "back": "Avalanche prevention is bounded fallback: breakers, semaphores, stale serve, and shedding — not 'just query Postgres.'",
+    "back": "Avalanche prevention is bounded fallback: breakers, a sized semaphore, ordered load shedding, and stale serve — not 'just query Postgres.' I size the bulkhead from DB headroom, coalesce misses, and run a game-day with a clear pass/fail on DB QPS. Fallback rate and semaphore rejects are the metrics that prove the guardrails work.",
     "tag": "d07"
   },
   {
     "front": "Trap — d07 / d07-q10: what's wrong with this instinct?",
-    "back": "Silent unlimited DB fallback",
+    "back": "Silent unlimited DB fallback — converts Redis loss into a full database outage",
     "tag": "d07-trap"
   },
   {
     "front": "A Kafka consumer is processing messages slower than producers are publishing them. How would you diagnose and scale it?",
-    "back": "Lag tells me I'm falling behind. I find whether it's handler time or skew, then add partitions/consumers or make each message cheaper.",
+    "back": "Lag is the north star: I confirm whether the whole group or one partition is falling behind, then profile the handler before adding capacity. Consumers beyond partition count sit idle, and key skew will not yield to horizontal scale. I alert on lag age against a freshness SLO, not only on CPU.",
     "tag": "d08"
   },
   {
     "front": "Trap — d08 / d08-q01: what's wrong with this instinct?",
-    "back": "Adding consumers without adding partitions",
+    "back": "Adding consumers without adding partitions — idle consumers and unchanged lag",
     "tag": "d08-trap"
   },
   {
     "front": "A consumer processes the same event twice. How should the application handle duplicates?",
-    "back": "Duplicates are expected. I key every side effect and upsert under a unique constraint so the second delivery is a no-op.",
+    "back": "Duplicates are expected under at-least-once, so every side effect carries a stable idempotency key. DB work uses an inbox unique constraint in the same transaction; non-DB work needs provider keys or durable SET NX. Kafka EOS narrows duplicates inside its scope — it does not replace business idempotency for arbitrary side effects.",
     "tag": "d08"
   },
   {
     "front": "Trap — d08 / d08-q02: what's wrong with this instinct?",
-    "back": "Assuming Kafka exactly-once means the business effect is exactly-once without work",
+    "back": "Assuming Kafka exactly-once means the business effect is exactly-once without work — EOS scope does not cover arbitrary side effects",
     "tag": "d08-trap"
   },
   {
     "front": "A consumer updates PostgreSQL and crashes before committing its Kafka offset. What could happen?",
-    "back": "DB committed, offset not: redelivery. That's at-least-once — idempotency makes it safe; committing early makes loss possible.",
+    "back": "If Postgres committed and the offset did not, redelivery is guaranteed — that is at-least-once, and idempotency makes it safe. Auto-commit, revoke mid-batch, and partial poll windows widen the hazard; committing early turns the same crash into data loss. I commit after success and rehearse kill-mid-batch.",
     "tag": "d08"
   },
   {
     "front": "Trap — d08 / d08-q03: what's wrong with this instinct?",
-    "back": "Believing 'we commit sync so duplicates can't happen'",
+    "back": "Believing 'we commit sync so duplicates can't happen' — sync commit after DB still races with crash between the two",
     "tag": "d08-trap"
   },
   {
     "front": "How would you design an idempotent Kafka consumer?",
-    "back": "Idempotent consumer = unique event id + transactional dedupe with the side effect + offset commit after success + DLQ for poison.",
+    "back": "An idempotent consumer pairs a stable event id with a transactional inbox and the business write, then commits offsets only after success. External calls need their own keys, and poison messages get a retry budget then DLQ so the partition keeps moving. Duplicate-skip and DLQ depth metrics prove the design under rebalances.",
     "tag": "d08"
   },
   {
     "front": "Trap — d08 / d08-q04: what's wrong with this instinct?",
-    "back": "Idempotency key that's not unique across retries (e.g. random UUID generated in consumer)",
+    "back": "Idempotency key that's not unique across retries (e.g. random UUID generated in consumer) — every retry looks new",
     "tag": "d08-trap"
   },
   {
     "front": "How would you choose a Kafka partition key for an order or user domain?",
-    "back": "Partition key = ordering scope. orderId for order timelines, userId for user timelines — never one key for the whole topic.",
+    "back": "Partition key equals ordering scope: orderId for order timelines, userId for user timelines — never one key for the whole topic and never a low-cardinality field. I watch per-partition lag for celebrity skew and treat key changes as migrations. Producer agreement on the key is part of the contract.",
     "tag": "d08"
   },
   {
     "front": "Trap — d08 / d08-q05: what's wrong with this instinct?",
-    "back": "Random keys when you needed per-entity ordering",
+    "back": "Random keys when you needed per-entity ordering — state machines race across partitions",
     "tag": "d08-trap"
   },
   {
     "front": "One Kafka partition is receiving much more traffic than the others. How would you diagnose and fix the imbalance?",
-    "back": "Hot partition is key skew. Find the key, change keying or isolate the whale — extra consumers can't share one partition.",
+    "back": "A hot partition is key skew until proven otherwise: find the key, then re-key, salt with eyes open, or isolate the whale. Extra consumers cannot share one partition, and more partitions will not split an existing hot key. Imbalance alerts on produce rate and lag catch it before SLO burn.",
     "tag": "d08"
   },
   {
     "front": "Trap — d08 / d08-q06: what's wrong with this instinct?",
-    "back": "Scaling consumer count expecting the hot partition to split",
+    "back": "Scaling consumer count expecting the hot partition to split — one partition still one consumer in the group",
     "tag": "d08-trap"
   },
   {
     "front": "How would you design retries without allowing one poison message to block unrelated processing?",
-    "back": "Retry transient errors with a budget, then DLQ and move on — one bad message must not stall the partition.",
+    "back": "I retry only transient errors with a budget, then DLQ and commit forward so one poison pill cannot stall the partition. Long sleeps that miss heartbeats cause rebalances that make things worse. DLQ depth and a replay runbook are part of the design, not afterthoughts.",
     "tag": "d08"
   },
   {
     "front": "Trap — d08 / d08-q07: what's wrong with this instinct?",
-    "back": "Infinite retries on deserialization errors",
+    "back": "Infinite retries on deserialization errors — partition lag grows forever on undrinkable poison",
     "tag": "d08-trap"
   },
   {
     "front": "When would you choose Kafka versus SQS, RabbitMQ, or a synchronous API call?",
-    "back": "Sync for immediate answers, SQS/Rabbit for work queues, Kafka when I need a replayable event log and independent consumer groups at scale.",
+    "back": "I use sync APIs when the caller needs an immediate answer, SQS or Rabbit when I need a work queue, and Kafka when I need a replayable partitioned log with independent consumer groups at scale. Kafka is not a default RPC substitute, and SQS is not Kafka's replay model. The ADR should state which property justified the choice.",
     "tag": "d08"
   },
   {
     "front": "Trap — d08 / d08-q08: what's wrong with this instinct?",
-    "back": "Using Kafka for every tiny async job",
+    "back": "Using Kafka for every tiny async job — pays cluster and ops cost without replay/fan-out value",
     "tag": "d08-trap"
   },
   {
     "front": "How would you evolve an event schema without breaking existing consumers?",
-    "back": "Additive evolution under registry compatibility rules. Breaking changes take expand-contract and versioned event types — never silent field deletes.",
+    "back": "I evolve events additively under registry compatibility rules, with expand-contract for anything breaking. Field renames and silent deletes are how you poison every consumer at once. CI compatibility checks and deserialization error alerts catch drift before a full rollout.",
     "tag": "d08"
   },
   {
     "front": "Trap — d08 / d08-q09: what's wrong with this instinct?",
-    "back": "Renaming fields in place",
+    "back": "Renaming fields in place — old consumers fail deserialization and stall or DLQ",
     "tag": "d08-trap"
   },
   {
     "front": "How would you use the outbox pattern to keep database state and published events consistent?",
-    "back": "Outbox: one DB transaction for state + event row, async relay to Kafka. No dual-write hope.",
+    "back": "Outbox keeps state and events aligned by writing both in one Postgres transaction, then relaying asynchronously with idempotent produce keys. CDC versus poll is an ops tradeoff on lag and complexity, not a different consistency story. I alert on outbox depth and publish lag SLO so a stuck publisher is visible before consumers starve.",
     "tag": "d08"
   },
   {
     "front": "Trap — d08 / d08-q10: what's wrong with this instinct?",
-    "back": "Publishing to Kafka inside the request without an outbox",
+    "back": "Publishing to Kafka inside the request without an outbox — classic dual-write race on crash",
     "tag": "d08-trap"
   },
   {
@@ -1101,12 +1101,12 @@
   },
   {
     "front": "You are given a major new feature and two junior interns. How would you approach, decompose, delegate, review, and deliver it?",
-    "back": "I keep the risky design and integration, give juniors well-bounded slices with contracts, and review early so we don't discover architectural mistakes on merge day.",
+    "back": "I keep risky design and integration, give juniors well-bounded vertical slices with contracts, review early for safety, and own ship/operability so we don't discover architecture mistakes on merge day.",
     "tag": "d12"
   },
   {
     "front": "Trap — d12 / d12-q01: what's wrong with this instinct?",
-    "back": "Throwing a vague epic at interns and disappearing into meetings.",
+    "back": "Throwing a vague epic at interns and disappearing — they invent conflicting designs and you rediscover architecture on merge day.",
     "tag": "d12-trap"
   },
   {
@@ -1116,7 +1116,7 @@
   },
   {
     "front": "Trap — d12 / d12-q02: what's wrong with this instinct?",
-    "back": "Building three speculative variants 'just in case'.",
+    "back": "Building three speculative variants 'just in case' — multiplies work and still leaves the real decision unmade.",
     "tag": "d12-trap"
   },
   {
@@ -1126,17 +1126,17 @@
   },
   {
     "front": "Trap — d12 / d12-q03: what's wrong with this instinct?",
-    "back": "Horizontal tasks that block on each other until the last day.",
+    "back": "Horizontal tasks that block on each other until the last day — looks parallel until integration reveals nothing works together.",
     "tag": "d12-trap"
   },
   {
     "front": "What parts of the feature would you own personally and what would you delegate?",
-    "back": "I keep the irreversible and high-blast-radius decisions, delegate patterned implementation, and co-own anything that can corrupt data or leak tenants. Outcome stays on me.",
+    "back": "I keep irreversible and high-blast-radius decisions, delegate patterned implementation, and co-own anything that can corrupt data or leak tenants. Outcome stays on me.",
     "tag": "d12"
   },
   {
     "front": "Trap — d12 / d12-q04: what's wrong with this instinct?",
-    "back": "Delegating everything then blaming juniors for architectural failure.",
+    "back": "Delegating everything then blaming juniors for architectural failure — ownership theater; the outcome was still yours.",
     "tag": "d12-trap"
   },
   {
@@ -1146,7 +1146,7 @@
   },
   {
     "front": "Trap — d12 / d12-q05: what's wrong with this instinct?",
-    "back": "Publicly shutting them down without teaching.",
+    "back": "Publicly shutting them down without teaching — they stop proposing, and you lose future signal.",
     "tag": "d12-trap"
   },
   {
@@ -1156,7 +1156,7 @@
   },
   {
     "front": "Trap — d12 / d12-q06: what's wrong with this instinct?",
-    "back": "Heroically promising the six-week design in two weeks.",
+    "back": "Heroically promising the six-week design in two weeks — trust collapses when the fake plan slips.",
     "tag": "d12-trap"
   },
   {
@@ -1166,7 +1166,7 @@
   },
   {
     "front": "Trap — d12 / d12-q07: what's wrong with this instinct?",
-    "back": "Quietly stretching nights to absorb infinite scope.",
+    "back": "Quietly stretching nights to absorb infinite scope — hides the real cost and burns the team.",
     "tag": "d12-trap"
   },
   {
@@ -1176,7 +1176,7 @@
   },
   {
     "front": "Trap — d12 / d12-q08: what's wrong with this instinct?",
-    "back": "Waiting until merge day to try the first end-to-end call.",
+    "back": "Waiting until merge day to try the first end-to-end call — discovers weeks of drift when calendar pressure peaks.",
     "tag": "d12-trap"
   },
   {
@@ -1186,7 +1186,7 @@
   },
   {
     "front": "Trap — d12 / d12-q09: what's wrong with this instinct?",
-    "back": "Always ship because 'we can patch tomorrow'.",
+    "back": "Always ship because 'we can patch tomorrow' — tomorrow's patch can't undo corrupted data.",
     "tag": "d12-trap"
   },
   {
@@ -1196,7 +1196,527 @@
   },
   {
     "front": "Trap — d12 / d12-q10: what's wrong with this instinct?",
-    "back": "Calling done when QA passed on staging with empty data.",
+    "back": "Calling done when QA passed on staging with empty data — production concurrency and cardinality are the real test.",
     "tag": "d12-trap"
+  },
+  {
+    "front": "How do you define ownership for a backend service, and what do you do when a production problem has no clear owner?",
+    "back": "Service ownership is outcomes plus on-call plus SLO—not git blame. Orphan incidents get a temporary DRI immediately, then a permanent owner so the next page isn't a scavenger hunt.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q11: what's wrong with this instinct?",
+    "back": "Assuming the last committer owns production — authorship ≠ on-call accountability when the person left the team.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "Two stakeholders give conflicting requirements, or Product asks for a complex feature when a simpler solution may solve the real problem. How do you handle it?",
+    "back": "Conflicts get a written options doc tied to the real user outcome. I bias to the simplest path that learns fast, and escalate with costs when stakeholders stay incompatible.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q12: what's wrong with this instinct?",
+    "back": "Quietly implementing both requirements — doubles cost and still leaves strategy undecided.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "You are given a six-month backend initiative. How would you break it into milestones, find the critical path, and let engineers work in parallel safely?",
+    "back": "Six months works when milestones are outcomes, the critical path is explicit, and contracts unlock safe parallelism. I won't celebrate six parallel tracks that only meet in month six.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q13: what's wrong with this instinct?",
+    "back": "Planning only tasks with no outcome milestones — busy for six months without a shippable narrative.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "You committed to four weeks and realize at week two it will take eight. How do you communicate risk and recover the project?",
+    "back": "Week-two honesty with options beats week-four surprise. I communicate remaining work and recommend cut/date/help—then execute the decided recovery plan.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q14: what's wrong with this instinct?",
+    "back": "Hoping nights will close a 4-week gap — burnout hides the miss until quality and people break.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "Facing an impossible deadline, when would you reduce scope or accept technical debt—and how do you ensure the debt is repaid?",
+    "back": "Impossible deadlines get scope cuts first; debt only when reversible, owned, dated, and never on integrity. Repayment is scheduled work with a metric—not a sticky note.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q15: what's wrong with this instinct?",
+    "back": "Accepting integrity debt to hit a symbolic date — the outage cost dwarfs the deadline win.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "How do you make an important technical decision when data is incomplete, and which decisions must be reversible versus reviewed broadly?",
+    "back": "Incomplete data means bias to reversible choices, write assumptions, and instrument to learn. Broad review is for irreversible blast radius—not for every naming debate.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q16: what's wrong with this instinct?",
+    "back": "Making irreversible schema/API calls in a private chat — the org inherits a hallway decision.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "You disagree with a senior engineer, your manager, or a product manager on approach. How do you push back, and when do you disagree-and-commit?",
+    "back": "I push with written options and risk, then disagree-and-commit on reversible safe calls. I escalate—not sulk—when integrity or irreversible blast radius is on the line.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q17: what's wrong with this instinct?",
+    "back": "Publicly undermining a decided approach — destroys trust and still doesn't change the decision cleanly.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "Your project needs changes from other teams and you are blocked. How do you coordinate multi-team delivery and unblock without escalating prematurely?",
+    "back": "Multi-team delivery needs explicit contracts, a parallel path, and escalation with an impact timeline—not early panic or silent hope. I try to make helping cheap before I pull rank.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q18: what's wrong with this instinct?",
+    "back": "Escalating before offering a concrete, small ask — burns political capital and looks like blame.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "How do you explain an engineering trade-off or technical debt to a non-technical stakeholder who wants it 'done quickly'?",
+    "back": "Non-technical stakeholders get options in outcome language—what users feel and what it costs later—not lectures. I make the quick path an explicit choice with a repayment plan.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q19: what's wrong with this instinct?",
+    "back": "Flooding stakeholders with implementation detail — they tune out and still push 'just ship it'.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "A junior engineer opens a 2,000-line PR. How do you review it, what feedback is mandatory vs optional, and what makes you block a merge?",
+    "back": "Mega-PRs get sliced. I block on safety and contracts, teach on design, and leave nits optional. Fatigue rubber-stamps are how juniors' mistakes become production incidents.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q20: what's wrong with this instinct?",
+    "back": "Rubber-stamping because the diff is exhausting — the worst bugs hide in large PRs.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "A production incident hits while you are the senior on call. How do you organize response—mitigation versus root cause—and what permanent change do you drive afterward?",
+    "back": "Incidents: mitigate first, diagnose in parallel, communicate on a cadence, then turn the outage into a systemic guardrail. Hero hotfixes without follow-up guarantee a sequel.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q21: what's wrong with this instinct?",
+    "back": "Root-causing for an hour before mitigating — customers experience your curiosity as downtime.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "Tell me about a failure or missed deadline framework: how should a senior discuss personal mistakes and what must change afterward?",
+    "back": "Seniors discuss failure as situation, owned decisions, misjudged tradeoffs, measured outcomes, and a concrete systemic change. Scar tissue with a metric beats a polished non-story.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q22: what's wrong with this instinct?",
+    "back": "Telling a story where you were only the hero fixer — hides judgment and sounds rehearsed.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "How do you identify harmful technical debt and convince product to allocate time to repay it?",
+    "back": "Harmful debt shows up in incidents and slow delivery. I convince Product with quantified tax and a time-boxed repayment tied to their metrics—not a taste-driven rewrite.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q23: what's wrong with this instinct?",
+    "back": "Pitching refactors as 'best practice' without user impact — Product correctly deprioritizes you.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "The team repeatedly makes the same production mistake. How do you turn that into a systemic process or tooling fix?",
+    "back": "Repeat mistakes need forcing functions—CI, templates, ownership—not pep talks. I measure repeat tags to zero and keep the guardrail small enough that people don't route around it.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q24: what's wrong with this instinct?",
+    "back": "Responding with only 'please be careful' — carefulness decays under load; systems don't.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "A monolith is getting hard to change. How do you decide whether to split into services—and when is that the wrong move?",
+    "back": "Hard-to-change monoliths often need modularity and ownership first. I split only for real boundaries with operability ready—otherwise you invent a distributed monolith.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q25: what's wrong with this instinct?",
+    "back": "Splitting because 'monoliths don't scale' without a measured hotspot — you scale operational pain instead.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "How do you connect backend engineering work to business or customer outcomes, and how do you know a project succeeded?",
+    "back": "Projects succeed when the agreed customer or business metric moves—not when Jira hits zero. I baseline, ship thin, and judge with the outcome window we wrote down.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q26: what's wrong with this instinct?",
+    "back": "Defining success as 'all stories done' — you can finish the wrong product on time.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "You have incomplete information and limited time to make a production decision, and an executive wants an answer now. What is your approach?",
+    "back": "Under pressure I give a reversible recommendation with confidence and assumptions—not false certainty. Then I verify fast and watch the symptom metric like a hawk.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q27: what's wrong with this instinct?",
+    "back": "Projecting high confidence without data — executives remember the certainty, not your private doubts, when it fails.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "Product insists on shipping a feature you believe is unsafe. How do you handle it?",
+    "back": "Unsafe ships get a written harm statement, a safer alternative, and escalated risk acceptance—not silent obedience. If leadership accepts residual risk, I still demand flags, cohorts, and tight alerts.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q28: what's wrong with this instinct?",
+    "back": "Quietly shipping then saying 'Product made me' — you still pressed merge; ownership doesn't transfer that easily.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "Walk through the end-to-end architecture of a document intelligence RAG platform from ingest to generate. Who owns what between NestJS and FastAPI?",
+    "back": "Nest owns tenancy and orchestration; FastAPI owns the AI stages. Every hop is org-scoped, idempotent, and observable by stage so we can reprocess safely without guessing where the pipeline stalled.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q01: what's wrong with this instinct?",
+    "back": "Letting FastAPI invent org_id from the upload payload — unsigned tenant context is a cross-tenant leak waiting to happen.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "On planning PDFs, why prefer table extraction over naive PDF text extraction for LLM grounding?",
+    "back": "Structure is the ground truth for planning numbers. I preserve tables so retrieval cites real cells; naive text dumps manufacture confident hallucinations.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q02: what's wrong with this instinct?",
+    "back": "Shipping vector search on flattened text and calling hallucinations a 'prompt issue' — the data lost structure before the prompt existed.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "How would you design semantic chunking and metadata for planning PDFs on a document intelligence RAG platform?",
+    "back": "Chunk by meaning, not by arbitrary tokens, and make metadata the first retrieval gate. Planning PDFs especially need table-aware parents and children, always org-scoped.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q03: what's wrong with this instinct?",
+    "back": "Fixed 500-token windows through tables — splits numbers from labels and tanks answer quality.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "Compare hybrid retrieval (vector + metadata filters + relevance scoring) to vector-only search for document intelligence RAG.",
+    "back": "Hybrid retrieval is how RAG stays tenant-safe and answerable. Vectors find candidates; metadata and scoring decide what the model is allowed to see.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q04: what's wrong with this instinct?",
+    "back": "Vector-only across a shared index — tenancy becomes a prompt instruction, which is not an access control.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "How do you make LLM calls production-grade with structured outputs, versioned prompts, bounded retries, and typed errors?",
+    "back": "Prompts and schemas are versioned APIs. I validate structured outputs, classify typed errors, and bound retries so the model cannot silently corrupt or melt the worker pool.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q05: what's wrong with this instinct?",
+    "back": "json.loads on free-form model text with no schema — one extra trailing comma poisons an entire document version.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "How do you ensure per-document and per-action idempotency when reprocessing documents on a RAG platform?",
+    "back": "Reprocess is a first-class path. I ledger per-document and per-action keys and use replace semantics so retries converge—never accumulate duplicate chunks.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q06: what's wrong with this instinct?",
+    "back": "Generating a new UUID inside the worker per attempt — every retry looks like new work and doubles embeddings.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "Design org-scoped multi-tenancy and HMAC authentication between NestJS and FastAPI. What isolation failure modes matter most?",
+    "back": "Tenancy is enforced in signatures and storage keys, not in prompts. HMAC proves Nest called us; org-scoped indexes and caches prove we cannot leak across customers.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q07: what's wrong with this instinct?",
+    "back": "Passing org_id only in the JSON body without signing — attackers who reach the worker pick any tenant.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "How do you design S3 handoff between NestJS and FastAPI with compensating cleanup when the downstream stage fails?",
+    "back": "S3 is a staged handoff with a ledger, not a junk drawer. Success promotes; failure compensates with delete or quarantine so orphans do not become a silent cost and compliance problem.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q08: what's wrong with this instinct?",
+    "back": "Leaving staging forever 'for debugging' — unbounded cost and broader data exposure surface.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "How would you operate federated GraphQL across 7+ NestJS services on an institutional LMS—gateway ownership and schema evolution?",
+    "back": "The gateway composes and protects; services own their slices. We evolve additively with composition CI so seven Nest subgraphs do not become seven ways to break the client.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q09: what's wrong with this instinct?",
+    "back": "Letting any service push breaking schema without composition checks — clients fail in production first.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "How do you keep Elasticsearch course search consistent with Mongo as the source of truth on an institutional LMS?",
+    "back": "Mongo is truth; Elasticsearch is a projection. Outbox plus lag alerts and rebuild aliases keep search useful without making ES a write dependency.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q10: what's wrong with this instinct?",
+    "back": "Dual-writing ES inside the HTTP handler — ES downtime blocks course administration.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "Design WebSocket chat for 1000+ concurrent users on an institutional LMS: persistence, reliable delivery, and fan-out/backpressure.",
+    "back": "Persist first, fan out second, catch up by cursor. Backpressure and rate limits keep a hot room from taking down the institutional LMS chat tier.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q11: what's wrong with this instinct?",
+    "back": "Fan-out before durable write — acknowledged UI messages disappear on crash.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "Mongo activity collection is ~16M documents / ~160GB. How would you design a live vs archive split?",
+    "back": "Split by access pattern: hot live indexes for the working set, cold archive for history, with watermarked movers and reconcile gates so we never delete what we have not archived.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q12: what's wrong with this instinct?",
+    "back": "Deleting from live before archive durability is proven — unrecoverable learner history loss.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "You claim ~71% working-set reduction with zero learner-metric delta. How do you prove safety before and after cutover?",
+    "back": "Disk savings are not the proof—learner-metric parity is. Shadow compares, stratified samples, and rollback-ready routing are how a ~71% working-set cut stays safe.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q13: what's wrong with this instinct?",
+    "back": "Using only disk metrics as success — learners can break while Grafana looks green on GB.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "Why would you reject a compaction that risks ~21K enrolments for roughly ~0.3% storage savings?",
+    "back": "I reject asymmetric bets: ~0.3% savings versus ~21K enrolments is not engineering thrift—it is negligence. We take storage wins that do not wager the enrolment graph.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q14: what's wrong with this instinct?",
+    "back": "Optimising for storage dashboards while ignoring learner-state blast radius — wrong objective function.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "Design data-lifecycle operations for the institutional LMS: distributed locks, run ledgers, dry-run and restore probes.",
+    "back": "Lifecycle is a product with locks, ledgers, dry-runs, and restore probes. If we cannot restore a sample, we do not prune.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q15: what's wrong with this instinct?",
+    "back": "Cron without a lock — two pods prune the same window and race deletes.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "Where would you put Redis on hot GraphQL paths in an institutional LMS—what to cache, how to invalidate, how to stop stampedes?",
+    "back": "Cache shared, authz-safe projections with org-aware keys. Invalidate on write, jitter TTLs, and single-flight misses so Redis speeds GraphQL without becoming a consistency or stampede bomb.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q16: what's wrong with this instinct?",
+    "back": "Caching GraphQL responses without authz in the key — cross-learner data leaks.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "How would you structure a healthcare diagnostics platform with modular DDD on FastAPI (patient, appointment, records, billing)?",
+    "back": "Modular DDD keeps clinical and billing languages apart. FastAPI packages own their invariants and talk through APIs/events—not shared tables—so the healthcare diagnostics platform can evolve safely.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q17: what's wrong with this instinct?",
+    "back": "One giant models.py for all contexts — boundaries exist only on slides.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "Describe a strangler-fig migration from NestJS/Cloud Functions toward Cloud Run for a healthcare diagnostics platform—cutover and dual-run risks.",
+    "back": "Strangler means dual-run, compare, then percentage cutover with a flag rollback. On a healthcare diagnostics platform, big-bang rewrites are how you schedule an incident.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q18: what's wrong with this instinct?",
+    "back": "Big-bang DNS cutover without shadow — first production day is your integration test.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "How do you apply CQRS with Cloud Tasks/Pub/Sub on a healthcare diagnostics platform—fail-fast validation, DLQ, and retries?",
+    "back": "Validate commands up front, enqueue durable work second, and treat DLQ as a paging signal. CQRS on Cloud Tasks/Pub/Sub only works if handlers are idempotent and lag is visible.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q19: what's wrong with this instinct?",
+    "back": "Enqueueing first and validating in the worker — the bus fills with garbage and clinical ops drown.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "Design lab-result ingestion with GPT vision transcription: JSON validation, unit normalisation, and risk-based human review.",
+    "back": "Vision proposes; validation and units constrain; risk policy decides what humans must see. Clinical safety beats end-to-end automation vanity metrics.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q20: what's wrong with this instinct?",
+    "back": "Writing raw model JSON to the patient record — schema drift becomes clinical data drift.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "For HIPAA-aligned controls on a healthcare diagnostics platform (Firebase Auth, encryption, RBAC, audit), what do you actually verify in the design?",
+    "back": "I verify outcomes: deny-by-default RBAC, encryption evidence, and auditability of PHI access. Tool names are not controls until tests and game-days prove them.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q21: what's wrong with this instinct?",
+    "back": "Equating 'we use Firebase Auth' with HIPAA compliance — identity alone is not minimum-necessary access.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "You improved a complex Firestore query by ~50%. What indexing and data-model tradeoffs typically unlock that?",
+    "back": "Firestore gains usually come from the right composite index plus a read-shaped model. I pay in write fan-out deliberately, and I prove the ~50% with p95 under load—not a single warm query.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q22: what's wrong with this instinct?",
+    "back": "Adding every possible composite index — write amplification and deployment pain for unused paths.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "How do you use emulator-backed pytest toward ~92% coverage on a healthcare diagnostics platform—what do you mock vs run for real?",
+    "back": "Emulators for our data/auth boundaries, mocks for expensive probabilistic externals, coverage as a critical-path floor. That is how you approach ~92% without lying to yourself.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q23: what's wrong with this instinct?",
+    "back": "Mocking Firestore so thoroughly that security rules never run — false confidence on PHI access.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "Give a cross-cutting production failure story framework (detect → mitigate → permanent fix) usable on the document intelligence RAG platform, institutional LMS, or healthcare diagnostics platform.",
+    "back": "Detect with SLIs, mitigate to stop harm, then fix the system and prove it with alerts and a game-day. Same framework whether the blast is RAG retrieval, LMS data lifecycle, or clinical projections.",
+    "tag": "d13"
+  },
+  {
+    "front": "Trap — d13 / d13-q24: what's wrong with this instinct?",
+    "back": "Jumping to root-cause debates while blast radius grows — patients/learners keep getting hurt during the argument.",
+    "tag": "d13-trap"
+  },
+  {
+    "front": "Story probe — Biggest owned project: What did YOU personally decide? What went wrong? What measurable outcome?",
+    "back": "Lead with your decisions and tradeoffs, not 'the team'. Name risks you owned, one failure, and a metric (latency, cost, adoption, error rate) that moved.",
+    "tag": "d12-probe"
+  },
+  {
+    "front": "Story probe — Difficult technical decision: Alternatives? Rejected why? Evidence? Would you choose the same today?",
+    "back": "List ≥2 real alternatives, rejection criteria, and whether the decision was reversible. Update with hindsight without rewriting history.",
+    "tag": "d12-probe"
+  },
+  {
+    "front": "Story probe — Missed deadline: When did you know it was at risk? When did you tell stakeholders? What did you change?",
+    "back": "Early risk beat late apology. Include what you cut, who you aligned, and the new date you defended.",
+    "tag": "d12-probe"
+  },
+  {
+    "front": "Story probe — Mentoring: Baseline → what you changed → evidence of growth.",
+    "back": "Avoid 'I answered their questions.' Cite task sizing, review habits, independence metrics (PRs merged without rescue).",
+    "tag": "d12-probe"
+  },
+  {
+    "front": "Story probe — Disagreement: What was the conflict? Your evidence? What happened after the decision?",
+    "back": "Show challenge without ego, data or scenarios used, and either commit or escalate with documented risk.",
+    "tag": "d12-probe"
+  },
+  {
+    "front": "Story probe — Production incident: Detect → your actions → mitigate → permanent change.",
+    "back": "Own mitigation and comms first; RCA second. End with a preventive change (alert, test, runbook, guardrail).",
+    "tag": "d12-probe"
+  },
+  {
+    "front": "Story probe — Technical debt: Why accept? Cost? When repaid?",
+    "back": "Name the invariant you refused to break, the shortcut taken, the repayment ticket/date, and whether it actually got paid.",
+    "tag": "d12-probe"
+  },
+  {
+    "front": "Story probe — Unclear requirements: Ambiguity identified → how reduced → what shipped.",
+    "back": "Show written assumptions, thin confirmed slice, and what you deferred on purpose.",
+    "tag": "d12-probe"
+  },
+  {
+    "front": "Story probe — Failure: Your personal mistake → what you changed afterward.",
+    "back": "Use 'I' not 'we'. Immediate mitigation, honest comms, and a systemic fix so it cannot recur the same way.",
+    "tag": "d12-probe"
+  },
+  {
+    "front": "Story probe — Improvement: How identified → why it mattered → measurable impact.",
+    "back": "Tie to user/business or reliability cost. Prefer before/after numbers over activity narratives.",
+    "tag": "d12-probe"
+  },
+  {
+    "front": "Senior vs mid — Implementing a feature vs owning a feature?",
+    "back": "Implement = code merges. Own = contracts, risks, rollout, metrics, and post-launch health until outcomes land.",
+    "tag": "d12-contrast"
+  },
+  {
+    "front": "Senior vs mid — Fixing a prod issue vs improving the system that allowed it?",
+    "back": "Fix restores service. Improve adds detection, prevention, and ownership so the class of failure shrinks.",
+    "tag": "d12-contrast"
+  },
+  {
+    "front": "Senior vs mid — Delegating work vs developing engineers?",
+    "back": "Delegate assigns tasks. Develop sizes growth, reviews design early, and measures independence—not permanent dependence.",
+    "tag": "d12-contrast"
+  },
+  {
+    "front": "Senior vs mid — Making a technical decision vs driving one?",
+    "back": "Making picks an option. Driving aligns stakeholders, records rationale, and lands the decision in code and ops.",
+    "tag": "d12-contrast"
+  },
+  {
+    "front": "Senior vs mid — Communicating status vs communicating project risk?",
+    "back": "Status is progress. Risk names likelihood, impact, options, and the decision you need now.",
+    "tag": "d12-contrast"
+  },
+  {
+    "front": "Senior vs mid — Writing good code vs maintaining a healthy service?",
+    "back": "Good code is local quality. Healthy service means SLOs, alerts, runbooks, and operable failure modes.",
+    "tag": "d12-contrast"
+  },
+  {
+    "front": "Senior vs mid — Technically correct vs good engineering decision?",
+    "back": "Correct can still be wrong for time, cost, risk, or reversibility. Good decisions optimize outcomes under constraints.",
+    "tag": "d12-contrast"
+  },
+  {
+    "front": "Senior vs mid — Solving a ticket vs solving the underlying problem?",
+    "back": "Ticket closes a symptom. Underlying problem removes the class of defects or process that generates them.",
+    "tag": "d12-contrast"
+  },
+  {
+    "front": "Senior vs mid — Being busy vs creating engineering impact?",
+    "back": "Busy fills the calendar. Impact moves a metric users or the business feel—or a risk that would have hurt them.",
+    "tag": "d12-contrast"
+  },
+  {
+    "front": "Senior vs mid — Owning implementation vs owning outcomes?",
+    "back": "Implementation ownership ends at merge. Outcome ownership includes production behavior, adoption, and follow-through.",
+    "tag": "d12-contrast"
   }
 ]
