@@ -72,7 +72,7 @@ Author commands (after this pass):
 
 **How:** Step viz frames; narrate invariant; one timed round only.
 
-**Park:** Dijkstra, 2D DP, LRU, Min Window, Meeting Rooms (gaps — backlog).
+**Park:** permutations / N-Queens, prefix sums, monotonic queue (nice-to-have stretch).
 
 **Trap:** Best Time to Buy/Sell Stock is taught under Sliding Window but interviewers usually call it **one-pass greedy** — say both.
 
@@ -160,17 +160,17 @@ Author commands (after this pass):
 
 **Coverage:** foundations + 16 patterns + drills + cheatsheet (~46 worked problems).
 
-**Gaps:** Min Window, Meeting Rooms I/II, LRU/design, Dijkstra, 2D DP, permutations/N-Queens, prefix sums, monotonic queue.
+**Gaps:** permutations/N-Queens, prefix sums, monotonic queue (stretch).
 
-**Today:** pattern map + one drill round &gt; reading every page.
+**Shipped (senior wave):** Min Window, Meeting Rooms II, LRU/design, Dijkstra, Unique Paths / 2D DP, Python coding bank.
 
 ### Aptitude & Reasoning
 
 **Coverage:** quant (9) · reasoning (8) · verbal (4) · DI (3) · 118-Q bank · formula/flashcards.
 
-**Gaps:** authentic hard RC, multi-set DI, larger stretch pool.
+**Gaps:** authentic hard RC, larger stretch pool.
 
-**Shipped:** [geometry & mensuration](aptitude-guide/quant/geometry-and-mensuration.html); [coded inequalities](aptitude-guide/reasoning/coded-inequalities.html).
+**Shipped:** [geometry](aptitude-guide/quant/geometry-and-mensuration.html); [coded inequalities](aptitude-guide/reasoning/coded-inequalities.html); multi-set DI densified on [caselets](aptitude-guide/di/caselets-and-mixed-sets.html).
 
 ---
 
@@ -259,12 +259,13 @@ Author commands (after this pass):
 - [x] FastAPI interview gotchas verbal bank
 - [x] Aptitude geometry & mensuration lesson
 - [x] Aptitude coded inequalities lesson
+- [x] Aptitude multi-set DI densify on caselets
 
 ### Still open
 
 1. ~~GenAI: soften landscape brand names; fix finetuning/production module maps; HyDE cross-link~~ (done in senior wave)
 2. ~~DSA: Min Window, Meeting Rooms, LRU, Dijkstra, 2D DP, fix Stock pattern label~~ (done)
-3. ~~Aptitude: geometry + coded inequalities~~ (done) — still open: harder RC / multi-set DI stretch
+3. ~~Aptitude: geometry + coded inequalities + multi-set DI~~ (done) — still open: harder RC stretch
 4. ~~FastAPI: Auth II, async tests, compose+Postgres~~ (done)
 5. ~~LangStack: middleware lesson, MCP cross-link, context engineering~~ (done)
 6. ~~Densify viz captions / whiteboard~~ (done on key pages)
