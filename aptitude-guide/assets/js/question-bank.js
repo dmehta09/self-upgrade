@@ -17,7 +17,8 @@ window.APTI_TOPIC_NAMES = {
   "qa-averages": "Averages & ages", "qa-commerce": "Profit/interest", "qa-tsd": "Time-speed-distance",
   "qa-work": "Time & work", "qa-pnc": "P&C / probability", "qa-geometry": "Geometry",
   "lr-series": "Series & analogies", "lr-coding": "Coding–decoding", "lr-blood": "Blood relations",
-  "lr-direction": "Direction sense", "lr-deduction": "Syllogisms", "lr-seating": "Seating & puzzles",
+  "lr-direction": "Direction sense", "lr-deduction": "Syllogisms", "lr-ineq": "Coded inequalities",
+  "lr-seating": "Seating & puzzles",
   "lr-spatial": "Clocks/calendars/cubes",
   "va-rc": "Reading comprehension", "va-grammar": "Grammar", "va-completion": "Completion & jumbles", "va-vocab": "Vocabulary",
   "di-charts": "Charts & tables", "di-caselets": "Caselets", "di-ds": "Data sufficiency"
@@ -128,6 +129,13 @@ window.APTI_QUESTIONS = [
   { section:"reasoning", topic:"lr-deduction", diff:"stretch", q:"All A are B. No B are C. Therefore:", options:["No A are C","All C are A","Some A are C","All A are C"], answer:0, explain:"A &sub; B and B &cap; C = &empty; &rarr; A &cap; C = &empty;." },
   { section:"reasoning", topic:"lr-deduction", diff:"warm", q:"Statement: &lsquo;No student failed.&rsquo; What must be true?", options:["Every student passed","Some students failed","Half passed","No one took the test"], answer:0, explain:"If none failed, all passed." },
   { section:"reasoning", topic:"lr-deduction", diff:"stretch", q:"All squares are rectangles. Some rectangles are blue. Can we conclude some squares are blue?", options:["No","Yes","Only if blue","Always"], answer:0, explain:"The blue rectangles needn&rsquo;t be squares &mdash; no valid link." },
+
+  /* ---------- REASONING · coded inequalities ---------- */
+  { section:"reasoning", topic:"lr-ineq", diff:"warm", q:"A &ge; B = C. Does A &ge; C follow?", options:["Yes","No","Only if A &gt; B","Only if B &gt; C"], answer:0, explain:"Equality is transparent: A &ge; B and B = C &rarr; A &ge; C." },
+  { section:"reasoning", topic:"lr-ineq", diff:"core", q:"P &ge; Q &gt; R. Which is definite?", options:["P &gt; R","P = R possible","Q &lt; R","P &lt; R"], answer:0, explain:"Even if P = Q, Q &gt; R forces P &gt; R." },
+  { section:"reasoning", topic:"lr-ineq", diff:"core", q:"A &ge; B &ge; C. Does A &gt; C follow?", options:["No","Yes","Always","Only if B &gt; C"], answer:0, explain:"All equal (A=B=C) satisfies &ge; chains but breaks A &gt; C." },
+  { section:"reasoning", topic:"lr-ineq", diff:"warm", q:"A &gt; B &ge; C. Relation of A to C?", options:["A &gt; C","A = C possible","A &lt; C","Cannot say"], answer:0, explain:"Strict &gt; then &ge; still forces A &gt; C." },
+  { section:"reasoning", topic:"lr-ineq", diff:"stretch", q:"A &ge; B. Conclusions: (I) A &gt; B (II) A = B. Best choice?", options:["Either I or II","Only I","Only II","Neither"], answer:0, explain:"&ge; means exactly one of &gt; or = holds &mdash; classic either&ndash;or." },
 
   /* ---------- REASONING · seating & puzzles ---------- */
   { section:"reasoning", topic:"lr-seating", diff:"warm", q:"Five people sit in a row. If A is exactly in the middle, A&rsquo;s position is?", options:["3rd","2nd","4th","1st"], answer:0, explain:"The middle of 5 is the 3rd seat." },

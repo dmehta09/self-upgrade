@@ -21,6 +21,7 @@ window.LESSONS = [
   { id: "lr-blood", title: "Blood relations", url: "reasoning/blood-relations.html", module: "reasoning", tool: "reasoning" },
   { id: "lr-direction", title: "Direction sense", url: "reasoning/direction-sense.html", module: "reasoning", tool: "reasoning" },
   { id: "lr-deduction", title: "Syllogisms & statements", url: "reasoning/syllogisms-and-statements.html", module: "reasoning", tool: "reasoning" },
+  { id: "lr-ineq", title: "Coded inequalities", url: "reasoning/coded-inequalities.html", module: "reasoning", tool: "reasoning" },
   { id: "lr-seating", title: "Seating & puzzles", url: "reasoning/seating-and-puzzles.html", module: "reasoning", tool: "reasoning" },
   { id: "lr-spatial", title: "Clocks, calendars, cubes & dice", url: "reasoning/clocks-calendars-cubes-dice.html", module: "reasoning", tool: "reasoning" },
   { id: "va-rc", title: "Reading comprehension", url: "verbal/reading-comprehension.html", module: "verbal", tool: "verbal" },

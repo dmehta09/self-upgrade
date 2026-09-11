@@ -166,11 +166,11 @@ Author commands (after this pass):
 
 ### Aptitude & Reasoning
 
-**Coverage:** quant (9) · reasoning (7) · verbal (4) · DI (3) · 113-Q bank · formula/flashcards.
+**Coverage:** quant (9) · reasoning (8) · verbal (4) · DI (3) · 118-Q bank · formula/flashcards.
 
-**Gaps:** coded inequalities, authentic hard RC, multi-set DI, larger stretch pool.
+**Gaps:** authentic hard RC, multi-set DI, larger stretch pool.
 
-**Shipped:** [geometry & mensuration](aptitude-guide/quant/geometry-and-mensuration.html) lesson + drill questions.
+**Shipped:** [geometry & mensuration](aptitude-guide/quant/geometry-and-mensuration.html); [coded inequalities](aptitude-guide/reasoning/coded-inequalities.html).
 
 ---
 
@@ -258,12 +258,13 @@ Author commands (after this pass):
 - [x] LangStack interview gotchas verbal bank
 - [x] FastAPI interview gotchas verbal bank
 - [x] Aptitude geometry & mensuration lesson
+- [x] Aptitude coded inequalities lesson
 
 ### Still open
 
 1. ~~GenAI: soften landscape brand names; fix finetuning/production module maps; HyDE cross-link~~ (done in senior wave)
 2. ~~DSA: Min Window, Meeting Rooms, LRU, Dijkstra, 2D DP, fix Stock pattern label~~ (done)
-3. ~~Aptitude: geometry~~ (done) — still open: coded inequalities, harder stretch bank (parked for deep RC)
+3. ~~Aptitude: geometry + coded inequalities~~ (done) — still open: harder RC / multi-set DI stretch
 4. ~~FastAPI: Auth II, async tests, compose+Postgres~~ (done)
 5. ~~LangStack: middleware lesson, MCP cross-link, context engineering~~ (done)
 6. ~~Densify viz captions / whiteboard~~ (done on key pages)

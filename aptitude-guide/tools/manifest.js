@@ -39,6 +39,7 @@ const MODULES = [
     { slug: "blood-relations",             title: "Blood relations",                    nav: "Blood relations",        id: "lr-blood",     widgets: ["drill.js"] },
     { slug: "direction-sense",             title: "Direction sense",                    nav: "Direction sense",        id: "lr-direction", widgets: ["drill.js"] },
     { slug: "syllogisms-and-statements",   title: "Syllogisms & statements",            nav: "Syllogisms & statements", id: "lr-deduction", widgets: ["drill.js"] },
+    { slug: "coded-inequalities",          title: "Coded inequalities",                 nav: "Coded inequalities",     id: "lr-ineq",     widgets: ["drill.js"] },
     { slug: "seating-and-puzzles",         title: "Seating & puzzles",                  nav: "Seating & puzzles",      id: "lr-seating",   widgets: ["drill.js"] },
     { slug: "clocks-calendars-cubes-dice", title: "Clocks, calendars, cubes & dice",    nav: "Clocks, calendars, cubes", id: "lr-spatial", widgets: ["drill.js"] },
   ]},
