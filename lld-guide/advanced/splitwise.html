@@ -159,17 +159,15 @@ class PercentSplit:
             <p>To settle, run a <strong>greedy min-cash-flow</strong>: repeatedly match the <em>biggest creditor</em> with the <em>biggest debtor</em>, transfer the smaller of the two amounts, and drop whoever hits zero. Each transfer zeroes out at least one person, so you never make more transfers than there are non-zero people — a small, practical list. (The <em>true</em> minimum number of transfers is NP-hard in general; greedy is the standard, expected interview answer and is excellent in practice.)</p>
             <div class="codeblock">
               <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">ledger.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
-              <div class="code-pane active"><pre><code data-lang="python">from collections import defaultdict
-
-class Ledger:
+              <div class="code-pane active"><pre><code data-lang="python">class Ledger:
     def __init__(self):
-        self.net = defaultdict(float)        # person -&gt; net (owed if +, owes if -)
+        self.net = {}                        # person -&gt; net (owed if +, owes if -)
 
     def add_expense(self, paid_by, amount, participants, strategy, **kw):
         owed = strategy.shares(amount, participants, **kw)
         for person, share in owed.items():
-            self.net[person] -= share        # each participant owes their share
-        self.net[paid_by] += amount          # the payer fronted the whole bill
+            self.net[person] = self.net.get(person, 0.0) - share  # each participant owes their share
+        self.net[paid_by] = self.net.get(paid_by, 0.0) + amount   # the payer fronted the whole bill
 
     def settlements(self):
         # greedy min-cash-flow: biggest debtor pays biggest creditor

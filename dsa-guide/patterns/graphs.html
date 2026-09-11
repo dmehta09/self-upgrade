@@ -582,20 +582,20 @@ print(cl.val, sorted(n.val for n in cl.neighbors), cl is not a)
                 <div class="runpad" data-needs="">
                   <div class="rp-head"><span class="rp-title">course_schedule.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
                   <textarea class="rp-editor" spellcheck="false" rows="24">
-from collections import defaultdict, deque
+from collections import deque
 
 def can_finish(num_courses, prerequisites):
-    graph = defaultdict(list)
+    graph = {}
     indegree = [0] * num_courses
     for course, prereq in prerequisites:
-        graph[prereq].append(course)
+        graph.setdefault(prereq, []).append(course)
         indegree[course] += 1
     q = deque([c for c in range(num_courses) if indegree[c] == 0])
     done = 0
     while q:
         node = q.popleft()
         done += 1
-        for nxt in graph[node]:
+        for nxt in graph.get(node, []):
             indegree[nxt] -= 1
             if indegree[nxt] == 0:
                 q.append(nxt)
@@ -629,19 +629,19 @@ False</pre></div>
   cmp -->|no| bad[Return False]
 </pre></div>
                 <ol class="code-walk">
-                  <li><code>from collections import defaultdict, deque</code><span>Graph as defaultdict; BFS queue as deque.</span></li>
+                  <li><code>from collections import deque</code><span>BFS queue as deque (plain dict for the graph).</span></li>
                   <li><code>def can_finish(num_courses, prerequisites):</code><span>Return whether all courses can be completed.</span></li>
-                  <li><code>graph = defaultdict(list)</code><span>Adjacency: prereq → list of courses that need it.</span></li>
+                  <li><code>graph = {}</code><span>Adjacency: prereq → list of courses that need it.</span></li>
                   <li><code>indegree = [0] * num_courses</code><span>How many prereqs each course still owes.</span></li>
                   <li><code>for course, prereq in prerequisites:</code><span>Each pair is [course, prereq] = take prereq first.</span></li>
-                  <li><code>graph[prereq].append(course)</code><span>Edge prereq → course.</span></li>
+                  <li><code>graph.setdefault(prereq, []).append(course)</code><span>Edge prereq → course (create list if new).</span></li>
                   <li><code>indegree[course] += 1</code><span>Course gains one outstanding prereq.</span></li>
                   <li><code>q = deque([c for c in range(num_courses) if indegree[c] == 0])</code><span>Seed with courses that need nothing.</span></li>
                   <li><code>done = 0</code><span>How many courses we have taken.</span></li>
                   <li><code>while q:</code><span>Keep taking free courses.</span></li>
                   <li><code>node = q.popleft()</code><span>Take the next available course.</span></li>
                   <li><code>done += 1</code><span>Count it finished.</span></li>
-                  <li><code>for nxt in graph[node]:</code><span>Unlock dependents.</span></li>
+                  <li><code>for nxt in graph.get(node, []):</code><span>Unlock dependents (empty if no outgoing).</span></li>
                   <li><code>indegree[nxt] -= 1</code><span>One fewer prereq remaining.</span></li>
                   <li><code>if indegree[nxt] == 0:</code><span>Now free to take.</span></li>
                   <li><code>q.append(nxt)</code><span>Enqueue it.</span></li>
@@ -750,12 +750,11 @@ False</pre></div>
                   <div class="rp-head"><span class="rp-title">network_delay.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
                   <textarea class="rp-editor" spellcheck="false" rows="26">
 import heapq
-from collections import defaultdict
 
 def network_delay_time(times, n, k):
-    graph = defaultdict(list)
+    graph = {}
     for u, v, w in times:
-        graph[u].append((v, w))
+        graph.setdefault(u, []).append((v, w))
     dist = {i: float("inf") for i in range(1, n + 1)}
     dist[k] = 0
     heap = [(0, k)]
@@ -763,7 +762,7 @@ def network_delay_time(times, n, k):
         d, u = heapq.heappop(heap)
         if d > dist[u]:
             continue
-        for v, w in graph[u]:
+        for v, w in graph.get(u, []):
             nd = d + w
             if nd < dist[v]:
                 dist[v] = nd
@@ -804,11 +803,10 @@ print(network_delay_time([[1, 2, 1]], 2, 2))
 </pre></div>
                 <ol class="code-walk">
                   <li><code>import heapq</code><span>Min-heap for Dijkstra.</span></li>
-                  <li><code>from collections import defaultdict</code><span>Adjacency list builder.</span></li>
                   <li><code>def network_delay_time(times, n, k):</code><span>Time for signal from k to reach all n nodes.</span></li>
-                  <li><code>graph = defaultdict(list)</code><span>u → list of (v, weight).</span></li>
+                  <li><code>graph = {}</code><span>u → list of (v, weight) via setdefault.</span></li>
                   <li><code>for u, v, w in times:</code><span>Ingest each directed edge.</span></li>
-                  <li><code>graph[u].append((v, w))</code><span>Store neighbor and travel time.</span></li>
+                  <li><code>graph.setdefault(u, []).append((v, w))</code><span>Store neighbor and travel time.</span></li>
                   <li><code>dist = {i: float("inf") for i in range(1, n + 1)}</code><span>All nodes start unreachable.</span></li>
                   <li><code>dist[k] = 0</code><span>Source is distance 0.</span></li>
                   <li><code>heap = [(0, k)]</code><span>Min-heap of (distance, node).</span></li>
@@ -816,7 +814,7 @@ print(network_delay_time([[1, 2, 1]], 2, 2))
                   <li><code>d, u = heapq.heappop(heap)</code><span>Pop the currently nearest candidate.</span></li>
                   <li><code>if d &gt; dist[u]:</code><span>Stale heap entry — we already found a better path.</span></li>
                   <li><code>continue</code><span>Skip it.</span></li>
-                  <li><code>for v, w in graph[u]:</code><span>Relax outgoing edges.</span></li>
+                  <li><code>for v, w in graph.get(u, []):</code><span>Relax outgoing edges.</span></li>
                   <li><code>nd = d + w</code><span>Candidate distance through u.</span></li>
                   <li><code>if nd &lt; dist[v]:</code><span>Improvement found.</span></li>
                   <li><code>dist[v] = nd</code><span>Record the better distance.</span></li>

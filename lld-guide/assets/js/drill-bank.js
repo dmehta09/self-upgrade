@@ -434,7 +434,7 @@ window.LLD_DRILLS = [
         prompts: ["RateLimiter Protocol: allow(client_id) → bool; TokenBucket and SlidingWindow implementations; a per-client registry."]
       },
       uml: {
-        prompts: ["Strategy for the algorithms; what creates per-client limiter instances (Factory / defaultdict)?"]
+        prompts: ["Strategy for the algorithms; what creates per-client limiter instances (Factory / plain dict)?"]
       },
       code: {
         prompts: ["Write TokenBucket.allow(): lazy refill from elapsed time, then check-and-decrement under the lock.", "Write SlidingWindow.allow() with a deque of timestamps."],

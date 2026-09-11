@@ -319,14 +319,14 @@ class LRUCache:
             <p>LFU evicts the <strong>least frequently used</strong> key; ties are broken by recency (oldest of the least-used goes). The trick for O(1): bucket keys by their use-count, and track the current <code>min</code> count so eviction is "pop the oldest key from the <code>min</code> bucket."</p>
             <div class="codeblock">
               <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">lfu.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
-              <div class="code-pane active"><pre><code data-lang="python">from collections import defaultdict, OrderedDict
+              <div class="code-pane active"><pre><code data-lang="python">from collections import OrderedDict
 
 class LFUCache:
     def __init__(self, capacity: int):
         self.capacity = capacity
         self._vals: dict = {}                          # key -> value
         self._freq: dict = {}                          # key -> use count
-        self._buckets = defaultdict(OrderedDict)       # count -> keys (in LRU order)
+        self._buckets = {}                             # count -> OrderedDict of keys
         self._min = 0                                  # smallest live count
 
     def _bump(self, key) -> None:
@@ -337,7 +337,7 @@ class LFUCache:
             if self._min == f:
                 self._min += 1                         # min moves up
         self._freq[key] = f + 1
-        self._buckets[f + 1][key] = None               # join the next bucket
+        self._buckets.setdefault(f + 1, OrderedDict())[key] = None  # join next bucket
 
     def get(self, key):
         if key not in self._vals:
@@ -358,7 +358,7 @@ class LFUCache:
             del self._freq[evict_key]
         self._vals[key] = value                        # new keys start at freq 1
         self._freq[key] = 1
-        self._buckets[1][key] = None
+        self._buckets.setdefault(1, OrderedDict())[key] = None
         self._min = 1</code></pre></div>
             </div>
             <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">The two things people get wrong</div><p>① A brand-new key has frequency 1, so after an eviction you must reset <code>self._min = 1</code>. ② Use an <strong>ordered</strong> bucket (here <code>OrderedDict</code>) so that within the same frequency you can still evict the <em>least-recently-used</em> — LFU's tie-breaker is LRU.</p></div></div>
