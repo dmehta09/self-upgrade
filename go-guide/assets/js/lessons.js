@@ -51,6 +51,7 @@ window.LESSONS = [
   { id: "web-production", title: "Production services: graceful shutdown & deploy", url: "webservices/production-services.html", module: "webservices", tool: "webservices" },
   { id: "test-basics", title: "testing: tests, table tests & subtests", url: "testing/testing-basics.html", module: "testing", tool: "testing" },
   { id: "test-mocking", title: "Test doubles, interfaces & dependency seams", url: "testing/mocking-interfaces.html", module: "testing", tool: "testing" },
+  { id: "test-synctest", title: "testing/synctest: fake clocks for concurrency", url: "testing/synctest.html", module: "testing", tool: "testing" },
   { id: "test-benchmarks", title: "Benchmarks & profiling", url: "testing/benchmarks.html", module: "testing", tool: "testing" },
   { id: "test-fuzzing", title: "Fuzzing, coverage & race testing", url: "testing/fuzzing-coverage.html", module: "testing", tool: "testing" },
   { id: "test-tooling", title: "The tooling belt: vet, staticcheck, modules", url: "testing/tooling.html", module: "testing", tool: "testing" },

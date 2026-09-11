@@ -42,7 +42,8 @@ Bob is 41</script>
   <p class="takeaway">A field tag <code>`json:"name,omitempty"`</code> renames the JSON key to <code>name</code> and <b>drops it entirely when the field holds its zero value</b>. A tag of <code>`json:"-"`</code> skips the field in both directions.</p>
   <dl class="kv">
     <dt><code>`json:"user_name"`</code></dt><dd>Encode/decode this field as the key <code>user_name</code>.</dd>
-    <dt><code>`json:"email,omitempty"`</code></dt><dd>Omit the key when the value is the zero value (<code>""</code>, <code>0</code>, <code>nil</code>, <code>false</code>).</dd>
+    <dt><code>`json:"email,omitempty"`</code></dt><dd>Omit the key when the value is the zero value (<code>""</code>, <code>0</code>, <code>nil</code>, <code>false</code>). Cannot tell a real zero from "unset."</dd>
+    <dt><code>`json:"count,omitzero"`</code></dt><dd><b>Go 1.24+</b>. Omit when the value is the zero value <em>or</em> when the type implements <code>IsZero() bool</code> and returns true. Prefer this over the old <code>*T</code> pointer workaround for "absent vs zero."</dd>
     <dt><code>`json:"-"`</code></dt><dd>Never marshal or unmarshal this field (e.g. a password hash).</dd>
     <dt><code>`json:",string"`</code></dt><dd>Encode a numeric/bool field as a JSON <em>string</em> (for APIs that want <code>"42"</code>).</dd>
   </dl>
@@ -95,10 +96,59 @@ func main() {
   <p>No <code>nickname</code> (empty → omitted), no <code>password</code> (skipped with <code>-</code>), and <code>created</code> sits at the top level beside <code>id</code> — the embedded <code>Meta</code> was flattened. Field order in the output follows declaration order, with embedded fields first.</p>
 </section>
 
+<section class="section reveal" id="omitzero">
+  <h2><span class="section-num">04</span> <code>omitzero</code> (Go 1.24): absent vs zero, without pointers</h2>
+  <p class="takeaway"><code>omitempty</code> and zero values collide: a real <code>0</code> or empty string disappears. Historically people used <code>*int</code> / <code>*string</code> so <code>nil</code> meant absent. <b><code>omitzero</code></b> (1.24) omits zeros cleanly, and honors a custom <code>IsZero() bool</code> method — so <code>time.Time{}</code> can omit without a pointer.</p>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Old workaround</div>
+      <div class="codeblock"><pre><code data-lang="go">type Patch struct {
+    Count *int `json:"count,omitempty"` // nil = absent, &amp;0 = real zero
+}</code></pre></div>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Go 1.24+</div>
+      <div class="codeblock"><pre><code data-lang="go">type Patch struct {
+    Count int       `json:"count,omitzero"`
+    When  time.Time `json:"when,omitzero"` // uses time.Time.IsZero
+}</code></pre></div>
+    </div>
+  </div>
+  <div class="gopad" data-gopad data-file="main.go">
+    <script type="text/plain" class="gp-code">package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+type Patch struct {
+	Count int       `json:"count,omitzero"`
+	When  time.Time `json:"when,omitzero"`
+	Note  string    `json:"note,omitempty"`
+}
+
+func main() {
+	empty, _ := json.Marshal(Patch{})
+	fmt.Println("empty:", string(empty))
+
+	partial, _ := json.Marshal(Patch{Count: 0, Note: "keep"})
+	// Count is still zero → omitzero drops it; Note is non-empty → kept
+	fmt.Println("partial:", string(partial))
+
+	set, _ := json.Marshal(Patch{Count: 3, When: time.Date(2026, 6, 24, 0, 0, 0, 0, time.UTC)})
+	fmt.Println("set:", string(set))
+}</script>
+    <script type="text/plain" class="gp-output">empty: {}
+partial: {"note":"keep"}
+set: {"count":3,"when":"2026-06-24T00:00:00Z"}</script>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">when to use which</span></div><p>Use <code>omitempty</code> for "don't spam the wire with empty strings/nils" on response DTOs. Use <code>omitzero</code> when a typed zero is meaningful to omit (counters, times, custom value types with <code>IsZero</code>). Reach for pointers only when the API must encode <em>three</em> states: absent / null / value.</p></div></div>
+</section>
+
 <section class="section reveal" id="dynamic">
-  <h2><span class="section-num">04</span> Dynamic JSON: <code>map[string]any</code>, <code>RawMessage</code> &amp; <code>Number</code></h2>
+  <h2><span class="section-num">05</span> Dynamic JSON: <code>map[string]any</code>, <code>RawMessage</code> &amp; <code>Number</code></h2>
   <p class="takeaway">When you don't have a struct, unmarshal into <code>map[string]any</code> — but every JSON number becomes a <b><code>float64</code></b>. Use <code>json.RawMessage</code> to defer parsing a chunk, and <code>json.Number</code> to keep numeric precision.</p>
-  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Three traps that bite everyone: <b>(1)</b> only <b>exported</b> fields are (un)marshaled — a lowercase field is silently skipped. <b>(2)</b> Decoding a number into <code>any</code> yields a <code>float64</code>, never an <code>int</code> — so <code>m["age"].(int)</code> <em>panics</em>; assert <code>.(float64)</code>. <b>(3)</b> <code>omitempty</code> drops every <b>zero value</b>, so a real <code>0</code>, <code>false</code>, or <code>""</code> vanishes from the output. Use a pointer (<code>*int</code>) when you must distinguish "zero" from "absent."</p></div></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Three traps that bite everyone: <b>(1)</b> only <b>exported</b> fields are (un)marshaled — a lowercase field is silently skipped. <b>(2)</b> Decoding a number into <code>any</code> yields a <code>float64</code>, never an <code>int</code> — so <code>m["age"].(int)</code> <em>panics</em>; assert <code>.(float64)</code>. <b>(3)</b> <code>omitempty</code> still drops every <b>zero value</b> — for "absent vs zero" prefer <code>omitzero</code> (1.24+) or a pointer when you need an explicit JSON <code>null</code>.</p></div></div>
   <div class="gopad" data-gopad data-file="main.go">
     <script type="text/plain" class="gp-code">package main
 
@@ -127,7 +177,7 @@ json.Number -> 12345678901234567</script>
 </section>
 
 <section class="section reveal" id="streaming">
-  <h2><span class="section-num">05</span> Streaming with Encoder &amp; Decoder</h2>
+  <h2><span class="section-num">06</span> Streaming with Encoder &amp; Decoder</h2>
   <p class="takeaway"><code>json.NewEncoder(w)</code> writes JSON straight to any <code>io.Writer</code>; <code>json.NewDecoder(r)</code> reads from any <code>io.Reader</code>. They stream one value at a time — ideal for HTTP bodies and newline-delimited JSON — instead of buffering the whole document in memory.</p>
   <p><code>Encoder.Encode</code> appends a trailing newline (handy for NDJSON). <code>Decoder.Decode</code> reads the <em>next</em> JSON value from the stream, so you can loop over a sequence of objects. This is what <code>json.Marshal</code> avoids — it builds the whole <code>[]byte</code> at once.</p>
   <div class="gopad" data-gopad data-file="main.go">
@@ -155,7 +205,7 @@ func main() {
 </section>
 
 <section class="section reveal" id="check">
-  <h2><span class="section-num">06</span> Check yourself</h2>
+  <h2><span class="section-num">07</span> Check yourself</h2>
   <div class="quiz" data-quiz>
     <p class="q">You unmarshal <code>{"count": 5}</code> into a <code>map[string]any</code> and write <code>n := m["count"].(int)</code>. What happens?</p>
     <div class="quiz-opts">

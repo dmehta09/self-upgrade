@@ -1,0 +1,75 @@
+<section class="hero reveal">
+  <span class="eyebrow">Testing &amp; tooling · synctest</span>
+  <h1>testing/synctest: fake clocks for concurrency.</h1>
+  <p class="lead">Code that sleeps, waits on timers, or races the wall clock used to force flaky tests or hour-long timeouts. Go 1.25 stabilized <code>testing/synctest</code>: a bubble of goroutines on a <b>fake clock</b> that advances only when everyone is blocked — so a one-hour timeout finishes in milliseconds, deterministically.</p>
+</section>
+
+<section class="section reveal" id="why">
+  <h2><span class="section-num">01</span> Why fake time beats real sleep</h2>
+  <p class="takeaway">Real <code>time.Sleep</code> in tests is slow and flaky. Injecting a clock interface works, but every call site must cooperate. <b>synctest</b> runs the <em>real</em> <code>time</code> package APIs inside a bubble whose clock the test controls.</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>It's a flight simulator for time. Outside, an hour is an hour. Inside the bubble, the instructor advances the dial the moment every pilot is waiting — nobody twiddles thumbs for sixty real minutes.</p></div></div>
+  <dl class="kv">
+    <dt><code>synctest.Test</code></dt><dd>Entry point (stable in 1.25): runs a function in an isolated bubble with a fake clock.</dd>
+    <dt>Durability</dt><dd>Only code that uses <code>time</code> (Sleep, After, NewTimer, Tickers, deadlines) sees the fake clock. External I/O still uses wall time — keep network out of the bubble.</dd>
+    <dt>vs clock interface</dt><dd>Interfaces are still great for production seams. synctest is for testing code that already calls <code>time</code> directly.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="shape">
+  <h2><span class="section-num">02</span> The shape of a synctest</h2>
+  <p class="takeaway">Wrap the scenario in <code>synctest.Test(t, func(t *testing.T) { ... })</code>. Start goroutines that block on timers; the bubble advances automatically when all are idle, or you can assert after controlled sleeps.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">timeout_test.go</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">package cache_test
+
+import (
+    "testing"
+    "testing/synctest"
+    "time"
+)
+
+func TestExpiresAfterTTL(t *testing.T) {
+    synctest.Test(t, func(t *testing.T) {
+        c := New(time.Hour) // real TTL, fake clock
+        c.Put("k", "v")
+
+        if _, ok := c.Get("k"); !ok {
+            t.Fatal("expected hit before TTL")
+        }
+
+        time.Sleep(time.Hour + time.Second) // advances instantly in the bubble
+        if _, ok := c.Get("k"); ok {
+            t.Fatal("expected miss after TTL")
+        }
+    })
+}</code></pre></div>
+  <p>No <code>time.Now</code> injection required if the cache uses <code>time.Now</code> / timers from the standard library — inside the bubble those calls see fake time.</p>
+</section>
+
+<section class="section reveal" id="when">
+  <h2><span class="section-num">03</span> When to reach for it</h2>
+  <div class="grid grid-2">
+    <div class="card"><b>Good fit</b><p>Timeouts, TTLs, rate-limit windows, backoff, lease expiry, anything that <code>select</code>s on <code>time.After</code>.</p></div>
+    <div class="card"><b>Poor fit</b><p>Tests that need real wall-clock scheduling against OS threads, or that dial the network — keep those outside the bubble.</p></div>
+    <div class="card"><b>Race detector</b><p>Still run <code>go test -race</code>; synctest does not replace race finding — it replaces sleeping.</p></div>
+    <div class="card"><b>Clock seams</b><p>Production code that must swap clocks in non-test builds should keep an interface; use synctest for stdlib-time paths.</p></div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">with seams</span></div><p>Prefer a narrow <code>Clock</code> interface when many packages need injectable time. Prefer <code>synctest</code> when you're testing a package that already sleeps on real <code>time</code> APIs and you refuse to rewrite it for the test. See also <a href="mocking-interfaces.html">Test doubles &amp; seams</a>.</p></div></div>
+</section>
+
+<section class="section reveal" id="gotcha">
+  <h2><span class="section-num">04</span> Gotchas</h2>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p><b>(1)</b> Blocking on channels/mutexes that never unblock deadlocks the bubble — same as a real deadlock, just faster to notice. <b>(2)</b> Mixing bubble goroutines with work that uses the real clock (HTTP client timeouts to a live server) confuses the model — isolate. <b>(3)</b> Don't assert on wall-clock duration of the <em>test</em>; assert on logical outcomes after fake sleeps.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You need to test that a worker cancels after a 30-minute idle timeout implemented with <code>time.After</code>. What's the best approach in Go 1.25+?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Wrap the test in <code>synctest.Test</code> and <code>time.Sleep</code> past 30 minutes — the fake clock advances when goroutines block.</button>
+      <button class="quiz-opt"><span class="mark"></span><code>time.Sleep(30 * time.Minute)</code> in a normal test and wait.</button>
+      <button class="quiz-opt"><span class="mark"></span>Lower the production timeout to 10ms permanently so tests stay fast.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> synctest keeps production timeouts honest while making the test instant and deterministic. Real multi-minute sleeps are flaky and slow; shipping a 10ms timeout to make tests pass is a production foot-gun.</div>
+  </div>
+</section>

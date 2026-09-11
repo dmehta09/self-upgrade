@@ -41,11 +41,37 @@ require (
     <dt>SemVer</dt><dd><code>v1.6.0</code> = MAJOR.MINOR.PATCH. A new MAJOR (v2+) changes the import path itself (<code>/v2</code>), so breaking changes can't sneak in.</dd>
     <dt>GOPATH</dt><dd>History. Pre-2018 Go forced all code under one <code>$GOPATH/src</code> tree. Modules ended that — your project lives anywhere.</dd>
   </dl>
-  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">tip</span></div><p>The <code>go</code> directive (<code>go 1.26</code>) gates which language features the file may use — bumping it is how a module opts in to, say, per-iteration loop variables or range-over-func.</p></div></div>
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">See also <span class="tag">tip</span></div><p>The <code>go</code> directive (<code>go 1.26</code>) gates which language features the file may use — bumping it is how a module opts in to, say, per-iteration loop variables or range-over-func. The separate <code>toolchain</code> line (below) pins which <em>compiler binary</em> builds it.</p></div></div>
+</section>
+
+<section class="section reveal" id="toolchain-go-work">
+  <h2><span class="section-num">03</span> <code>toolchain</code>, workspaces &amp; <code>replace</code></h2>
+  <p class="takeaway">Modules scale past one repo with three tools: the <b><code>toolchain</code></b> directive (which Go binary builds you), <b><code>go.work</code></b> (local multi-module workspaces), and <b><code>replace</code></b> (temporary local overrides — keep them out of published modules).</p>
+  <dl class="kv">
+    <dt><code>toolchain go1.26.0</code></dt><dd>In <code>go.mod</code>: the exact toolchain the <code>go</code> command should download/use. Distinct from the language <code>go 1.26</code> line. Teams pin this so CI and laptops compile with the same binary.</dd>
+    <dt><code>go.work</code></dt><dd>A workspace file listing local modules (<code>use ./svc-a</code>, <code>use ./svc-b</code>). Lets you edit sibling modules without publishing or <code>replace</code> hacks. <b>Do not commit <code>go.work</code></b> to library repos; it's a local developer tool (commit only in monorepo roots that intend it).</dd>
+    <dt><code>replace</code></dt><dd><code>replace github.com/acme/lib =&gt; ../lib</code> forces a local path. Fine for a one-off debug; prefer <code>go.work</code> for ongoing multi-module work, and never leave a machine-local <code>replace</code> in a module others will <code>go get</code>.</dd>
+  </dl>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">go.mod</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">module github.com/acme/widgets
+
+go 1.26
+
+toolchain go1.26.0
+
+require golang.org/x/sync v0.10.0</code></pre></div>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">go.work</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="go">go 1.26
+
+use (
+    ./widgets
+    ./widgets-cli
+)</code></pre></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Shipping a <code>replace</code> that points at <code>/Users/you/...</code> breaks every other machine. Workspaces fix the local-edit problem without poisoning <code>go.mod</code>. If you must <code>replace</code> for a fork, use a relative path inside the repo or a public fork URL.</p></div></div>
 </section>
 
 <section class="section reveal" id="everyday-commands">
-  <h2><span class="section-num">03</span> Everyday commands</h2>
+  <h2><span class="section-num">04</span> Everyday commands</h2>
   <p class="takeaway">Adding a dependency is just <b>importing it and running <code>go mod tidy</code></b> (or <code>go get</code>). The tool resolves versions, downloads, and updates both <code>go.mod</code> and <code>go.sum</code> for you.</p>
   <div class="codeblock shell">
     <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">terminal</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
@@ -61,7 +87,7 @@ go test -race ./...                   # run tests with the race detector</code><
 </section>
 
 <section class="section reveal" id="build-output">
-  <h2><span class="section-num">04</span> The build output: one static binary</h2>
+  <h2><span class="section-num">05</span> The build output: one static binary</h2>
   <p class="takeaway"><code>go build</code> emits a <b>single, statically-linked executable</b> — no runtime, no shared libraries to ship. Set <b><code>GOOS</code></b> and <b><code>GOARCH</code></b> to <b>cross-compile</b> for any platform from your laptop.</p>
   <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Other runtimes ship you a recipe plus a list of ingredients the host must already have (a JVM, a Python interpreter, the right shared libs). Go ships a sealed, ready-to-eat meal — the binary contains everything it needs. Drop it on a fresh Linux box (even an empty <code>scratch</code> container) and it just runs.</p></div></div>
   <div class="codeblock shell">
@@ -79,7 +105,7 @@ go tool dist list                     # every GOOS/GOARCH pair Go supports</code
 </section>
 
 <section class="section reveal" id="gotcha">
-  <h2><span class="section-num">05</span> The go.mod gotcha</h2>
+  <h2><span class="section-num">06</span> The go.mod gotcha</h2>
   <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Don't <b>hand-edit <code>go.mod</code></b> to bump a version, and don't <b>forget <code>go mod tidy</code></b>. <code>go.mod</code> is a managed file — typing a version by hand skips the resolver, so it can disagree with <code>go.sum</code> or pull a version whose own dependencies you never recorded. Worse, if your imports and <code>go.mod</code> drift apart (you added an import but never tidied, or removed one and left the <code>require</code> behind), CI builds fail with <code>missing go.sum entry</code> or "inconsistent vendoring." The fix is the same command every time: <code>go get pkg@version</code> to change a version, then <code>go mod tidy</code> to reconcile.</p></div></div>
   <div class="versus">
     <div class="vs-col vs-bad"><div class="vs-h">Don't</div>
@@ -95,7 +121,7 @@ go mod tidy                             # reconcile with actual imports</code></
 </section>
 
 <section class="section reveal" id="check">
-  <h2><span class="section-num">06</span> Check yourself</h2>
+  <h2><span class="section-num">07</span> Check yourself</h2>
   <div class="quiz" data-quiz>
     <p class="q">You add <code>import "github.com/google/uuid"</code> to a file. Which single command makes the build work — downloading the dependency and recording it in <code>go.mod</code> and <code>go.sum</code>?</p>
     <div class="quiz-opts">

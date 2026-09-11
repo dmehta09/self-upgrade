@@ -88,6 +88,7 @@ const MODULES = [
   { key: "testing", label: "Testing & tooling", pages: [
     { slug: "testing-basics",    title: "testing: tests, table tests & subtests",  nav: "Tests & table tests",  id: "test-basics",      widgets: ["gopad.js"] },
     { slug: "mocking-interfaces",title: "Test doubles, interfaces & dependency seams",nav: "Mocking & seams",    id: "test-mocking",     widgets: ["gopad.js"] },
+    { slug: "synctest",          title: "testing/synctest: fake clocks for concurrency", nav: "synctest",         id: "test-synctest",    widgets: ["gopad.js"] },
     { slug: "benchmarks",        title: "Benchmarks & profiling",                  nav: "Benchmarks",           id: "test-benchmarks",  widgets: ["gopad.js"] },
     { slug: "fuzzing-coverage",  title: "Fuzzing, coverage & race testing",        nav: "Fuzzing & coverage",   id: "test-fuzzing",     widgets: ["gopad.js"] },
     { slug: "tooling",           title: "The tooling belt: vet, staticcheck, modules",nav: "The tooling belt",  id: "test-tooling",     widgets: ["gopad.js"] },
