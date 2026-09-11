@@ -666,5 +666,125 @@ window.DSA_DRILLS = [
       { phase: "test",    text: "Hit increasing/decreasing/all-equal edges and argued amortized O(n)." }
     ],
     model: "<p><b>Shape:</b> each bar's best rectangle is bounded by the first shorter bar on each side; a monotonic increasing stack discovers both walls in one pass.</p><p><b>Core code:</b></p><p><code>best, stack = 0, []</code><br><code>for i, h in enumerate(heights + [0]):&nbsp;&nbsp;# sentinel flushes everyone</code><br><code>&nbsp;&nbsp;while stack and heights[stack[-1]] &gt; h:</code><br><code>&nbsp;&nbsp;&nbsp;&nbsp;top = stack.pop()</code><br><code>&nbsp;&nbsp;&nbsp;&nbsp;width = i - stack[-1] - 1 if stack else i</code><br><code>&nbsp;&nbsp;&nbsp;&nbsp;best = max(best, heights[top] * width)</code><br><code>&nbsp;&nbsp;stack.append(i)</code><br><code>return best</code></p><p><b>The senior moves:</b> the walls reframe before any stack talk; the sentinel trick named; the empty-stack width case handled and tested; amortized O(n) argued via push-once-pop-once.</p>"
+  },
+
+  {
+    id: "subarray-sum-k", level: "core", lesson: "pat-arrays-hashing",
+    title: "Subarray Sum Equals K",
+    prompt: "Given an integer array that may contain negatives, count how many contiguous subarrays sum to k.",
+    phaseNotes: {
+      clarify: {
+        prompts: ["Contiguous or any subset? Are negatives allowed?", "Walk [1,1,1] / k=2 and [1,2,3] / k=3 out loud."],
+        hints: ["Contiguous only. Negatives allowed. Answers: 2 and 2."]
+      },
+      brute: {
+        prompts: ["Cost of checking every i..j sum?", "Can you speed the sum with a prefix array and still stay quadratic?"],
+        hints: ["All subarrays is O(n²). Prefix makes each sum O(1) but the enumeration is still O(n²)."]
+      },
+      plan: {
+        prompts: ["If prefix[i] − prefix[j] = k, what does that mean?", "Which structure counts how often prefix − k already appeared?"],
+        hints: ["One pass: maintain running prefix and a freq map of past prefixes. Seed freq[0]=1. Look up before inserting."]
+      },
+      code: {
+        prompts: ["Why seed freq[0] = 1?", "Look up prefix−k before or after filing the current prefix?"],
+        hints: ["Seed so a whole-prefix equal to k counts. Lookup first, then insert — same discipline as Two Sum."]
+      },
+      test: {
+        prompts: ["Trace [1,−1,0] / k=0. Restate complexity.", "Why is a sliding window unsafe here?"],
+        hints: ["Answer 3. Negatives break monotonic window sums. O(n) time / O(n) space."]
+      }
+    },
+    rubric: [
+      { phase: "clarify", text: "Confirmed contiguous + negatives; walked a tiny example." },
+      { phase: "brute",   text: "Named the O(n²) all-subarrays baseline." },
+      { phase: "plan",    text: "Framed as prefix[i] − earlier_prefix = k." },
+      { phase: "plan",    text: "Chose hash of past prefixes; stated O(n)/O(n)." },
+      { phase: "code",    text: "Seeded freq[0] = 1." },
+      { phase: "code",    text: "Looked up before inserting the current prefix." },
+      { phase: "code",    text: "Complete working loop." },
+      { phase: "test",    text: "Hit a zero/negative case or explained why window fails." },
+      { phase: "test",    text: "Restated O(n) time and O(n) space." }
+    ],
+    model: "<p><b>Shape:</b> running prefix + freq map of past prefixes; each index asks how often prefix−k already appeared.</p><p><b>Core:</b></p><p><code>freq = {0: 1}; prefix = ans = 0</code><br><code>for n in nums:</code><br><code>&nbsp;&nbsp;prefix += n</code><br><code>&nbsp;&nbsp;ans += freq.get(prefix - k, 0)</code><br><code>&nbsp;&nbsp;freq[prefix] = freq.get(prefix, 0) + 1</code></p><p><b>Senior move:</b> named why sliding window fails with negatives before coding the hash.</p>"
+  },
+
+  {
+    id: "permutations", level: "core", lesson: "pat-backtracking",
+    title: "Permutations",
+    prompt: "Given a list of distinct integers, return every possible ordering (all n! permutations).",
+    phaseNotes: {
+      clarify: {
+        prompts: ["Are the numbers distinct? Return a list of lists?", "How many answers for [1,2,3]?"],
+        hints: ["Distinct. Return all orderings. 3! = 6."]
+      },
+      brute: {
+        prompts: ["What's the size of the output? What's a naive generate-and-check cost?", "Why isn't DP the right hammer?"],
+        hints: ["Output has n! lists. DP counts; here you must emit every ordering."]
+      },
+      plan: {
+        prompts: ["Choose/undo skeleton — what tracks \"already used\"?", "How does this differ from Subsets' start index?", "Link to N-Queens in one sentence."],
+        hints: ["Used boolean mask (or set). Any unused index is eligible (order matters). N-Queens = same DFS + a safety filter."]
+      },
+      code: {
+        prompts: ["When do you append path[:]? What do you undo?", "What happens if you forget to copy the path?"],
+        hints: ["Append when len(path)==n. Pop and unmark after recurse. Without path[:] you mutate recorded answers."]
+      },
+      test: {
+        prompts: ["Trace [1,2] by hand. Restate complexity.", "Single-element and empty list?"],
+        hints: ["[[1,2],[2,1]]. O(n·n!) time, O(n) recursion space."]
+      }
+    },
+    rubric: [
+      { phase: "clarify", text: "Confirmed distinct inputs and n! output size." },
+      { phase: "brute",   text: "Said generate-all (not DP count) and named output size." },
+      { phase: "plan",    text: "Named choose/undo with a used mask." },
+      { phase: "plan",    text: "Contrasted with Subsets' start index (or linked N-Queens)." },
+      { phase: "code",    text: "Copied path[:] at the leaf." },
+      { phase: "code",    text: "Marked/unmarked used around the recursive call." },
+      { phase: "code",    text: "Complete working backtrack." },
+      { phase: "test",    text: "Traced a tiny case or edges." },
+      { phase: "test",    text: "Stated O(n·n!) / O(n)." }
+    ],
+    model: "<p><b>Shape:</b> DFS with used[i]; at depth n record path[:].</p><p><b>Senior move:</b> \"N-Queens is this plus a safe-square filter\" said out loud.</p>"
+  },
+
+  {
+    id: "sliding-window-maximum", level: "advanced", lesson: "pat-sliding-window",
+    title: "Sliding Window Maximum",
+    prompt: "Given an array and window size k, return the maximum of every contiguous window of length k in better than O(nk) time.",
+    phaseNotes: {
+      clarify: {
+        prompts: ["Contiguous windows of exactly k? What if k=1 or k=n?", "Walk [1,3,-1,-3,5,3,6,7], k=3."],
+        hints: ["Exact width k. Answer starts [3,3,5,5,6,7]."]
+      },
+      brute: {
+        prompts: ["Cost of scanning each window?", "Heap of window values — cost and stale-entry pain?"],
+        hints: ["O(nk) scan. Heap is O(n log k) with lazy deletes."]
+      },
+      plan: {
+        prompts: ["What structure keeps the current max at the front in O(1)?", "Store values or indices? Why?"],
+        hints: ["Decreasing monotonic deque of indices. Indices let you evict when front &lt; i−k+1."]
+      },
+      code: {
+        prompts: ["Order of operations: evict left, pop back, push, then record?", "When do you first append to the answer?"],
+        hints: ["Evict out-of-window front; pop back while ≤ new; append i; if i≥k−1 record nums[dq[0]]."]
+      },
+      test: {
+        prompts: ["Trace a decreasing array and an increasing one. Restate complexity.", "Argue amortized O(n)."],
+        hints: ["Each index pushed/popped ≤ once → O(n) time, O(k) space."]
+      }
+    },
+    rubric: [
+      { phase: "clarify", text: "Pinned exact window width k and walked the classic example." },
+      { phase: "brute",   text: "Named O(nk) scan (and optionally heap)." },
+      { phase: "plan",    text: "Named monotonic decreasing deque." },
+      { phase: "plan",    text: "Chose indices so out-of-window eviction works." },
+      { phase: "code",    text: "Evicted front when index left the window." },
+      { phase: "code",    text: "Popped back while back ≤ newcomer." },
+      { phase: "code",    text: "Recorded max only once the first full window exists." },
+      { phase: "test",    text: "Hit mono-increasing or mono-decreasing case." },
+      { phase: "test",    text: "Argued amortized O(n) via push-once-pop-once." }
+    ],
+    model: "<p><b>Shape:</b> decreasing deque of indices; front is the window max.</p><p><b>Core:</b> popleft stale; pop right ≤ n; append i; if i≥k−1 append nums[dq[0]].</p><p><b>Senior move:</b> named \"monotonic deque\" out loud — not just \"sliding window.\"</p>"
   }
 ];

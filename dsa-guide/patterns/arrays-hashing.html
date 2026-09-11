@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Arrays &amp; Hashing | DSA Field Guide</title>
-  <meta name="description" content="The Arrays &amp; Hashing pattern, explained for a curious beginner: the hash map as instant memory of what you've seen, plus three curated problems (Two Sum, Group Anagrams, Product of Array Except Self) with hints and runnable Python solutions." />
+  <meta name="description" content="The Arrays &amp; Hashing pattern, explained for a curious beginner: the hash map as instant memory of what you've seen, plus curated problems (Two Sum, Group Anagrams, Product of Array Except Self, Subarray Sum Equals K) with hints and runnable Python solutions." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -40,6 +40,7 @@
           <a class="nav-link" href="#two-sum">Two Sum</a>
           <a class="nav-link" href="#group-anagrams">Group Anagrams</a>
           <a class="nav-link" href="#product-except-self">Product of Array Except Self</a>
+          <a class="nav-link" href="#subarray-sum-k">Subarray Sum Equals K</a>
         </div>
         <a class="nav-link" href="../patterns/two-pointers.html">Two Pointers</a>
         <a class="nav-link" href="../patterns/sliding-window.html">Sliding Window</a>
@@ -541,6 +542,153 @@ print(product_except_self([1, 2, 3, 4]))
             </details>
           </section>
 
+
+          <!-- ===== PROBLEM 4: SUBARRAY SUM EQUALS K ===== -->
+          <section class="section problem reveal" id="subarray-sum-k">
+            <header class="problem-meta">
+              <h2><span class="section-num">04</span> &nbsp;Subarray Sum Equals K</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Prefix Sum + Hash</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~20 min</span>
+                <span class="pm-chip cx">O(n) time · O(n) space</span>
+              </div>
+            </header>
+            <p class="lead">Given an integer array <code>nums</code> and an integer <code>k</code>, return how many <strong>contiguous</strong> subarrays sum to <code>k</code>. For <code>nums = [1, 1, 1]</code> and <code>k = 2</code>, the answer is <code>2</code> (the two windows of length 2). Negatives are allowed — so a sliding window that only grows/shrinks on sign assumptions won't work.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Mile markers on a road trip <span class="tag">analogy</span></div>
+                <p>Write down the total miles driven after every exit (a <em>prefix sum</em>). A stretch that ends at exit <code>i</code> and covers exactly <code>k</code> miles started wherever the odometer earlier showed <code>prefix[i] − k</code>. Count how often that earlier reading already happened — that's how many good stretches end here.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Prefix sums finding subarrays that add to k">
+              <figcaption class="viz-title">Running total + hash of past totals</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": [1, 2, 3] },
+                "frames": [
+                  {"active":[],"caption":"k = 3. Seed the map with prefix 0 → 1 (empty prefix before any numbers)."},
+                  {"active":[0],"pointers":[{"name":"i","at":0}],"caption":"See 1 → prefix = 1. Need 1−3 = −2? Not seen. Count stays 0. File prefix 1."},
+                  {"active":[1],"pointers":[{"name":"i","at":1}],"caption":"See 2 → prefix = 3. Need 3−3 = 0 — and 0 is in the map! Count += 1 (subarray [1,2])."},
+                  {"active":[2],"match":[2],"pointers":[{"name":"i","at":2}],"caption":"See 3 → prefix = 6. Need 6−3 = 3 — seen once. Count += 1 (subarray [3]). Answer 2."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Keep a running <code>prefix</code> and a map <code>freq</code> from prefix value → how many times you've seen it. Seed <code>freq[0] = 1</code>.</p>
+            <ol>
+              <li>Add the current number into <code>prefix</code>.</li>
+              <li>Ask: how many earlier prefixes equal <code>prefix − k</code>? Add that count to the answer.</li>
+              <li>Then file the current <code>prefix</code> into <code>freq</code>.</li>
+            </ol>
+            <p>Why it works: any subarray ending at <code>i</code> that sums to <code>k</code> is exactly "current prefix minus some earlier prefix equals <code>k</code>."</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(n)</span></td><td>One pass; each map lookup/insert is O(1) average.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(n)</span></td><td>Up to n distinct prefix values in the map.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+              <div class="co-body"><div class="co-title">Don't reach for a sliding window here</div><p>With negatives (or zeros), expanding the right edge does <em>not</em> monotonically grow the sum — so "shrink while too big" breaks. Prefix + hash is the safe interview default. Positive-only subarray-sum-to-k <em>can</em> use a window — say that trade-off out loud.</p></div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why seed the frequency map with <code>freq[0] = 1</code>?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>So we never get a KeyError in Python</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>So a prefix that itself equals <code>k</code> counts as a valid subarray from the start</button>
+                <button class="quiz-opt"><span class="mark"></span>Because empty arrays always contribute one answer</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> When <code>prefix == k</code>, we look up <code>prefix − k == 0</code>. Seeding one occurrence of 0 means "there was an empty prefix before index 0," so whole-prefix matches count once.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Use <code>from collections import defaultdict</code>. <code>freq = defaultdict(int); freq[0] = 1</code>. Loop: <code>prefix += n</code>, then <code>ans += freq[prefix - k]</code>, then <code>freq[prefix] += 1</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">subarray_sum_k.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="16">
+from collections import defaultdict
+
+def subarray_sum(nums, k):
+    freq = defaultdict(int)
+    freq[0] = 1
+    prefix = ans = 0
+    for n in nums:
+        prefix += n
+        ans += freq[prefix - k]
+        freq[prefix] += 1
+    return ans
+
+print(subarray_sum([1, 1, 1], 2))
+print(subarray_sum([1, 2, 3], 3))
+print(subarray_sum([1, -1, 0], 0))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">2
+2
+3</pre></div>
+                </div>
+                <p>Look up <code>prefix − k</code> <em>before</em> filing the current prefix — same discipline as Two Sum. That order keeps a single-element subarray from double-counting against itself incorrectly when <code>k == 0</code> edge cases get tricky; filing after the lookup is the safe habit.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Prefix sum + hash of past prefixes is the interview default when the array may contain negatives. Nested all-subarrays is O(n²). Sliding window only if every element is positive and you can argue monotonicity.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["Seed freq 0 = 1, prefix = 0"] --> loop[For each number n]
+  loop --> add["prefix += n"]
+  add --> look["ans += freq prefix - k"]
+  look --> store["freq prefix += 1"]
+  store --> more{More numbers?}
+  more -->|yes| loop
+  more -->|no| out[Return ans]
+  out --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>from collections import defaultdict</code><span>Import a dict that returns 0 for missing keys — perfect for frequencies.</span></li>
+                  <li><code>def subarray_sum(nums, k):</code><span>Count contiguous subarrays whose sum equals <code>k</code>.</span></li>
+                  <li><code>freq = defaultdict(int)</code><span>Map each past prefix sum to how often it appeared.</span></li>
+                  <li><code>freq[0] = 1</code><span>Empty prefix before the array — so a whole-prefix equal to <code>k</code> counts.</span></li>
+                  <li><code>prefix = ans = 0</code><span>Running sum and answer counter.</span></li>
+                  <li><code>for n in nums:</code><span>One left-to-right pass.</span></li>
+                  <li><code>prefix += n</code><span>Extend the odometer by this exit's miles.</span></li>
+                  <li><code>ans += freq[prefix - k]</code><span>How many earlier odometer readings make this stretch equal <code>k</code>?</span></li>
+                  <li><code>freq[prefix] += 1</code><span>File today's reading for later stretches.</span></li>
+                  <li><code>return ans</code><span>Total number of good subarrays.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) for one pass; space O(n) for the prefix frequency map.</p>
+              </div>
+            </details>
+          </section>
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -555,6 +703,7 @@ print(product_except_self([1, 2, 3, 4]))
           <a href="#two-sum">Two Sum</a>
           <a href="#group-anagrams">Group Anagrams</a>
           <a href="#product-except-self">Product of Array Except Self</a>
+          <a href="#subarray-sum-k">Subarray Sum Equals K</a>
         </aside>
       </div>
 

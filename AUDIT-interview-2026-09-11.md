@@ -11,7 +11,7 @@
 | Guide | Score | Role today | Verdict |
 |-------|-------|------------|---------|
 | **Aptitude** | 8/10 OA | Round 0 gate | Strong warm/core; stretch bank thin |
-| **DSA** | 7.5/10 mid coding | Pattern + timed drill | Solid mid primer; not full Blind-75 |
+| **DSA** | 8/10 mid coding | Pattern + timed drill | Strong mid primer; stretch gaps (prefix / perms / deque) filled |
 | **GenAI** | 8.5/10 conceptual + SD | Verbal / system design | Interview kit is real; avoid memorizing speculative model brand names |
 | **FastAPI** | 8/10 API screen | Backend verbal | Modern stack correct; 2 copy-paste bugs fixed in this pass |
 | **LangStack** | 6.5/10 currency | Framework verbal | Pedagogy excellent; agent factory + Platform naming corrected in this pass |
@@ -72,7 +72,7 @@ Author commands (after this pass):
 
 **How:** Step viz frames; narrate invariant; one timed round only.
 
-**Park:** permutations / N-Queens, prefix sums, monotonic queue (nice-to-have stretch).
+**Park:** ~~permutations / N-Queens, prefix sums, monotonic queue~~ — now on pattern pages (stretch).
 
 **Trap:** Best Time to Buy/Sell Stock is taught under Sliding Window but interviewers usually call it **one-pass greedy** — say both.
 
@@ -158,11 +158,13 @@ Author commands (after this pass):
 
 ### DSA Field Guide
 
-**Coverage:** foundations + 16 patterns + drills + cheatsheet (~46 worked problems).
+**Coverage:** foundations + 16 patterns + drills + cheatsheet (~54 worked problems).
 
-**Gaps:** permutations/N-Queens, prefix sums, monotonic queue (stretch).
+**Gaps:** ~~permutations/N-Queens, prefix sums, monotonic queue~~ (shipped stretch).
 
 **Shipped (senior wave):** Min Window, Meeting Rooms II, LRU/design, Dijkstra, Unique Paths / 2D DP, Python coding bank.
+
+**Shipped (stretch):** [Subarray Sum Equals K](dsa-guide/patterns/arrays-hashing.html#subarray-sum-k), [Permutations](dsa-guide/patterns/backtracking.html#permutations) (+ N-Queens bridge note), [Sliding Window Maximum](dsa-guide/patterns/sliding-window.html#sliding-window-maximum).
 
 ### Aptitude & Reasoning
 
@@ -270,6 +272,7 @@ Author commands (after this pass):
 4. ~~FastAPI: Auth II, async tests, compose+Postgres~~ (done)
 5. ~~LangStack: middleware lesson, MCP cross-link, context engineering~~ (done)
 6. ~~Densify viz captions / whiteboard~~ (done on key pages)
+7. ~~DSA stretch: prefix sums, permutations/N-Queens bridge, monotonic deque~~ (done)
 
 ### Senior wave shipped
 
@@ -291,7 +294,7 @@ Skip foundations. Engines first. Checklist also on [`index.html#senior-path`](in
 | GenAI | 45m | [Attention](genai-guide/internals/attention-mechanism.html) → [workflows](genai-guide/rag/architectures-and-workflows.html) → [hybrid RAG](genai-guide/rag/hybrid-search-and-reranking.html) → [Q bank](genai-guide/interview/question-bank.html) → [RAG SD](genai-guide/interview/system-design/rag-chatbot.html) |
 | LangStack | 35m | [Gotchas](langstack/ecosystem/interview-gotchas.html) → [Middleware](langstack/langchain/middleware.html) → [HITL advanced](langstack/langgraph/advanced.html) → [evals](langstack/langsmith/evals.html) |
 | FastAPI | 40m | [Gotchas](fastapi-guide/drill/interview-gotchas.html) → [DI](fastapi-guide/fastapi/dependencies.html) → [async DB](fastapi-guide/fastapi/async-db.html) → [Auth II](fastapi-guide/fastapi/auth.html#auth-ii) → [async tests](fastapi-guide/deploy/index.html#async-tests) |
-| DSA | 50m | [Pattern map](dsa-guide/patterns/index.html) → [Python bank](dsa-guide/reference/python-coding-round.html) → [Min Window](dsa-guide/patterns/sliding-window.html#min-window) → [LRU](dsa-guide/patterns/design.html) → [2D DP](dsa-guide/patterns/dynamic-programming.html#unique-paths) → [Meeting Rooms II](dsa-guide/patterns/intervals.html#meeting-rooms-ii) |
+| DSA | 50m | [Pattern map](dsa-guide/patterns/index.html) → [Python bank](dsa-guide/reference/python-coding-round.html) → [Min Window](dsa-guide/patterns/sliding-window.html#min-window) → [SW Maximum](dsa-guide/patterns/sliding-window.html#sliding-window-maximum) → [LRU](dsa-guide/patterns/design.html) → [Prefix sum K](dsa-guide/patterns/arrays-hashing.html#subarray-sum-k) → [Permutations](dsa-guide/patterns/backtracking.html#permutations) |
 
 ---
 

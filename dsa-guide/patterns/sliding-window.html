@@ -42,6 +42,7 @@
           <a class="nav-link" href="#best-time">Best Time to Buy and Sell Stock</a>
           <a class="nav-link" href="#longest-substring">Longest Substring Without Repeating Characters</a>
           <a class="nav-link" href="#min-window">Minimum Window Substring</a>
+          <a class="nav-link" href="#sliding-window-maximum">Sliding Window Maximum</a>
         </div>
         <a class="nav-link" href="../patterns/stack.html">Stack</a>
         <a class="nav-link" href="../patterns/binary-search.html">Binary Search</a>
@@ -611,6 +612,162 @@ a
             </details>
           </section>
 
+
+          <!-- ===== PROBLEM 4: SLIDING WINDOW MAXIMUM ===== -->
+          <section class="section problem reveal" id="sliding-window-maximum">
+            <header class="problem-meta">
+              <h2><span class="section-num">04</span> &nbsp;Sliding Window Maximum</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Monotonic Deque</span>
+                <span class="pm-chip diff-hard">Hard</span>
+                <span class="pm-chip"><span class="dot"></span>~25 min</span>
+                <span class="pm-chip cx">O(n) time · O(k) space</span>
+              </div>
+            </header>
+            <p class="lead">Given an array and a window size <code>k</code>, return an array of the <strong>maximum</strong> in every contiguous window of length <code>k</code>. For <code>nums = [1,3,-1,-3,5,3,6,7]</code> and <code>k = 3</code>, the answer is <code>[3,3,5,5,6,7]</code>. A fresh scan of each window is O(nk) — interviewers want O(n).</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">A VIP line that only keeps useful people <span class="tag">analogy</span></div>
+                <p>As the window slides, keep a deque of indices whose values go <em>decreasing</em> from front to back. The front is always the current max. Anyone shorter than the newcomer at the back is useless forever (they'll never be max while the newcomer is around) — kick them out. Anyone who slid out of the window leaves the front.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Monotonic deque tracking window maxima">
+              <figcaption class="viz-title">Deque front = window max</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": [1, 3, -1, -3, 5] },
+                "frames": [
+                  {"win":[0,2],"active":[2],"caption":"k=3. Window [1,3,-1]. Deque indices of decreasing values → front is 3 (the max)."},
+                  {"win":[1,3],"active":[3],"caption":"Slide to [3,-1,-3]. 1 left the window. Front still 3. Max = 3."},
+                  {"win":[2,4],"match":[4],"active":[4],"caption":"5 arrives — pops everyone smaller from the back. Deque = [5]. Max = 5."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Use <code>collections.deque</code> storing <strong>indices</strong>, kept so <code>nums</code> values decrease from left to right:</p>
+            <ol>
+              <li>While the front index is outside the window (<code>&lt; i - k + 1</code>), popleft.</li>
+              <li>While the back's value is ≤ the new value, pop from the right.</li>
+              <li>Append index <code>i</code>. Once <code>i ≥ k - 1</code>, record <code>nums[dq[0]]</code> as this window's max.</li>
+            </ol>
+            <p>Each index enters and leaves the deque at most once → O(n).</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(n)</span></td><td>Amortized: each index pushed/popped ≤ once.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(k)</span></td><td>Deque holds at most one full window of candidates.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout gotcha">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+              <div class="co-body"><div class="co-title">Say "monotonic deque," not just "sliding window"</div><p>The window tells you <em>where</em>; the deque tells you <em>who is max</em> in O(1). Heap-per-window also works but is O(n log k) and messier with stale entries — name the deque first.</p></div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why store indices in the deque instead of raw values?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Indices sort automatically</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>So you can evict the front when it falls outside the window of width k</button>
+                <button class="quiz-opt"><span class="mark"></span>Because Python deques can't hold integers that aren't indices</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> Knowing the value isn't enough — you need its position to know when it slides out of the window.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p><code>from collections import deque</code>. For each <code>i</code>: popleft while front &lt; <code>i-k+1</code>; pop right while <code>nums[dq[-1]] &lt;= nums[i]</code>; append <code>i</code>; if <code>i &gt;= k-1</code>, append <code>nums[dq[0]]</code> to the answer.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">max_sliding_window.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="20">
+from collections import deque
+
+def max_sliding_window(nums, k):
+    dq = deque()
+    out = []
+    for i, n in enumerate(nums):
+        while dq and dq[0] < i - k + 1:
+            dq.popleft()
+        while dq and nums[dq[-1]] <= n:
+            dq.pop()
+        dq.append(i)
+        if i >= k - 1:
+            out.append(nums[dq[0]])
+    return out
+
+print(max_sliding_window([1, 3, -1, -3, 5, 3, 6, 7], 3))
+print(max_sliding_window([1], 1))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">[3, 3, 5, 5, 6, 7]
+[1]</pre></div>
+                </div>
+                <p>Front = max; back cleanup keeps the deque decreasing. Same family as the monotonic <em>stack</em> on the Stack page — here both ends move, so it's a deque.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">A decreasing monotonic deque of indices is the interview default for window maximums: O(n). Scanning each window is O(nk). A heap works but adds log factors and stale-entry bookkeeping.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Empty deque] --> i[For each index i]
+  i --> evict{Front index out of window?}
+  evict -->|yes| popL[popleft]
+  popL --> evict
+  evict -->|no| back{Back value <= nums i?}
+  back -->|yes| popR[pop right]
+  popR --> back
+  back -->|no| push[Append i]
+  push --> ready{i >= k - 1?}
+  ready -->|yes| rec[Record nums of front]
+  ready -->|no| more
+  rec --> more{More?}
+  more -->|yes| i
+  more -->|no| done[Return out]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>from collections import deque</code><span>Need O(1) pops from both ends.</span></li>
+                  <li><code>def max_sliding_window(nums, k):</code><span>Return the max of every length-<code>k</code> window.</span></li>
+                  <li><code>dq = deque()</code><span>Will hold indices in decreasing-value order.</span></li>
+                  <li><code>out = []</code><span>Answer list of window maxima.</span></li>
+                  <li><code>for i, n in enumerate(nums):</code><span>Right edge of the window advances one step.</span></li>
+                  <li><code>while dq and dq[0] &lt; i - k + 1:</code><span>Front fell out of the current window — remove it.</span></li>
+                  <li><code>dq.popleft()</code><span>Evict the stale max candidate.</span></li>
+                  <li><code>while dq and nums[dq[-1]] &lt;= n:</code><span>Anyone ≤ the newcomer can never beat it while it's around.</span></li>
+                  <li><code>dq.pop()</code><span>Drop useless smaller (or equal) candidates from the back.</span></li>
+                  <li><code>dq.append(i)</code><span>Newcomer joins as the new smallest-in-deque (back).</span></li>
+                  <li><code>if i &gt;= k - 1:</code><span>First full window completes at index <code>k - 1</code>.</span></li>
+                  <li><code>out.append(nums[dq[0]])</code><span>Front is the current maximum — record it.</span></li>
+                  <li><code>return out</code><span>One max per window position.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) amortized; space O(k) for the deque of candidates.</p>
+              </div>
+            </details>
+          </section>
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -625,6 +782,7 @@ a
           <a href="#best-time">Best Time to Buy and Sell Stock</a>
           <a href="#longest-substring">Longest Substring Without Repeating Characters</a>
           <a href="#min-window">Minimum Window Substring</a>
+          <a href="#sliding-window-maximum">Sliding Window Maximum</a>
         </aside>
       </div>
 
