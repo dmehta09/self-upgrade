@@ -53,7 +53,7 @@ const MODULES = [
     { slug: "data-sufficiency",       title: "Data sufficiency",     nav: "Data sufficiency",  id: "di-ds",       widgets: ["drill.js"] },
   ]},
   { key: "practice", label: "Practice", pages: [
-    { slug: "method", title: "How to crack the test",  nav: "Method & time budgets", id: "pr-method" },
+    { slug: "method", title: "How to crack the test",  nav: "Method & time budgets", id: "pr-method", widgets: ["whiteboard.js"] },
     { slug: "drill",  title: "Timed practice drill",   nav: "Timed drill",           id: "pr-drill", widgets: ["drill.js"] },
   ]},
 ];
