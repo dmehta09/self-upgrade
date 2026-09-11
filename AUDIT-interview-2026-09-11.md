@@ -278,6 +278,7 @@ Author commands (after this pass):
 7. ~~DSA stretch: prefix sums, permutations/N-Queens bridge, monotonic deque~~ (done)
 8. ~~Aptitude stretch pool densify + Stretch-only drill chip~~ (done)
 9. ~~Hub Interview/Senior path sync + deep-link dry-run~~ (done)
+10. ~~DSA Blind 75 tracker + wave-1 fill-ins (8 problems)~~ (done)
 
 ### Senior wave shipped
 
