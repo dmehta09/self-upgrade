@@ -12,12 +12,13 @@
   <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Pillars are like building codes for a skyscraper: fire safety (security), earthquake bracing (reliability), elevator capacity (performance), operating budget (cost), day-to-day maintenance (ops), and energy use (sustainability). A design that aces elevators but fails fire code fails the inspection.</p></div></div>
 
   <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
-  design[Architecture_choice] --> sec[Security]
-  design --> rel[Reliability]
-  design --> perf[Performance]
-  design --> cost[Cost]
-  design --> ops[Operational_Excellence]
-  design --> sus[Sustainability]
+  stem["Underline the stem constraint"] --> decide{"Which pillar is weighted?"}
+  decide -->|"least privilege / encrypt"| sec["Security"]
+  decide -->|"survive AZ / RPO-RTO"| rel["Reliability"]
+  decide -->|"latency / right-size"| perf["Performance efficiency"]
+  decide -->|"most cost-effective"| cost["Cost optimization"]
+  decide -->|"minimize ops overhead"| ops["Operational excellence"]
+  decide -->|"reduce always-on waste"| sus["Sustainability"]
 </pre></div>
 
   <dl class="kv">
@@ -33,6 +34,37 @@
 <section class="section reveal" id="tradeoffs">
   <h2><span class="section-num">02</span> Pillars collide — pick intentionally</h2>
   <p class="takeaway">There is no free lunch: Multi-Region reliability costs money; aggressive caching can stale data; tight security can add latency. The stem tells you which pillar wins.</p>
+
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Cost vs reliability",
+      "axisLabel": "How much AZ/Region resilience do you buy?",
+      "stops": [
+        {
+          "label": "Single-AZ",
+          "dims": { "Reliability": 25, "Cost savings": 95, "Ops simplicity": 85, "Exam fit": 15 },
+          "note": "Cheapest idle footprint. Usually wrong when the stem mentions HA or AZ failure — unless it explicitly accepts downtime."
+        },
+        {
+          "label": "Multi-AZ one Region",
+          "dims": { "Reliability": 70, "Cost savings": 65, "Ops simplicity": 70, "Exam fit": 95 },
+          "note": "SAA default for most apps: ALB + ASG + RDS Multi-AZ. Survives an AZ loss without paying for a second Region."
+        },
+        {
+          "label": "Pilot light / warm DR",
+          "dims": { "Reliability": 85, "Cost savings": 40, "Ops simplicity": 45, "Exam fit": 70 },
+          "note": "When RPO/RTO needs Region recovery. More spend and runbooks than Multi-AZ; still cheaper than full active-active."
+        },
+        {
+          "label": "Active-active Multi-Region",
+          "dims": { "Reliability": 95, "Cost savings": 15, "Ops simplicity": 20, "Exam fit": 40 },
+          "note": "Near-zero failover when healthy, but dual capacity and data conflict design. Wrong if the stem only asked for AZ resilience or cost-effective."
+        }
+      ]
+    }
+    </script>
+  </div>
 
   <div class="versus">
     <div class="vs-col vs-good"><div class="vs-h">Stem says “cost-effective”</div>
@@ -50,6 +82,11 @@
       </ul>
     </div>
   </div>
+
+  <dl class="kv">
+    <dt>Acme tickets · cost wins</dt><dd>Stem: “cost-effective HA for a regional ticket site.” Kill Global Accelerator + dual-Region Aurora. Keep Multi-AZ ALB/ASG/RDS and S3 gateway endpoints.</dd>
+    <dt>Payments ledger · reliability wins</dt><dd>Stem: “must not lose committed payments; RPO near zero in-Region.” Kill Spot-only primary DB and Single-AZ RDS. Pay for Multi-AZ (or Aurora storage) + backups even if cost rises.</dd>
+  </dl>
 
   <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Over-architecting “best practices”</b> without a constraint. Adding Global Accelerator + multi-Region Aurora when the stem only asks for AZ resilience wastes cost and is often the <em>wrong</em> answer. Match the pillar the question actually graded.</p></div></div>
 </section>

@@ -1,5 +1,5 @@
 /* ============================================================
-   System Design Field Guide — trade-off explorer (.tradeoff)
+   AWS SAA Field Guide — trade-off explorer (.tradeoff)
    A segmented slider between competing options; picking one
    animates a set of dimension bars (latency / cost / complexity /
    …) and shows a "best for" note. There is rarely a free lunch in

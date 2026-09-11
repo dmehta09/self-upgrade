@@ -11,32 +11,67 @@
 
   <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p><b>SQS</b> is a ticket spike at a deli — workers pull the next order when free. <b>SNS</b> is the PA system announcing “order 42” to every station at once. <b>EventBridge</b> is the smart mailroom that reads the envelope and routes only matching packages to the right floors (and can schedule nightly sweeps).</p></div></div>
 
-  <div class="table-wrap"><table>
-    <thead><tr><th>Service</th><th>Pattern</th><th>Exam cue</th></tr></thead>
-    <tbody>
-      <tr><td><b>SQS</b></td><td>Point-to-point / competing consumers</td><td>Buffer spikes, decouple, DLQ</td></tr>
-      <tr><td><b>SNS</b></td><td>Pub/sub fan-out</td><td>One event → email + Lambda + SQS</td></tr>
-      <tr><td><b>EventBridge</b></td><td>Event bus + rules</td><td>Default for events, SaaS, schedules, filtering</td></tr>
-    </tbody>
-  </table></div>
-
   <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
-  producer[Producer] --> decide{Need}
-  decide -->|bufferWork| sqs[SQS]
-  decide -->|fanOutPush| sns[SNS]
-  decide -->|routeByContent| eb[EventBridge]
-  sns --> sqs
-  eb --> targets[LambdaSQSStepFunctions]
+  need["Need async messaging?"] --> job{"What is the job?"}
+  job -->|"Buffer work · retries · DLQ"| sqs["SQS · pull queue"]
+  job -->|"Same message to many targets"| sns["SNS · push fan-out"]
+  job -->|"Filter by content · SaaS · schedule"| eb["EventBridge · rules"]
+  sns --> durable["Often: SNS → SQS for durable subscribers"]
+  eb --> targets["Targets: Lambda · SQS · Step Functions"]
 </pre></div>
+
+  <dl class="kv">
+    <dt>Acme tickets</dt><dd>Checkout enqueues “render PDF” to SQS. Workers scale on queue depth; API returns fast.</dd>
+    <dt>Nova alerts</dt><dd>Fraud score hits one SNS topic → email ops, Lambda enrich, SQS analytics queue — each fails alone.</dd>
+  </dl>
 </section>
 
 <section class="section reveal" id="sqs-sns">
-  <h2><span class="section-num">02</span> SQS &amp; SNS details</h2>
+  <h2><span class="section-num">02</span> SNS fan-out path</h2>
+  <p class="takeaway">Classic exam pattern: one publish, many subscribers. Pair SNS with SQS when a consumer needs a durable buffer.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">SNS fan-out → SQS / Lambda / email</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "SNS fan-out",
+      "nodes": [
+        { "id": "prod", "label": "Producer · OrderPlaced", "type": "compute", "col": 0, "row": 1 },
+        { "id": "sns", "label": "SNS topic", "type": "queue", "col": 1, "row": 1 },
+        { "id": "sqs", "label": "SQS · inventory", "type": "queue", "col": 2, "row": 0 },
+        { "id": "lambda", "label": "Lambda · enrich", "type": "compute", "col": 2, "row": 1 },
+        { "id": "email", "label": "Email / SMS", "type": "client", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "prod", "to": "sns", "label": "publish once" },
+        { "from": "sns", "to": "sqs", "label": "push" },
+        { "from": "sns", "to": "lambda", "label": "push" },
+        { "from": "sns", "to": "email", "label": "push" }
+      ],
+      "steps": [
+        { "node": "prod", "caption": "Producer publishes OrderPlaced once — it should not call every system synchronously." },
+        { "edge": ["prod","sns"], "caption": "SNS receives the message and fans it out to every subscription.", "status": "hit" },
+        { "edge": ["sns","sqs"], "caption": "Inventory queue gets a durable copy. Workers pull, retry, and use a DLQ.", "status": "hit" },
+        { "edge": ["sns","lambda"], "caption": "Lambda enriches or notifies another system — fails without blocking SQS.", "status": "hit" },
+        { "edge": ["sns","email"], "caption": "Ops email/SMS fires in parallel. Heterogeneous targets, one publish.", "status": "hit" }
+      ] }
+    </script>
+    <p class="viz-fallback">Producer → SNS topic → SQS inventory + Lambda + email/SMS in parallel.</p>
+  </figure>
+
   <dl class="kv">
     <dt>Standard vs FIFO SQS</dt><dd>Standard = best-effort ordering, nearly unlimited throughput. FIFO = exactly-once processing within a group + ordered — use when the stem demands order.</dd>
-    <dt>Visibility timeout</dt><dd>Hide in-flight messages while processing; set ≥ worst-case work time.</dd>
-    <dt>DLQ</dt><dd>After maxReceiveCount failures, poison messages land here for inspection.</dd>
-    <dt>SNS + SQS</dt><dd>Classic fan-out: one SNS topic, many SQS queues (durable subscribers).</dd>
+    <dt>Visibility timeout / DLQ</dt><dd>Hide in-flight messages while processing; set ≥ worst-case work time. After maxReceiveCount, poison messages land in the DLQ.</dd>
   </dl>
 
   <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Don't use SQS when you need <b>instant push to many heterogeneous targets with filtering</b> — that's SNS or EventBridge. Don't use EventBridge as a long durable work queue — put durable work in SQS (EventBridge can target SQS).</p></div></div>
@@ -51,7 +86,7 @@
     <li>Schema Registry helps discover event shapes.</li>
   </ul>
 
-  <p>Serverless consumers often sit on Lambda — see <a href="../../devops-guide/aws/containers-and-serverless.html">DevOps · Containers &amp; serverless</a>.</p>
+  <p>Related: <a href="../resilience/decoupling-and-scaling.html">Decoupling &amp; scaling</a> · <a href="../compute/lambda-serverless.html">Lambda</a>.</p>
 
   <div class="quiz" data-quiz>
     <p class="q">OrderPlaced must trigger inventory, email, and analytics only when total &gt; 100, with optional SaaS source later. Best default?</p>
@@ -65,7 +100,7 @@
 </section>
 
 <section class="section reveal" id="interview">
-  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
   <div class="qa-set">
     <details class="qa">
       <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">SQS vs SNS vs EventBridge?</span><span class="pm-chip diff-core">core</span></summary>

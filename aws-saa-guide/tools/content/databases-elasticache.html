@@ -1,76 +1,98 @@
 <section class="hero reveal">
+  <span class="eyebrow">Databases · ElastiCache</span>
   <span class="domain-chip">Domain 3 · High-performing</span>
-  <span class="eyebrow">Databases · cache</span>
-  <h1>ElastiCache.</h1>
-  <p class="lead">Managed in-memory cache (Redis / Valkey-compatible and Memcached) to cut database load and latency. The exam asks engine choice, HA, and when cache belongs in front of RDS/DynamoDB vs when the DB feature (DAX) is enough.</p>
+  <h1>Cache the hot path. Keep the DB breathing.</h1>
+  <p class="lead">ElastiCache is managed Redis / Valkey or Memcached in your VPC. Put it in front of RDS or DynamoDB for hot keys, sessions, and leaderboards — then invalidate carefully. The exam picks engine, HA, and ElastiCache vs DAX.</p>
 </section>
 
-<section class="section reveal" id="when">
-  <h2><span class="section-num">01</span> When caching wins</h2>
-  <p class="takeaway">Put ElastiCache in front of a relational or document store for <b>hot keys</b>, session stores, leaderboards, and read-heavy pages. Invalidate or TTL carefully — stale cache is a silent bug.</p>
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway">App asks the <b>cache first</b> (cache-aside). Hit → done. Miss → read the database, populate the cache, return. Stale data is a silent bug — TTL or explicit invalidate on write.</p>
 
-  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Your database is the library stacks. <b>ElastiCache</b> is the cart of books already pulled for today's popular titles — grab in milliseconds, but if someone updates the catalog you must refresh the cart or readers see yesterday's edition.</p></div></div>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Your database is the library stacks. <b>ElastiCache</b> is the cart of popular books already pulled for today — grab in milliseconds. Update a title and you must refresh the cart, or readers see yesterday's edition.</p></div></div>
 
-  <div class="diagram">
-    <div class="dg-title">Cache-aside</div>
-    <p style="text-align:center;margin:0;font-size:14px;color:var(--text-muted)">Client → App → <b>ElastiCache</b> (hit) · miss → <b>RDS / DynamoDB</b> → populate cache</p>
-  </div>
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  req["App needs data"] --> cache{"In ElastiCache?"}
+  cache -->|yes| hit["Cache hit · return"]
+  cache -->|no| miss["Cache miss"]
+  miss --> db["Read RDS or DynamoDB"]
+  db --> fill["Write key into cache"]
+  fill --> ret["Return to caller"]
+</pre></div>
 </section>
 
-<section class="section reveal" id="engines">
-  <h2><span class="section-num">02</span> Redis vs Memcached</h2>
+<section class="section reveal" id="scenarios">
+  <h2><span class="section-num">02</span> Three stories that stick</h2>
+  <p class="takeaway">Same product, three exam shapes: <b>shared sessions</b>, <b>sorted-set leaderboards</b>, and <b>RDS read offload</b>.</p>
+
+  <dl class="kv">
+    <dt>Acme tickets</dt><dd>Stateless web fleet behind an ALB. Sessions live in Multi-AZ Redis so any instance can serve any user — no sticky EBS on one host.</dd>
+    <dt>Nova games</dt><dd>Live leaderboard needs sorted sets and fast increments. Redis (or Valkey) wins; Memcached has no sorted sets.</dd>
+    <dt>Ledger Co</dt><dd>Product catalog reads hammer RDS. Cache-aside on hot SKUs cuts DB CPU; writes invalidate or short TTL so stock counts stay honest.</dd>
+  </dl>
+
   <div class="versus">
     <div class="vs-col vs-good"><div class="vs-h">Redis / Valkey</div>
       <ul>
-        <li>Rich data structures, persistence options</li>
+        <li>Structures: strings, hashes, sorted sets, pub/sub</li>
         <li>Replication + Multi-AZ failover</li>
         <li>Cluster mode for scale-out</li>
-        <li>Pub/Sub, Lua, sorted sets</li>
+        <li>Sessions, leaderboards, queues-ish patterns</li>
       </ul>
     </div>
     <div class="vs-col vs-good"><div class="vs-h">Memcached</div>
       <ul>
-        <li>Simple key/value</li>
-        <li>Multithreaded, easy horizontal scale</li>
-        <li>No fancy structures / persistence story</li>
-        <li>When you only need a dumb cache</li>
+        <li>Simple key/value only</li>
+        <li>Multithreaded horizontal scale</li>
+        <li>No rich structures / HA story like Redis</li>
+        <li>When you only need a dumb object cache</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="vs-dax">
+  <h2><span class="section-num">03</span> ElastiCache vs DAX</h2>
+  <p class="takeaway"><b>DAX</b> is DynamoDB's own microsecond cache (Dynamo APIs). <b>ElastiCache</b> is a general Redis/Memcached tier you wire yourself in front of RDS, DynamoDB, or APIs.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Pick ElastiCache</div>
+      <ul>
+        <li>RDS / Aurora / multi-backend caching</li>
+        <li>Redis features (sessions, sorted sets)</li>
+        <li>You control cache-aside and TTL</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Pick DAX</div>
+      <ul>
+        <li>DynamoDB-only access path</li>
+        <li>Want API-compatible acceleration</li>
+        <li>Microsecond eventually consistent reads</li>
       </ul>
     </div>
   </div>
 
-  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>ElastiCache is <b>VPC-bound</b> — not a public internet cache. Place nodes in private subnets; open security groups only from app tiers. Also: caching does not replace Multi-AZ on the primary database for durability.</p></div></div>
-
-  <p>Compute placement context: <a href="../../devops-guide/aws/compute-and-networking.html">DevOps · Compute &amp; networking</a>.</p>
-</section>
-
-<section class="section reveal" id="patterns">
-  <h2><span class="section-num">03</span> Patterns &amp; HA</h2>
-  <dl class="kv">
-    <dt>Cache-aside</dt><dd>App reads cache → miss → DB → populate cache. Most common exam pattern.</dd>
-    <dt>Session store</dt><dd>Sticky-user sessions in Redis so ASG instances stay stateless.</dd>
-    <dt>Multi-AZ Redis</dt><dd>Primary + replica with automatic failover for HA.</dd>
-    <dt>vs DAX</dt><dd>DAX is DynamoDB-specific microsecond cache; ElastiCache is general-purpose for many backends.</dd>
-  </dl>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>ElastiCache is <b>VPC-bound</b> — private subnets, security groups only from the app tier. Caching does not replace Multi-AZ on the primary database for durability. Also: Memcached ≠ Redis sorted sets — stem says leaderboard → Redis.</p></div></div>
 
   <div class="quiz" data-quiz>
-    <p class="q">Stateless web tier behind an ALB needs shared sessions and sorted-set leaderboards. Choose?</p>
+    <p class="q">Acme tickets needs shared sessions and a sorted-set leaderboard behind an ALB Auto Scaling group. Choose?</p>
     <div class="quiz-opts">
       <button class="quiz-opt" data-correct="true"><span class="mark"></span>ElastiCache Redis (Multi-AZ) — structures + shared sessions.</button>
-      <button class="quiz-opt"><span class="mark"></span>Memcached only — it has sorted sets built in.</button>
-      <button class="quiz-opt"><span class="mark"></span>Store sessions on each instance's EBS and hope users stick.</button>
+      <button class="quiz-opt"><span class="mark"></span>Memcached only — it includes sorted sets.</button>
+      <button class="quiz-opt"><span class="mark"></span>Sessions on each instance's EBS with sticky sessions forever.</button>
     </div>
-    <div class="quiz-explain"><b>Right.</b> Redis gives shared sessions and rich structures. Memcached lacks sorted sets. Local EBS sessions break horizontal scale.</div>
+    <div class="quiz-explain"><b>Right.</b> Redis gives shared sessions and sorted sets. Memcached lacks those structures. Local EBS sessions break a stateless scale-out story.</div>
   </div>
 </section>
 
 <section class="section reveal" id="interview">
-  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
   <div class="qa-set">
     <details class="qa">
       <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Redis vs Memcached on ElastiCache?</span><span class="pm-chip diff-warm">warm-up</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p><b>Redis</b> for rich structures, replication/failover, and advanced features. <b>Memcached</b> for simple, multithreaded key/value caching when you don't need those features.</p>
+        <p><b>Redis / Valkey</b> for rich structures, replication/failover, and advanced features. <b>Memcached</b> for simple, multithreaded key/value when you do not need those features.</p>
         <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Redis for features and HA; Memcached for simple horizontal key/value."</p></div></div>
       </div>
     </details>
@@ -78,7 +100,7 @@
       <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you keep the web tier stateless?</span><span class="pm-chip diff-core">core</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p>Move sessions (and other shared hot state) into <b>ElastiCache Redis</b> so any instance behind the load balancer can serve any user. Combine with Auto Scaling — no sticky dependency on a single host's memory/disk.</p>
+        <p>Move sessions into <b>ElastiCache Redis</b> so any instance behind the load balancer can serve any user. Pair with Auto Scaling — no dependency on one host's memory or disk.</p>
         <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Sessions in Redis, instances disposable — that's a stateless web tier."</p></div></div>
       </div>
     </details>
@@ -86,7 +108,7 @@
       <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">ElastiCache vs DynamoDB DAX?</span><span class="pm-chip diff-stretch">stretch</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p><b>DAX</b> is a write-through/read cache purpose-built for DynamoDB APIs. <b>ElastiCache</b> is a general cache you wire yourself (cache-aside) in front of RDS, DynamoDB, or APIs. Pick DAX for seamless Dynamo microsecond reads; ElastiCache when you need Redis features or multi-backend caching.</p>
+        <p><b>DAX</b> is purpose-built for DynamoDB APIs. <b>ElastiCache</b> is a general cache you wire (cache-aside) in front of RDS, DynamoDB, or APIs. Pick DAX for seamless Dynamo microsecond reads; ElastiCache for Redis features or multi-backend caching.</p>
         <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"DAX is Dynamo's own accelerator; ElastiCache is the general Redis/Memcached tier."</p></div></div>
       </div>
     </details>

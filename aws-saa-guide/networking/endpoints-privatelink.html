@@ -130,16 +130,24 @@
 
 <section class="section reveal" id="why">
   <h2><span class="section-num">01</span> Why endpoints show up constantly</h2>
-  <p class="takeaway">Exam stems that say <b>no internet</b>, <b>private only</b>, or <b>reduce data transfer/NAT cost</b> almost always want VPC endpoints — not “add a NAT and open 443 everywhere.”</p>
+  <p class="takeaway">Exam stems that say <b>no internet</b>, <b>private only</b>, or <b>reduce data transfer/NAT cost</b> almost always want VPC endpoints — not “add a NAT and open 443 everywhere.” For AWS APIs, prefer endpoints over NAT.</p>
 
   <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Without endpoints, private apps leave campus through the highway tollbooth (NAT) just to visit the company warehouse next door (S3). A gateway endpoint is a private service road to that warehouse — no toll, no public highway. PrivateLink is a secure loading dock you can offer to partner campuses without merging entire road networks (peering).</p></div></div>
 
-  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
-  app[Private_app] -->|bad_path| nat[NAT_to_internet]
-  nat --> s3public[S3_public_endpoint]
-  app -->|good_path| gw[Gateway_endpoint]
-  gw --> s3priv[S3_via_AWS_network]
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["Need private outbound?"] --> aws{"Talking to an AWS API?"}
+  aws -->|no · third-party HTTPS| nat["NAT Gateway · public subnet"]
+  aws -->|yes| which{"Which AWS service?"}
+  which -->|"S3 or DynamoDB"| gw["Gateway endpoint · route table"]
+  which -->|"Most other APIs · Secrets · ECR · …"| iface["Interface endpoint · PrivateLink ENI"]
+  gw --> save["Stays on AWS network · cuts NAT GB"]
+  iface --> save
 </pre></div>
+
+  <dl class="kv">
+    <dt>Acme tickets</dt><dd>Private app tier pulls ticket PDFs from S3. Associate an <b>S3 gateway endpoint</b> with those route tables — no NAT hairpin for object GETs.</dd>
+    <dt>Ledger Co</dt><dd>Workers fetch Secrets Manager and ECR images with no internet path. Use <b>interface endpoints</b> for those APIs; keep NAT only if you still need non-AWS HTTPS.</dd>
+  </dl>
 </section>
 
 <section class="section reveal" id="gateway-vs-interface">
@@ -191,7 +199,7 @@
     <div class="quiz-explain"><b>Right.</b> S3 supports gateway endpoints — the cost- and privacy-friendly default. Don’t attach IGW to “private” subnets. (S3 also has interface endpoints in some designs, but gateway is the classic exam answer for private + cheap.)</div>
   </div>
 
-  <p>Related connectivity context in <a href="../../devops-guide/aws/compute-and-networking.html">DevOps VPC networking</a>.</p>
+  <p>Related: <a href="../networking/vpc-and-subnets.html">VPC &amp; subnets</a> · <a href="../compute/elb-patterns.html">ELB / PrivateLink NLB</a>.</p>
 </section>
 
 <section class="section reveal" id="interview">
@@ -214,11 +222,11 @@
       </div>
     </details>
     <details class="qa">
-      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do endpoint policies interact with IAM?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">NAT vs endpoint for AWS APIs?</span><span class="pm-chip diff-stretch">stretch</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p>Both must allow. An endpoint policy can restrict which principals/buckets are reachable through that endpoint even if IAM is broader — defense in depth for private S3 access paths.</p>
-        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"IAM and the endpoint policy are an AND — either deny blocks the call."</p></div></div>
+        <p>Use <b>gateway or interface endpoints</b> for AWS APIs — cheaper and private. Reserve <b>NAT</b> for third-party internet HTTPS the endpoints cannot reach. Both IAM and the endpoint policy must allow the call.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"AWS APIs → endpoints. Third-party internet → NAT. IAM and endpoint policy are an AND."</p></div></div>
       </div>
     </details>
   </div>
@@ -239,7 +247,7 @@
       </div>
 
       <footer class="footer">
-        <span class="fmono">AWS SAA Field Guide &middot; CI/CD &middot; containers &middot; Kubernetes &middot; Terraform &middot; AWS &middot; interview-ready</span>
+        <span class="fmono">AWS SAA Field Guide &middot; SAA-C03 &middot; Well-Architected &middot; Sep 2026</span>
         <span class="fmono">Built to open offline &middot; Sep 2026</span>
       </footer>
     </div>

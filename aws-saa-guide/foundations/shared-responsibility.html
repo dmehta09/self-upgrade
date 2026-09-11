@@ -128,27 +128,26 @@
   <p class="lead">Shared Responsibility is the security framing behind IAM, encryption, patching, and network isolation questions. The line moves with the service model — more managed means AWS owns more of the stack, but never your data classification or identity choices.</p>
 </section>
 
-<section class="section reveal" id="line">
+<section class="section reveal" id="idea">
   <h2><span class="section-num">01</span> Where the line sits</h2>
-  <p class="takeaway"><b>AWS</b> is responsible for security <em>of</em> the cloud (facilities, hardware, virtualization, global network). <b>You</b> are responsible for security <em>in</em> the cloud (OS/apps where applicable, data, identity, network config, encryption choices).</p>
+  <p class="takeaway"><b>AWS</b> owns security <em>of</em> the cloud. <b>You</b> own security <em>in</em> the cloud. As you climb from EC2 → RDS → Lambda/S3, AWS patches more — you still own identity, data, and config.</p>
 
   <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>AWS is the landlord of a secured apartment building: locks on the lobby, cameras in the halls, fire systems. You still lock your own door, decide who gets keys, and don’t leave passports on the kitchen table. Renting a furnished suite (Lambda) doesn’t mean strangers can read your mail — you still own the contents.</p></div></div>
 
-  <div class="diagram"><div class="dg-title">Responsibility shifts by abstraction</div>
-    <div class="flow">
-      <div class="flow-node"><div class="fn-k">EC2</div><div class="fn-t">You patch OS</div><div class="fn-d">SG, IAM, data</div></div>
-      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
-      <div class="flow-node"><div class="fn-k">RDS / Fargate</div><div class="fn-t">AWS patches more</div><div class="fn-d">You: data, IAM, net</div></div>
-      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
-      <div class="flow-node"><div class="fn-k">Lambda / S3</div><div class="fn-t">AWS runs platform</div><div class="fn-d">You: code, ACLs, keys</div></div>
-    </div>
-    <div class="cap">Higher abstraction → AWS owns more patching; you still own identity and data.</div>
-  </div>
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["Who patches the OS / engine?"] --> model{"Which service model?"}
+  model -->|"IaaS · EC2"| iaas["You patch guest OS + apps"]
+  model -->|"PaaS · RDS · Fargate"| paas["AWS patches host / engine"]
+  model -->|"SaaS-like · Lambda · S3"| saas["AWS runs the platform"]
+  iaas --> you["You still own: IAM · data · SG · encryption choices"]
+  paas --> you
+  saas --> you
+</pre></div>
 </section>
 
 <section class="section reveal" id="matrix">
-  <h2><span class="section-num">02</span> Exam matrix: who does what</h2>
-  <p class="takeaway">Memorize a few sharp splits — they appear as “who is responsible for…” distractors.</p>
+  <h2><span class="section-num">02</span> Exam matrix + three stories</h2>
+  <p class="takeaway">Memorize sharp splits — they appear as “who is responsible for…” distractors. Then map them onto named designs.</p>
 
   <div class="table-wrap"><table>
     <thead><tr><th>Concern</th><th>EC2</th><th>RDS</th><th>Lambda / S3</th></tr></thead>
@@ -157,24 +156,41 @@
       <tr><td>Guest OS patching</td><td><b>Customer</b></td><td>AWS</td><td>AWS</td></tr>
       <tr><td>Network controls (VPC/SG)</td><td>Customer</td><td>Customer</td><td>Customer (config)</td></tr>
       <tr><td>Data classification &amp; encryption choices</td><td>Customer</td><td>Customer</td><td>Customer</td></tr>
-      <tr><td>IAM policies / Identity Center</td><td>Customer</td><td>Customer</td><td>Customer</td></tr>
+      <tr><td>IAM / Identity Center</td><td>Customer</td><td>Customer</td><td>Customer</td></tr>
     </tbody>
   </table></div>
 
-  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>“AWS encrypts everything for me”</b> is incomplete. Many services offer encryption defaults or easy toggles (S3 SSE, EBS, RDS), but <em>you</em> choose CMKs vs AWS-managed keys, key policies, and whether client-side encryption is required. Misconfigured bucket policies remain <em>your</em> incident.</p></div></div>
-
-  <p>Deep IAM and secrets patterns: <a href="../../devops-guide/aws/iam-storage-data.html">DevOps IAM · storage · data</a>.</p>
+  <dl class="kv">
+    <dt>Harbor Shop · EC2</dt><dd>Custom image pipeline on EC2. Harbor owns guest OS patches, SSM patch baselines, and app packages. AWS still owns the hypervisor and the building.</dd>
+    <dt>Ledger Co · RDS</dt><dd>PostgreSQL on RDS. AWS applies engine patches in the maintenance window. Ledger owns schema, DB users, parameter groups, backups policy, and who can reach port 5432.</dd>
+    <dt>Acme tickets · Lambda</dt><dd>Ticket PDF renderer on Lambda. AWS patches the runtime host. Acme owns the function code, dependencies, execution role, and any VPC attachment.</dd>
+  </dl>
 </section>
 
 <section class="section reveal" id="modern">
   <h2><span class="section-num">03</span> Modern identity defaults</h2>
-  <p class="takeaway">Prefer <b>IAM roles</b> and <b>IAM Identity Center</b> over long-lived access keys. Prefer instance/task/Lambda roles and OIDC federation from CI.</p>
+  <p class="takeaway">Prefer <b>IAM roles</b> and <b>IAM Identity Center</b> over long-lived access keys. Shared responsibility always includes <em>who</em> can call AWS — that part never moves to AWS.</p>
 
   <dl class="kv">
-    <dt>Humans</dt><dd>Identity Center (SSO) → short-lived roles into accounts; MFA enforced.</dd>
+    <dt>Humans</dt><dd>Identity Center (SSO) → short-lived permission sets into accounts; MFA enforced. No shared IAM users with standing keys.</dd>
     <dt>Workloads</dt><dd>EC2 instance profiles, ECS task roles, Lambda execution roles, EKS Pod Identity / IRSA.</dd>
     <dt>Automation</dt><dd>GitHub Actions / GitLab OIDC assume-role — no static keys in secrets if avoidable.</dd>
   </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>“AWS encrypts everything for me”</b> is incomplete. Services offer encryption defaults or easy toggles (S3 SSE, EBS, RDS), but <em>you</em> choose CMKs vs AWS-managed keys, key policies, and whether client-side encryption is required. A world-readable bucket is still <em>your</em> incident.</p></div></div>
+
+  <p>Deep dive: <a href="../identity-security/iam-users-roles-policies.html">IAM users, roles &amp; policies</a> · <a href="../identity-security/org-scp-identity-center.html">Organizations, SCPs &amp; Identity Center</a>.</p>
+</section>
+
+<section class="section reveal" id="worked">
+  <h2><span class="section-num">04</span> Worked: three “who patches?” stems</h2>
+  <p class="takeaway">Underline the <b>service</b>, then ask whether you control a guest OS. That one test kills most distractors.</p>
+
+  <div class="steps">
+    <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Stem · RDS engine patches</h4><p><em>Constraint:</em> Amazon RDS for PostgreSQL. Kill “SSH and <code>yum update</code>” — no guest OS access. Kill “nobody patches.” <b>Answer:</b> AWS applies engine/host patches; you still own schema, users, and network.</p></div></div>
+    <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Stem · EC2 AMI fleet</h4><p><em>Constraint:</em> custom apps on Amazon EC2. Kill “AWS patches the guest OS for you by default.” Kill “only the hypervisor matters.” <b>Answer:</b> you patch guest OS and apps (SSM Patch Manager is a common helper — still your responsibility).</p></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Stem · Lambda runtime CVE</h4><p><em>Constraint:</em> function on AWS Lambda managed runtime. Kill “you must patch the underlying host.” Kill “AWS owns your npm dependencies.” <b>Answer:</b> AWS patches the execution environment; you secure code, libs, and the execution role.</p></div></div>
+  </div>
 
   <div class="quiz" data-quiz>
     <p class="q">On Amazon RDS for PostgreSQL, who is responsible for applying database engine patches?</p>
@@ -188,7 +204,7 @@
 </section>
 
 <section class="section reveal" id="interview">
-  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
   <div class="qa-set">
     <details class="qa">
       <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">State shared responsibility in one sentence.</span><span class="pm-chip diff-warm">warm-up</span></summary>
@@ -224,23 +240,26 @@
         </div>
         <nav class="toc">
           <h5>On this page</h5>
-          <a href="#line">Where the line sits</a>
-          <a href="#matrix">Exam matrix: who does what</a>
+          <a href="#idea">Where the line sits</a>
+          <a href="#matrix">Exam matrix + three stories</a>
           <a href="#modern">Modern identity defaults</a>
+          <a href="#worked">Worked: three “who patches?” stems</a>
           <a href="#interview">Exam rapid-fire</a>
         </nav>
       </div>
 
       <footer class="footer">
-        <span class="fmono">AWS SAA Field Guide &middot; CI/CD &middot; containers &middot; Kubernetes &middot; Terraform &middot; AWS &middot; interview-ready</span>
+        <span class="fmono">AWS SAA Field Guide &middot; SAA-C03 &middot; Well-Architected &middot; Sep 2026</span>
         <span class="fmono">Built to open offline &middot; Sep 2026</span>
       </footer>
     </div>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
   <script src="../assets/js/lessons.js"></script>
   <script src="../assets/js/search-index.js"></script>
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
   <script src="../assets/js/progress.js"></script>
 </body>
 </html>

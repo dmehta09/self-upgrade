@@ -130,60 +130,113 @@
 
 <section class="section reveal" id="classes">
   <h2><span class="section-num">01</span> Storage classes — pick by access</h2>
-  <p class="takeaway">S3 is a <b>Regional</b> object store (99.999999999% durability design target). You choose a <b>storage class</b> per object (or let lifecycle / Intelligent-Tiering move it). Cheaper classes trade retrieval cost, latency, or availability.</p>
+  <p class="takeaway">S3 is a <b>Regional</b> object store (11 nines durability design target). You choose a <b>storage class</b> per object (or let lifecycle / Intelligent-Tiering move it). Cheaper classes trade retrieval cost, latency, or availability.</p>
 
   <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Think of a warehouse with climate-controlled floors. <b>Standard</b> is the front aisle — instant grab, highest rent. <b>Intelligent-Tiering</b> is a smart forklift that moves pallets to cheaper floors when nobody touches them, then brings them back when someone asks — no retrieval fee for the automated moves. <b>Glacier Deep Archive</b> is the off-site vault: pennies to store, hours and a fee to open.</p></div></div>
 
   <div class="table-wrap"><table>
     <thead><tr><th>Class</th><th>When</th><th>Watch for</th></tr></thead>
     <tbody>
-      <tr><td><b>Standard</b></td><td>Hot, frequent access</td><td>Default for new uploads if you don't choose otherwise</td></tr>
-      <tr><td><b>Intelligent-Tiering</b></td><td>Unknown / changing access</td><td><b>2026 default for “we don't know”</b>; monitoring fee per object; no retrieval charges for auto-tier moves</td></tr>
-      <tr><td><b>Standard-IA / One Zone-IA</b></td><td>Infrequent but minutes matter</td><td>Retrieval fee + min storage duration; One Zone = single AZ risk</td></tr>
-      <tr><td><b>Glacier Instant / Flexible / Deep Archive</b></td><td>Archive</td><td>Instant = ms; Flexible/Deep = minutes–hours + retrieval cost</td></tr>
-      <tr><td><b>Express One Zone</b></td><td>Latency-sensitive single-AZ workloads</td><td>Not multi-AZ; different access model</td></tr>
+      <tr><td><b>Standard</b></td><td>Hot, frequent, known access</td><td>Default upload class if you don’t choose otherwise</td></tr>
+      <tr><td><b>Intelligent-Tiering</b></td><td>Unknown / changing access</td><td><b>2026 default for “we don’t know”</b>; small monitoring fee; no retrieval charges for auto-tier moves</td></tr>
+      <tr><td><b>Standard-IA / One Zone-IA</b></td><td>Infrequent but minutes matter</td><td>Retrieval fee + min duration; One Zone = single-AZ risk</td></tr>
+      <tr><td><b>Glacier Instant Retrieval</b></td><td>Archive that still needs ms reads</td><td>Cheaper storage than IA; retrieval fee; ms latency</td></tr>
+      <tr><td><b>Glacier Flexible Retrieval</b></td><td>True cold; minutes–hours OK</td><td>Expedited / Standard / Bulk retrieval windows</td></tr>
+      <tr><td><b>Glacier Deep Archive</b></td><td>Lowest $/GB; hours OK</td><td>Cheapest archive; longest restores</td></tr>
+      <tr><td><b>Express One Zone</b></td><td>Latency-sensitive single-AZ</td><td>Not multi-AZ; different access model</td></tr>
     </tbody>
   </table></div>
 
   <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
-  upload[ObjectUploaded] --> known{AccessPatternKnown}
-  known -->|hot| std[Standard]
-  known -->|unknownOrChanging| intel[IntelligentTiering]
-  known -->|rareButFast| ia[StandardIA]
-  known -->|archive| glacier[GlacierFamily]
-  intel --> autoMove[AutoTierByAccess]
+  upload["Object uploaded"] --> known{"Access pattern known?"}
+  known -->|"Hot and frequent"| std["Standard"]
+  known -->|"Unknown or changing"| intel["Intelligent-Tiering · 2026 default"]
+  known -->|"Rare but need minutes"| ia["Standard-IA"]
+  known -->|"Archive · need ms"| ginst["Glacier Instant"]
+  known -->|"Archive · hours OK"| gflex["Glacier Flexible or Deep"]
+  intel --> auto["Auto-tier by access · no retrieval fee on moves"]
 </pre></div>
 
   <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Do not dump everything into Glacier “to save money” if the question needs <b>millisecond</b> reads — pick Instant Retrieval or keep hot/IA. Also: <b>One Zone-IA</b> is cheaper but dies with that AZ; exam scenarios that mention “must survive AZ failure” rule it out.</p></div></div>
 </section>
 
 <section class="section reveal" id="lifecycle">
-  <h2><span class="section-num">02</span> Lifecycle, versioning &amp; replication</h2>
+  <h2><span class="section-num">02</span> Lifecycle story — logs for two years</h2>
+  <p class="takeaway"><b>Lifecycle rules</b> transition or expire objects after N days. Pair with versioning, CRR, and Object Lock when the stem needs undo, DR, or WORM.</p>
+
   <dl class="kv">
-    <dt>Lifecycle rules</dt><dd>Transition classes or expire objects/versions after N days. Pair with Intelligent-Tiering or explicit IA/Glacier transitions.</dd>
-    <dt>Versioning</dt><dd>Keeps prior object versions; protects against overwrite/delete. Enables MFA Delete and Object Lock patterns.</dd>
-    <dt>CRR / SRR</dt><dd>Cross-Region or Same-Region Replication for DR, latency, or compliance. Needs versioning on.</dd>
-    <dt>Object Lock</dt><dd>WORM retention (compliance / governance mode) — exam favorite for “cannot be deleted by anyone.”</dd>
+    <dt>Acme · app logs · 2 years</dt><dd>Day 0 → Standard (or Intelligent-Tiering). After 30 days → Standard-IA. After 90 days → Glacier Flexible. Expire at day 730. Keep Multi-AZ classes — logs must survive an AZ loss.</dd>
+    <dt>Nova · unknown analytics lake</dt><dd>Land in <b>Intelligent-Tiering</b> (2026 default). Let AWS move cold partitions; don’t guess Glacier on day one.</dd>
+    <dt>Versioning / CRR / Object Lock</dt><dd>Versioning = undo deletes. CRR/SRR = Region/compliance copies (needs versioning). Object Lock = WORM retention nobody can shred early.</dd>
   </dl>
-  <p>Interview depth on IAM + bucket policy lives in the sibling <a href="../../devops-guide/aws/iam-storage-data.html">DevOps AWS · IAM, storage &amp; data</a> page — here we stay on SAA design choices.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  d0["Day 0 · Standard"] --> d30["Day 30 · Standard-IA"]
+  d30 --> d90["Day 90 · Glacier Flexible"]
+  d90 --> d730["Day 730 · expire"]
+</pre></div>
 </section>
 
 <section class="section reveal" id="access">
-  <h2><span class="section-num">03</span> Access control &amp; private paths</h2>
+  <h2><span class="section-num">03</span> Access control &amp; CloudFront OAC</h2>
   <p class="takeaway"><b>Block Public Access</b> on (account + bucket). Prefer <b>bucket policies</b> + IAM roles over ACLs. Public websites go through <b>CloudFront</b> (OAC), not an open bucket.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Private bucket · CloudFront OAC</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "CloudFront OAC to private S3",
+      "nodes": [
+        { "id": "user", "label": "User browser", "type": "client", "col": 0, "row": 1 },
+        { "id": "edge", "label": "CloudFront edge", "type": "edge", "col": 1, "row": 1 },
+        { "id": "oac", "label": "OAC · signed origin", "type": "edge", "col": 2, "row": 1 },
+        { "id": "s3", "label": "Private S3 bucket", "type": "storage", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "user", "to": "edge", "label": "HTTPS CDN URL" },
+        { "from": "edge", "to": "oac", "label": "cache miss" },
+        { "from": "oac", "to": "s3", "label": "only CF may GET" }
+      ],
+      "steps": [
+        { "node": "user", "caption": "User requests assets via the CloudFront domain — never the raw S3 website URL." },
+        { "edge": ["user","edge"], "caption": "Edge serves from cache when warm. Block Public Access stays on the bucket.", "status": "hit" },
+        { "edge": ["edge","oac"], "caption": "On miss, CloudFront uses Origin Access Control to call S3 as a trusted origin.", "status": "hit" },
+        { "edge": ["oac","s3"], "caption": "Bucket policy allows only that distribution’s OAC. Direct public GETs fail.", "status": "hit" }
+      ] }
+    </script>
+    <p class="viz-fallback">User → CloudFront edge → OAC → private S3 (Block Public Access on).</p>
+  </figure>
 
   <div class="versus">
     <div class="vs-col vs-bad"><div class="vs-h">Anti-pattern</div>
-      <ul><li>Public bucket for “simple static site”</li><li>Long-lived access keys in the app</li><li>ACLs as the primary control plane</li></ul>
+      <ul>
+        <li>Public bucket for “simple static site”</li>
+        <li>Long-lived access keys in the app</li>
+        <li>ACLs as the primary control plane</li>
+      </ul>
     </div>
     <div class="vs-col vs-good"><div class="vs-h">Exam-default</div>
-      <ul><li>Block Public Access + CloudFront OAC</li><li>Instance/task/role credentials</li><li>VPC gateway/interface endpoints for private access</li></ul>
+      <ul>
+        <li>Block Public Access + CloudFront OAC</li>
+        <li>Instance/task/role credentials</li>
+        <li>VPC gateway/interface endpoints for private access</li>
+      </ul>
     </div>
   </div>
 
   <dl class="kv">
     <dt>Presigned URLs</dt><dd>Time-boxed GET/PUT for a specific object without opening the bucket.</dd>
-    <dt>Access Points / Multi-Region Access Points</dt><dd>Scoped policy endpoints; MRAP for global anycast-style access.</dd>
+    <dt>Access Points / MRAP</dt><dd>Scoped policy endpoints; Multi-Region Access Points for global anycast-style access.</dd>
     <dt>Encryption</dt><dd>SSE-S3, SSE-KMS, or client-side. KMS when you need key policy audit/control.</dd>
   </dl>
 
@@ -199,7 +252,7 @@
 </section>
 
 <section class="section reveal" id="interview">
-  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
   <div class="qa-set">
     <details class="qa">
       <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When do you choose Intelligent-Tiering vs Standard vs Glacier?</span><span class="pm-chip diff-core">core</span></summary>
@@ -218,11 +271,11 @@
       </div>
     </details>
     <details class="qa">
-      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Versioning vs Object Lock — what's the difference?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Glacier Instant vs Flexible vs Deep?</span><span class="pm-chip diff-stretch">stretch</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p><b>Versioning</b> keeps prior versions so overwrites/deletes are recoverable. <b>Object Lock</b> adds WORM retention so even privileged users cannot delete or overwrite until the retention period ends (compliance or governance mode). Often used together for regulated archives.</p>
-        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Versioning is undo; Object Lock is WORM — nobody deletes until the clock expires."</p></div></div>
+        <p><b>Instant</b> = archive storage with millisecond gets (pay retrieval). <b>Flexible</b> = minutes to hours with expedited/standard/bulk. <b>Deep Archive</b> = cheapest storage, longest restore — for data you almost never touch.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Instant for ms archive reads; Flexible for hours; Deep Archive for the cheapest rarely-touched vault."</p></div></div>
       </div>
     </details>
   </div>
@@ -236,14 +289,14 @@
         <nav class="toc">
           <h5>On this page</h5>
           <a href="#classes">Storage classes — pick by access</a>
-          <a href="#lifecycle">Lifecycle, versioning replication</a>
-          <a href="#access">Access control private paths</a>
-          <a href="#interview">Interview rapid-fire</a>
+          <a href="#lifecycle">Lifecycle story — logs for two years</a>
+          <a href="#access">Access control CloudFront OAC</a>
+          <a href="#interview">Exam rapid-fire</a>
         </nav>
       </div>
 
       <footer class="footer">
-        <span class="fmono">AWS SAA Field Guide &middot; CI/CD &middot; containers &middot; Kubernetes &middot; Terraform &middot; AWS &middot; interview-ready</span>
+        <span class="fmono">AWS SAA Field Guide &middot; SAA-C03 &middot; Well-Architected &middot; Sep 2026</span>
         <span class="fmono">Built to open offline &middot; Sep 2026</span>
       </footer>
     </div>
@@ -254,6 +307,7 @@
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/mermaid-init.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
   <script src="../assets/js/progress.js"></script>
 </body>
 </html>

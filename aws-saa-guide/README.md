@@ -24,4 +24,4 @@ cd aws-saa-guide && node tools/gen.js && node tools/build-search-index.js && nod
 - `tools/AUTHORING.md` / `prompt.md` — contracts
 - Modules: foundations → networking → identity-security → compute → storage → databases → integration → resilience → cost-ops → exam
 
-Sibling interview AWS (crisp): [`../devops-guide/aws/`](../devops-guide/aws/).
+This guide is **self-contained** — no dependency on other field guides.

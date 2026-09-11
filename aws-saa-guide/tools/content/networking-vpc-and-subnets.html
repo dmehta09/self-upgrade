@@ -17,8 +17,7 @@
     <dt>IPv6</dt><dd>Optional dual-stack; egress-only IGW for IPv6 private outbound. Know it exists for “IPv6 required” stems.</dd>
   </dl>
 
-  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">Heads up <span class="tag">sibling</span></div><p>Interview-depth ASG/ALB sizing with this topology: <a href="../../devops-guide/aws/compute-and-networking.html">DevOps compute &amp; networking</a>.</p></div></div>
-</section>
+  </section>
 
 <section class="section reveal" id="request-path">
   <h2><span class="section-num">02</span> Canonical multi-AZ request path</h2>
@@ -63,13 +62,53 @@
     <p class="viz-fallback">Internet → IGW → ALB in public multi-AZ subnets → private app targets → private Multi-AZ RDS.</p>
   </figure>
 
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Private-tier egress · patch and API calls</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "Private egress",
+      "nodes": [
+        { "id": "app", "label": "App · private", "type": "compute", "col": 0, "row": 1 },
+        { "id": "nat", "label": "NAT · public AZ", "type": "edge", "col": 1, "row": 0 },
+        { "id": "ep", "label": "VPC endpoint", "type": "storage", "col": 1, "row": 2 },
+        { "id": "inet", "label": "Internet APIs", "type": "client", "col": 2, "row": 0 },
+        { "id": "s3", "label": "S3 / DynamoDB", "type": "storage", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "app", "to": "nat", "label": "third-party HTTPS" },
+        { "from": "nat", "to": "inet", "label": "via IGW" },
+        { "from": "app", "to": "ep", "label": "AWS APIs" },
+        { "from": "ep", "to": "s3", "label": "private path" }
+      ],
+      "steps": [
+        { "node": "app", "caption": "Private app needs outbound access — no inbound from the internet." },
+        { "edge": ["app","nat"], "caption": "Calls to third-party HTTPS APIs go to a NAT Gateway in a public subnet." },
+        { "edge": ["nat","inet"], "caption": "NAT uses the IGW so return traffic can reach the private instance.", "status": "hit" },
+        { "edge": ["app","ep"], "caption": "S3/DynamoDB (and many AWS APIs) should use VPC endpoints instead of NAT." },
+        { "edge": ["ep","s3"], "caption": "Gateway endpoints keep S3/DynamoDB traffic on the AWS network — cheaper and private." }
+      ] }
+    </script>
+    <p class="viz-fallback">Private app → NAT → internet for third-party APIs; private app → VPC endpoint → S3/DynamoDB for AWS APIs.</p>
+  </figure>
+
   <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
-  igw[IGW] --> pubA[Public_subnet_AZa]
-  igw --> pubB[Public_subnet_AZb]
-  pubA --> natA[NAT_AZa]
-  pubB --> natB[NAT_AZb]
-  privA[Private_subnet_AZa] --> natA
-  privB[Private_subnet_AZb] --> natB
+  need["Private subnet needs outbound?"] --> aws{"Only AWS APIs?"}
+  aws -->|yes| ep["Gateway or interface endpoint"]
+  aws -->|no| third{"Need public internet?"}
+  third -->|yes| nat["NAT Gateway in public subnet"]
+  third -->|no| none["No default route — stay private"]
+  nat --> ha["NAT per AZ for production HA"]
+  ep --> tip["Prefer endpoints over NAT for S3 / DynamoDB"]
 </pre></div>
 </section>
 

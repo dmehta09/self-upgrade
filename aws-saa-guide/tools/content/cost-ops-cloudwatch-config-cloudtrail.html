@@ -6,40 +6,57 @@
 </section>
 
 <section class="section reveal" id="triangle">
-  <h2><span class="section-num">01</span> Three tools, three questions</h2>
-  <p class="takeaway">"Is it healthy?" → CloudWatch. "Is it configured correctly / what changed?" → Config. "Who called the API?" → CloudTrail.</p>
+  <h2><span class="section-num">01</span> Which tool? Three questions</h2>
+  <p class="takeaway">“Is it healthy?” → <b>CloudWatch</b>. “Is it configured correctly / what changed?” → <b>Config</b>. “Who called the API?” → <b>CloudTrail</b>.</p>
 
   <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>CloudWatch is the car's dashboard (speed, temp). Config is the inspection checklist (did someone remove the seatbelts?). CloudTrail is the security camera of who opened the hood.</p></div></div>
 
   <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
-  q1[Is_it_healthy] --> cw[CloudWatch]
-  q2[Is_config_compliant] --> cfg[AWS_Config]
-  q3[Who_changed_what] --> ct[CloudTrail]
-  cw --> alarm[Alarms_SNS]
-  cfg --> rules[Config_Rules]
-  ct --> lake[Trail_to_S3_or_Lake]
+  ask["What do you need to know?"] --> q{"Pick the question"}
+  q -->|"Is it healthy / alarming?"| cw["CloudWatch · metrics · logs · alarms"]
+  q -->|"Is config compliant / what changed?"| cfg["AWS Config · inventory · rules"]
+  q -->|"Who called which API?"| ct["CloudTrail · API audit"]
+  cw --> act1["Alarm → SNS / Auto Scaling"]
+  cfg --> act2["Config Rules · conformance packs"]
+  ct --> act3["Trail → S3 or CloudTrail Lake"]
 </pre></div>
 </section>
 
 <section class="section reveal" id="cloudwatch">
   <h2><span class="section-num">02</span> CloudWatch essentials</h2>
+  <p class="takeaway">Metrics tell you how the system feels. Logs hold the detail. Alarms turn both into action — not a pretty dashboard alone.</p>
+
   <dl class="kv">
     <dt>Metrics &amp; alarms</dt><dd>CPU, ALB 5xx, custom metrics → alarm → SNS / Auto Scaling / incident chat.</dd>
     <dt>Logs</dt><dd>Log groups; metric filters turn log patterns into alarms.</dd>
     <dt>Dashboards</dt><dd>Ops visibility; not a substitute for alarms.</dd>
-    <dt>Events → EventBridge</dt><dd>Schedule and react to AWS events (modern home for many "CloudWatch Events" patterns).</dd>
+    <dt>Events → EventBridge</dt><dd>Schedule and react to AWS events (modern home for many “CloudWatch Events” patterns).</dd>
   </dl>
 
-  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>CloudWatch does <b>not</b> replace CloudTrail for API audit. Config is <b>not</b> a performance monitor. Turning on a trail without an S3 bucket / Lake destination (and encryption) fails the "audit" stem.</p></div></div>
+  <dl class="kv">
+    <dt>Acme tickets</dt><dd>ALB 5xx alarm pages on-call. Metric filter on “PAYMENT_FAILED” in app logs fires a second alarm — health, not audit of who changed IAM.</dd>
+    <dt>Nova games</dt><dd>ASG target tracking on CPU keeps the lobby fleet honest. Dashboard is for war rooms; the alarm is what pages.</dd>
+    <dt>Ledger Co</dt><dd>Scheduled EventBridge rule kicks a nightly reconcile Lambda — ops automation, still not “who deleted the SG.”</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>CloudWatch does <b>not</b> replace CloudTrail for API audit. Config is <b>not</b> a performance monitor. Turning on a trail without an S3 bucket / Lake destination (and encryption) fails the “audit” stem.</p></div></div>
 </section>
 
 <section class="section reveal" id="config-trail">
-  <h2><span class="section-num">03</span> Config &amp; CloudTrail</h2>
+  <h2><span class="section-num">03</span> Config, CloudTrail &amp; three mini-scenarios</h2>
+  <p class="takeaway">Trail shows <em>who</em> changed a security group. Config shows <em>what</em> it was before/after and whether a rule is violated. Use both when the stem wants attribution <em>and</em> posture.</p>
+
   <ul>
-    <li><b>Config</b> — continuous inventory + history; <b>Config Rules</b> (managed or custom) for "S3 must be encrypted," "SG must not be 0.0.0.0/0," etc. Conformance packs for packs of rules.</li>
+    <li><b>Config</b> — continuous inventory + history; <b>Config Rules</b> (managed or custom) for “S3 must be encrypted,” “SG must not be 0.0.0.0/0.” Conformance packs for packs of rules.</li>
     <li><b>CloudTrail</b> — management (and optional data) events; multi-Region trail to S3; org trail from the management account; CloudTrail Lake for searchable history.</li>
-    <li><b>Together</b> — Trail shows <em>who</em> changed a SG; Config shows <em>what</em> the SG was before/after and whether it violates a rule.</li>
+    <li><b>Together</b> — Trail = actor; Config = desired-vs-actual configuration.</li>
   </ul>
+
+  <div class="steps">
+    <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Scenario · page on 5xx</h4><p>Users report checkout errors. <b>Tool:</b> CloudWatch ALB 5xx + app log metric filter. Not Config (no compliance question). Not Trail first (you need symptoms, not yet forensics).</p></div></div>
+    <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Scenario · public bucket drift</h4><p>Security wants continuous proof buckets stay private and encrypted across accounts. <b>Tool:</b> Config Rules (+ aggregator) — optionally Security Hub. Trail alone won’t evaluate ongoing posture.</p></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Scenario · who opened the SG?</h4><p>A rule went 0.0.0.0/0 overnight. <b>Tool:</b> CloudTrail for the principal and API call; Config history for before/after and a noncompliant rule finding.</p></div></div>
+  </div>
 
   <div class="quiz" data-quiz>
     <p class="q">Security needs proof of which IAM principal opened an S3 bucket to public and whether buckets stay encrypted. Best pair?</p>

@@ -11,35 +11,81 @@
 
   <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p><b>ALB</b> is a smart receptionist who reads the URL and sends you to the right department (path/host rules). <b>NLB</b> is a high-speed turnstile that barely looks at you — just pushes packets through insanely fast. <b>GWLB</b> is a security checkpoint lane that forces every car through inspection appliances.</p></div></div>
 
-  <div class="table-wrap"><table>
-    <thead><tr><th></th><th>ALB</th><th>NLB</th><th>GWLB</th></tr></thead>
-    <tbody>
-      <tr><td><b>Layer</b></td><td>L7 HTTP/HTTPS/gRPC/WebSocket</td><td>L4 TCP/UDP/TLS</td><td>L3/L4 GENEVE to appliances</td></tr>
-      <tr><td><b>Routing</b></td><td>Host, path, header, query</td><td>Port / protocol</td><td>Transparent bump-in-the-wire</td></tr>
-      <tr><td><b>Static IP / EIPs</b></td><td>No (use NLB or Global Accelerator)</td><td>Yes per AZ</td><td>Endpoint model</td></tr>
-      <tr><td><b>Classic use</b></td><td>Microservices, path-based</td><td>Ultra-low latency, non-HTTP</td><td>Firewalls, IDS/IPS fleets</td></tr>
-    </tbody>
-  </table></div>
+  <div class="grid grid-3">
+    <div class="card">
+      <h3>ALB</h3>
+      <p><b>L7</b> HTTP/HTTPS · gRPC · WebSocket. Host, path, header, query rules. Microservices and path-based apps.</p>
+      <p class="muted">No static EIPs — pair with NLB or Global Accelerator if you need them.</p>
+    </div>
+    <div class="card">
+      <h3>NLB</h3>
+      <p><b>L4</b> TCP/UDP/TLS. Ultra-low latency, static IP / EIP per AZ, PrivateLink endpoint services.</p>
+      <p class="muted">When partners allowlist IPs or you speak raw TCP.</p>
+    </div>
+    <div class="card">
+      <h3>GWLB</h3>
+      <p><b>Bump-in-the-wire</b> to firewall / IDS fleets (GENEVE). Transparent inspection path.</p>
+      <p class="muted">Stem says inline appliances → GWLB.</p>
+    </div>
+  </div>
 
   <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
-  need{Requirement?}
-  need -->|HTTP_path_host| alb[Application_LB]
-  need -->|Static_IP_or_TCP_UDP| nlb[Network_LB]
-  need -->|Inline_firewall| gwlb[Gateway_LB]
-  alb --> targets[Multi_AZ_targets]
+  need{"What do you need?"}
+  need -->|"HTTP path / host rules"| alb["Application Load Balancer"]
+  need -->|"Static IP or TCP / UDP"| nlb["Network Load Balancer"]
+  need -->|"Inline firewall / IDS"| gwlb["Gateway Load Balancer"]
+  alb --> targets["Multi-AZ targets · private"]
   nlb --> targets
-  gwlb --> apps[Appliance_ASG]
+  gwlb --> apps["Appliance ASG"]
 </pre></div>
 </section>
 
 <section class="section reveal" id="alb-patterns">
-  <h2><span class="section-num">02</span> ALB patterns that show up on SAA</h2>
+  <h2><span class="section-num">02</span> ALB path &amp; host routing</h2>
+  <p class="takeaway">One listener, many <b>target groups</b>. Rules match <b>Host</b> and/or <b>path</b>, then forward. Each service health-checks and scales on its own.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Host / path → target groups</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "ALB host and path routing",
+      "nodes": [
+        { "id": "client", "label": "Browser / API client", "type": "client", "col": 0, "row": 1 },
+        { "id": "alb", "label": "ALB · HTTPS listener", "type": "balancer", "col": 1, "row": 1 },
+        { "id": "web", "label": "TG · app.example.com", "type": "compute", "col": 2, "row": 0 },
+        { "id": "api", "label": "TG · /api/*", "type": "compute", "col": 2, "row": 1 },
+        { "id": "admin", "label": "TG · admin host", "type": "compute", "col": 2, "row": 2 }
+      ],
+      "edges": [
+        { "from": "client", "to": "alb", "label": "HTTPS" },
+        { "from": "alb", "to": "web", "label": "Host match" },
+        { "from": "alb", "to": "api", "label": "Path /api/*" },
+        { "from": "alb", "to": "admin", "label": "Host admin.*" }
+      ],
+      "steps": [
+        { "node": "client", "caption": "Client hits one hostname (or several) on the ALB." },
+        { "edge": ["client","alb"], "caption": "HTTPS lands on the listener. ACM terminates TLS here (optional re-encrypt to targets)." },
+        { "edge": ["alb","web"], "caption": "Host rule: app.example.com → web target group (ASG / ECS).", "status": "hit" },
+        { "edge": ["alb","api"], "caption": "Path rule: /api/* → API target group. Same listener, different service.", "status": "hit" },
+        { "edge": ["alb","admin"], "caption": "Separate host for admin UI — often on an internal ALB, never public by default.", "status": "hit" }
+      ] }
+    </script>
+    <p class="viz-fallback">Client → ALB listener → Host/path rules → separate target groups (web, /api/*, admin).</p>
+  </figure>
+
   <dl class="kv">
-    <dt>Path / host routing</dt><dd><code>/api/*</code> → API target group; <code>app.example.com</code> → web TG.</dd>
-    <dt>TLS termination</dt><dd>ACM certs on HTTPS listeners; optionally re-encrypt to targets.</dd>
-    <dt>Sticky sessions</dt><dd>Only when the app is not yet stateless — prefer external session store.</dd>
-    <dt>WAF association</dt><dd>Attach Web ACL on ALB (or front with CloudFront + WAF).</dd>
-    <dt>Internal vs internet-facing</dt><dd>Internal ALB for service-to-service inside VPC; never expose admin UIs publicly.</dd>
+    <dt>Acme tickets</dt><dd><code>tickets.example.com</code> → web TG; <code>/api/*</code> → API TG on the same ALB. Each ASG scales independently.</dd>
+    <dt>TLS / WAF</dt><dd>ACM on the listener; attach WAF to the ALB (or CloudFront + WAF in front). Prefer external session store over sticky sessions.</dd>
   </dl>
 
   <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>ALB nodes live in <b>subnets you select</b> — for public ALBs you need public subnets (or correct routing). Targets can stay private. Cross-zone load balancing changes how traffic fans out and can affect data transfer — know it’s often on by default for ALB.</p></div></div>
@@ -78,7 +124,7 @@
 </section>
 
 <section class="section reveal" id="interview">
-  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
   <div class="qa-set">
     <details class="qa">
       <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When is ALB the wrong choice?</span><span class="pm-chip diff-core">core</span></summary>

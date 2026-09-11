@@ -10,13 +10,13 @@
 
   <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>AWS is a city of prefabricated rooms, not a blank lot. You don’t pour concrete for a kitchen — you rent a kitchen module (RDS), a hallway (VPC), and a front desk (IAM). Exam questions ask which module fits the guest list and the fire code, not how to build the stove.</p></div></div>
 
-  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
-  req[Requirement] --> decide{Which_block}
-  decide -->|run_code| compute[Compute]
-  decide -->|reach_others| network[Network]
-  decide -->|persist| data[Storage_Data]
-  decide -->|who_may| identity[Identity]
-  decide -->|fan_out| edge[Edge_Integration]
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  req["What does the stem need?"] --> decide{"Which block?"}
+  decide -->|"run code"| compute["Compute"]
+  decide -->|"reach others"| network["Network"]
+  decide -->|"persist data"| data["Storage / data"]
+  decide -->|"who may"| identity["Identity"]
+  decide -->|"global entry / fan-out"| edge["Edge / integration"]
 </pre></div>
 
   <dl class="kv">
@@ -28,8 +28,57 @@
   </dl>
 </section>
 
+<section class="section reveal" id="composition">
+  <h2><span class="section-num">02</span> Compose a request path</h2>
+  <p class="takeaway">A “web app on AWS” stem is usually <b>edge → load balancer → private compute → Multi-AZ data</b>, glued with IAM roles. Trace one hop at a time before picking logos.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Acme tickets · HTTPS composition</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "Acme ticket site",
+      "nodes": [
+        { "id": "client", "label": "Client browser", "type": "client", "col": 0, "row": 1 },
+        { "id": "cf", "label": "CloudFront", "type": "edge", "col": 1, "row": 1 },
+        { "id": "alb", "label": "ALB · public", "type": "balancer", "col": 2, "row": 1 },
+        { "id": "app", "label": "App · private", "type": "compute", "col": 3, "row": 1 },
+        { "id": "rds", "label": "RDS Multi-AZ", "type": "database", "col": 4, "row": 1 }
+      ],
+      "edges": [
+        { "from": "client", "to": "cf", "label": "HTTPS" },
+        { "from": "cf", "to": "alb", "label": "origin" },
+        { "from": "alb", "to": "app", "label": "to target" },
+        { "from": "app", "to": "rds", "label": "SQL" }
+      ],
+      "steps": [
+        { "node": "client", "caption": "Fan buys a ticket at tickets.acme.example — browser starts HTTPS." },
+        { "edge": ["client","cf"], "caption": "CloudFront terminates TLS at the edge and caches static assets." },
+        { "edge": ["cf","alb"], "caption": "Dynamic requests hit an ALB in public subnets across two AZs." },
+        { "edge": ["alb","app"], "caption": "ALB forwards to private compute (ASG or Fargate) — no public IPs on the app.", "status": "hit" },
+        { "edge": ["app","rds"], "caption": "App uses an IAM role and talks privately to Multi-AZ RDS for orders." }
+      ] }
+    </script>
+    <p class="viz-fallback">Client → CloudFront → ALB (public) → App (private) → RDS Multi-AZ.</p>
+  </figure>
+
+  <dl class="kv">
+    <dt>Acme tickets</dt><dd>Global fans + dynamic checkout → edge (CloudFront) + ALB + private app + Multi-AZ RDS. Identity = roles on compute, not keys in the AMI.</dd>
+    <dt>Ledger Co · overnight batch</dt><dd>Finance CSV land in S3 (data). EventBridge/SQS wakes a Fargate task (compute + integration). No public entry — VPC endpoints for S3, IAM task role only. Different blocks, same mental model.</dd>
+  </dl>
+</section>
+
 <section class="section reveal" id="managed">
-  <h2><span class="section-num">02</span> Managed vs you-operate</h2>
+  <h2><span class="section-num">03</span> Managed vs you-operate</h2>
   <p class="takeaway">Default to <b>managed</b> when the exam cites undifferentiated ops (patching, Multi-AZ failover, backups). Pick self-managed only when you need OS/kernel control or a constraint the managed service can’t meet.</p>
 
   <div class="versus">
@@ -51,11 +100,11 @@
 
   <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>“EC2 can do anything”</b> is true and wrong for the exam. If the stem says Multi-AZ automatic failover for a relational DB, the answer is <b>RDS/Aurora</b>, not “EC2 in two AZs with your own scripts.” Managed = the control plane does the HA dance.</p></div></div>
 
-  <p>Interview-depth EC2/ASG/VPC walkthroughs live in the sibling <a href="../../devops-guide/aws/compute-and-networking.html">DevOps AWS compute &amp; networking</a> module — here we stay exam-decision focused.</p>
+  <p>Next depth in this guide: <a href="../networking/vpc-and-subnets.html">VPC &amp; subnets</a> and <a href="../compute/ec2-asg-placement.html">EC2 &amp; ASG</a>.</p>
 </section>
 
 <section class="section reveal" id="exam-lens">
-  <h2><span class="section-num">03</span> The exam decision lens</h2>
+  <h2><span class="section-num">04</span> The exam decision lens</h2>
   <p class="takeaway">Read stems for <b>constraints</b>: latency, RPO/RTO, compliance, cost, throughput, “no internet,” “least privilege.” Constraints kill otherwise-valid options.</p>
 
   <div class="steps">
@@ -76,7 +125,7 @@
 </section>
 
 <section class="section reveal" id="interview">
-  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
   <div class="qa-set">
     <details class="qa">
       <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you approach a vague “design a web app on AWS” stem?</span><span class="pm-chip diff-warm">warm-up</span></summary>

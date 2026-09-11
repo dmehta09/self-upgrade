@@ -1,5 +1,5 @@
 /* ============================================================
-   DEVOPS FIELD GUIDE — shared behaviors (no dependencies, offline)
+   AWS SAA Field Guide — shared behaviors (no dependencies, offline)
    theme · mobile nav · scroll progress · scrollspy · code tabs ·
    copy · quizzes · reveal-on-scroll · multi-language highlighter
    (Bash / YAML / Dockerfile / HCL / JSON / Python / Markdown)

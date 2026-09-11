@@ -10,11 +10,11 @@ A **visual, exam-focused** field guide for **AWS Certified Solutions Architect �
 - **Voice:** analogy-first → technical → Mermaid/versus → scenario quiz → say-it-out-loud.
 - **Scope:** ~35 lessons + exam surfaces (scenarios, timed mock, flashcards, cheat-sheet).
 - **As-of:** September 2026. Confirm against the official SAA-C03 exam guide before inventing services.
-- **Sibling boundary:** Interview-depth AWS lives in `devops-guide/aws/`. Cross-link; do not duplicate that crisp interview module.
+- **Isolation:** This guide is **fully self-contained** — do not cross-link or depend on any other field guide in the repo.
 - **Out of scope:** SAP / specialties, deep K8s, full observability stack, live AWS console labs.
 
 ## Architecture
-Tier A fragment→gen (clone of devops pattern):
+Tier A fragment→gen:
 - `tools/manifest.js` — MODULES + EXAM_PREP + REFERENCE
 - `tools/content/<dir>-<slug>.html` — section-only fragments
 - `node tools/gen.js && node tools/build-search-index.js && node tools/verify.js`

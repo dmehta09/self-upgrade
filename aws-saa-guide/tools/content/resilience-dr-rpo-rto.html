@@ -27,17 +27,30 @@
       </ul>
     </div>
   </div>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["Region failure in the stem?"] --> rto{"How fast must we be up?"}
+  rto -->|"Hours OK"| backup["Backup and restore"]
+  rto -->|"Tens of minutes"| pilot["Pilot light"]
+  rto -->|"Minutes"| warm["Warm standby"]
+  rto -->|"Near zero"| multi["Multi-site active / active"]
+  start --> rpo{"How much data can we lose?"}
+  rpo -->|"Hours of loss OK"| snap["Periodic snapshots / AWS Backup"]
+  rpo -->|"Minutes"| repl["Continuous replication · CRR / replica"]
+  rpo -->|"Near zero"| sync["Sync / Global Tables / Aurora Global"]
+</pre></div>
 </section>
 
 <section class="section reveal" id="strategies">
-  <h2><span class="section-num">02</span> The four DR strategies</h2>
-  <p>From cheapest/slowest to most expensive/fastest. Match the stem's RPO/RTO language to a tier.</p>
+  <h2><span class="section-num">02</span> Four warmth stories</h2>
+  <p class="takeaway">Match the stem’s RPO/RTO language to a tier — then pay for that warmth. Slide the tradeoff to feel cost vs speed.</p>
 
-  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
-  backup[Backup_and_Restore] --> pilot[Pilot_Light]
-  pilot --> warm[Warm_Standby]
-  warm --> multi[Multi_Site_Active]
-</pre></div>
+  <dl class="kv">
+    <dt>Acme · Backup &amp; restore</dt><dd>Internal wiki: nightly AWS Backup to a vault. RTO hours, RPO ~24h. Cheapest idle — rebuild from recovery points when the Region is gone.</dd>
+    <dt>Nova · Pilot light</dt><dd>Payments ledger: Aurora replica (or Global) + AMIs/IaC in the DR Region. Data stays warm; scale compute at failover. Tens of minutes.</dd>
+    <dt>Ledger Co · Warm standby</dt><dd>Customer portal: scaled-down full stack always running in Region B. Failover is mostly DNS + scale-out. Minutes of downtime.</dd>
+    <dt>Orbit · Multi-site active</dt><dd>Global checkout: serve from two Regions continuously (Route 53 latency / Global Accelerator + replicated data). Near-zero RTO/RPO — ~2× capacity.</dd>
+  </dl>
 
   <div class="table-wrap"><table>
     <thead><tr><th>Strategy</th><th>What you run</th><th>Typical RTO/RPO feel</th></tr></thead>

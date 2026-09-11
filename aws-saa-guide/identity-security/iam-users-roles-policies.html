@@ -125,12 +125,12 @@
   <span class="domain-chip">Domain 1 · Secure Architectures</span>
   <span class="eyebrow">Identity &amp; Security · IAM</span>
   <h1>IAM users, roles &amp; policies.</h1>
-  <p class="lead">Who can call which API on which resource. SAA-C03 defaults (Sep 2026): <b>roles + short-lived credentials</b>, not long-lived access keys; humans via Identity Center; workloads via instance profiles, IRSA/Pod Identity, or OIDC.</p>
+  <p class="lead">Who can call which API on which resource. SAA-C03 defaults (Sep 2026): <b>roles + short-lived credentials</b>, not long-lived access keys; humans via Identity Center; workloads via instance profiles, task/execution roles, or OIDC.</p>
 </section>
 
 <section class="section reveal" id="identities">
   <h2><span class="section-num">01</span> Users, groups, roles — pick the right principal</h2>
-  <p class="takeaway">An IAM <b>user</b> is a long-lived principal (password and/or access keys). A <b>role</b> is assumed and yields <b>temporary</b> credentials. A <b>group</b> is only a permission bundle for users — never attach policies to “everyone” via wildcard principals.</p>
+  <p class="takeaway">An IAM <b>user</b> is a long-lived login (password and/or access keys). A <b>role</b> is assumed and yields <b>temporary</b> credentials. A <b>group</b> only bundles policies for users — never grant “everyone” with wildcard principals.</p>
 
   <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A <b>role</b> is a visitor badge that unlocks specific rooms for the next hour, then expires. A long-lived <b>access key</b> is a permanent master key — if it leaks into Git or a log, it keeps working until someone notices. Hand out badges, not master keys.</p></div></div>
 
@@ -153,30 +153,30 @@
     </div>
   </div>
 
-  <p>Interview depth for IAM + storage lives in the sibling guide: <a href="../../devops-guide/aws/iam-storage-data.html">IAM, storage &amp; data</a>.</p>
+  <p>Related in this guide: <a href="../storage/s3-classes-and-access.html">S3 access</a> and <a href="../identity-security/encryption-kms-secrets.html">KMS &amp; secrets</a>.</p>
 </section>
 
 <section class="section reveal" id="policies">
-  <h2><span class="section-num">02</span> Policies: identity, resource &amp; permission boundaries</h2>
-  <p>Permissions are JSON. Evaluation is not “any Allow wins” — <b>explicit Deny always wins</b>, then Allow must grant the action on the resource, and SCPs / boundaries can still block.</p>
+  <h2><span class="section-num">02</span> Policies: identity, resource &amp; ceilings</h2>
+  <p class="takeaway">Permissions are JSON. Evaluation is not “any Allow wins” — <b>explicit Deny always wins</b>, then Allow must grant the action, and org ceilings (SCPs) or permission boundaries can still block.</p>
 
   <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
-  request[API_request] --> deny{Explicit_Deny?}
-  deny -->|yes| blocked[Denied]
-  deny -->|no| scp{SCP_and_boundary_allow?}
+  request["API request"] --> deny{"Explicit Deny?"}
+  deny -->|yes| blocked["Denied"]
+  deny -->|no| scp{"SCP and boundary allow?"}
   scp -->|no| blocked
-  scp -->|yes| idPol{Identity_policy_Allow?}
+  scp -->|yes| idPol{"Identity policy Allows?"}
   idPol -->|no| blocked
-  idPol -->|yes| resPol{Resource_policy_ok?}
+  idPol -->|yes| resPol{"Resource policy OK?"}
   resPol -->|no| blocked
-  resPol -->|yes| allowed[Allowed]
+  resPol -->|yes| allowed["Allowed"]
 </pre></div>
 
   <dl class="kv">
-    <dt>Identity-based</dt><dd>Attached to user/group/role — “what this principal can do.”</dd>
-    <dt>Resource-based</dt><dd>On the resource (S3 bucket policy, KMS key policy, SQS) — “who can access me,” including other accounts.</dd>
-    <dt>Permission boundary</dt><dd>Max permissions a role/user can ever receive — used to safely delegate IAM administration.</dd>
-    <dt>Session policies</dt><dd>Further restrict credentials when assuming a role (STS).</dd>
+    <dt>Identity policy</dt><dd>On the user/group/role — “what this principal can do.”</dd>
+    <dt>Resource policy</dt><dd>On the resource (S3 bucket, KMS key, SQS) — “who can access me,” including other accounts.</dd>
+    <dt>Permission boundary</dt><dd>A ceiling: the max a role/user can ever receive — used to safely let teams create roles.</dd>
+    <dt>Session policy</dt><dd>Extra shrink-wrap when you assume a role (STS) — can only reduce permissions.</dd>
   </dl>
 
   <div class="codeblock">
@@ -196,16 +196,54 @@
   </div>
   <p>Scope <b>Action</b> and <b>Resource</b>; add <b>Condition</b> keys (<code>aws:SourceVpce</code>, MFA, tags) when the scenario demands it.</p>
 
-  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Trust policy ≠ permissions policy.</b> The role’s <em>trust</em> policy says <em>who may assume</em> it. The <em>permissions</em> policy says <em>what the assumed session can do</em>. Cross-account access fails when people only edit one of them.</p></div></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Trust policy ≠ permissions policy.</b> Trust says <em>who may assume</em> the role. Permissions say <em>what the session can do</em>. Cross-account access fails when people only edit one of them.</p></div></div>
 </section>
 
 <section class="section reveal" id="workload-creds">
   <h2><span class="section-num">03</span> Workload credentials without keys</h2>
+  <p class="takeaway">Apps never store access keys. The host or platform hands them a <b>role</b>; the SDK fetches short-lived creds and refreshes them.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">EC2 → IMDS → STS session → S3</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "Instance profile to S3",
+      "nodes": [
+        { "id": "app", "label": "App on EC2", "type": "compute", "col": 0, "row": 1 },
+        { "id": "imds", "label": "IMDS · role creds", "type": "edge", "col": 1, "row": 1 },
+        { "id": "sts", "label": "STS session", "type": "balancer", "col": 2, "row": 1 },
+        { "id": "s3", "label": "S3 bucket", "type": "storage", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "app", "to": "imds", "label": "ask for role" },
+        { "from": "imds", "to": "sts", "label": "temp keys" },
+        { "from": "sts", "to": "s3", "label": "signed API call" }
+      ],
+      "steps": [
+        { "node": "app", "caption": "App SDK needs to read an object — no access keys in the AMI or env." },
+        { "edge": ["app","imds"], "caption": "Instance metadata service (prefer IMDSv2) returns credentials for the attached instance profile role." },
+        { "edge": ["imds","sts"], "caption": "Those credentials are temporary STS session keys that rotate automatically.", "status": "hit" },
+        { "edge": ["sts","s3"], "caption": "SDK signs s3:GetObject with the role’s permissions — least privilege on one bucket ARN." }
+      ] }
+    </script>
+    <p class="viz-fallback">App on EC2 → IMDS (instance profile) → temporary STS credentials → signed S3 API call.</p>
+  </figure>
+
   <dl class="kv">
     <dt>EC2</dt><dd>Instance profile → role; SDK pulls rotating creds from IMDS. Prefer IMDSv2.</dd>
-    <dt>Lambda / ECS</dt><dd>Execution / task role attached at deploy time — no keys in env.</dd>
-    <dt>EKS</dt><dd><b>IRSA</b> or <b>EKS Pod Identity</b> maps a service account to an IAM role. See <a href="../../devops-guide/aws/containers-and-serverless.html">containers &amp; serverless</a>.</dd>
-    <dt>CI/CD</dt><dd>OIDC → <code>AssumeRoleWithWebIdentity</code>; no <code>AWS_SECRET_ACCESS_KEY</code> in secrets stores for AWS auth.</dd>
+    <dt>Lambda / ECS</dt><dd>Execution / task role attached at deploy — no keys in env.</dd>
+    <dt>EKS</dt><dd>Pod Identity or IRSA maps a service account to an IAM role.</dd>
+    <dt>CI/CD</dt><dd>OIDC → assume role with web identity; no static <code>AWS_SECRET_ACCESS_KEY</code> for AWS auth.</dd>
   </dl>
 
   <div class="quiz" data-quiz>
@@ -219,15 +257,26 @@
   </div>
 </section>
 
+<section class="section reveal" id="worked">
+  <h2><span class="section-num">04</span> Worked: three mini-stems</h2>
+  <p class="takeaway">Underline the <b>who</b> (human, EC2, CI, other account), then pick role + trust. Kill long-lived keys unless the stem forces a legacy exception.</p>
+
+  <div class="steps">
+    <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Stem · EC2 → S3</h4><p><em>Constraint:</em> app on EC2 reads one bucket. Kill IAM user keys in <code>/etc/environment</code>. Kill public bucket. <b>Answer:</b> instance profile + role with <code>s3:GetObject</code> on that ARN.</p></div></div>
+    <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Stem · GitHub OIDC</h4><p><em>Constraint:</em> GitHub Actions must deploy to an account; no long-lived keys in secrets. Kill static access keys. Kill shared IAM user. <b>Answer:</b> OIDC identity provider + role trust for the repo; workflow assumes the role.</p></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Stem · cross-account</h4><p><em>Constraint:</em> Account A app reads a bucket in Account B. Kill “copy keys between accounts.” Kill only editing the bucket policy. <b>Answer:</b> role in B with trust for A (+ ExternalId if third party); permissions on the role <em>and</em> bucket policy allowing that role.</p></div></div>
+  </div>
+</section>
+
 <section class="section reveal" id="interview">
-  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
   <div class="qa-set">
     <details class="qa">
       <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">User vs role — when is each correct?</span><span class="pm-chip diff-core">core</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p>Prefer <b>roles</b> for anything that needs AWS API access: workloads, federation, cross-account. IAM <b>users</b> with long-lived keys are legacy for apps; humans should use Identity Center. Roles issue temporary STS credentials that expire automatically.</p>
-        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Roles over users — temporary badges, not master keys. EC2 uses instance profiles, pods use IRSA or Pod Identity, CI uses OIDC. No long-lived keys in apps."</p></div></div>
+        <p>Prefer <b>roles</b> for anything that needs AWS API access: workloads, federation, cross-account. Humans should use Identity Center. Roles issue temporary STS credentials that expire automatically. Long-lived user keys in apps are an anti-pattern.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Roles over users — temporary badges, not master keys. EC2 uses instance profiles, CI uses OIDC. No long-lived keys in apps."</p></div></div>
       </div>
     </details>
     <details class="qa">
@@ -257,14 +306,15 @@
         <nav class="toc">
           <h5>On this page</h5>
           <a href="#identities">Users, groups, roles — pick the right principal</a>
-          <a href="#policies">Policies: identity, resource permission boundaries</a>
+          <a href="#policies">Policies: identity, resource ceilings</a>
           <a href="#workload-creds">Workload credentials without keys</a>
-          <a href="#interview">Interview rapid-fire</a>
+          <a href="#worked">Worked: three mini-stems</a>
+          <a href="#interview">Exam rapid-fire</a>
         </nav>
       </div>
 
       <footer class="footer">
-        <span class="fmono">AWS SAA Field Guide &middot; CI/CD &middot; containers &middot; Kubernetes &middot; Terraform &middot; AWS &middot; interview-ready</span>
+        <span class="fmono">AWS SAA Field Guide &middot; SAA-C03 &middot; Well-Architected &middot; Sep 2026</span>
         <span class="fmono">Built to open offline &middot; Sep 2026</span>
       </footer>
     </div>
@@ -275,6 +325,7 @@
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/mermaid-init.js"></script>
+  <script src="../assets/js/reqflow.js"></script>
   <script src="../assets/js/progress.js"></script>
 </body>
 </html>

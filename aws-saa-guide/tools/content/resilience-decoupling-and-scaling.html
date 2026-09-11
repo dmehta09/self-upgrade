@@ -7,18 +7,9 @@
 
 <section class="section reveal" id="why-decouple">
   <h2><span class="section-num">01</span> Why decoupling wins</h2>
-  <p class="takeaway">If service A calls B synchronously and B is down, A is down. A queue or topic makes the failure <b>temporary backlog</b> instead of user-facing errors.</p>
+  <p class="takeaway">If service A calls B synchronously and B is down, A is down. A queue or topic makes the failure a <b>temporary backlog</b> instead of user-facing errors.</p>
 
-  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A restaurant ticket rail is a queue: the kitchen can spike without the host crashing. A megaphone to all cooks is pub/sub (SNS). The reservation system reacting to "table freed" events is EventBridge.</p></div></div>
-
-  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
-  api[API_tier] --> sqs[SQS_queue]
-  sqs --> workers[Worker_ASG]
-  api --> sns[SNS_topic]
-  sns --> email[Email_sub]
-  sns --> lambda[Lambda_sub]
-  sns --> sqs2[SQS_sub]
-</pre></div>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A restaurant ticket rail is a queue: the kitchen can spike without the host crashing. A megaphone to all cooks is pub/sub (SNS). The reservation system reacting to “table freed” events is EventBridge.</p></div></div>
 
   <div class="versus">
     <div class="vs-col vs-bad"><div class="vs-h">Tight coupling</div>
@@ -38,26 +29,82 @@
   </div>
 </section>
 
+<section class="section reveal" id="sync-vs-queue">
+  <h2><span class="section-num">02</span> Sync fail vs SQS buffer</h2>
+  <p class="takeaway">Watch the same upload: a sync call dies with the worker; an enqueue returns fast and work finishes when capacity returns.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Upload path: sync timeout vs SQS buffer</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "Sync fail vs SQS buffer",
+      "nodes": [
+        { "id": "user", "label": "User upload", "type": "client", "col": 0, "row": 1 },
+        { "id": "api", "label": "API tier", "type": "compute", "col": 1, "row": 1 },
+        { "id": "sync", "label": "Processor · sync", "type": "compute", "col": 2, "row": 0 },
+        { "id": "sqs", "label": "SQS queue", "type": "queue", "col": 2, "row": 1 },
+        { "id": "worker", "label": "Worker ASG", "type": "compute", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "user", "to": "api", "label": "HTTPS" },
+        { "from": "api", "to": "sync", "label": "sync call" },
+        { "from": "api", "to": "sqs", "label": "enqueue" },
+        { "from": "sqs", "to": "worker", "label": "pull work" }
+      ],
+      "steps": [
+        { "node": "user", "caption": "User uploads an image. The API must acknowledge quickly." },
+        { "edge": ["user","api"], "caption": "Request hits the API tier." },
+        { "edge": ["api","sync"], "caption": "Sync path: API waits on the processor. Processor is overloaded or down.", "status": "miss" },
+        { "node": "api", "caption": "User sees timeouts / 5xx. The failure is now the API’s problem.", "status": "miss" },
+        { "edge": ["api","sqs"], "caption": "Decoupled path: API enqueues the job and returns 202 / success to the user.", "status": "hit" },
+        { "edge": ["sqs","worker"], "caption": "Workers pull when ready. Backlog grows; the site stays up. Scale on queue depth.", "status": "hit" }
+      ] }
+    </script>
+    <p class="viz-fallback">User → API → (sync processor fails) vs API → SQS → Worker ASG (buffer absorbs the spike).</p>
+  </figure>
+</section>
+
 <section class="section reveal" id="messaging">
-  <h2><span class="section-num">02</span> Pick the right messaging tool</h2>
+  <h2><span class="section-num">03</span> Pick SQS, SNS, or EventBridge</h2>
+  <p class="takeaway"><b>SQS</b> buffers work. <b>SNS</b> fans out the same message. <b>EventBridge</b> routes by content, schedule, and SaaS partners. Combine them when you need durable multi-consumer.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  need["Need async messaging?"] --> q{"What is the job?"}
+  q -->|"Buffer work for consumers"| sqs["SQS · pull queue · DLQ"]
+  q -->|"Fan-out same message"| sns["SNS · push topic"]
+  q -->|"Route by content / schedule / SaaS"| eb["EventBridge · rules"]
+  sns --> durable["Often: SNS → SQS for durable fan-out"]
+  eb --> targets["Targets: Lambda · SQS · Step Functions"]
+</pre></div>
+
   <dl class="kv">
-    <dt>SQS</dt><dd>Pull queue between producers and workers. Standard = at-least-once + best-effort order. FIFO = exactly-once processing + order per message group.</dd>
-    <dt>SNS</dt><dd>Push pub/sub fan-out to many subscribers (Lambda, SQS, HTTP, email). Use SNS→SQS for durable fan-out.</dd>
-    <dt>EventBridge</dt><dd>Event bus with content filtering, SaaS partners, schedule rules — "when X happens, do Y."</dd>
-    <dt>DLQ</dt><dd>Dead-letter queue after max receives — poison messages don't block the main queue forever.</dd>
+    <dt>Acme tickets</dt><dd>Checkout API enqueues “render PDF” to SQS. ASG scales on <code>ApproximateNumberOfMessages</code>. Fast ACK; workers catch up overnight if needed.</dd>
+    <dt>Nova alerts</dt><dd>Fraud score published once. SNS fans out to email, Lambda, and an SQS analytics queue — each subscriber fails alone.</dd>
+    <dt>Ledger Co</dt><dd><code>PaymentSettled</code> events on EventBridge with amount filters. Only matching rules fire Step Functions / Lambda — no giant shared queue of ignore-me messages.</dd>
   </dl>
 
-  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Long polling and visibility timeout matter: too-short visibility → duplicate processing; no DLQ → endless poison retries. FIFO is not free — use it when order/dedup is required, not by default.</p></div></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Long polling and visibility timeout matter: too-short visibility → duplicate processing; no DLQ → endless poison retries. FIFO is not free — use it when order/dedup is required, not by default. EventBridge is not a long durable work queue — park durable work in SQS.</p></div></div>
 </section>
 
 <section class="section reveal" id="scaling">
-  <h2><span class="section-num">03</span> Scaling patterns</h2>
+  <h2><span class="section-num">04</span> Scaling patterns + stems</h2>
+  <p class="takeaway">Scale on the <b>signal that hurts</b>: queue depth, ALB request count, Lambda concurrency — not a guess at instance size.</p>
+
   <ul>
     <li><b>ASG</b> on CPU, ALB request count, or <b>SQS ApproximateNumberOfMessages</b> — classic worker farm.</li>
-    <li><b>Target tracking</b> policies over manual step thresholds when the stem wants "automatically maintain."</li>
-    <li><b>Lambda</b> scales with concurrency; use reserved concurrency to protect downstream.</li>
+    <li><b>Target tracking</b> policies when the stem wants “automatically maintain.”</li>
+    <li><b>Lambda</b> scales with concurrency; reserved concurrency protects downstream.</li>
     <li><b>DynamoDB</b> on-demand vs provisioned + auto scaling; Aurora Serverless v2 for spiky relational.</li>
-    <li><b>Read replicas / ElastiCache</b> for read-heavy paths without oversizing the primary.</li>
   </ul>
 
   <div class="quiz" data-quiz>
@@ -69,10 +116,20 @@
     </div>
     <div class="quiz-explain"><b>Right.</b> Decouple with a queue so the API acknowledges quickly and workers scale independently on backlog.</div>
   </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">One order event must trigger email, inventory Lambda, and a durable analytics consumer. Best pattern?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>SNS topic with email + Lambda subscribers, plus an SQS subscription for analytics.</button>
+      <button class="quiz-opt"><span class="mark"></span>One SQS queue that every service polls and discards irrelevant messages.</button>
+      <button class="quiz-opt"><span class="mark"></span>Synchronous HTTPS from the order API to each system in a loop.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> SNS fan-out (often with SQS for durable consumers) isolates failure domains. A shared ignore-me queue and sync fan-out both couple systems the wrong way.</div>
+  </div>
 </section>
 
 <section class="section reveal" id="interview">
-  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
   <div class="qa-set">
     <details class="qa">
       <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">SQS vs SNS vs EventBridge — when?</span><span class="pm-chip diff-core">core</span></summary>

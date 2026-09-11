@@ -1,5 +1,5 @@
 /* ============================================================
-   DevOps Field Guide — flashcards
+   AWS SAA Field Guide — flashcards
    Click/Enter/Space to flip; Shuffle (unknowns first); per-card
    known/unknown persisted to localStorage["aws-saa-cards"] keyed by
    deck name + index. Both faces live in the DOM (searchable, and

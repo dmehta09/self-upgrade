@@ -135,27 +135,34 @@
   <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>EC2 is renting a computer in someone else’s datacenter. An <b>ASG</b> is a smart fleet manager that keeps N healthy computers running and replaces dead ones. <b>Graviton</b> is choosing the more efficient engine that goes further on the same fuel — if your app can run on it.</p></div></div>
 
   <dl class="kv">
-    <dt>AMI</dt><dd>Boot template (OS + baked config). Prefer hardened, CIS-like images; patch via SSM.</dd>
+    <dt>AMI</dt><dd>Boot template (OS + baked config). Prefer hardened images; patch via SSM. ASG replacements must boot the same launch template/AMI.</dd>
     <dt>Instance profile</dt><dd>Role for the instance — SDKs get temporary creds from IMDS. Prefer <b>IMDSv2</b>.</dd>
-    <dt>User data / launch templates</dt><dd>Bootstrap once; launch templates version ASG/Spot/ODCR settings.</dd>
+    <dt>User data / launch templates</dt><dd>Bootstrap once; launch templates version ASG/Spot settings.</dd>
     <dt>EBS vs instance store</dt><dd>EBS persists; instance store is ephemeral and fast — fine for caches, not sole source of truth.</dd>
   </dl>
 
-  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Stopping/starting a non-Elastic-IP public instance changes its public IPv4. Use <b>Elastic IP</b> or put instances behind an ALB/NLB and never teach clients a transient instance IP. Also: don’t store long-lived access keys on the box — see <a href="../../devops-guide/aws/iam-storage-data.html">IAM &amp; storage</a>.</p></div></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Stopping/starting a non-Elastic-IP public instance changes its public IPv4. Use <b>Elastic IP</b> or put instances behind an ALB/NLB and never teach clients a transient instance IP. Also: don’t store long-lived access keys on the box — use an <a href="../identity-security/iam-users-roles-policies.html">instance role</a>.</p></div></div>
 </section>
 
 <section class="section reveal" id="asg">
   <h2><span class="section-num">02</span> Auto Scaling groups</h2>
-  <p>ASG maintains desired capacity across AZs, replaces unhealthy instances (ELB/EC2 health checks), and scales on metrics or schedules/predictive policies.</p>
+  <p class="takeaway">Exam stems expect an ASG that spans <b>≥2 AZs</b>, replaces unhealthy targets, and scales on a metric (often <b>target tracking</b>). Know <b>min / desired / max</b> as floor / target / ceiling.</p>
 
   <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
   users[Users] --> alb[ALB]
-  alb --> asg[Auto_Scaling_Group]
-  asg --> azA[Instances_AZ_a]
-  asg --> azB[Instances_AZ_b]
-  metrics[CPU_ALB_custom] --> policy[Scaling_policy]
+  alb --> asg["Auto Scaling Group"]
+  asg --> azA["Instances · AZ-a"]
+  asg --> azB["Instances · AZ-b"]
+  metrics["CPU / ALB / custom"] --> policy["Scaling policy"]
   policy --> asg
 </pre></div>
+
+  <dl class="kv">
+    <dt>min / desired / max</dt><dd>Floor, current target, ceiling. Capacity never goes below min or above max.</dd>
+    <dt>Target tracking</dt><dd>Hold a metric near a goal (CPU or RequestCountPerTarget). Common “automatically maintain” answer on the exam.</dd>
+    <dt>Health checks</dt><dd>Behind an ALB, prefer <b>ELB</b> health so bad apps are replaced — not only EC2 status checks.</dd>
+    <dt>Multi-AZ</dt><dd>Required for AZ failure. <code>min=2</code> in a <em>single</em> AZ is still an AZ outage.</dd>
+  </dl>
 
   <div class="versus">
     <div class="vs-col vs-good"><div class="vs-h">Scale out when…</div>
@@ -266,7 +273,7 @@
       </div>
 
       <footer class="footer">
-        <span class="fmono">AWS SAA Field Guide &middot; CI/CD &middot; containers &middot; Kubernetes &middot; Terraform &middot; AWS &middot; interview-ready</span>
+        <span class="fmono">AWS SAA Field Guide &middot; SAA-C03 &middot; Well-Architected &middot; Sep 2026</span>
         <span class="fmono">Built to open offline &middot; Sep 2026</span>
       </footer>
     </div>

@@ -12,19 +12,19 @@
   <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>DynamoDB is a giant set of labeled filing cabinets (partitions). The <b>partition key</b> chooses the cabinet; the <b>sort key</b> orders folders inside it. A GSI is a second index card system so you can find files by a different label without dumping every cabinet on the floor (a scan).</p></div></div>
 
   <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
-  req[QueryRequirement] --> pk[ChoosePartitionKey]
-  pk --> sk[OptionalSortKey]
-  sk --> gsi[AddGSIIfNeeded]
-  gsi --> mode{CapacityMode}
-  mode -->|unpredictable| ondemand[OnDemand]
-  mode -->|steady| provisioned[ProvisionedPlusAS]
+  req["What must I query?"] --> pk["Choose partition key · spread load"]
+  pk --> sk["Optional sort key · ranges"]
+  sk --> gsi["Add GSI only if needed"]
+  gsi --> mode{"Traffic shape?"}
+  mode -->|"Spiky / unknown"| ondemand["On-demand · 2026 default"]
+  mode -->|"Steady &amp; known"| provisioned["Provisioned + auto scaling"]
 </pre></div>
 
   <dl class="kv">
-    <dt>GetItem / Query</dt><dd>Efficient. Query needs PK (+ optional SK conditions).</dd>
-    <dt>Scan</dt><dd>Reads the whole table — avoid on the exam unless “rarely / admin.”</dd>
+    <dt>Acme tickets</dt><dd>PK = <code>USER#id</code>, SK = <code>ORDER#ts</code>. Query “my recent orders” — never Scan the whole table.</dd>
+    <dt>Nova feed</dt><dd>Hot celebrity IDs? Shard the PK (<code>userId#shard</code>) or redesign — one popular product ID as sole PK creates a hot partition.</dd>
+    <dt>GetItem / Query vs Scan</dt><dd>Efficient paths need PK (+ optional SK). Scan = whole table — exam answer only for rare/admin.</dd>
     <dt>GSI / LSI</dt><dd>Alternate query shapes. GSI can be eventual; watch projected attributes &amp; cost.</dd>
-    <dt>Single-table</dt><dd>Optional advanced pattern: many entity types in one table with composite keys.</dd>
   </dl>
 </section>
 
@@ -51,7 +51,7 @@
 
   <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Strongly consistent reads</b> cost more and aren't available on all GSI patterns. Default is eventually consistent. Also: a “popular product ID” as the only PK creates a hot partition — add entropy or redesign the key.</p></div></div>
 
-  <p>Workload identity to call DynamoDB: roles, not keys — see <a href="../../devops-guide/aws/iam-storage-data.html">DevOps · IAM, storage &amp; data</a>.</p>
+  <p>Workload identity to call DynamoDB: roles, not keys — <a href="../identity-security/iam-users-roles-policies.html">IAM roles</a>.</p>
 </section>
 
 <section class="section reveal" id="features">

@@ -35,7 +35,7 @@ function attr(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;
 function dataPageId(page) { return (page.dir ? page.dir.replace(/\//g, "-") + "-" : "") + page.slug; }
 function clean(s) { return String(s).replace(/<span class="section-num">[\s\S]*?<\/span>/g, "").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim(); }
 
-/* infinity loop — the DevOps "build &harr; operate" cycle */
+/* infinity loop brand mark */
 const ICON = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fb923c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z'/></svg>";
 const BRAND = "AWS SAA Field Guide";
 
@@ -186,7 +186,7 @@ ${topbar(p, page)}
 
 ${mainWrap(page, sections, pages, i)}
       <footer class="footer">
-        <span class="fmono">${BRAND} &middot; CI/CD &middot; containers &middot; Kubernetes &middot; Terraform &middot; AWS &middot; interview-ready</span>
+        <span class="fmono">${BRAND} &middot; SAA-C03 &middot; Well-Architected &middot; Sep 2026</span>
         <span class="fmono">Built to open offline &middot; Sep 2026</span>
       </footer>
     </div>
