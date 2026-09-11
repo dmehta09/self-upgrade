@@ -53,6 +53,7 @@
           <a class="nav-link" href="#flow">OAuth2 password flow</a>
           <a class="nav-link" href="#jwt">JWT with PyJWT</a>
           <a class="nav-link" href="#protect">Protecting routes</a>
+          <a class="nav-link" href="#auth-ii">Auth II · refresh &amp; RBAC</a>
         </div>
       </nav>
       <nav class="nav-group is-adv" aria-label="Advanced"><h4><span class="dot"></span>Advanced</h4><a class="nav-link" href="../fastapi/advanced.html">Async &amp; structure</a>
@@ -196,6 +197,63 @@ def read_me(user: CurrentUser):          # 401 unless a valid token is sent
             </div>
           </section>
 
+          <section class="section reveal" id="auth-ii">
+            <h2><span class="section-num">06</span> &nbsp;Auth II · refresh, RBAC, API keys <span class="badge">senior</span></h2>
+            <p>Password + access JWT gets you a demo. Production needs <strong>short-lived access tokens</strong>, <strong>rotating refresh tokens</strong>, layered authorization, and a path for machines that never log in with a password.</p>
+
+            <h3>Access vs refresh</h3>
+            <div class="kv">
+              <dt>Access JWT</dt><dd>15–30 minutes. Sent on every API call. Pin <code>algorithms=[...]</code> on decode. Check <code>typ</code>/<code>aud</code> if you issue multiple audiences.</dd>
+              <dt>Refresh token</dt><dd><strong>Opaque</strong> (random bytes), stored server-side as a hash + family id. Not a long-lived JWT copy of the access token.</dd>
+              <dt>Rotation + reuse detection</dt><dd>Each refresh issues a new refresh and invalidates the old one. If a <em>previously used</em> refresh appears again, revoke the whole family — treat it as theft.</dd>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">refresh.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python"># One row per session: family_id, token_hash, user_id, rotated_at, revoked
+def rotate_refresh(presented: str) -> tuple[str, str]:
+    row = lookup_by_hash(hash(presented))
+    if row is None or row.revoked:
+        raise HTTPException(401, "Invalid refresh")
+    if row.already_rotated:          # reuse of an old token
+        revoke_family(row.family_id) # compromise signal
+        raise HTTPException(401, "Refresh reuse")
+    mark_rotated(row)
+    new_refresh = secrets.token_urlsafe(32)
+    store_hash(row.family_id, hash(new_refresh))
+    access = create_access_token(row.user_id)  # short TTL, algorithms pinned
+    return access, new_refresh</code></pre></div>
+            </div>
+
+            <h3>Layered deps: validate → user → role</h3>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">rbac.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">def require_roles(*roles: str):
+    def dep(user: CurrentUser) -> User:
+        if user.role not in roles:
+            raise HTTPException(403, "Forbidden")  # authenticated but not allowed
+        return user
+    return dep
+
+AdminUser = Annotated[User, Depends(require_roles("admin"))]
+
+@app.delete("/users/{id}")
+def delete_user(_: AdminUser, id: int): ...</code></pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say it out loud</div><p>“401 means I don’t know who you are; 403 means I know you and you’re not allowed. Refresh tokens are opaque, rotated, and reuse-detected — not long-lived JWTs.”</p></div></div>
+
+            <h3>Service auth: HTTPBearer &amp; API keys</h3>
+            <p>For service-to-service, skip the password flow. Use <code>HTTPBearer</code> or a hashed API key dependency. Same layering: extract credential → validate → attach principal → optional scope check.</p>
+            <div class="quiz" data-quiz>
+              <p class="q">A client presents a valid refresh token that was already rotated once. What should the server do?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Issue a new access token and ignore the reuse</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Revoke the token family and return 401 — treat as compromise</button>
+                <button class="quiz-opt"><span class="mark"></span>Accept it forever because refresh tokens never expire</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Reuse after rotation is the classic theft signal (attacker and victim both trying the old token). Kill the family.</div>
+            </div>
+          </section>
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -211,6 +269,7 @@ def read_me(user: CurrentUser):          # 401 unless a valid token is sent
           <a href="#flow">OAuth2 password flow</a>
           <a href="#jwt">JWT with PyJWT</a>
           <a href="#protect">Protecting routes</a>
+          <a href="#auth-ii">Auth II</a>
         </aside>
       </div>
 

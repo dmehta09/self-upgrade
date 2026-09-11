@@ -54,6 +54,8 @@
         <div class="nav-sub">
           <a class="nav-link" href="#testing">Testing basics</a>
           <a class="nav-link" href="#testdb">A test database</a>
+          <a class="nav-link" href="#async-tests">Async tests</a>
+          <a class="nav-link" href="#compose">Compose + Postgres</a>
           <a class="nav-link" href="#run">Running in production</a>
           <a class="nav-link" href="#docker">Docker</a>
           <a class="nav-link" href="#checklist">Ship checklist</a>
@@ -161,6 +163,62 @@ gunicorn main:app -k uvicorn.workers.UvicornWorker -w 4 -b 0.0.0.0:80</code></pr
             <p>Workers = roughly your number of CPU cores. Put a reverse proxy (nginx, or your platform's load balancer) in front for TLS and static files.</p>
           </section>
 
+          <section class="section reveal" id="async-tests">
+            <h2><span class="section-num">03b</span> &nbsp;Async tests · TestClient vs AsyncClient <span class="badge">senior</span></h2>
+            <p><code>TestClient</code> is fine for sync tests. Once fixtures or the app are async end-to-end, switch to <code>httpx.AsyncClient</code> + <code>ASGITransport</code> so the test and the app share one event loop.</p>
+            <div class="kv">
+              <dt>TestClient</dt><dd>Sync API; runs lifespan only inside <code>with TestClient(app)</code>. Great for simple routes and WebSocket helpers.</dd>
+              <dt>AsyncClient + ASGITransport</dt><dd>Async API; same loop as async fixtures. Does <strong>not</strong> run lifespan unless you enter <code>app.router.lifespan_context(app)</code>.</dd>
+              <dt>When to use which</dt><dd>Sync suite → TestClient. Async DB/cache fixtures or concurrent requests in one test → AsyncClient.</dd>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">conftest.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">import pytest
+from httpx import ASGITransport, AsyncClient
+from main import app, get_session
+
+@pytest.fixture
+async def client():
+    app.dependency_overrides[get_session] = override_session
+    transport = ASGITransport(app=app)
+    async with app.router.lifespan_context(app):
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
+    app.dependency_overrides.clear()
+
+@pytest.mark.asyncio
+async def test_health(client: AsyncClient):
+    r = await client.get("/healthz")
+    assert r.status_code == 200</code></pre></div>
+            </div>
+            <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span><div class="co-body"><div class="co-title">Say it out loud</div><p>“ASGITransport never opens a socket. Lifespan is separate — if startup creates the pool, my async tests must enter the lifespan context or I’ll debug phantom AttributeErrors.”</p></div></div>
+          </section>
+
+          <section class="section reveal" id="compose">
+            <h2><span class="section-num">03c</span> &nbsp;Compose · app + Postgres</h2>
+            <p>One container is a start. Locally, run the API next to Postgres and apply Alembic before traffic:</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">docker-compose.yml</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="yaml">services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
+    ports: ["5432:5432"]
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db/app
+      SECRET_KEY: change-me
+    ports: ["8000:80"]
+    depends_on: [db]
+    command: >
+      sh -c "alembic upgrade head &&
+             fastapi run main.py --port 80"</code></pre></div>
+            </div>
+          </section>
+
           <section class="section reveal" id="docker">
             <h2><span class="section-num">04</span> &nbsp;A Dockerfile</h2>
             <p>Containerizing makes “works on my machine” work everywhere. A minimal image:</p>
@@ -231,6 +289,8 @@ CMD ["fastapi", "run", "main.py", "--port", "80"]</code></pre></div>
           <h5>On this page</h5>
           <a href="#testing">Testing basics</a>
           <a href="#testdb">A test database</a>
+          <a href="#async-tests">Async tests</a>
+          <a href="#compose">Compose</a>
           <a href="#run">Running in production</a>
           <a href="#docker">Docker</a>
           <a href="#checklist">Ship checklist</a>
