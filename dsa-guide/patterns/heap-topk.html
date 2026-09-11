@@ -340,8 +340,8 @@ print(find_kth_largest([3, 2, 3, 1, 2, 4, 5, 5, 6], 4))
             <h3>How to solve it</h3>
             <p>Two clean steps, both leaning on the standard library:</p>
             <ol>
-              <li><strong>Count:</strong> a <code>collections.Counter</code> tallies every value in one O(n) pass.</li>
-              <li><strong>Select the top K:</strong> <code>Counter.most_common(k)</code> hands back the k highest-count <code>(value, count)</code> pairs, already sorted. Keep just the values.</li>
+              <li><strong>Count:</strong> a plain <code>dict</code> tallies every value in one O(n) pass with <code>.get</code>.</li>
+              <li><strong>Select the top K:</strong> sort the keys by count descending and keep the first <code>k</code> (or use a size-k heap if they ask for O(n log k)).</li>
             </ol>
             <p>Under the hood <code>most_common</code> uses a heap when <code>k</code> is given, so it doesn't fully sort when it doesn't have to. Connecting back to the picture: count the votes, then read off the top K winners.</p>
 
@@ -361,30 +361,30 @@ print(find_kth_largest([3, 2, 3, 1, 2, 4, 5, 5, 6], 4))
             </div>
 
             <div class="quiz" data-quiz>
-              <p class="q">What is the role of the <code>Counter</code> here?</p>
+              <p class="q">What is the role of the frequency <code>dict</code> here?</p>
               <div class="quiz-opts">
                 <button class="quiz-opt"><span class="mark"></span>It sorts the input list in place</button>
                 <button class="quiz-opt" data-correct="true"><span class="mark"></span>It tallies how many times each value appears, so we can rank values by frequency</button>
                 <button class="quiz-opt"><span class="mark"></span>It removes duplicate values from the list</button>
               </div>
-              <div class="quiz-explain"><b>Exactly.</b> <code>Counter</code> turns the raw list into a value-to-count map in one pass. Once we know each value's count, "top K frequent" becomes "the K biggest counts" — a Top-K selection.</div>
+              <div class="quiz-explain"><b>Exactly.</b> The frequency dict turns the raw list into a value-to-count map in one pass. Once we know each value's count, "top K frequent" becomes "the K biggest counts" — a Top-K selection.</div>
             </div>
 
             <details class="deeper hint">
               <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
-              <div class="deeper-body"><p>Use <code>from collections import Counter</code>. Build <code>counts = Counter(nums)</code>, then call <code>counts.most_common(k)</code> and keep only the value from each <code>(value, count)</code> pair.</p></div>
+              <div class="deeper-body"><p>Build <code>counts = {}</code> with <code>counts[n] = counts.get(n, 0) + 1</code>. Then <code>return sorted(counts, key=counts.get, reverse=True)[:k]</code>.</p></div>
             </details>
             <details class="deeper solution">
               <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
               <div class="deeper-body">
                 <div class="runpad" data-needs="">
                   <div class="rp-head"><span class="rp-title">top_k_frequent.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
-                  <textarea class="rp-editor" spellcheck="false" rows="11">
-from collections import Counter
-
+                  <textarea class="rp-editor" spellcheck="false" rows="12">
 def top_k_frequent(nums, k):
-    counts = Counter(nums)
-    return [num for num, _ in counts.most_common(k)]
+    counts = {}
+    for n in nums:
+        counts[n] = counts.get(n, 0) + 1
+    return sorted(counts, key=counts.get, reverse=True)[:k]
 
 print(top_k_frequent([1, 1, 1, 2, 2, 3], 2))
 print(top_k_frequent([1], 1))
@@ -392,24 +392,24 @@ print(top_k_frequent([1], 1))
                   <div class="rp-output"><pre class="rp-expected">[1, 2]
 [1]</pre></div>
                 </div>
-                <p>Counting collapses the list into per-value tallies; <code>most_common(k)</code> then ranks those tallies and returns the K biggest. The comprehension just strips off the counts, leaving the winning values.</p>
+                <p>Counting collapses the list into per-value tallies; sorting keys by count descending then slicing <code>[:k]</code> returns the K biggest. A size-k heap is the classic follow-up for O(n log k).</p>
               </div>
             </details>
             <details class="deeper walkthrough">
               <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
               <div class="deeper-body">
-                <p class="takeaway">Count first, then take the k highest frequencies. <code>Counter.most_common(k)</code> is the clear Python default; a size-k heap is O(n log k) and bucket sort is O(n) — mention those if they ask for a tighter bound than sorting the unique keys.</p>
+                <p class="takeaway">Count first, then take the k highest frequencies. Sorting unique keys by count is the clear plain-dict default; a size-k heap is O(n log k) and bucket sort is O(n) — mention those if they ask for a tighter bound.</p>
                 <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
-  start[Count frequencies] --> rank["most_common k"]
-  rank --> strip["Keep only the values"]
-  strip --> ret[Return list of k nums]
+  start[Count frequencies] --> rank["Sort keys by count desc"]
+  rank --> slice["Take first k"]
+  slice --> ret[Return list of k nums]
   ret --> done[Done]
 </pre></div>
                 <ol class="code-walk">
-                  <li><code>from collections import Counter</code><span>Handy tally dict that also ranks by count.</span></li>
                   <li><code>def top_k_frequent(nums, k):</code><span>Return the k values that appear most often (order among ties is unspecified).</span></li>
-                  <li><code>counts = Counter(nums)</code><span>One pass: map each distinct number to how many times it showed up.</span></li>
-                  <li><code>return [num for num, _ in counts.most_common(k)]</code><span>Ask for the k biggest tallies, then drop the counts and keep the numbers.</span></li>
+                  <li><code>counts = {}</code><span>Plain frequency map.</span></li>
+                  <li><code>counts[n] = counts.get(n, 0) + 1</code><span>One pass: map each distinct number to how many times it showed up.</span></li>
+                  <li><code>return sorted(counts, key=counts.get, reverse=True)[:k]</code><span>Rank by count descending and keep the top k keys.</span></li>
                 </ol>
                 <p class="walk-why">Time O(n + u log u) to count then rank u unique keys (often written O(n log n)); space O(u) for the counter.</p>
               </div>

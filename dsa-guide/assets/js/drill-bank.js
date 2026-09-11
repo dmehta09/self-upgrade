@@ -116,7 +116,7 @@ window.DSA_DRILLS = [
       },
       brute: {
         prompts: ["Name two simpler solutions and why each violates a constraint.", "What would sorting cost?"],
-        hints: ["Counter dict: O(n) time but O(n) space. Sorting then scanning pairs: O(1)-ish space but O(n log n) time. Both fail the brief."]
+        hints: ["Freq dict: O(n) time but O(n) space. Sorting then scanning pairs: O(1)-ish space but O(n log n) time. Both fail the brief."]
       },
       plan: {
         prompts: ["What does x XOR x equal? And x XOR 0?", "If XOR is commutative, what happens when you XOR the whole list together?"],

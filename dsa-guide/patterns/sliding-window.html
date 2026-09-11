@@ -526,26 +526,26 @@ print(length_of_longest_substring("pwwkew"))
 
             <details class="deeper hint">
               <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
-              <div class="deeper-body"><p>Build <code>need</code> with <code>Counter(t)</code>. Track <code>have</code>, <code>formed</code>, and <code>best = (inf, 0, 0)</code>. Expand <code>right</code>; while formed, update best and shrink <code>left</code>. Return <code>s[best[1]:best[2]+1]</code> if finite.</p></div>
+              <div class="deeper-body"><p>Build <code>need</code> as a plain freq dict over <code>t</code>. Track <code>have</code>, <code>missing</code>, and <code>best</code>. Expand <code>right</code>; while missing is 0, update best and shrink <code>left</code>. Return the best substring if finite.</p></div>
             </details>
             <details class="deeper solution">
               <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
               <div class="deeper-body">
                 <div class="runpad" data-needs="">
                   <div class="rp-head"><span class="rp-title">min_window.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
-                  <textarea class="rp-editor" spellcheck="false" rows="28">
-from collections import Counter
-
+                  <textarea class="rp-editor" spellcheck="false" rows="32">
 def min_window(s, t):
     if not t or not s:
         return ""
-    need = Counter(t)
+    need = {}
+    for c in t:
+        need[c] = need.get(c, 0) + 1
     missing = len(need)
-    have = Counter()
+    have = {}
     best_len, best_l, best_r = float("inf"), 0, 0
     left = 0
     for right, ch in enumerate(s):
-        have[ch] += 1
+        have[ch] = have.get(ch, 0) + 1
         if ch in need and have[ch] == need[ch]:
             missing -= 1
         while missing == 0:
@@ -574,7 +574,7 @@ a
               <div class="deeper-body">
                 <p class="takeaway">Need/have counters with a <code>missing</code> (or formed) tally is the interview default for minimum window: O(|s|+|t|). Restarting a fresh scan at every index is O(n·m). Grow right until valid, then shrink left while valid — that's the variable-window template.</p>
                 <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
-  start[Build need Counter, missing = distinct needs] --> grow[Expand right, update have]
+  start[Build need dict, missing = distinct needs] --> grow[Expand right, update have]
   grow --> hit{"have ch just met need ch?"}
   hit -->|yes| dec[missing -= 1]
   hit -->|no| valid
@@ -588,16 +588,16 @@ a
   out --> done[Done]
 </pre></div>
                 <ol class="code-walk">
-                  <li><code>def min_window(s, t):</code><span>Define a function that returns the shortest substring of <code>s</code> covering all of <code>t</code> (needs <code>from collections import Counter</code>).</span></li>
+                  <li><code>def min_window(s, t):</code><span>Define a function that returns the shortest substring of <code>s</code> covering all of <code>t</code>.</span></li>
                   <li><code>if not t or not s:</code><span>Empty input — nothing to cover or search.</span></li>
                   <li><code>return ""</code><span>Early exit with an empty string.</span></li>
-                  <li><code>need = Counter(t)</code><span>Required counts for each character in <code>t</code>.</span></li>
+                  <li><code>need = {}</code> / tally loop<span>Required counts for each character in <code>t</code>.</span></li>
                   <li><code>missing = len(need)</code><span>How many distinct required characters are still under-satisfied.</span></li>
-                  <li><code>have = Counter()</code><span>Counts of characters currently inside the window.</span></li>
+                  <li><code>have = {}</code><span>Counts of characters currently inside the window.</span></li>
                   <li><code>best_len, best_l, best_r = float("inf"), 0, 0</code><span>Track the shortest valid window's length and endpoints.</span></li>
                   <li><code>left = 0</code><span>Left edge of the sliding window.</span></li>
                   <li><code>for right, ch in enumerate(s):</code><span>Grow the right edge one character at a time.</span></li>
-                  <li><code>have[ch] += 1</code><span>Add this character into the window counts.</span></li>
+                  <li><code>have[ch] = have.get(ch, 0) + 1</code><span>Add this character into the window counts.</span></li>
                   <li><code>if ch in need and have[ch] == need[ch]:</code><span>This required character just hit its exact need (not every extra copy).</span></li>
                   <li><code>missing -= 1</code><span>One fewer distinct requirement unsatisfied.</span></li>
                   <li><code>while missing == 0:</code><span>Window covers <code>t</code> — shrink from the left while it stays valid.</span></li>

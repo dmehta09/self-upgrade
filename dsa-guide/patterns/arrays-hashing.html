@@ -844,7 +844,7 @@ False</pre></div>
               <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
               <div class="co-body">
                 <div class="co-title">Two bowls of Scrabble tiles <span class="tag">analogy</span></div>
-                <p>Pour each word into its own bowl and count how many of each letter you have. If the tallies match — three A's, one N, one G… — the words are anagrams. Order never mattered; only the <em>counts</em> did. A <code>Counter</code> is that tally sheet.</p>
+                <p>Pour each word into its own bowl and count how many of each letter you have. If the tallies match — three A's, one N, one G… — the words are anagrams. Order never mattered; only the <em>counts</em> did. A plain <code>dict</code> is that tally sheet.</p>
               </div>
             </div>
 
@@ -868,7 +868,7 @@ False</pre></div>
                 "frames": [
                   {"active":[0,2,5],"caption":"s = anagram. Count letters: a×3, n, g, r, m."},
                   {"active":[1,3,4,6],"caption":"t = nagaram. Same letters, same counts — just shuffled."},
-                  {"match":[0,1,2,3,4,5,6],"caption":"Counters equal → True. Different lengths or counts → False."}
+                  {"match":[0,1,2,3,4,5,6],"caption":"Frequencies match → True. Different lengths or counts → False."}
                 ]
               }
               </script>
@@ -878,10 +878,10 @@ False</pre></div>
             <p>If the lengths differ, they can't be anagrams — return early. Otherwise compare frequency maps:</p>
             <ol>
               <li>Reject immediately when <code>len(s) != len(t)</code>.</li>
-              <li>Build <code>Counter(s)</code> and <code>Counter(t)</code> (or one array of 26 ints if the alphabet is lowercase English).</li>
+              <li>Build a frequency <code>dict</code> for <code>s</code>, then subtract counts for <code>t</code> (or one array of 26 ints if the alphabet is lowercase English).</li>
               <li>Return whether the two counters are equal.</li>
             </ol>
-            <p>Sorting both strings and comparing is also correct (O(n log n)), but Counter is the cleaner interview story: "same bag of letters."</p>
+            <p>Sorting both strings and comparing is also correct (O(n log n)), but a frequency dict is the cleaner interview story: "same bag of letters."</p>
 
             <div class="table-wrap complexity">
               <table>
@@ -899,31 +899,38 @@ False</pre></div>
             </div>
 
             <div class="quiz" data-quiz>
-              <p class="q">Why is Counter preferred over sorting both strings in an interview?</p>
+              <p class="q">Why is a frequency dict preferred over sorting both strings in an interview?</p>
               <div class="quiz-opts">
                 <button class="quiz-opt"><span class="mark"></span>Because sorting always uses more memory</button>
                 <button class="quiz-opt" data-correct="true"><span class="mark"></span>Because counting is O(n) and directly models "same letter frequencies"</button>
-                <button class="quiz-opt"><span class="mark"></span>Because Counter works only for English letters</button>
+                <button class="quiz-opt"><span class="mark"></span>Because frequency maps work only for English letters</button>
               </div>
               <div class="quiz-explain"><b>Right.</b> Sorting is correct but O(n log n). A frequency map is linear time and matches the definition of an anagram — same multiset of characters.</div>
             </div>
 
             <details class="deeper hint">
               <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
-              <div class="deeper-body"><p><code>from collections import Counter</code>. If lengths differ, return <code>False</code>. Otherwise <code>return Counter(s) == Counter(t)</code>.</p></div>
+              <div class="deeper-body"><p>If lengths differ, return <code>False</code>. Count letters of <code>s</code> into a dict with <code>.get</code>, then decrement for each char of <code>t</code>. Return whether the map is empty (all zeros cleared).</p></div>
             </details>
             <details class="deeper solution">
               <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
               <div class="deeper-body">
                 <div class="runpad" data-needs="">
                   <div class="rp-head"><span class="rp-title">valid_anagram.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
-                  <textarea class="rp-editor" spellcheck="false" rows="11">
-from collections import Counter
-
+                  <textarea class="rp-editor" spellcheck="false" rows="18">
 def is_anagram(s, t):
     if len(s) != len(t):
         return False
-    return Counter(s) == Counter(t)
+    freq = {}
+    for c in s:
+        freq[c] = freq.get(c, 0) + 1
+    for c in t:
+        if c not in freq:
+            return False
+        freq[c] -= 1
+        if freq[c] == 0:
+            del freq[c]
+    return not freq
 
 print(is_anagram("anagram", "nagaram"))
 print(is_anagram("rat", "car"))
@@ -931,29 +938,32 @@ print(is_anagram("rat", "car"))
                   <div class="rp-output"><pre class="rp-expected">True
 False</pre></div>
                 </div>
-                <p>Two counters are equal iff every character appears the same number of times. That's exactly the definition of an anagram.</p>
+                <p>If every letter of <code>t</code> cancels a count from <code>s</code> and nothing is left over, the bags match — that's exactly the definition of an anagram.</p>
               </div>
             </details>
             <details class="deeper walkthrough">
               <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
               <div class="deeper-body">
-                <p class="takeaway">Frequency equality is the interview default: O(n) with Counter (or a 26-slot array). Sorting both strings works but is O(n log n).</p>
+                <p class="takeaway">Frequency equality is the interview default: O(n) with a plain dict (or a 26-slot array). Sorting both strings works but is O(n log n).</p>
                 <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
   start[Compare lengths] --> lenCheck{Same length?}
   lenCheck -->|no| retFalse[Return False]
-  lenCheck -->|yes| count[Build Counter s and Counter t]
-  count --> eq{Counters equal?}
+  lenCheck -->|yes| count[Count letters of s into freq]
+  count --> dec[Decrement for each letter of t]
+  dec --> eq{freq empty?}
   eq -->|yes| retTrue[Return True]
   eq -->|no| retFalse
   retTrue --> done[Done]
   retFalse --> done
 </pre></div>
                 <ol class="code-walk">
-                  <li><code>from collections import Counter</code><span>Import a dict specialized for counting hashable items.</span></li>
                   <li><code>def is_anagram(s, t):</code><span>Decide whether <code>t</code> is a rearrangement of <code>s</code>.</span></li>
                   <li><code>if len(s) != len(t):</code><span>Different lengths → impossible; bail out.</span></li>
                   <li><code>return False</code><span>Early exit when lengths disagree.</span></li>
-                  <li><code>return Counter(s) == Counter(t)</code><span>Same letter frequencies iff the counters match.</span></li>
+                  <li><code>freq = {}</code><span>Plain tally map for letters in <code>s</code>.</span></li>
+                  <li><code>freq[c] = freq.get(c, 0) + 1</code><span>Count each letter of <code>s</code>.</span></li>
+                  <li><code>freq[c] -= 1</code> / <code>del</code><span>Spend counts for <code>t</code>; leftover or missing → not anagram.</span></li>
+                  <li><code>return not freq</code><span>Empty map means every count cancelled exactly.</span></li>
                 </ol>
                 <p class="walk-why">Time O(n) to count both strings; space O(1) for a fixed alphabet (26 letters).</p>
               </div>
