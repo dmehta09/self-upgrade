@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent middleware | The Lang Stack</title>
+  <meta name="description" content="Customize create_agent with LangChain middleware: hook timeline, SummarizationMiddleware, HITL, PII, retries/fallback, and custom @before_model / @wrap_tool_call — without rewriting StateGraph." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='6' r='2.4' fill='%2334d399'/><circle cx='19' cy='6' r='2.4' fill='%23818cf8'/><circle cx='12' cy='18' r='2.4' fill='%23fbbf24'/></svg>" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="langchain" data-page="lc-middleware" data-lesson="lc-middleware">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="The Lang Stack home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06140f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M6.8 7.4 10.4 16M17.2 7.4 13.6 16M7 6h10"/></svg></span>
+        <span class="brand-text"><b>The Lang Stack</b><span>Visual field guide</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home</a>
+        <a class="nav-link" href="../ecosystem/index.html">The big picture</a>
+        <a class="nav-link" href="../ecosystem/glossary.html">Glossary</a>
+      </nav>
+      <nav class="nav-group is-lc" aria-label="LangChain">
+        <h4><span class="dot"></span>LangChain</h4>
+        <a class="nav-link" href="../langchain/index.html">Overview</a>
+        <a class="nav-link" href="../langchain/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langchain/middleware.html">Agent middleware</a>
+        <div class="nav-sub">
+          <a class="nav-link" href="#why">Why middleware</a>
+          <a class="nav-link" href="#hooks">Hook timeline</a>
+          <a class="nav-link" href="#builtins">Built-ins</a>
+          <a class="nav-link" href="#custom">Custom hooks</a>
+          <a class="nav-link" href="#context">Context engineering</a>
+          <a class="nav-link" href="#mcp">MCP</a>
+          <a class="nav-link" href="#quiz">Quiz</a>
+        </div>
+        <a class="nav-link" href="../langchain/rag.html">RAG in production</a>
+      </nav>
+      <nav class="nav-group is-lg" aria-label="LangGraph">
+        <h4><span class="dot"></span>LangGraph</h4>
+        <a class="nav-link" href="../langgraph/index.html">Overview</a>
+        <a class="nav-link" href="../langgraph/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langgraph/agents.html">Agent architectures</a>
+        <a class="nav-link" href="../langgraph/advanced.html">Advanced LangGraph</a>
+      </nav>
+      <nav class="nav-group is-ls" aria-label="LangSmith">
+        <h4><span class="dot"></span>LangSmith</h4>
+        <a class="nav-link" href="../langsmith/index.html">Overview</a>
+        <a class="nav-link" href="../langsmith/concepts.html">Core concepts</a>
+        <a class="nav-link" href="../langsmith/evals.html">Evaluation in depth</a>
+      </nav>
+      <nav class="nav-group is-drill" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../drill/index.html">Quiz drills</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a><span class="sep">/</span><a href="../langchain/index.html" style="color:var(--accent)">LangChain</a><span class="sep">/</span><span class="current">Agent middleware</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="st-label">Search</span><kbd>/</kbd></button>
+        <span class="pill"><span class="dot"></span>Python · v1.3</span>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal" style="padding-top:8px;">
+            <span class="eyebrow">LangChain · Agent middleware</span>
+            <h1>Customize the agent loop — keep the graph.</h1>
+            <p class="lead"><code>create_agent</code> already returns a LangGraph. Middleware is how you intercept that loop — summarize, redact PII, pause for humans, retry, fall back — without hand-rolling a <code>StateGraph</code> for every cross-cutting concern.</p>
+          </section>
+
+          <!-- 1. WHY -->
+          <section class="section reveal" id="why">
+            <h2><span class="section-num">01</span> &nbsp;Why middleware</h2>
+            <p>Once you ship agents past the demo, the same five needs show up everywhere: shrink history, block secrets, approve dangerous tools, survive flaky APIs, switch models when a provider hiccups. You <em>could</em> fork the agent graph and bake those into nodes. You will regret it the third time product asks for "just one more guardrail."</p>
+            <p>Middleware is the extension point on <code>create_agent</code>: pass a list, keep the stock think → tool → think loop, and compose behavior like Express/FastAPI middleware — except the hooks are agent-shaped.</p>
+            <div class="diagram">
+              <div class="dg-title">Two ways to customize — pick the cheap one first</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">need</div><div class="fn-t">HITL · PII · retries</div><div class="fn-d">cross-cutting, reusable</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">prefer</div><div class="fn-t">middleware list</div><div class="fn-d">hooks on create_agent</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">escalate</div><div class="fn-t">custom StateGraph</div><div class="fn-d">new topology / routing</div></div>
+              </div>
+              <div class="cap">Middleware rides inside the compiled graph <code>create_agent</code> returns. Rewrite the graph when you need a new topology — not when you need a policy.</div>
+            </div>
+            <div class="kv">
+              <dt>keep create_agent</dt><dd>You still get the default ReAct-style loop, streaming, and checkpointer wiring. Middleware plugs in; it doesn't replace the runtime.</dd>
+              <dt>compose, don't fork</dt><dd>Order the list. Before-hooks run forward; wrap-hooks nest; after-hooks run reverse. Same mental model as HTTP middleware stacks.</dd>
+              <dt>drop into larger graphs</dt><dd>The agent (middleware and all) is still a node/subgraph you can embed in a bigger <code>StateGraph</code> for classification → route → agent patterns.</dd>
+            </div>
+            <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Middleware customizes <code>create_agent</code> without rewriting <code>StateGraph</code>. I reach for a custom graph when the <em>topology</em> changes — branching, parallel fan-out, multi-agent routing — not when I need summarization or PII redaction."</p></div></div>
+          </section>
+
+          <!-- 2. HOOKS -->
+          <section class="section reveal" id="hooks">
+            <h2><span class="section-num">02</span> &nbsp;Hook timeline <span class="badge" style="vertical-align:middle">key idea</span></h2>
+            <p>The agent loop is: call the model → maybe run tools → repeat until the model stops calling tools. Middleware exposes hooks around that loop. Lifecycle hooks see/update state; wrap hooks sit <em>around</em> the actual model or tool call like a decorator.</p>
+            <div class="diagram">
+              <div class="dg-title">One turn through the agent loop</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">start</div><div class="fn-t">before_agent</div><div class="fn-d">once per invoke</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">pre-LLM</div><div class="fn-t">before_model</div><div class="fn-d">trim · gate · log</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">wrap</div><div class="fn-t">wrap_model_call</div><div class="fn-d">retry · fallback · swap</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">post-LLM</div><div class="fn-t">after_model</div><div class="fn-d">validate · redact</div></div>
+              </div>
+              <div class="cap">If the model requested tools, <code>wrap_tool_call</code> wraps each execution. When the loop exits, <code>after_agent</code> runs. Then you're done — or the next user turn starts <code>before_agent</code> again.</div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Hook</th><th>When it fires</th><th>Typical job</th></tr></thead>
+                <tbody>
+                  <tr><td><code>before_agent</code></td><td>Once at the start of an invocation</td><td>Init counters, load side context, hard abort</td></tr>
+                  <tr><td><code>before_model</code></td><td>Before every model call in the loop</td><td>Summarize/trim messages, dynamic system prompts</td></tr>
+                  <tr><td><code>wrap_model_call</code></td><td>Around the model invocation</td><td>Retries, fallbacks, provider swap, latency budgets</td></tr>
+                  <tr><td><code>after_model</code></td><td>After the model returns</td><td>Validate output, strip secrets, force stop</td></tr>
+                  <tr><td><code>wrap_tool_call</code></td><td>Around each tool execution</td><td>Error → ToolMessage, timeouts, audit logs</td></tr>
+                  <tr><td><code>after_agent</code></td><td>When the agent finishes</td><td>Metrics flush, final redaction, cleanup</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1 0 5.6l-1.4 1.4-5.6-5.6 1.4-1.4a4 4 0 0 1 5.6 0ZM3 21l4-1 11-11"/></svg></span><div class="co-body"><div class="co-title">before_* vs wrap_*</div><p><code>before_model</code> mutates <em>state</em> (messages list) and returns updates. <code>wrap_model_call</code> receives a request + <code>handler</code> — you decide whether to call it, how many times, or with a different model. Same split for tools.</p></div></div>
+            <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"<code>before_model</code> reshapes state; <code>wrap_model_call</code> wraps the call itself — that's where retries and fallbacks live. Tools get the same treatment with <code>wrap_tool_call</code>."</p></div></div>
+          </section>
+
+          <!-- 3. BUILTINS -->
+          <section class="section reveal" id="builtins">
+            <h2><span class="section-num">03</span> &nbsp;Built-in middleware</h2>
+            <p>Ship the common policies from the box. Compose them in one list — order matters for before/after hooks.</p>
+
+            <h3>Summarization</h3>
+            <p><code>SummarizationMiddleware</code> watches token (or message) pressure and compresses older turns while keeping a recent window. Prefer this over hand-rolled trimming when the conversation must stay coherent across a long thread.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">summarize.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain.agents import create_agent
+from langchain.agents.middleware import SummarizationMiddleware
+
+agent = create_agent(
+    model="gpt-4.1",
+    tools=[search_tool],
+    middleware=[
+        SummarizationMiddleware(
+            model="gpt-4.1-mini",          # cheaper model for the summary
+            trigger=("tokens", 4000),      # fire when history crosses this
+            keep=("messages", 20),         # retain the last N messages intact
+        ),
+    ],
+)</code></pre></div>
+            </div>
+
+            <h3>Human-in-the-loop</h3>
+            <p><code>HumanInTheLoopMiddleware</code> interrupts before named tools run. Pair it with a checkpointer — interrupts need a thread to resume.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">hitl.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain.agents import create_agent
+from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langgraph.checkpoint.memory import InMemorySaver
+
+agent = create_agent(
+    model="gpt-4.1",
+    tools=[read_email, send_email],
+    middleware=[
+        HumanInTheLoopMiddleware(
+            interrupt_on={"send_email": True},
+            description_prefix="Tool execution pending approval",
+        ),
+    ],
+    checkpointer=InMemorySaver(),
+)</code></pre></div>
+            </div>
+
+            <h3>PII, retries, fallback</h3>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">guardrails.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain.agents import create_agent
+from langchain.agents.middleware import (
+    PIIMiddleware,
+    ModelRetryMiddleware,
+    ModelFallbackMiddleware,
+    ToolRetryMiddleware,
+)
+
+agent = create_agent(
+    model="gpt-4.1",
+    tools=[customer_tool],
+    middleware=[
+        PIIMiddleware("email", strategy="redact", apply_to_input=True),
+        PIIMiddleware("credit_card", strategy="mask", apply_to_input=True),
+        ModelRetryMiddleware(max_retries=3, backoff_factor=2.0, initial_delay=1.0),
+        ModelFallbackMiddleware("gpt-4.1-mini", "claude-sonnet-4-5"),
+        ToolRetryMiddleware(
+            max_retries=2,
+            retry_on=(ConnectionError, TimeoutError),
+            on_failure="continue",
+        ),
+    ],
+)</code></pre></div>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">HITL needs a checkpointer</div><p>Without a checkpointer, the interrupt has nowhere to pause. Same rule as LangGraph HITL nodes — thread state is the resume key.</p></div></div>
+          </section>
+
+          <!-- 4. CUSTOM -->
+          <section class="section reveal" id="custom">
+            <h2><span class="section-num">04</span> &nbsp;Custom hooks</h2>
+            <p>Decorators are enough for most one-off policies. Subclass <code>AgentMiddleware</code> when you need config + multiple hooks in one object.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">custom_hooks.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from collections.abc import Callable
+from typing import Any
+
+from langchain.agents import create_agent
+from langchain.agents.middleware import before_model, wrap_tool_call, AgentState
+from langchain.messages import ToolMessage
+from langchain.tools.tool_node import ToolCallRequest
+from langgraph.runtime import Runtime
+
+
+@before_model
+def log_before_model(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+    print(f"About to call model with {len(state['messages'])} messages")
+    return None  # or return {"messages": [...]} to update state
+
+
+@wrap_tool_call
+def handle_tool_errors(
+    request: ToolCallRequest,
+    handler: Callable[[ToolCallRequest], ToolMessage],
+) -> ToolMessage:
+    try:
+        return handler(request)
+    except Exception as e:
+        return ToolMessage(
+            content=f"Tool error: check inputs and retry. ({e})",
+            tool_call_id=request.tool_call["id"],
+        )
+
+
+agent = create_agent(
+    model="gpt-4.1",
+    tools=[search_tool, write_db],
+    middleware=[log_before_model, handle_tool_errors],
+)</code></pre></div>
+            </div>
+            <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"I decorate with <code>@before_model</code> to reshape state before the LLM, and <code>@wrap_tool_call</code> to turn tool exceptions into <code>ToolMessage</code>s the model can recover from — then pass both into <code>middleware=[...]</code>."</p></div></div>
+          </section>
+
+          <!-- 5. CONTEXT -->
+          <section class="section reveal" id="context">
+            <h2><span class="section-num">05</span> &nbsp;Context engineering: summarize vs trim</h2>
+            <p>Context windows are a budget. Agents burn it on tool transcripts, retries, and "helpful" system prompts. Two levers:</p>
+            <div class="grid grid-2">
+              <div class="card"><h4 class="mt-0">Trim</h4><p class="mb-0">Drop oldest messages (or hard-cut by token count). Cheap, deterministic, lossy. Fine when early turns are scaffolding and the last N messages carry the task. Often a few lines in <code>before_model</code>.</p></div>
+              <div class="card"><h4 class="mt-0">Summarize</h4><p class="mb-0">Compress older turns into a running synopsis via <code>SummarizationMiddleware</code>. Costs an extra model call; preserves decisions, IDs, and constraints that trimming would erase.</p></div>
+            </div>
+            <div class="diagram">
+              <div class="dg-title">When the window fills up</div>
+              <div class="flow">
+                <div class="flow-node"><div class="fn-k">pressure</div><div class="fn-t">tokens ↑</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node"><div class="fn-k">trim</div><div class="fn-t">drop oldest</div><div class="fn-d">fast · lossy</div></div>
+                <div class="flow-arrow"><svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h22M18 4l6 6-6 6"/></svg></div>
+                <div class="flow-node" style="border-color:var(--accent)"><div class="fn-k">or</div><div class="fn-t">summarize</div><div class="fn-d">keep gist · keep recent</div></div>
+              </div>
+              <div class="cap">Rule of thumb: trim for ephemeral chat; summarize when the agent must remember earlier tool results or user constraints across a long session.</div>
+            </div>
+            <p>The deeper craft — what belongs in system vs retrieved vs tool results, how to budget tokens across those lanes — lives in the GenAI guide: <a href="../../genai-guide/prompting/context-engineering.html">Context engineering</a>.</p>
+            <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Trim when early turns are disposable; summarize when I need the gist of a long thread. Middleware is the switch — the strategy still comes from context engineering."</p></div></div>
+          </section>
+
+          <!-- 6. MCP -->
+          <section class="section reveal" id="mcp">
+            <h2><span class="section-num">06</span> &nbsp;MCP: tools without reinventing the protocol</h2>
+            <p>Middleware does not replace tool discovery. <strong>Model Context Protocol (MCP)</strong> is how you expose external tool servers to an agent — filesystem, browsers, SaaS APIs — with a standard handshake. Wire MCP tools into <code>create_agent</code>; use middleware for policies <em>around</em> those tools (HITL on writes, retries on flaky servers, PII on results).</p>
+            <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Don't duplicate MCP here</div><p>Transports, servers, and client wiring are covered in the GenAI tool-use track — start at <a href="../../genai-guide/tool-use/">Tool use &amp; MCP</a> (see <a href="../../genai-guide/tool-use/model-context-protocol.html">Model Context Protocol</a>). This page stays on agent hooks.</p></div></div>
+          </section>
+
+          <!-- 7. QUIZ -->
+          <section class="section reveal" id="quiz">
+            <h2><span class="section-num">07</span> &nbsp;Check yourself</h2>
+            <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"<code>create_agent</code> + middleware for policies; custom <code>StateGraph</code> for topology. Summarize vs trim is a context budget call. HITL interrupts need a checkpointer. MCP brings tools; middleware governs them."</p></div></div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">You need retries when the chat provider 503s, without rewriting the agent graph. Where does that live?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>A new LangGraph node that catches exceptions and re-invokes the model</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>wrap_model_call</code> / <code>ModelRetryMiddleware</code> on <code>create_agent</code>'s middleware list</button>
+                <button class="quiz-opt"><span class="mark"></span><code>before_agent</code> only — it runs once and can loop the whole invoke</button>
+              </div>
+              <div class="quiz-explain"><b>Wrap the call.</b> Retries and fallbacks sit around the model invocation. Lifecycle hooks like <code>before_agent</code> aren't the right shape for "call handler again with backoff."</div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">When do you leave middleware and write a custom <code>StateGraph</code>?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>When you need a new control-flow topology — branching, parallel fan-out, multi-agent routing</button>
+                <button class="quiz-opt"><span class="mark"></span>Whenever you want summarization or PII redaction</button>
+                <button class="quiz-opt"><span class="mark"></span>Any time a tool might throw — graphs are the only place for try/except</button>
+              </div>
+              <div class="quiz-explain"><b>Topology vs policy.</b> Summarization, PII, HITL, and retries are middleware. Custom graphs are for structure the stock agent loop can't express.</div>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q"><code>HumanInTheLoopMiddleware(interrupt_on={&#34;send_email&#34;: True})</code> — what's also required?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>A vector store so approvals can be retrieved later</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A checkpointer (and usually a <code>thread_id</code>) so the interrupt can pause and resume</button>
+                <button class="quiz-opt"><span class="mark"></span>Wrapping <code>send_email</code> in <code>@before_model</code></button>
+              </div>
+              <div class="quiz-explain"><b>State has to survive the pause.</b> Interrupts are LangGraph persistence — without a checkpointer there's no thread to resume.</div>
+            </div>
+          </section>
+
+          <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
+
+          <nav class="page-nav reveal">
+            <a href="../langchain/concepts.html"><span class="pn-k">‹ Back</span><span class="pn-t">LangChain · Core concepts</span></a>
+            <a class="next" href="../langchain/rag.html"><span class="pn-k">Next ›</span><span class="pn-t">RAG in production</span></a>
+          </nav>
+        </div>
+
+        <!-- On this page -->
+        <aside class="toc" aria-label="On this page">
+          <h5>On this page</h5>
+          <a href="#why">Why middleware</a>
+          <a href="#hooks">Hook timeline</a>
+          <a href="#builtins">Built-ins</a>
+          <a href="#custom">Custom hooks</a>
+          <a href="#context">Context engineering</a>
+          <a href="#mcp">MCP</a>
+          <a href="#quiz">Quiz</a>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">LangChain · Agent middleware</span>
+        <span class="fmono">The Lang Stack · Jun 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+</body>
+</html>

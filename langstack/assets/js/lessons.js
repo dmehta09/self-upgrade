@@ -12,6 +12,7 @@ window.LESSONS = [
   /* ---- LANGCHAIN ---- */
   { id: "lc-overview",     title: "LangChain — Overview",       url: "langchain/index.html",    module: "langchain", tool: "langchain" },
   { id: "lc-concepts",     title: "LangChain — Core concepts",  url: "langchain/concepts.html", module: "langchain", tool: "langchain" },
+  { id: "lc-middleware",   title: "Agent middleware",           url: "langchain/middleware.html", module: "langchain", tool: "langchain" },
   { id: "lc-rag",          title: "RAG in production",          url: "langchain/rag.html",      module: "langchain", tool: "langchain" },
 
   /* ---- LANGGRAPH ---- */
