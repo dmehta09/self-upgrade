@@ -21,7 +21,8 @@ const FILES = [
   "patterns/linked-list.html", "patterns/trees-traversal.html", "patterns/heap-topk.html",
   "patterns/backtracking.html", "patterns/graphs.html", "patterns/dynamic-programming.html",
   "patterns/intervals.html",
-  "patterns/greedy.html", "patterns/tries.html", "patterns/union-find.html", "patterns/bits.html",
+  "patterns/greedy.html", "patterns/tries.html", "patterns/union-find.html",
+  "patterns/design.html", "patterns/bits.html",
   "drill/index.html",
   "reference/cheatsheet.html",
 ];

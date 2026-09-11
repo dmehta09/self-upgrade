@@ -186,6 +186,86 @@ window.DSA_DRILLS = [
   },
 
   {
+    id: "min-window", level: "advanced", lesson: "pat-sliding-window",
+    title: "Minimum Window Substring",
+    prompt: "Given strings s and t, return the smallest substring of s that covers every character in t (with multiplicity). Return \"\" if impossible.",
+    phaseNotes: {
+      clarify: {
+        prompts: ["Substring or subsequence? Does multiplicity in t matter?", "Walk s=\"ADOBECODEBANC\", t=\"ABC\" — what's the answer?"],
+        hints: ["Contiguous substring. Counts matter (two A's in t need two A's). Answer: \"BANC\"."]
+      },
+      brute: {
+        prompts: ["Cost of checking every substring for coverage of t?", "Can you do better than restarting the count every time?"],
+        hints: ["All substrings + count check is O(n² · |Σ|) or worse. Neighbouring windows share almost everything — sliding window."]
+      },
+      plan: {
+        prompts: ["What grows the window? What shrinks it? What's the invariant when valid?", "How do you know the window covers t without rescanning?"],
+        hints: ["Grow right until need is met (formed / missing counter); shrink left while still valid; track shortest. need + have maps."]
+      },
+      code: {
+        prompts: ["When do you bump formed — on every copy or only when have hits need?", "What do you return if never valid?"],
+        hints: ["Bump formed only when have[ch] == need[ch]. Empty string if best stayed infinity."]
+      },
+      test: {
+        prompts: ["Trace t with duplicate letters. Restate complexity.", "Check s shorter than t."],
+        hints: ["O(|s|+|t|) time, O(|Σ|) space. Both pointers only move forward."]
+      }
+    },
+    rubric: [
+      { phase: "clarify", text: "Confirmed contiguous cover with multiplicity; named \"BANC\" for the classic example." },
+      { phase: "brute",   text: "Gave the O(n²) (or worse) all-substrings baseline." },
+      { phase: "plan",    text: "Named variable sliding window: grow until valid, shrink while valid." },
+      { phase: "plan",    text: "Planned need/have counts with a formed (or missing) counter." },
+      { phase: "code",    text: "Only advances formed when have reaches need for that char." },
+      { phase: "code",    text: "Tracks best window indices; returns \"\" when none." },
+      { phase: "code",    text: "Complete left/right loop without rescanning the window." },
+      { phase: "test",    text: "Handled duplicate needs in t." },
+      { phase: "test",    text: "Stated O(|s|+|t|) / O(alphabet)." }
+    ],
+    model: "<p><b>Shape:</b> variable window + need/have counters; shrink while the shopping list is covered.</p><p><b>Core:</b> expand right updating have/formed; while formed, record best and drop s[left].</p><p><b>Senior move:</b> multiplicity called out; formed only flips at equality, not on extras.</p>"
+  },
+
+  {
+    id: "lru-cache", level: "advanced", lesson: "pat-design",
+    title: "LRU Cache",
+    prompt: "Design a cache with get(key) and put(key, value), both O(1). Evict the least recently used key when over capacity. Reads and writes both count as use.",
+    phaseNotes: {
+      clarify: {
+        prompts: ["Does put on an existing key refresh recency? What does get return on a miss?", "Capacity 2: put 1, put 2, get 1, put 3 — what does get(2) return?"],
+        hints: ["Yes, put refreshes. Miss → -1. After that sequence get(2) is -1 (evicted)."]
+      },
+      brute: {
+        prompts: ["Array + scan for LRU — costs? Why does that fail the O(1) ask?", "What two jobs does the structure need?"],
+        hints: ["Scan is O(n). Need: O(1) lookup by key AND O(1) reorder/evict by recency."]
+      },
+      plan: {
+        prompts: ["Which two structures? What does each own?", "Where do new / freshly used nodes go? Where does eviction happen?"],
+        hints: ["HashMap key→node + doubly linked list MRU at head / LRU at tail. Sentinels simplify edge cases."]
+      },
+      code: {
+        prompts: ["Write _remove and _add_to_head before get/put.", "On overflow, which node do you delete from the map?"],
+        hints: ["Evict tail.prev — and delete map[node.key]. Existing-key put must move to head."]
+      },
+      test: {
+        prompts: ["Trace the classic LeetCode sequence. Restate per-op complexity.", "Capacity 1 edge case."],
+        hints: ["Every op is O(1) pointer rewires + hash. Capacity 1: every new put evicts the only entry."]
+      }
+    },
+    rubric: [
+      { phase: "clarify", text: "Confirmed put refreshes; miss returns -1; walked the capacity-2 eviction trace." },
+      { phase: "brute",   text: "Rejected scan-based LRU as O(n) vs the O(1) requirement." },
+      { phase: "plan",    text: "Named HashMap + doubly linked list and their roles." },
+      { phase: "plan",    text: "Stated MRU-at-head / evict-tail invariant (or equivalent)." },
+      { phase: "code",    text: "Helpers to remove a node and insert at head." },
+      { phase: "code",    text: "get moves to head; put updates-or-inserts and evicts when over capacity." },
+      { phase: "code",    text: "Map stays in sync on eviction." },
+      { phase: "test",    text: "Traced the classic sequence including get(2) → -1." },
+      { phase: "test",    text: "Stated O(1) get/put." }
+    ],
+    model: "<p><b>Shape:</b> map for lookup + DLL for recency order.</p><p><b>Core:</b> sentinels; get/put splice node to head; on overflow delete tail.prev from list and map.</p><p><b>Senior move:</b> said the two-structure plan before coding; called out that put-on-existing refreshes.</p>"
+  },
+
+  {
     id: "daily-temps", level: "core", lesson: "pat-stack",
     title: "Daily Temperatures",
     prompt: "Given daily temperatures, return for each day how many days you'd wait until a warmer one. If none ever comes, put 0.",

@@ -51,6 +51,7 @@
     "intervals":       { label: "Intervals (sort & sweep)",lesson: "pat-intervals" },
     "trie":            { label: "Trie",                    lesson: "pat-tries" },
     "union-find":      { label: "Union-Find",              lesson: "pat-union-find" },
+    "design":           { label: "Design (LRU / API)",      lesson: "pat-design" },
     "bits":            { label: "Bit manipulation",        lesson: "pat-bits" }
   };
 

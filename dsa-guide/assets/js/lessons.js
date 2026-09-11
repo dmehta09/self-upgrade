@@ -30,6 +30,7 @@ window.LESSONS = [
   { id: "pat-greedy",          title: "Greedy",                        url: "patterns/greedy.html",              module: "patterns",    tool: "patterns" },
   { id: "pat-tries",           title: "Tries",                         url: "patterns/tries.html",               module: "patterns",    tool: "patterns" },
   { id: "pat-union-find",      title: "Union-Find",                    url: "patterns/union-find.html",          module: "patterns",    tool: "patterns" },
+  { id: "pat-design",          title: "Design",                        url: "patterns/design.html",              module: "patterns",    tool: "patterns" },
   { id: "pat-bits",            title: "Bit Manipulation",              url: "patterns/bits.html",                module: "patterns",    tool: "patterns" }
 ];
 
