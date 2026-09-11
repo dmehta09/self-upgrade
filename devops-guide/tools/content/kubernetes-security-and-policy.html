@@ -1,0 +1,56 @@
+<section class="hero reveal">
+  <span class="eyebrow">Kubernetes · security</span>
+  <h1>RBAC, NetworkPolicy &amp; PSA.</h1>
+  <p class="lead">A cluster without admission and network boundaries is a flat LAN with root-ish pods. Lock identity (<b>RBAC</b>), east-west traffic (<b>NetworkPolicy</b>), and pod privileges (<b>Pod Security Admission</b>) before you scale GitOps.</p>
+</section>
+
+<section class="section reveal" id="rbac">
+  <h2><span class="section-num">01</span> RBAC: who can do what</h2>
+  <p class="takeaway"><b>Role</b>/<b>ClusterRole</b> list allowed API verbs on resources; <b>RoleBinding</b>/<b>ClusterRoleBinding</b> attach them to users, groups, or ServiceAccounts. Prefer namespace Roles; reserve ClusterRoles for platform needs.</p>
+  <dl class="kv">
+    <dt>ServiceAccount</dt><dd>Identity for pods. Default SA in a namespace is often too broad — create one per app.</dd>
+    <dt>Least privilege</dt><dd>Grant <code>get/list/watch</code> on specific resources, not <code>*</code> on <code>*.*</code>.</dd>
+    <dt>IRSA / Pod Identity</dt><dd>Maps the SA to a cloud IAM role so the pod never holds long-lived cloud keys (see AWS IAM lesson).</dd>
+  </dl>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">role.yaml</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="yaml">apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: { name: config-reader, namespace: payments }
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]</code></pre></div>
+</section>
+
+<section class="section reveal" id="netpol">
+  <h2><span class="section-num">02</span> NetworkPolicy: default-deny east-west</h2>
+  <p class="takeaway">Without a CNI that enforces NetworkPolicy, every pod can talk to every pod. Start <b>default-deny ingress</b> in a namespace, then allow only the paths you need (frontend → API → DB).</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>RBAC is the badge reader on the office door (API access). NetworkPolicy is who can walk the corridors between rooms. PSA is the rule that forbids bringing a blowtorch into the building.</p></div></div>
+</section>
+
+<section class="section reveal" id="psa">
+  <h2><span class="section-num">03</span> Pod Security Admission</h2>
+  <p class="takeaway"><b>PSA</b> labels namespaces with <code>pod-security.kubernetes.io/enforce: restricted|baseline|privileged</code>. Restricted bans hostPath, privileged containers, and running as root — make it the default for app namespaces.</p>
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Privileged / hostPath</div>
+      <ul><li>Container breakout → node compromise.</li><li>Fine for kube-system agents; deadly for random apps.</li></ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Restricted</div>
+      <ul><li>Non-root, drop caps, read-only root FS where possible.</li><li>Pair with resource limits and read-only mounts.</li></ul>
+    </div>
+  </div>
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Policy engines <span class="tag">P1</span></div><p>Kyverno / Gatekeeper add custom policies (required labels, banned registries) beyond PSA. Mention them in interviews; PSA is the built-in floor.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">04</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">A microservice needs to read one ConfigMap and call the payments API. What is the wrong default?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Bind <code>cluster-admin</code> to its ServiceAccount "just for now" and skip NetworkPolicy.</button>
+      <button class="quiz-opt"><span class="mark"></span>Namespace Role with get on that ConfigMap + NetworkPolicy allowing only payments egress + restricted PSA.</button>
+      <button class="quiz-opt"><span class="mark"></span>Dedicated ServiceAccount with IRSA for any AWS calls it needs.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> <code>cluster-admin</code> is the classic interview fail. Scope RBAC, constrain traffic, enforce restricted pods.</div>
+  </div>
+</section>

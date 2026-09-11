@@ -25,7 +25,7 @@ Clone the newest sibling pattern. No runtime build, no dependencies; opens at `f
 ## Design system
 - Fonts: Fraunces (display), Hanken Grotesk (body), JetBrains Mono (code). Dark-first + warm-paper light theme; toggle persisted to `localStorage["devops-theme"]`.
 - `assets/css/styles.css` (shared design system), `assets/css/theme.css` (brand + per-module accents + search/progress components), `assets/css/devops.css` (Q&A, versus, journey, home cards, flashcards, and the engines).
-- Per-module accent via `<body data-tool="<module>">`: foundations(sky) · linux-networking(emerald) · cicd(violet) · containers(blue) · kubernetes(indigo) · iac(purple) · aws(orange) · delivery(rose) · operate(teal) · interview(cyan).
+- Per-module accent via `<body data-tool="<module>">`: foundations(sky) · linux-networking(emerald) · cicd(violet) · containers(blue) · kubernetes(indigo) · iac(purple) · aws(orange) · delivery(rose) · platform(amber) · operate(teal) · interview(cyan).
 - localStorage namespace: `devops-progress`, `devops-theme`, `devops-cards`.
 
 ## Interactive engines (`assets/js/`)

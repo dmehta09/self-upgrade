@@ -1,0 +1,71 @@
+<section class="hero reveal">
+  <span class="eyebrow">Kubernetes · packaging</span>
+  <h1>Helm &amp; Kustomize packaging.</h1>
+  <p class="lead">Raw YAML doesn't scale across environments. <b>Helm</b> packages apps as versioned charts with values; <b>Kustomize</b> layers patches over a base. Most teams use one as the primary, and often both at the edges.</p>
+</section>
+
+<section class="section reveal" id="problem">
+  <h2><span class="section-num">01</span> Why packaging exists</h2>
+  <p class="takeaway">You need the <b>same workload</b> in staging and prod with different replicas, images, and secrets — without copy-paste drift. Packaging tools generate or overlay the final manifests the cluster applies (often via GitOps).</p>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Helm is a recipe card with blanks ("servings," "oven temp") you fill per dinner. Kustomize is the same photo of a plated dish with sticky notes for "double the salt in prod" — you keep the base photo and layer edits.</p></div></div>
+</section>
+
+<section class="section reveal" id="helm">
+  <h2><span class="section-num">02</span> Helm charts</h2>
+  <p class="takeaway">A <b>chart</b> is a versioned package: templates + <code>values.yaml</code> + Chart.yaml. <code>helm install/upgrade</code> renders templates and talks to the API server (or you render and hand YAML to Argo CD).</p>
+  <dl class="kv">
+    <dt>values.yaml</dt><dd>Defaults; override per env with <code>-f values-prod.yaml</code> or <code>--set</code>.</dd>
+    <dt>Templates</dt><dd>Go-templated Kubernetes manifests under <code>templates/</code>.</dd>
+    <dt>Release</dt><dd>A named install of a chart in a namespace — Helm tracks revision history for rollback.</dd>
+    <dt>OCI / repos</dt><dd>Charts published as OCI artifacts or classic chart repos.</dd>
+  </dl>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">values-prod.yaml</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="yaml">replicaCount: 4
+image:
+  tag: "1.8.2"
+resources:
+  requests: { cpu: 250m, memory: 256Mi }
+ingress:
+  enabled: true
+  host: api.example.com</code></pre></div>
+</section>
+
+<section class="section reveal" id="kustomize">
+  <h2><span class="section-num">03</span> Kustomize overlays</h2>
+  <p class="takeaway"><b>Kustomize</b> (built into <code>kubectl -k</code>) keeps plain YAML in a <code>base/</code> and applies strategic patches / images / replicas in <code>overlays/staging</code> and <code>overlays/prod</code>. No template language — diffs stay readable.</p>
+  <div class="codeblock"><div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">overlays/prod/kustomization.yaml</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+  <pre><code data-lang="yaml">resources:
+  - ../../base
+images:
+  - name: ghcr.io/acme/api
+    newTag: "1.8.2"
+replicas:
+  - name: api
+    count: 4</code></pre></div>
+</section>
+
+<section class="section reveal" id="choose">
+  <h2><span class="section-num">04</span> When each wins</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th></th><th>Helm</th><th>Kustomize</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Strength</strong></td><td>Packaging/sharing apps; complex optionality; ecosystem charts</td><td>Env overlays; GitOps-friendly plain YAML; small diffs</td></tr>
+      <tr><td><strong>Cost</strong></td><td>Template logic can hide intent; values sprawl</td><td>Awkward for highly optional features; less "app store"</td></tr>
+      <tr><td><strong>Common combo</strong></td><td colspan="2">Vendor Helm chart → <code>helm template</code> → Kustomize overlay for your cluster</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Gotcha <span class="tag">trap</span></div><p>Don't maintain three full copies of every manifest "because GitOps." Either chart values or overlays should be the single place env differences live. Pin chart versions; never <code>latest</code> in prod.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">You consume a third-party operator chart but need your own NetworkPolicies and replica counts. Sensible approach?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Render or vendor the chart, then apply a Kustomize overlay (or values file) for your patches — don't fork the whole chart unless you must.</button>
+      <button class="quiz-opt"><span class="mark"></span>Copy-paste the rendered YAML into three folders and edit by hand forever.</button>
+      <button class="quiz-opt"><span class="mark"></span>Only use ConfigMaps; packaging tools are for greenfield apps.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Charts are for distribution; overlays/values are for your env deltas. Forking every upstream chart is how drift and CVE lag explode.</div>
+  </div>
+</section>

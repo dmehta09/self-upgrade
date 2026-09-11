@@ -1,0 +1,149 @@
+<section class="hero reveal">
+  <span class="eyebrow">Git &amp; CI/CD · OIDC &amp; reuse</span>
+  <h1>Pipeline auth, OIDC &amp; reusable workflows.</h1>
+  <p class="lead">Stop storing long-lived cloud keys in CI. <b>OIDC federation</b> lets GitHub Actions assume a short-lived AWS role; <b>environments</b> add protection rules; <b>reusable workflows</b> keep every repo from reinventing the pipeline.</p>
+</section>
+
+<section class="section reveal" id="oidc">
+  <h2><span class="section-num">01</span> OIDC → assume role (no static keys)</h2>
+  <p class="takeaway">The runner requests an OIDC token from GitHub; AWS trusts that issuer and mints temporary credentials for a role. The trust policy pins <b>repo, branch, or environment</b> — so a fork PR can't assume prod.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Static keys are a house key under the mat — anyone who finds it walks in forever. OIDC is a <b>hotel keycard that expires when checkout ends</b>: GitHub vouches "this job is from repo X on main," AWS hands a short-lived card, and the trust policy decides which rooms that card opens.</p></div></div>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">GHA OIDC → AWS credentials</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "OIDC assume role",
+      "nodes": [
+        { "id": "job", "label": "GHA job", "type": "source", "col": 0, "row": 1 },
+        { "id": "oidc", "label": "GitHub OIDC", "type": "gate", "col": 1, "row": 1 },
+        { "id": "sts", "label": "AWS STS", "type": "reconciler", "col": 2, "row": 1 },
+        { "id": "aws", "label": "Deploy / TF", "type": "actual", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "job", "to": "oidc", "label": "request token" },
+        { "from": "oidc", "to": "sts", "label": "federate" },
+        { "from": "sts", "to": "aws", "label": "temp creds" }
+      ],
+      "steps": [
+        { "node": "job", "caption": "A deploy job starts with permissions: id-token: write." },
+        { "edge": ["job","oidc"], "caption": "The runner fetches a short-lived OIDC JWT asserting repo, ref, and environment." },
+        { "edge": ["oidc","sts"], "caption": "aws-actions/configure-aws-credentials exchanges it; the IAM trust policy must match.", "status": "hit" },
+        { "edge": ["sts","aws"], "caption": "STS returns temporary keys. The job deploys or runs Terraform — no long-lived secret in GitHub.", "status": "hit" }
+      ] }
+    </script>
+    <p class="viz-fallback">The job requests a GitHub OIDC token, AWS STS federates it into temporary role credentials, then the job deploys — no static AWS keys stored in CI.</p>
+  </figure>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">.github/workflows/deploy.yml</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="yaml">jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC token
+      contents: read
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123:role/gha-prod
+          aws-region: us-east-1
+      - run: ./deploy.sh</code></pre>
+  </div>
+</section>
+
+<section class="section reveal" id="envs">
+  <h2><span class="section-num">02</span> Environments &amp; protection rules</h2>
+  <p class="takeaway">GitHub <b>Environments</b> gate jobs that name them: required reviewers, wait timers, and branch restrictions. Pair with OIDC trust on <code>environment:production</code> so only protected jobs can assume the prod role.</p>
+
+  <dl class="kv">
+    <dt>Required reviewers</dt><dd>A human must approve before the job runs — change control without a separate tool.</dd>
+    <dt>Deployment branches</dt><dd>Only <code>main</code> (or release tags) can deploy to prod.</dd>
+    <dt>Environment secrets</dt><dd>Scoped secrets not available to unprotected workflows.</dd>
+    <dt>Trust condition</dt><dd>IAM <code>sub</code> / <code>environment</code> claim must match — forks and feature branches fail STS.</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>OIDC with a trust policy of <code>repo:org/*:*</code> is barely better than a static key — any workflow in any branch can assume the role. Pin to <code>ref:refs/heads/main</code> and/or a specific <code>environment</code>, and use separate roles for staging vs prod.</p></div></div>
+</section>
+
+<section class="section reveal" id="reuse">
+  <h2><span class="section-num">03</span> Reusable workflows &amp; composite actions</h2>
+  <p class="takeaway"><b>Reusable workflows</b> (<code>workflow_call</code>) share whole job graphs across repos. <b>Composite actions</b> share a sequence of steps. Centralize lint/test/OIDC-deploy once; version them so callers pin a tag or SHA.</p>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">.github/workflows/ci.yml (caller)</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="yaml">jobs:
+  test:
+    uses: acme/platform-workflows/.github/workflows/node-ci.yml@v3
+    with:
+      node-version: "22"
+  deploy:
+    needs: test
+    uses: acme/platform-workflows/.github/workflows/oidc-deploy.yml@v3
+    secrets: inherit
+    with:
+      environment: production</code></pre>
+  </div>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Reusable workflow</div>
+      <ul><li>Whole jobs / pipeline shape.</li><li>Caller passes inputs + secrets.</li><li>Best for org-standard CI/CD.</li></ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Composite action</div>
+      <ul><li>A few steps inside a job.</li><li>Like a scripted function.</li><li>Best for checkout+setup+scan snippets.</li></ul>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Why prefer OIDC role assumption over storing <code>AWS_SECRET_ACCESS_KEY</code> as a GitHub secret?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Credentials are short-lived and scoped by trust policy (repo/ref/env) — a leaked static key stays valid until someone rotates it.</button>
+      <button class="quiz-opt"><span class="mark"></span>OIDC is required by Kubernetes; static keys cannot talk to EKS at all.</button>
+      <button class="quiz-opt"><span class="mark"></span>GitHub rejects workflows that declare any secrets.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Blast radius and rotation: temporary STS creds expire quickly, and the IAM trust policy decides which workflows may assume the role.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How does GitHub Actions authenticate to AWS without long-lived keys?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Enable OIDC: the job requests an <code>id-token</code>, AWS has an identity provider for GitHub, and an IAM role trust policy allows assume-role when claims match (org/repo, ref, environment). <code>configure-aws-credentials</code> exchanges the JWT for temporary STS credentials. No static access keys in secrets.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"GitHub mints a short-lived OIDC token for the job; AWS trusts that issuer and hands temporary role credentials. The trust policy pins which repo and environment can assume prod."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What are GitHub Environments for in a deploy pipeline?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>They attach protection rules to jobs that target them — required reviewers, wait timers, allowed branches — and hold environment-scoped secrets. Combined with OIDC trust on that environment name, only approved deploys to <code>production</code> can assume the prod role.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Environments are the approval gate and secret scope for deploys — required reviewers plus branch rules, and the IAM trust can require that environment claim."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Reusable workflows vs composite actions?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>Reusable workflows</b> share entire called workflows (jobs, needs, environments) across repositories — ideal for org-standard CI/CD. <b>Composite actions</b> bundle steps inside a single job — ideal for small shared snippets. Pin both by version/SHA so callers don't float on <code>main</code>.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Reusable workflows share whole pipelines; composite actions share a few steps. Platform team owns the versions; app repos call them pinned."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

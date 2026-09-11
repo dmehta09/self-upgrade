@@ -28,20 +28,20 @@ output "api_url" {
 
 <section class="section reveal" id="remote-state">
   <h2><span class="section-num">02</span> Remote state &amp; locking</h2>
-  <p class="takeaway">Store state <b>remotely</b> (S3 + a DynamoDB lock table, or Terraform Cloud) so the whole team shares one source of truth. <b>State locking</b> stops two concurrent <code>apply</code>s from corrupting it.</p>
-  <p>Local state on one laptop is a disaster waiting to happen: nobody else can apply, the file gets lost, and two people running apply at once race each other into a corrupt state. The S3 backend holds the file (encrypted), DynamoDB holds the lock.</p>
+  <p class="takeaway">Store state <b>remotely</b> (S3 with <b>native lockfile</b>, or Terraform Cloud) so the whole team shares one source of truth. <b>State locking</b> stops two concurrent <code>apply</code>s from corrupting it — and the modern default is S3's own lock, not a separate DynamoDB table.</p>
+  <p>Local state on one laptop is a disaster waiting to happen: nobody else can apply, the file gets lost, and two people running apply at once race each other into a corrupt state. The S3 backend holds the encrypted state <em>and</em> the lockfile beside it.</p>
 
-  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Pro tip <span class="tag">tip</span></div><p>Think of remote state with locking as a <em>shared document with edit-locking</em> — like a Google Doc that grabs a lock while one person types. Everyone reads the same latest version, and two people can't overwrite each other mid-save. Local state is emailing a copy around and praying nobody edits the stale one.</p></div></div>
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Remote state with locking is a <em>shared document with edit-locking</em> — like a Google Doc that grabs a lock while one person types. Everyone reads the same latest version, and two people can't overwrite each other mid-save. Local state is emailing a Word doc around and praying nobody edits the stale copy. The modern twist: the lock lives <b>in the same filing cabinet</b> (S3) as the doc — you no longer need a separate lock binder (DynamoDB) on another shelf.</p></div></div>
 
   <div class="codeblock">
     <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">backend.tf</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
     <pre><code data-lang="hcl">terraform {
   backend "s3" {
-    bucket         = "acme-tfstate"
-    key            = "prod/terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "tf-locks"   # state locking
-    encrypt        = true         # encrypt at rest
+    bucket       = "acme-tfstate"
+    key          = "prod/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true   # S3 native locking (modern default)
   }
 }</code></pre>
   </div>
@@ -51,9 +51,11 @@ output "api_url" {
       <ul><li>Only one engineer can run Terraform.</li><li>Disk dies → state (and secrets) lost.</li><li>Two applies = corrupted state, no lock.</li><li>Often accidentally committed to Git.</li></ul>
     </div>
     <div class="vs-col vs-good"><div class="vs-h">Remote, locked, encrypted</div>
-      <ul><li>S3 holds one shared, versioned state file.</li><li>DynamoDB lock serializes every apply.</li><li>Encrypted at rest; never in the repo.</li><li>CI and humans use the same backend.</li></ul>
+      <ul><li>S3 holds one shared, versioned state file.</li><li><b>S3 native lockfile</b> serializes every apply.</li><li>Encrypted at rest; never in the repo.</li><li>CI and humans use the same backend.</li></ul>
     </div>
   </div>
+
+  <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><div class="co-body"><div class="co-title">Legacy note <span class="tag">history</span></div><p>Older tutorials pair S3 with a <b>DynamoDB lock table</b> (<code>dynamodb_table = "tf-locks"</code>). That still works, but it's the <b>legacy</b> pattern — an extra service, extra IAM, and another thing to operate. Prefer <code>use_lockfile = true</code> (S3 conditional writes) for new backends; migrate when you touch existing ones.</p></div></div>
 
   <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Local state on one laptop leads to lost or conflicting state, and two applies without a lock <b>corrupt the state file</b> — which can orphan or double-create real resources. Always use a remote backend with locking, even for a solo project that might grow a second contributor.</p></div></div>
 </section>
@@ -102,9 +104,9 @@ output "api_url" {
       <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you manage Terraform state for a team, and what is state locking?</span><span class="pm-chip diff-core">core</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p>Use a <b>remote backend</b> — typically S3 with encryption for the state, plus a DynamoDB table for <b>locking</b> (or Terraform Cloud). Everyone reads and writes the same shared, versioned state. <b>State locking</b> takes an exclusive lock during <code>apply</code> so two people can't run concurrently and corrupt it; the second apply waits for the lock.</p>
-        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"S3 for shared encrypted state, DynamoDB for the lock. Locking serializes applies so two people can't corrupt state at once — like edit-locking a shared doc. Never local state on a laptop."</p></div></div>
-        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>Why encrypt the state? (It can hold secrets like DB passwords in plaintext.)</li><li>What if a lock gets stuck? (<code>terraform force-unlock</code> with the lock ID — carefully.)</li></ul></div>
+        <p>Use a <b>remote backend</b> — typically S3 with encryption and <b>native state locking</b> via <code>use_lockfile = true</code> (or Terraform Cloud). Everyone reads and writes the same shared, versioned state. <b>State locking</b> takes an exclusive lock during <code>apply</code> so two people can't run concurrently and corrupt it; the second apply waits for the lock. DynamoDB lock tables are the older pattern — still valid, but not what I'd set up new.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Encrypted S3 for shared state, with S3 native lockfile locking — no DynamoDB table needed anymore. Locking serializes applies so two people can't corrupt state at once. Never local state on a laptop."</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>Why encrypt the state? (It can hold secrets like DB passwords in plaintext.)</li><li>What about DynamoDB locks? (Legacy — still works; new backends use <code>use_lockfile</code>.)</li><li>What if a lock gets stuck? (<code>terraform force-unlock</code> with the lock ID — carefully.)</li></ul></div>
       </div>
     </details>
     <details class="qa">

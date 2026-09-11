@@ -29,6 +29,7 @@ const MODULES = [
     { slug: "git-and-branching",      title: "Git & branching models",            nav: "Git & branching",        id: "ci-git" },
     { slug: "continuous-integration", title: "Continuous integration",            nav: "Continuous integration", id: "ci-ci", widgets: ["reqflow.js"] },
     { slug: "continuous-delivery",    title: "Continuous delivery & deployment",  nav: "Continuous delivery",    id: "ci-cd", widgets: ["reqflow.js"] },
+    { slug: "pipeline-auth-and-reuse", title: "Pipeline auth, OIDC & reusable workflows", nav: "OIDC & reuse", id: "ci-auth", widgets: ["reqflow.js"] },
   ]},
   { key: "containers", label: "Containers (Docker)", pages: [
     { slug: "images-and-dockerfiles", title: "Images & Dockerfiles", nav: "Images & Dockerfiles", id: "co-images" },
@@ -38,6 +39,8 @@ const MODULES = [
     { slug: "k8s-mental-model",      title: "The Kubernetes mental model", nav: "Mental model",        id: "ku-model",     widgets: ["reqflow.js"] },
     { slug: "core-objects",          title: "Core objects",                nav: "Core objects",        id: "ku-objects",   widgets: ["reqflow.js"] },
     { slug: "workloads-and-scaling", title: "Workloads, scaling & config", nav: "Workloads & scaling", id: "ku-workloads" },
+    { slug: "helm-and-kustomize",    title: "Helm & Kustomize packaging",  nav: "Helm & Kustomize",    id: "ku-helm" },
+    { slug: "security-and-policy",   title: "RBAC, NetworkPolicy & PSA",   nav: "Security & policy",   id: "ku-security" },
   ]},
   { key: "iac", label: "Infrastructure as Code", pages: [
     { slug: "iac-and-terraform-model", title: "IaC & the Terraform model", nav: "IaC & Terraform model", id: "ia-model" },
@@ -52,10 +55,15 @@ const MODULES = [
     { slug: "release-strategies",          title: "Release strategies",            nav: "Release strategies", id: "de-release", widgets: ["deploy-viz.js"] },
     { slug: "gitops-progressive-delivery", title: "GitOps & progressive delivery", nav: "GitOps",             id: "de-gitops",  widgets: ["reqflow.js", "tradeoff.js"] },
   ]},
+  { key: "platform", label: "Platform Engineering", pages: [
+    { slug: "idp-and-golden-paths", title: "IDPs & golden paths",              nav: "IDP & golden paths", id: "pl-idp", widgets: ["reqflow.js"] },
+    { slug: "service-catalog",      title: "Service catalog & developer portals", nav: "Service catalog", id: "pl-catalog" },
+  ]},
   { key: "operate", label: "Reliability & Security", pages: [
     { slug: "incident-response",          title: "Incident response & on-call", nav: "Incident response",        id: "op-incident" },
     { slug: "postmortems-and-resilience", title: "Postmortems & resilience",    nav: "Postmortems & resilience", id: "op-postmortem" },
     { slug: "devsecops-essentials",       title: "DevSecOps essentials",        nav: "DevSecOps",                id: "op-security" },
+    { slug: "deploy-health-handoff",      title: "Deploy health → observability handoff", nav: "Deploy → observability", id: "op-handoff" },
   ]},
 ];
 
