@@ -113,6 +113,7 @@ Author commands (after this pass):
 
 | Concept | Page / engine | Must say | Status |
 |---------|---------------|----------|--------|
+| Verbal bank | [ecosystem/interview-gotchas.html](langstack/ecosystem/interview-gotchas.html) | Opening line + HITL footgun | ⬜ |
 | LCEL | [langchain/concepts.html](langstack/langchain/concepts.html) pipeviz | `prompt \| model \| parser` | ⬜ |
 | Agent factory | LangChain `create_agent` (not deprecated `create_react_agent`) | middleware is the customization surface | ⬜ |
 | HITL | [langgraph/concepts.html](langstack/langgraph/concepts.html) / advanced | `interrupt` re-runs node — side effects before interrupt are dangerous | ⬜ |
@@ -246,6 +247,8 @@ Author commands (after this pass):
 - [x] `bin/guide` CLI
 - [x] FastAPI `session.query` + `include_router` fixes
 - [x] LangStack `create_agent` + LangSmith Deployment naming
+- [x] DSA Python coding-round bank
+- [x] LangStack interview gotchas verbal bank
 
 ### Still open
 
@@ -274,9 +277,8 @@ Skip foundations. Engines first. Checklist also on [`index.html#senior-path`](in
 | Block | Time | Open |
 |-------|------|------|
 | GenAI | 45m | [Attention](genai-guide/internals/attention-mechanism.html) → [workflows](genai-guide/rag/architectures-and-workflows.html) → [hybrid RAG](genai-guide/rag/hybrid-search-and-reranking.html) → [Q bank](genai-guide/interview/question-bank.html) → [RAG SD](genai-guide/interview/system-design/rag-chatbot.html) |
-| LangStack | 35m | [Middleware](langstack/langchain/middleware.html) → [HITL advanced](langstack/langgraph/advanced.html) → [evals](langstack/langsmith/evals.html) |
-| FastAPI | 40m | [DI](fastapi-guide/fastapi/dependencies.html) → [async DB](fastapi-guide/fastapi/async-db.html) → [Auth II](fastapi-guide/fastapi/auth.html#auth-ii) → [async tests](fastapi-guide/deploy/index.html#async-tests) |
-| DSA | 50m | [Pattern map](dsa-guide/patterns/index.html) → [Min Window](dsa-guide/patterns/sliding-window.html#min-window) → [LRU](dsa-guide/patterns/design.html) → [2D DP](dsa-guide/patterns/dynamic-programming.html#unique-paths) → [Meeting Rooms II](dsa-guide/patterns/intervals.html#meeting-rooms-ii) |
+| DSA | 50m | [Pattern map](dsa-guide/patterns/index.html) → [Python bank](dsa-guide/reference/python-coding-round.html) → [Min Window](dsa-guide/patterns/sliding-window.html#min-window) → [LRU](dsa-guide/patterns/design.html) → [2D DP](dsa-guide/patterns/dynamic-programming.html#unique-paths) → [Meeting Rooms II](dsa-guide/patterns/intervals.html#meeting-rooms-ii) |
+| LangStack | 35m | [Gotchas](langstack/ecosystem/interview-gotchas.html) → [Middleware](langstack/langchain/middleware.html) → [HITL advanced](langstack/langgraph/advanced.html) → [evals](langstack/langsmith/evals.html) |
 
 ---
 

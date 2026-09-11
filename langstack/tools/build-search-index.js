@@ -14,7 +14,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const FILES = [
   "index.html",
-  "ecosystem/index.html", "ecosystem/glossary.html",
+  "ecosystem/index.html", "ecosystem/interview-gotchas.html", "ecosystem/glossary.html",
   "langchain/index.html", "langchain/concepts.html", "langchain/middleware.html", "langchain/rag.html",
   "langgraph/index.html", "langgraph/concepts.html", "langgraph/agents.html", "langgraph/advanced.html",
   "langsmith/index.html", "langsmith/concepts.html", "langsmith/evals.html",
