@@ -43,6 +43,7 @@
           <a class="nav-link" href="#longest-substring">Longest Substring Without Repeating Characters</a>
           <a class="nav-link" href="#min-window">Minimum Window Substring</a>
           <a class="nav-link" href="#sliding-window-maximum">Sliding Window Maximum</a>
+          <a class="nav-link" href="#char-replacement">Longest Repeating Character Replacement</a>
         </div>
         <a class="nav-link" href="../patterns/stack.html">Stack</a>
         <a class="nav-link" href="../patterns/binary-search.html">Binary Search</a>
@@ -770,6 +771,152 @@ print(max_sliding_window([1], 1))
             </details>
           </section>
 
+
+          <!-- ===== PROBLEM 5: LONGEST REPEATING CHARACTER REPLACEMENT ===== -->
+          <section class="section problem reveal" id="char-replacement">
+            <header class="problem-meta">
+              <h2><span class="section-num">05</span> &nbsp;Longest Repeating Character Replacement</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Sliding Window</span>
+                <span class="pm-chip diff-medium">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~20 min</span>
+                <span class="pm-chip cx">O(n) time · O(1) space</span>
+              </div>
+            </header>
+            <p class="lead">You may replace any character in a string up to <code>k</code> times. Return the length of the longest substring you can make into <strong>all the same letter</strong>. Examples: <code>s = "ABAB"</code>, <code>k = 2</code> → <code>4</code>; <code>s = "AABABBA"</code>, <code>k = 1</code> → <code>4</code>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">A paint budget for the minority letters <span class="tag">analogy</span></div>
+                <p>Grow a window. The cheapest way to make it uniform is to keep the letter that already appears most often and repaint everyone else. If <code>windowLen - maxFreq &gt; k</code>, you've overspent — slide the left edge forward until the budget fits again. Track the best window length along the way.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Sliding window with replacement budget k">
+              <figcaption class="viz-title">Valid while (len − maxFreq) ≤ k</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": ["A", "B", "A", "B"] },
+                "frames": [
+                  {"win":[0,1],"pointers":[{"name":"L","at":0},{"name":"R","at":1}],"active":[0,1],"caption":"k=2. Window AB: maxFreq=1, replacements needed = 2−1 = 1 ≤ 2. OK."},
+                  {"win":[0,3],"pointers":[{"name":"L","at":0},{"name":"R","at":3}],"active":[0,1,2,3],"caption":"Grow to ABAB: maxFreq still 2 (A or B), need 4−2 = 2 ≤ 2. Whole string is valid → best = 4."},
+                  {"win":[0,3],"caption":"Invariant: keep the window valid by shrinking when replacements would exceed k."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Variable sliding window with a frequency map (26 letters → O(1) space):</p>
+            <ol>
+              <li>Expand <code>right</code>, bump <code>count[s[right]]</code>, and refresh <code>max_freq</code> (highest count in the window).</li>
+              <li>While <code>(right - left + 1) - max_freq &gt; k</code>, decrement <code>count[s[left]]</code> and advance <code>left</code>.</li>
+              <li>After each fix-up, update <code>best = max(best, right - left + 1)</code>.</li>
+            </ol>
+            <p>You don't need to recompute <code>max_freq</code> when shrinking — a slightly stale max only makes the window shrink sooner, never wrongly grow past k. Interviewers love hearing that.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(n)</span></td><td>Each index enters and leaves the window at most once.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-great">O(1)</span></td><td>At most 26 letter counts (or a fixed alphabet).</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">What does <code>windowLen - maxFreq</code> mean?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>The number of distinct letters in the window</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>How many characters you must replace to make the window all equal to the majority letter</button>
+                <button class="quiz-opt"><span class="mark"></span>The longest run of identical characters so far</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Keep the letter with frequency <code>maxFreq</code>; everyone else needs a replacement. That count is exactly <code>len - maxFreq</code>, and it must stay ≤ <code>k</code>.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Grow right; track counts and <code>max_freq</code>. While <code>right - left + 1 - max_freq &gt; k</code>, drop <code>s[left]</code> and <code>left += 1</code>. Then update best length.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">character_replacement.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="22">
+def character_replacement(s, k):
+    count = {}
+    left = 0
+    max_freq = 0
+    best = 0
+    for right, ch in enumerate(s):
+        count[ch] = count.get(ch, 0) + 1
+        max_freq = max(max_freq, count[ch])
+        while (right - left + 1) - max_freq > k:
+            count[s[left]] -= 1
+            left += 1
+        best = max(best, right - left + 1)
+    return best
+
+print(character_replacement("ABAB", 2))
+print(character_replacement("AABABBA", 1))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">4
+4</pre></div>
+                </div>
+                <p>Same grow/shrink skeleton as longest-substring on this page — the validity rule is the replacement budget instead of “all unique.”</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Longest repeating replacement is a sliding window whose invariant is <code>(len - maxFreq) ≤ k</code>. Track letter counts + max frequency; shrink from the left when the budget breaks. O(n) / O(1) alphabet.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[left = 0, maxFreq = 0, best = 0] --> loop[For each right and ch]
+  loop --> bump["count ch += 1, refresh maxFreq"]
+  bump --> over{"len - maxFreq &gt; k?"}
+  over -->|yes| shrink["Drop s left, left += 1"]
+  shrink --> over
+  over -->|no| best[Update best with window length]
+  best --> more{More chars?}
+  more -->|yes| loop
+  more -->|no| out[Return best]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def character_replacement(s, k):</code><span>Longest substring length makeable uniform with ≤ k replacements.</span></li>
+                  <li><code>count = {}</code><span>Frequency of each character inside the window.</span></li>
+                  <li><code>left = 0</code><span>Left edge of the current window.</span></li>
+                  <li><code>max_freq = 0</code><span>Highest single-letter count seen in a window (may be slightly stale when shrinking).</span></li>
+                  <li><code>best = 0</code><span>Best valid window length so far.</span></li>
+                  <li><code>for right, ch in enumerate(s):</code><span>Grow the right edge one character at a time.</span></li>
+                  <li><code>count[ch] = count.get(ch, 0) + 1</code><span>Include the new character in the window counts.</span></li>
+                  <li><code>max_freq = max(max_freq, count[ch])</code><span>Maybe this letter is the new majority.</span></li>
+                  <li><code>while (right - left + 1) - max_freq &gt; k:</code><span>Too many non-majority chars — over budget.</span></li>
+                  <li><code>count[s[left]] -= 1</code><span>Remove the leftmost character from the window.</span></li>
+                  <li><code>left += 1</code><span>Shrink until replacements needed ≤ k again.</span></li>
+                  <li><code>best = max(best, right - left + 1)</code><span>Window is valid — record its length.</span></li>
+                  <li><code>return best</code><span>Longest uniform-after-replacements length.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) — both edges only move forward; space O(1) for a fixed alphabet counter.</p>
+              </div>
+            </details>
+          </section>
+
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -785,6 +932,7 @@ print(max_sliding_window([1], 1))
           <a href="#longest-substring">Longest Substring Without Repeating Characters</a>
           <a href="#min-window">Minimum Window Substring</a>
           <a href="#sliding-window-maximum">Sliding Window Maximum</a>
+          <a href="#char-replacement">Longest Repeating Character Replacement</a>
         </aside>
       </div>
 

@@ -49,6 +49,8 @@
           <a class="nav-link" href="#lca">Lowest Common Ancestor</a>
           <a class="nav-link" href="#invert-tree">Invert Binary Tree</a>
           <a class="nav-link" href="#same-tree">Same Tree</a>
+          <a class="nav-link" href="#subtree">Subtree of Another Tree</a>
+          <a class="nav-link" href="#kth-smallest">Kth Smallest Element in a BST</a>
         </div>
         <a class="nav-link" href="../patterns/heap-topk.html">Heap / Top-K</a>
         <a class="nav-link" href="../patterns/backtracking.html">Backtracking</a>
@@ -1031,6 +1033,305 @@ False</pre></div>
           </section>
 
 
+          <!-- ===== PROBLEM 7: SUBTREE OF ANOTHER TREE ===== -->
+          <section class="section problem reveal" id="subtree">
+            <header class="problem-meta">
+              <h2><span class="section-num">07</span> &nbsp;Subtree of Another Tree</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Trees · DFS</span>
+                <span class="pm-chip diff-easy">Easy</span>
+                <span class="pm-chip"><span class="dot"></span>~15 min</span>
+                <span class="pm-chip cx">O(m·n) time · O(h) space</span>
+              </div>
+            </header>
+            <p class="lead">Return whether <code>subRoot</code> is <strong>identical</strong> to some subtree of <code>root</code> — same structure and values, rooted at that node. Classic: <code>root = [3,4,5,1,2]</code>, <code>subRoot = [4,1,2]</code> → <code>True</code>; add an extra child under <code>2</code> and the same <code>subRoot</code> → <code>False</code>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">A sticker that must match a branch exactly <span class="tag">analogy</span></div>
+                <p>Walk every node of the big tree. At each stop, try the Same Tree check against <code>subRoot</code>. If any stop matches all the way down, the sticker fits. A near-match with one extra leaf fails — identical means identical, not “contains the values somewhere.”</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Checking whether subRoot matches a subtree of root">
+              <figcaption class="viz-title">DFS over root + Same Tree at each candidate</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "tree",
+                "meta": { "tree": [3, 4, 5, 1, 2] },
+                "frames": [
+                  {"active":[3],"caption":"Try Same Tree at root 3 vs subRoot [4,1,2] — values differ. Keep walking."},
+                  {"visited":[3],"active":[4],"caption":"At node 4: values match. Compare left 1↔1 and right 2↔2."},
+                  {"visited":[3,4],"active":[1,2],"caption":"Both children match and are leaves → subtree rooted at 4 equals subRoot."},
+                  {"visited":[3,4,1,2],"caption":"Found a match → True. (An extra child under 2 would fail Same Tree here.)"}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Compose two DFS helpers (reuse the Same Tree idea from this page):</p>
+            <ol>
+              <li><code>same(a, b)</code> — both <code>None</code> → True; one missing or values differ → False; else both children.</li>
+              <li><code>is_subtree(root, subRoot)</code> — if <code>root</code> is <code>None</code>, False (empty can't host a non-empty subtree). If <code>same(root, subRoot)</code>, True. Else try left or right: <code>is_subtree(root.left, subRoot) or is_subtree(root.right, subRoot)</code>.</li>
+            </ol>
+            <p>Empty <code>subRoot</code> is usually treated as a subtree of everything; interview prompts vary — nail the classic non-empty cases first.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-ok">O(m·n)</span></td><td>Up to n candidate roots; each Same Tree costs O(m) in the worst case.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(h)</span></td><td>Recursion depth follows tree height (serialization + hash tricks exist but aren't the default).</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why does <code>root = [3,4,5,1,2]</code> with an extra <code>0</code> under <code>2</code> fail against <code>subRoot = [4,1,2]</code>?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because 3 is not in subRoot</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Same Tree at node 4 fails — subRoot's 2 is a leaf, but root's 2 still has a child</button>
+                <button class="quiz-opt"><span class="mark"></span>Because subtree checks only care about values, not structure</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Values under 4 still look like 1 and 2, but structure must match. One extra child means <code>same</code> returns False at that candidate, and no other node equals the whole subRoot.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Write <code>same</code> exactly like Same Tree. Then <code>is_subtree</code>: if not root return False; if same(root, subRoot) return True; return is_subtree(left) or is_subtree(right).</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">is_subtree.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="28">
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val; self.left = left; self.right = right
+
+def same(a, b):
+    if not a and not b:
+        return True
+    if not a or not b or a.val != b.val:
+        return False
+    return same(a.left, b.left) and same(a.right, b.right)
+
+def is_subtree(root, subRoot):
+    if not root:
+        return False
+    if same(root, subRoot):
+        return True
+    return is_subtree(root.left, subRoot) or is_subtree(root.right, subRoot)
+
+root_ok = TreeNode(3, TreeNode(4, TreeNode(1), TreeNode(2)), TreeNode(5))
+sub = TreeNode(4, TreeNode(1), TreeNode(2))
+print(is_subtree(root_ok, sub))
+
+root_bad = TreeNode(3, TreeNode(4, TreeNode(1), TreeNode(2, TreeNode(0))), TreeNode(5))
+print(is_subtree(root_bad, sub))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">True
+False</pre></div>
+                </div>
+                <p>Same <code>TreeNode</code> helper as the rest of this page. First tree is the classic True case; second adds left child <code>0</code> under <code>2</code> (LC example 2) so Same Tree fails at node 4.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Subtree = walk every candidate root + Same Tree equality. Interview default is O(m·n) DFS; don't invent serialization unless asked. Extra children break identity even when values look similar.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[is_subtree root subRoot] --> empty{"root is None?"}
+  empty -->|yes| no[Return False]
+  empty -->|no| eq{"same root subRoot?"}
+  eq -->|yes| yes[Return True]
+  eq -->|no| kids["is_subtree left OR is_subtree right"]
+  kids --> done[Done]
+  yes --> done
+  no --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>class TreeNode:</code><span>Same helper used elsewhere on this page.</span></li>
+                  <li><code>def same(a, b):</code><span>Structural equality — identical to Same Tree.</span></li>
+                  <li><code>if not a and not b: return True</code><span>Two empties match.</span></li>
+                  <li><code>if not a or not b or a.val != b.val: return False</code><span>Structure or value mismatch.</span></li>
+                  <li><code>return same(a.left, b.left) and same(a.right, b.right)</code><span>Both sides must match.</span></li>
+                  <li><code>def is_subtree(root, subRoot):</code><span>Does any subtree of root equal subRoot?</span></li>
+                  <li><code>if not root: return False</code><span>Nowhere left to search.</span></li>
+                  <li><code>if same(root, subRoot): return True</code><span>This node is a match.</span></li>
+                  <li><code>return is_subtree(root.left, subRoot) or is_subtree(root.right, subRoot)</code><span>Try either child as the next candidate root.</span></li>
+                </ol>
+                <p class="walk-why">Time O(m·n) worst case over n candidates × m-sized equality checks; space O(h) recursion.</p>
+              </div>
+            </details>
+          </section>
+
+
+          <!-- ===== PROBLEM 8: KTH SMALLEST IN BST ===== -->
+          <section class="section problem reveal" id="kth-smallest">
+            <header class="problem-meta">
+              <h2><span class="section-num">08</span> &nbsp;Kth Smallest Element in a BST</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Trees · Inorder</span>
+                <span class="pm-chip diff-medium">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~20 min</span>
+                <span class="pm-chip cx">O(h + k) time · O(h) space</span>
+              </div>
+            </header>
+            <p class="lead">In a BST, inorder traversal visits values in sorted order. Return the <strong>kth smallest</strong> value (1-indexed). Examples: <code>root = [3,1,4,null,2]</code>, <code>k = 1</code> → <code>1</code>; <code>root = [5,3,6,2,4,null,null,1]</code>, <code>k = 3</code> → <code>3</code>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Reading a sorted bookshelf left to right <span class="tag">analogy</span></div>
+                <p>A BST's left→node→right walk is already sorted. Push left spines onto a stack, pop the next smallest, then explore that node's right. Stop when you've popped <code>k</code> times — no need to finish the whole tree.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Iterative inorder finding the kth smallest BST value">
+              <figcaption class="viz-title">Inorder stack: stop at k</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "tree",
+                "meta": { "tree": [3, 1, 4, null, 2] },
+                "frames": [
+                  {"active":[3,1],"caption":"k=1. Push left spine: 3 then 1. Stack top is the next inorder node."},
+                  {"visited":[1],"active":[1],"caption":"Pop 1 — count = 1. That's k → answer 1. Stop (no need to visit 2,3,4)."},
+                  {"visited":[1],"caption":"Early exit: O(h + k) instead of walking the whole tree."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Iterative inorder with an explicit stack (easy early exit):</p>
+            <ol>
+              <li>While there is a <code>node</code> or a non-empty stack: push all the way left; pop; decrement <code>k</code>; if <code>k == 0</code>, return that value; else continue from <code>node.right</code>.</li>
+              <li>Recursive inorder also works — keep a counter — but the stack form makes “stop at k” obvious in interviews.</li>
+            </ol>
+            <p>Use the same <code>TreeNode</code> helper as the other problems on this page.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(h + k)</span></td><td>Push left spine (≤ h), then pop k times; each pop may push a right spine.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(h)</span></td><td>Stack holds at most the height of the tree.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why is inorder the right walk for “kth smallest” in a BST?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because inorder always visits the root first</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>BST inorder emits values in sorted ascending order, so the kth visit is the answer</button>
+                <button class="quiz-opt"><span class="mark"></span>Because BFS levels are sorted by value</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> Left subtree &lt; node &lt; right subtree means left→node→right is sorted. The kth popped value is the kth smallest — no extra sorting step.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p><code>stack = []</code>, <code>cur = root</code>. Loop: while cur, push and go left; pop; <code>k -= 1</code>; if <code>k == 0</code> return val; else <code>cur = cur.right</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">kth_smallest.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="28">
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val; self.left = left; self.right = right
+
+def kth_smallest(root, k):
+    stack = []
+    cur = root
+    while True:
+        while cur:
+            stack.append(cur)
+            cur = cur.left
+        cur = stack.pop()
+        k -= 1
+        if k == 0:
+            return cur.val
+        cur = cur.right
+
+# [3,1,4,null,2]
+t1 = TreeNode(3, TreeNode(1, None, TreeNode(2)), TreeNode(4))
+print(kth_smallest(t1, 1))
+
+# [5,3,6,2,4,null,null,1]
+t2 = TreeNode(5, TreeNode(3, TreeNode(2, TreeNode(1)), TreeNode(4)), TreeNode(6))
+print(kth_smallest(t2, 3))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">1
+3</pre></div>
+                </div>
+                <p>Iterative inorder stops at <code>k</code> — for <code>k = 1</code> you never visit the right spine of 1. Same <code>TreeNode</code> style as max-depth / validate-bst on this page.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Kth smallest in a BST is early-exit inorder. Prefer an iterative stack so you can stop at k without collecting the full sorted list. O(h + k) beats “dump all values then index.”</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[stack empty, cur = root] --> push{"cur exists?"}
+  push -->|yes| goLeft["Push cur, cur = cur.left"]
+  goLeft --> push
+  push -->|no| pop[Pop stack as cur]
+  pop --> dec["k = k - 1"]
+  dec --> hit{"k == 0?"}
+  hit -->|yes| ans[Return cur.val]
+  hit -->|no| right["cur = cur.right"]
+  right --> push
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>class TreeNode:</code><span>Same helper used elsewhere on this page.</span></li>
+                  <li><code>def kth_smallest(root, k):</code><span>Return the kth smallest value in the BST.</span></li>
+                  <li><code>stack = []</code><span>Explicit inorder stack of nodes still to visit.</span></li>
+                  <li><code>cur = root</code><span>Current descent pointer.</span></li>
+                  <li><code>while True:</code><span>Drive the inorder machine until we return.</span></li>
+                  <li><code>while cur:</code><span>Go as far left as possible, pushing along the way.</span></li>
+                  <li><code>stack.append(cur)</code><span>Remember this node — visit it after its left subtree.</span></li>
+                  <li><code>cur = cur.left</code><span>Continue left.</span></li>
+                  <li><code>cur = stack.pop()</code><span>Next inorder node (left subtree done).</span></li>
+                  <li><code>k -= 1</code><span>We've visited one more sorted value.</span></li>
+                  <li><code>if k == 0: return cur.val</code><span>This visit is the kth — done early.</span></li>
+                  <li><code>cur = cur.right</code><span>Otherwise explore the right subtree next.</span></li>
+                </ol>
+                <p class="walk-why">Time O(h + k) with early stop; space O(h) for the stack (skewed tree → O(n)).</p>
+              </div>
+            </details>
+          </section>
+
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -1048,6 +1349,8 @@ False</pre></div>
           <a href="#lca">Lowest Common Ancestor</a>
           <a href="#invert-tree">Invert Binary Tree</a>
           <a href="#same-tree">Same Tree</a>
+          <a href="#subtree">Subtree of Another Tree</a>
+          <a href="#kth-smallest">Kth Smallest Element in a BST</a>
         </aside>
       </div>
 

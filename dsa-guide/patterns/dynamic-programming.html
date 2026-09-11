@@ -56,6 +56,10 @@
           <a class="nav-link" href="#unique-paths">Unique Paths</a>
           <a class="nav-link" href="#maximum-subarray">Maximum Subarray</a>
           <a class="nav-link" href="#word-break">Word Break</a>
+          <a class="nav-link" href="#lcs">Longest Common Subseq.</a>
+          <a class="nav-link" href="#decode-ways">Decode Ways</a>
+          <a class="nav-link" href="#house-robber-ii">House Robber II</a>
+          <a class="nav-link" href="#max-product-subarray">Max Product Subarray</a>
         </div>
         <a class="nav-link" href="../patterns/intervals.html">Intervals</a>
         <a class="nav-link" href="../patterns/greedy.html">Greedy</a>
@@ -1302,6 +1306,581 @@ False</pre></div>
           </section>
 
 
+          <!-- ===== PROBLEM: LONGEST COMMON SUBSEQUENCE ===== -->
+          <section class="section problem reveal" id="lcs">
+            <header class="problem-meta">
+              <h2><span class="section-num">10</span> &nbsp;Longest Common Subsequence</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">2-D DP · Strings</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~25 min</span>
+                <span class="pm-chip cx">O(m·n) time · O(m·n) space</span>
+              </div>
+            </header>
+            <p class="lead">Given two strings <code>text1</code> and <code>text2</code>, return the length of their longest <strong>common subsequence</strong> — characters that appear in both, in the same order, but not necessarily contiguous. For <code>text1 = "abcde"</code> and <code>text2 = "ace"</code> the answer is <code>3</code> (<code>"ace"</code>).</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Two playlists, shared hits in order <span class="tag">analogy</span></div>
+                <p>You and a friend each have a playlist. You want the longest list of songs that show up in <em>both</em> playlists in the same order — you can skip songs, but you can't rearrange. Walk both lists with two fingers: when the songs match, lock that hit in and move both fingers; when they don't, try advancing one finger or the other and keep the better streak. That table of "best so far for these two prefixes" is classic 2-D string DP.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="LCS DP table filling for abcde vs ace">
+              <figcaption class="viz-title">dp[i][j] = LCS of text1[:i] and text2[:j]</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "grid",
+                "meta": { "grid": [["0","0","0","0"],["0","·","·","·"],["0","·","·","·"],["0","·","·","·"],["0","·","·","·"],["0","·","·","·"]] },
+                "frames": [
+                  {"active":[[0,0]],"caption":"Borders stay 0 — empty prefix shares nothing."},
+                  {"grid":[["0","0","0","0"],["0","1","1","1"],["0","1","1","1"],["0","1","1","1"],["0","1","1","1"],["0","1","1","1"]],"active":[[1,1]],"caption":"text1[0]='a' matches text2[0]='a' → dp[1][1]=1."},
+                  {"grid":[["0","0","0","0"],["0","1","1","1"],["0","1","1","1"],["0","1","2","2"],["0","1","2","2"],["0","1","2","3"]],"active":[[3,2]],"caption":"'c' matches 'c' → take diagonal+1 = 2."},
+                  {"grid":[["0","0","0","0"],["0","1","1","1"],["0","1","1","1"],["0","1","2","2"],["0","1","2","2"],["0","1","2","3"]],"active":[[5,3]],"match":[[5,3]],"caption":"'e' matches 'e' → dp[5][3]=3. Answer: 3."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Build a table where <code>dp[i][j]</code> is the LCS length of the prefixes <code>text1[:i]</code> and <code>text2[:j]</code>:</p>
+            <ol>
+              <li>Make a <code>(m+1) × (n+1)</code> table; row/column 0 stay <code>0</code> (empty prefix).</li>
+              <li>If <code>text1[i-1] == text2[j-1]</code>, set <code>dp[i][j] = dp[i-1][j-1] + 1</code>.</li>
+              <li>Otherwise <code>dp[i][j] = max(dp[i-1][j], dp[i][j-1])</code> — skip a char from one string or the other.</li>
+              <li>Return <code>dp[m][n]</code>.</li>
+            </ol>
+            <p>You can compress to one rolling row (O(n) space) — nice follow-up; the full table is the interview default.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(m·n)</span></td><td>Fill each cell of the m×n table once.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(m·n)</span> → <span class="bigo t-great">O(n)</span></td><td>Full table, or one rolling row.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">When the current characters differ, why take <code>max(dp[i-1][j], dp[i][j-1])</code> instead of the diagonal?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because the diagonal is always smaller</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A mismatch means you must skip one character — either from text1 or from text2 — and keep the better of those two choices</button>
+                <button class="quiz-opt"><span class="mark"></span>Because subsequences must be contiguous</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> The diagonal would only apply if you used both characters (a match). With a mismatch you discard one side's character and reuse the already-computed best for that smaller pair of prefixes.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p><code>dp = [[0]*(n+1) for _ in range(m+1)]</code>. Nested loops <code>i=1..m</code>, <code>j=1..n</code>: if chars equal, diagonal + 1; else <code>max(up, left)</code>. Return <code>dp[m][n]</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">lcs.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="18">
+def longest_common_subsequence(text1, text2):
+    m, n = len(text1), len(text2)
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if text1[i - 1] == text2[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
+            else:
+                dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
+    return dp[m][n]
+
+print(longest_common_subsequence("abcde", "ace"))
+print(longest_common_subsequence("abc", "abc"))
+print(longest_common_subsequence("abc", "def"))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">3
+3
+0</pre></div>
+                </div>
+                <p>Match → diagonal + 1; mismatch → max(skip left, skip up). Same skeleton as edit distance / unique paths — name the <strong>2-D string DP</strong> family out loud.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">dp[i][j] is LCS of prefixes. Equal chars extend the diagonal; unequal take max of skip-one-side. Classic 2-D string DP — O(m·n), compressible to one row.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["Build m+1 by n+1 zeros"] --> loops[For i=1..m j=1..n]
+  loops --> match{"text1 i-1 == text2 j-1?"}
+  match -->|yes| diag["dp = diagonal + 1"]
+  match -->|no| skip["dp = max up, left"]
+  diag --> more{More cells?}
+  skip --> more
+  more -->|yes| loops
+  more -->|no| ret["Return dp m n"]
+  ret --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def longest_common_subsequence(text1, text2):</code><span>Length of longest shared subsequence (order kept, gaps ok).</span></li>
+                  <li><code>m, n = len(text1), len(text2)</code><span>Prefix lengths for the two strings.</span></li>
+                  <li><code>dp = [[0] * (n + 1) for _ in range(m + 1)]</code><span>dp[i][j] = LCS of text1[:i] and text2[:j]; borders stay 0.</span></li>
+                  <li><code>for i in range(1, m + 1):</code><span>Grow the text1 prefix.</span></li>
+                  <li><code>for j in range(1, n + 1):</code><span>Grow the text2 prefix.</span></li>
+                  <li><code>if text1[i - 1] == text2[j - 1]:</code><span>Current characters match — use both.</span></li>
+                  <li><code>dp[i][j] = dp[i - 1][j - 1] + 1</code><span>Extend the LCS of the shorter prefixes.</span></li>
+                  <li><code>else:</code><span>Mismatch — must skip one character.</span></li>
+                  <li><code>dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])</code><span>Better of skipping text1's char or text2's char.</span></li>
+                  <li><code>return dp[m][n]</code><span>Full strings' LCS length.</span></li>
+                </ol>
+                <p class="walk-why">Time O(m · n) one cell each; space O(m · n) for the table (or O(n) with a rolling row).</p>
+              </div>
+            </details>
+          </section>
+
+
+          <!-- ===== PROBLEM: DECODE WAYS ===== -->
+          <section class="section problem reveal" id="decode-ways">
+            <header class="problem-meta">
+              <h2><span class="section-num">11</span> &nbsp;Decode Ways</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">DP · 1-D · String</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~20 min</span>
+                <span class="pm-chip cx">O(n) time · O(n) space</span>
+              </div>
+            </header>
+            <p class="lead">A message containing letters <code>A</code>–<code>Z</code> is encoded as digits with <code>A=1 … Z=26</code>. Given a digit string <code>s</code>, return how many ways it can be decoded. For <code>s = "12"</code> there are <code>2</code> ways: <code>"AB"</code> (<code>1,2</code>) or <code>"L"</code> (<code>12</code>). Leading zeros are invalid — <code>"06"</code> → <code>0</code>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Secret codebook, one or two digits <span class="tag">analogy</span></div>
+                <p>You're reading a strip of digits and at each position may peel off a single valid code (<code>1</code>–<code>9</code>) or a two-digit code (<code>10</code>–<code>26</code>). The number of ways to finish the strip is “ways ending with a one-digit peel” plus “ways ending with a two-digit peel.” Zero alone is never a letter, so a lone <code>0</code> kills that branch — that's why <code>"06"</code> has no decoding.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Decode Ways DP for string 226">
+              <figcaption class="viz-title">dp[i] = ways to decode the prefix s[:i]</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": [1, 1, "?", "?"] },
+                "frames": [
+                  {"values":[1,1,"?","?"],"active":[0,1],"caption":"dp[0]=1 (empty). s[0]='2' is valid → dp[1]=1."},
+                  {"values":[1,1,2,"?"],"active":[2],"compare":[0,1],"caption":"At i=2: single '2' ok (+dp[1]); pair '22' ok (+dp[0]) → dp[2]=2."},
+                  {"values":[1,1,2,3],"active":[3],"compare":[1,2],"match":[3],"caption":"At i=3: single '6' ok (+2); pair '26' ok (+1) → dp[3]=3. Answer: 3."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Let <code>dp[i]</code> be the number of ways to decode the prefix <code>s[:i]</code>:</p>
+            <ol>
+              <li>Seed <code>dp[0] = 1</code> (one way to decode nothing). If <code>s[0] == '0'</code>, return <code>0</code> immediately.</li>
+              <li>For each end index <code>i</code> from 1 to <code>n</code>: start <code>dp[i] = 0</code>.</li>
+              <li>If the last one digit <code>s[i-1]</code> is <code>'1'</code>–<code>'9'</code>, add <code>dp[i-1]</code>.</li>
+              <li>If <code>i &gt;= 2</code> and the last two digits form an integer in <code>10..26</code>, add <code>dp[i-2]</code>.</li>
+              <li>Return <code>dp[n]</code>. (Rolling two scalars gives O(1) space.)</li>
+            </ol>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(n)</span></td><td>One pass; constant work per index.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(n)</span> → <span class="bigo t-great">O(1)</span></td><td>Full dp array, or two rolling way-counts.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why does <code>"06"</code> decode to <code>0</code> ways?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because 6 is greater than 5</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A leading <code>0</code> is not a valid single-digit letter, and <code>06</code> is not in <code>10..26</code>, so both peel options fail</button>
+                <button class="quiz-opt"><span class="mark"></span>Because the string is too short</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> <code>0</code> alone maps to nothing, and two-digit codes can't start with <code>0</code>. The first character already leaves <code>dp[1] = 0</code>, so the whole string stays undecodable.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p><code>dp = [0]*(n+1); dp[0]=1</code>. For each <code>i</code>: if <code>s[i-1] != '0'</code>, add <code>dp[i-1]</code>; if <code>i&gt;=2</code> and <code>10 &lt;= int(s[i-2:i]) &lt;= 26</code>, add <code>dp[i-2]</code>. Return <code>dp[n]</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">decode_ways.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="20">
+def num_decodings(s):
+    n = len(s)
+    if not n or s[0] == "0":
+        return 0
+    dp = [0] * (n + 1)
+    dp[0] = 1
+    dp[1] = 1
+    for i in range(2, n + 1):
+        if s[i - 1] != "0":
+            dp[i] += dp[i - 1]
+        two = int(s[i - 2:i])
+        if 10 <= two <= 26:
+            dp[i] += dp[i - 2]
+    return dp[n]
+
+print(num_decodings("12"))
+print(num_decodings("226"))
+print(num_decodings("06"))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">2
+3
+0</pre></div>
+                </div>
+                <p>Climbing-stairs cousin: one-step and two-step transitions, with validity filters for digits. Say “string DP / ways” out loud and call out the zero trap.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">dp[i] = ways ending with a valid 1-digit peel (+dp[i-1]) plus a valid 2-digit peel (+dp[i-2]). Leading zeros kill the string. Same shape as climbing stairs with filters.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start{"s empty or starts with 0?"}
+  start -->|yes| zero["Return 0"]
+  start -->|no| seed["dp0=1 dp1=1"]
+  seed --> loop[For i = 2..n]
+  loop --> one{"s i-1 != 0?"}
+  one -->|yes| add1["dp i += dp i-1"]
+  one -->|no| two
+  add1 --> two{"10 &lt;= two-digit &lt;= 26?"}
+  two -->|yes| add2["dp i += dp i-2"]
+  two -->|no| more
+  add2 --> more{More i?}
+  more -->|yes| loop
+  more -->|no| ret["Return dp n"]
+  zero --> done[Done]
+  ret --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def num_decodings(s):</code><span>Count valid A=1..Z=26 decodings of digit string s.</span></li>
+                  <li><code>n = len(s)</code><span>Prefix lengths 0..n.</span></li>
+                  <li><code>if not n or s[0] == "0":</code><span>Empty or leading zero → impossible.</span></li>
+                  <li><code>return 0</code><span>No valid decoding.</span></li>
+                  <li><code>dp = [0] * (n + 1)</code><span>dp[i] = ways to decode s[:i].</span></li>
+                  <li><code>dp[0] = 1</code><span>One way to decode the empty prefix.</span></li>
+                  <li><code>dp[1] = 1</code><span>First char already validated as non-zero.</span></li>
+                  <li><code>for i in range(2, n + 1):</code><span>Grow the decoded prefix left to right.</span></li>
+                  <li><code>if s[i - 1] != "0":</code><span>Single-digit peel is a letter 1..9.</span></li>
+                  <li><code>dp[i] += dp[i - 1]</code><span>Reuse ways for the shorter prefix.</span></li>
+                  <li><code>two = int(s[i - 2:i])</code><span>Candidate two-digit code.</span></li>
+                  <li><code>if 10 &lt;= two &lt;= 26:</code><span>Valid letter J..Z (no leading zero).</span></li>
+                  <li><code>dp[i] += dp[i - 2]</code><span>Add ways that end with that pair.</span></li>
+                  <li><code>return dp[n]</code><span>Ways for the whole string.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) one pass; space O(n) for dp (or O(1) with two rolling scalars).</p>
+              </div>
+            </details>
+          </section>
+
+
+          <!-- ===== PROBLEM: HOUSE ROBBER II ===== -->
+          <section class="section problem reveal" id="house-robber-ii">
+            <header class="problem-meta">
+              <h2><span class="section-num">12</span> &nbsp;House Robber II</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">DP · 1-D · Circular</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~20 min</span>
+                <span class="pm-chip cx">O(n) time · O(1) space</span>
+              </div>
+            </header>
+            <p class="lead">Same as House Robber — max money without robbing adjacent houses — but the houses form a <strong>circle</strong>: the first and last are neighbours. For <code>[2, 3, 2]</code> the answer is <code>3</code> (you can't take both 2s). Reduce the circle to two linear passes.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">A roundabout of houses <span class="tag">analogy</span></div>
+                <p>The street loops: house 0's alarm links to house n−1. So you never rob both ends. Clever trick: run the linear House Robber helper twice — once on the range that <em>excludes the last</em> house, once on the range that <em>excludes the first</em> — and take the better haul. The circle constraint collapses into “pick which end is off-limits.”</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="House Robber II circular choice on 1,2,3,1">
+              <figcaption class="viz-title">Answer = max(rob without last, rob without first)</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": [1, 2, 3, 1] },
+                "frames": [
+                  {"values":[1,2,3,1],"active":[0,3],"caption":"Circle: house 0 and house 3 are adjacent — never rob both."},
+                  {"values":[1,2,3,1],"active":[0,1,2],"caption":"Path A: rob linear range [0..2] → best = 1+3 = 4."},
+                  {"values":[1,2,3,1],"active":[1,2,3],"caption":"Path B: rob linear range [1..3] → best = 2+1 = 3."},
+                  {"values":[1,2,3,1],"match":[0,2],"caption":"max(4, 3) = 4. Answer from path A (houses 1 and 3)."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <ol>
+              <li>If there's only one house, return its money.</li>
+              <li>Write (or reuse) the linear helper: <code>rob_linear(arr)</code> with rolling <code>prev, cur</code>.</li>
+              <li>Compute <code>a = rob_linear(nums[:-1])</code> — forbid the last house.</li>
+              <li>Compute <code>b = rob_linear(nums[1:])</code> — forbid the first house.</li>
+              <li>Return <code>max(a, b)</code>.</li>
+            </ol>
+            <p>That's the whole circular twist: two linear House Robber runs, then a max.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(n)</span></td><td>Two linear passes over ~n houses.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-great">O(1)</span></td><td>Helper uses two scalars (slices are conceptual).</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why is <code>max(rob(nums[:-1]), rob(nums[1:]))</code> enough for a circle?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because every optimal plan robs the middle house</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Any valid plan omits at least one of the two ends; the better of those two linear worlds covers every legal choice</button>
+                <button class="quiz-opt"><span class="mark"></span>Because the array is always even length</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Robbing both ends is illegal. So the optimum lives in “no last” or “no first” (or both — still covered). Taking the max of those two linear optima is exact.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Helper: <code>prev=cur=0</code>; for each <code>n</code>: <code>prev, cur = cur, max(cur, prev+n)</code>. Then <code>return max(helper(nums[:-1]), helper(nums[1:]))</code>, with a length-1 guard.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">house_robber_ii.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="18">
+def rob_linear(nums):
+    prev, cur = 0, 0
+    for n in nums:
+        prev, cur = cur, max(cur, prev + n)
+    return cur
+
+def rob(nums):
+    if len(nums) == 1:
+        return nums[0]
+    return max(rob_linear(nums[:-1]), rob_linear(nums[1:]))
+
+print(rob([2, 3, 2]))
+print(rob([1, 2, 3, 1]))
+print(rob([1, 2, 3]))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">3
+4
+3</pre></div>
+                </div>
+                <p>Circle → two linear ranges → max. Reuse the House Robber helper; don't reinvent the skip/rob recurrence.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Circular constraint = first and last are adjacent. Optimal = max of linear rob on nums without last vs without first. One-house edge case returns that house.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start{"len == 1?"}
+  start -->|yes| one["Return nums 0"]
+  start -->|no| a["a = rob_linear nums without last"]
+  a --> b["b = rob_linear nums without first"]
+  b --> ret["Return max a, b"]
+  one --> done[Done]
+  ret --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def rob_linear(nums):</code><span>Classic linear House Robber helper.</span></li>
+                  <li><code>prev, cur = 0, 0</code><span>Best two-back and best-at-last.</span></li>
+                  <li><code>for n in nums:</code><span>Walk the open range house by house.</span></li>
+                  <li><code>prev, cur = cur, max(cur, prev + n)</code><span>Skip vs rob; slide the window.</span></li>
+                  <li><code>return cur</code><span>Best for this linear slice.</span></li>
+                  <li><code>def rob(nums):</code><span>Circular wrapper.</span></li>
+                  <li><code>if len(nums) == 1:</code><span>Only one house on the circle.</span></li>
+                  <li><code>return nums[0]</code><span>Must take it (or get 0 — take it).</span></li>
+                  <li><code>return max(rob_linear(nums[:-1]), rob_linear(nums[1:]))</code><span>Forbid last vs forbid first; take the better haul.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) two linear passes; space O(1) rolling totals in the helper.</p>
+              </div>
+            </details>
+          </section>
+
+
+          <!-- ===== PROBLEM: MAXIMUM PRODUCT SUBARRAY ===== -->
+          <section class="section problem reveal" id="max-product-subarray">
+            <header class="problem-meta">
+              <h2><span class="section-num">13</span> &nbsp;Maximum Product Subarray</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">DP · 1-D · Products</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~20 min</span>
+                <span class="pm-chip cx">O(n) time · O(1) space</span>
+              </div>
+            </header>
+            <p class="lead">Find a contiguous subarray whose <strong>product</strong> is maximal, and return that product. For <code>[2, 3, -2, 4]</code> the answer is <code>6</code> from <code>[2, 3]</code>. Negatives flip the sign — so you must track both the best <em>and</em> worst product ending here.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">A streak that can flip sign <span class="tag">analogy</span></div>
+                <p>Kadane for sums only needs a max-ending-here. Products are trickier: a big negative streak can become the new champion the moment another negative arrives. So keep two running notes — the largest and the smallest product ending at this index. When you see a new number, multiply both notes by it (and also consider starting fresh), then swap roles if the number was negative. Zero resets both notes to zero.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Max product subarray tracking max and min ending here">
+              <figcaption class="viz-title">Track max_end and min_end; best remembers the peak</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": [2, 3, -2, 4] },
+                "frames": [
+                  {"active":[0],"caption":"Start: max_end = min_end = best = 2."},
+                  {"active":[0,1],"match":[0,1],"caption":"See 3: products 2·3=6. max_end=6, min_end=3, best=6."},
+                  {"active":[2],"caption":"See −2: 6·(−2)=−12 and 3·(−2)=−6. max_end=−2, min_end=−12. best stays 6."},
+                  {"active":[3],"caption":"See 4: (−2)·4=−8, (−12)·4=−48. max_end=4, min_end=−48. best still 6 from [2,3]."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <ol>
+              <li>Seed <code>max_end = min_end = best = nums[0]</code>.</li>
+              <li>For each later <code>x</code>, compute candidates <code>x</code>, <code>max_end * x</code>, and <code>min_end * x</code>.</li>
+              <li>Set <code>max_end = max(...)</code> and <code>min_end = min(...)</code> of those three (a negative can swap which streak wins).</li>
+              <li>Update <code>best = max(best, max_end)</code>.</li>
+              <li>Return <code>best</code>.</li>
+            </ol>
+            <p>Zeros naturally reset both ending products toward <code>0</code> / restart at the next value.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(n)</span></td><td>One left-to-right pass.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-great">O(1)</span></td><td>Three scalars: max-ending, min-ending, global best.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why track a <em>minimum</em> product ending here, not only a maximum?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because the problem asks for the smallest product too</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A large negative ending-product can become the new maximum when multiplied by another negative</button>
+                <button class="quiz-opt"><span class="mark"></span>Because zeros require a min tracker</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Sign flips turn “worst so far” into “best so far.” Without <code>min_end</code>, you'd miss products like <code>[-2, 3, -4]</code> → <code>24</code>.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Keep <code>max_end</code> and <code>min_end</code>. For each <code>x</code>: <code>cands = (x, max_end*x, min_end*x)</code>; then <code>max_end, min_end = max(cands), min(cands)</code>; <code>best = max(best, max_end)</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">max_product_subarray.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="16">
+def max_product(nums):
+    max_end = min_end = best = nums[0]
+    for x in nums[1:]:
+        cands = (x, max_end * x, min_end * x)
+        max_end = max(cands)
+        min_end = min(cands)
+        best = max(best, max_end)
+    return best
+
+print(max_product([2, 3, -2, 4]))
+print(max_product([-2, 0, -1]))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">6
+0</pre></div>
+                </div>
+                <p>Kadane's cousin for products: dual max/min ending state handles sign flips. Name “track both extremes” in the interview.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Products need max_end and min_end: a negative can swap them. At each x take max/min of (x, max_end·x, min_end·x); best tracks the peak max_end.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["Seed max_end min_end best"] --> loop[For each later x]
+  loop --> cands["cands = x, max*x, min*x"]
+  cands --> update["max_end = max cands; min_end = min cands"]
+  update --> track["best = max best, max_end"]
+  track --> more{More numbers?}
+  more -->|yes| loop
+  more -->|no| ret[Return best]
+  ret --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def max_product(nums):</code><span>Largest product of any contiguous subarray.</span></li>
+                  <li><code>max_end = min_end = best = nums[0]</code><span>Seed both ending extremes and the global best.</span></li>
+                  <li><code>for x in nums[1:]:</code><span>Extend or restart at each later value.</span></li>
+                  <li><code>cands = (x, max_end * x, min_end * x)</code><span>Start fresh, extend the max streak, or extend the min streak.</span></li>
+                  <li><code>max_end = max(cands)</code><span>Best product ending at this index.</span></li>
+                  <li><code>min_end = min(cands)</code><span>Worst (most negative) product ending here — fuel for a future flip.</span></li>
+                  <li><code>best = max(best, max_end)</code><span>Remember the peak product seen anywhere.</span></li>
+                  <li><code>return best</code><span>After the last index, best is the answer.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) one pass; space O(1) three scalars.</p>
+              </div>
+            </details>
+          </section>
+
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -1322,6 +1901,10 @@ False</pre></div>
           <a href="#unique-paths">Unique Paths</a>
           <a href="#maximum-subarray">Maximum Subarray</a>
           <a href="#word-break">Word Break</a>
+          <a href="#lcs">Longest Common Subseq.</a>
+          <a href="#decode-ways">Decode Ways</a>
+          <a href="#house-robber-ii">House Robber II</a>
+          <a href="#max-product-subarray">Max Product Subarray</a>
         </aside>
       </div>
 
