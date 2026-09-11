@@ -1,0 +1,200 @@
+#!/usr/bin/env node
+/* ============================================================
+   Self-Upgrade — thin author-time CLI (no npm deps).
+   Wraps per-guide tools/{gen,build-search-index,verify}.js
+
+   Usage:
+     ./bin/guide status
+     ./bin/guide verify [all|name]
+     ./bin/guide build  [all|name]
+     ./bin/guide new-page <guide> <module/slug>
+   ============================================================ */
+"use strict";
+
+const fs = require("fs");
+const path = require("path");
+const { spawnSync } = require("child_process");
+
+const ROOT = path.resolve(__dirname, "..");
+
+const GUIDES = [
+  "aposd-guide", "aptitude-guide", "claude-guide", "ddia-guide",
+  "devops-guide", "dsa-guide", "fastapi-guide", "frontend-guide",
+  "genai-guide", "go-guide", "langstack", "lld-guide",
+  "observability-guide", "sysdesign-guide"
+];
+
+function guideDir(name) {
+  const d = path.join(ROOT, name);
+  if (!fs.existsSync(d)) {
+    console.error("Unknown guide:", name);
+    console.error("Known:", GUIDES.join(", "));
+    process.exit(1);
+  }
+  return d;
+}
+
+function has(dir, rel) {
+  return fs.existsSync(path.join(dir, rel));
+}
+
+function runNode(cwd, script, args) {
+  const scriptPath = path.join(cwd, script);
+  if (!fs.existsSync(scriptPath)) {
+    console.log("  skip (missing)", script);
+    return 0;
+  }
+  console.log("  → node", script, (args || []).join(" "));
+  const r = spawnSync(process.execPath, [scriptPath].concat(args || []), {
+    cwd: cwd,
+    stdio: "inherit"
+  });
+  return r.status || 0;
+}
+
+function resolveTargets(arg) {
+  if (!arg || arg === "all") return GUIDES.filter(function (g) {
+    return fs.existsSync(path.join(ROOT, g));
+  });
+  return [arg];
+}
+
+function cmdStatus() {
+  console.log("Self-Upgrade guides @", ROOT);
+  console.log("");
+  console.log(
+    pad("guide", 22) +
+    pad("gen", 6) +
+    pad("search", 8) +
+    pad("verify", 8) +
+    pad("manifest", 10) +
+    "tier"
+  );
+  GUIDES.forEach(function (g) {
+    const d = path.join(ROOT, g);
+    if (!fs.existsSync(d)) return;
+    const gen = has(d, "tools/gen.js");
+    const search = has(d, "tools/build-search-index.js");
+    const verify = has(d, "tools/verify.js");
+    const manifest = has(d, "tools/manifest.js");
+    const content = has(d, "tools/content");
+    let tier = "C hand-HTML";
+    if (gen && content) tier = "A fragment→gen";
+    else if (gen && manifest) tier = "B stub-gen";
+    console.log(
+      pad(g, 22) +
+      pad(yn(gen), 6) +
+      pad(yn(search), 8) +
+      pad(yn(verify), 8) +
+      pad(yn(manifest), 10) +
+      tier
+    );
+  });
+}
+
+function yn(b) { return b ? "yes" : "—"; }
+function pad(s, n) { s = String(s); return s + " ".repeat(Math.max(1, n - s.length)); }
+
+function cmdVerify(arg) {
+  const targets = resolveTargets(arg);
+  let code = 0;
+  targets.forEach(function (g) {
+    const d = guideDir(g);
+    console.log("\n== verify", g, "==");
+    const c = runNode(d, "tools/verify.js");
+    if (c) code = c;
+  });
+  process.exit(code);
+}
+
+function cmdBuild(arg) {
+  const targets = resolveTargets(arg);
+  let code = 0;
+  targets.forEach(function (g) {
+    const d = guideDir(g);
+    console.log("\n== build", g, "==");
+    let c = 0;
+    if (has(d, "tools/gen.js")) c = runNode(d, "tools/gen.js") || c;
+    if (has(d, "tools/build-search-index.js")) c = runNode(d, "tools/build-search-index.js") || c;
+    if (has(d, "tools/verify.js")) c = runNode(d, "tools/verify.js") || c;
+    if (c) code = c;
+  });
+  process.exit(code);
+}
+
+function cmdNewPage(guide, moduleSlug) {
+  if (!guide || !moduleSlug) {
+    console.error("Usage: ./bin/guide new-page <guide> <module/slug>");
+    console.error("Example: ./bin/guide new-page aptitude-guide quant/geometry");
+    process.exit(1);
+  }
+  const d = guideDir(guide);
+  if (!has(d, "tools/content") || !has(d, "tools/manifest.js")) {
+    console.error(guide, "is not Tier-A (needs tools/content + tools/manifest.js).");
+    console.error("For hand-authored guides, copy an existing HTML page instead.");
+    process.exit(1);
+  }
+  const parts = moduleSlug.replace(/^\//, "").split("/");
+  if (parts.length !== 2) {
+    console.error("module/slug must look like: quant/geometry");
+    process.exit(1);
+  }
+  const dir = parts[0];
+  const slug = parts[1];
+  const fragName = dir + "-" + slug + ".html";
+  const fragPath = path.join(d, "tools/content", fragName);
+  if (fs.existsSync(fragPath)) {
+    console.error("Fragment already exists:", fragPath);
+    process.exit(1);
+  }
+  const title = slug.replace(/-/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  const stub = [
+    '<section class="hero reveal">',
+    '  <span class="eyebrow">' + dir + " · " + slug + "</span>",
+    "  <h1>" + title + ".</h1>",
+    '  <p class="lead">TODO: write the lead — one job for this page.</p>',
+    "</section>",
+    "",
+    '<section id="idea" class="reveal">',
+    '  <h2><span class="section-num">01</span> &nbsp;The idea</h2>',
+    "  <p>TODO: analogy first, then the precise version.</p>",
+    "</section>",
+    ""
+  ].join("\n");
+  fs.writeFileSync(fragPath, stub);
+  console.log("Wrote", fragPath);
+  console.log("");
+  console.log("Next:");
+  console.log("  1. Add the page to tools/manifest.js (lessons + sidebar)");
+  console.log("  2. Fill in the fragment content");
+  console.log("  3. Run: ./bin/guide build " + guide);
+}
+
+function usage() {
+  console.log("Self-Upgrade guide CLI\n");
+  console.log("  ./bin/guide status");
+  console.log("  ./bin/guide verify [all|name]");
+  console.log("  ./bin/guide build  [all|name]");
+  console.log("  ./bin/guide new-page <guide> <module/slug>");
+}
+
+const cmd = process.argv[2];
+const a1 = process.argv[3];
+const a2 = process.argv[4];
+
+switch (cmd) {
+  case "status": cmdStatus(); break;
+  case "verify": cmdVerify(a1 || "all"); break;
+  case "build": cmdBuild(a1 || "all"); break;
+  case "new-page": cmdNewPage(a1, a2); break;
+  case "help":
+  case "--help":
+  case "-h":
+  case undefined:
+    usage();
+    break;
+  default:
+    console.error("Unknown command:", cmd);
+    usage();
+    process.exit(1);
+}
