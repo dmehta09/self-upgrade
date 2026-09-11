@@ -1,12 +1,14 @@
-# 🚀 Self-Upgrade — Projects Workspace
+# Self-Upgrade — Projects Workspace
 
 A personal workspace of hands-on learning projects. **Each project lives in its own top-level folder with its own `README.md`** (and optional `docs/`), so projects stay self-contained and easy to browse. This file is just the index.
 
-**▶ Open [`index.html`](./index.html)** — a visual hub that links to every guide in one place.
+**Live (phone-friendly):** [https://dmehta09.github.io/self-upgrade/](https://dmehta09.github.io/self-upgrade/) · Senior backend: [senior-backend-guide](https://dmehta09.github.io/self-upgrade/senior-backend-guide/)
+
+**Local:** open [`index.html`](./index.html) — same hub offline.
 
 ---
 
-## 📦 Projects
+## Projects
 
 | Project | What it is | Status | Open |
 |---|---|---|---|
