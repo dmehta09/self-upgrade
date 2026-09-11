@@ -1,0 +1,186 @@
+<section class="hero reveal">
+  <span class="eyebrow">FOUNDATIONS · kubectl</span>
+  <span class="domain-chip">Foundations · Exam method adjacent</span>
+  <h1>kubectl fluency &amp; docs speed.</h1>
+  <p class="lead">CKA grades outcomes under a clock. Contexts, namespaces, explain, dry-run, and docs.k8s.io navigation save more points than memorizing every flag.</p>
+</section>
+
+<section class="section reveal" id="context-ns">
+  <h2><span class="section-num">01</span> Context first, then namespace</h2>
+  <p class="takeaway">Wrong cluster or wrong namespace is the fastest way to “finish” a task that never gets scored.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Hotel keycard, not master key <span class="tag">analogy</span></div>
+      <p>In plain English: a kubeconfig context is which hotel and which room key you hold — cluster + user + default namespace. Switching contexts mid-exam is swapping buildings. Always read the task’s cluster alias before you type.</p>
+    </div>
+  </div>
+
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">orient.sh</span>
+    </div>
+    <pre><code># Orient at the start of every task
+kubectl config get-contexts
+kubectl config use-context &lt;alias-from-question&gt;
+kubectl config set-context --current --namespace=&lt;ns&gt;
+kubectl get ns
+kubectl get all</code></pre>
+  </div>
+
+  <p>Prefer an explicit <code>-n</code> on mutating commands when the question names a namespace. Default context namespace is a convenience, not a guarantee you typed what you meant.</p>
+</section>
+
+<section class="section reveal" id="explain-dry-run">
+  <h2><span class="section-num">02</span> explain · dry-run · -o yaml</h2>
+  <p>Field memory fades under stress. <code>kubectl explain</code> is offline docs for the object schema on the exam cluster’s API version.</p>
+
+  <div class="mermaid-wrap">
+    <pre class="mermaid">flowchart TD
+      A[Need an object] --> B{Know the fields?}
+      B -->|No| C["kubectl explain RES[.field] --recursive"]
+      B -->|Yes| D{Need a starting YAML?}
+      D -->|Yes| E["kubectl create|run … --dry-run=client -o yaml"]
+      D -->|No| F[Edit existing live object]
+      E --> G[Redirect to file · edit · apply]
+      C --> E
+      F --> H["kubectl get OBJ -o yaml"]
+      G --> I[Verify with get / describe]
+      H --> I
+    </pre>
+  </div>
+
+  <dl class="kv">
+    <dt>explain</dt>
+    <dd><code>kubectl explain deployment.spec.strategy</code> — short docs; add <code>--recursive</code> when hunting nested fields.</dd>
+    <dt>dry-run=client</dt>
+    <dd>Validates locally and prints YAML without hitting the API. Ideal scaffold for exam YAML.</dd>
+    <dt>-o yaml / json</dt>
+    <dd>Inspect live objects; strip <code>status</code> and noisy metadata before re-applying when needed.</dd>
+    <dt>-o wide</dt>
+    <dd>Extra columns (node, pod IP) — often enough without describe.</dd>
+  </dl>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha · dry-run=server ≠ free pass</div>
+      <p><code>--dry-run=server</code> still talks to the apiserver (admission runs). For scaffolding YAML on the exam, <code>--dry-run=client -o yaml</code> is the usual move. Don’t leave a dry-run as your only “fix” — apply and verify Ready.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="docs-speed">
+  <h2><span class="section-num">03</span> docs.k8s.io under PSI</h2>
+  <p>Allowed documentation is your second brain. Bookmark the search box and the kubectl cheat sheet before the timer starts. See <a href="exam-method.html">How to take CKA</a> for the full allow-list.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h4>Search the concept, not the blog</h4>
+        <p>Query <code>Deployment</code>, <code>NetworkPolicy</code>, <code>PersistentVolumeClaim</code> — open the Tasks / Concepts page with copy-pasteable YAML.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h4>Prefer reference tables</h4>
+        <p>Resource types, probe fields, and Service types live on docs pages. Don’t re-derive from memory when a table is one Ctrl-F away.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h4>Copy → paste → rename</h4>
+        <p>Paste into the exam editor, change names/namespaces/images to match the stem, then apply. Verify before moving on.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">fast-scaffold.sh</span>
+    </div>
+    <pre><code>kubectl create deployment web --image=nginx:1.27 -n app --dry-run=client -o yaml &gt; web.yaml
+# edit replicas / labels / ports in the file
+kubectl apply -f web.yaml
+kubectl rollout status deployment/web -n app</code></pre>
+  </div>
+</section>
+
+<section class="section reveal" id="fluency-drills">
+  <h2><span class="section-num">04</span> Fluency drills that pay off</h2>
+  <p>Speed compounds. Practice these until they are automatic — they show up across Workloads, Networking, and Troubleshooting.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Goal</th><th>Pattern</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Find failures</strong></td><td><code>kubectl get events -n NS --sort-by=.lastTimestamp</code></td></tr>
+        <tr><td><strong>Who owns this Pod?</strong></td><td><code>kubectl get pod P -o jsonpath='{.metadata.ownerReferences}'</code></td></tr>
+        <tr><td><strong>Force a field</strong></td><td><code>kubectl explain pod.spec.containers.resources</code></td></tr>
+        <tr><td><strong>Diff before apply</strong></td><td><code>kubectl diff -f file.yaml</code> (when available)</td></tr>
+        <tr><td><strong>Shell without SSH</strong></td><td><code>kubectl exec -it POD -- sh</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="quiz" data-quiz="kubectl-orient">
+    <p class="q">A task says “work on cluster <code>hk431</code> in namespace <code>orders</code>.” What should you do first?</p>
+    <div class="quiz-opts">
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Apply the YAML from the previous question to save time</button>
+      <button type="button" class="quiz-opt" data-correct="true"><span class="mark"></span> Switch context to hk431 and target namespace orders</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Restart kubelet so the namespace exists</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Only set the namespace; context never changes mid-exam</button>
+    </div>
+    <div class="quiz-explain">CKA multi-cluster setups require an explicit context switch per question. Namespace alone is not enough if you are still pointed at the wrong cluster.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">When do you use kubectl explain vs docs.k8s.io?</span>
+        <span class="pm-chip diff-warm">Warm</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: explain for exact field paths on this cluster’s API; docs.k8s.io for examples, concepts, and copy-paste YAML.</p></div></div>
+        <h5>Answer</h5>
+        <p>Use explain when you know the resource but forgot a nested field. Use docs when you need a worked example (Ingress rules, NetworkPolicy ingress/egress blocks, StorageClass parameters).</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Why -o yaml after create --dry-run=client?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: dry-run client emits a legal skeleton you can edit and apply — faster and less typo-prone than writing apiVersion from scratch.</p></div></div>
+        <h5>Answer</h5>
+        <p>You get correct <code>apiVersion</code>/<code>kind</code> structure for the cluster, then add exam-specific names, labels, and mounts. Pair with <a href="yaml-and-imperative.html">YAML vs imperative</a>.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Name three orientation commands before mutating.</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: get-contexts, use-context, then get ns / get all in the target namespace.</p></div></div>
+        <h5>Answer</h5>
+        <p><code>kubectl config get-contexts</code>, <code>use-context</code>, and a namespace-scoped inventory (<code>get all</code>, <code>get deploy,svc,pod -n …</code>). Confirm the stem’s names exist or must be created.</p>
+      </div>
+    </details>
+  </div>
+</section>

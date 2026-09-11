@@ -1,0 +1,177 @@
+<section class="hero reveal">
+  <span class="eyebrow">FOUNDATIONS · API objects</span>
+  <span class="domain-chip">Domains 2 &amp; 4 · Cluster + Workloads</span>
+  <h1>API objects, namespaces &amp; labels.</h1>
+  <p class="lead">Everything you administer is an API object: a kind, a name, optional namespace, and metadata. Labels select; annotations annotate. Mix them up and Services, NetworkPolicies, and rollouts silently miss their targets.</p>
+</section>
+
+<section class="section reveal" id="resource-kind">
+  <h2><span class="section-num">01</span> Resources, kinds, names</h2>
+  <p class="takeaway">A <b>kind</b> is the type; a <b>resource</b> is the API path plural; an <b>object</b> is one named instance.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Library catalog card <span class="tag">analogy</span></div>
+      <p>In plain English: kind is “Book,” the resource is the catalog drawer <code>books</code>, and each ISBN is one object. Namespaces are separate rooms in the library. Labels are color tabs you can sort by; annotations are sticky notes that don’t affect sorting.</p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>apiVersion</dt>
+    <dd>Group + version (<code>apps/v1</code>, <code>v1</code>, <code>networking.k8s.io/v1</code>).</dd>
+    <dt>kind</dt>
+    <dd>CamelCase type: Pod, Deployment, Service, NetworkPolicy.</dd>
+    <dt>metadata.name</dt>
+    <dd>Unique within its scope (namespace or cluster).</dd>
+    <dt>resource</dt>
+    <dd>What kubectl lists: <code>pods</code>, <code>deployments</code>, short names <code>po</code>, <code>deploy</code>.</dd>
+  </dl>
+
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">discover-api.sh</span>
+    </div>
+    <pre><code>kubectl api-resources
+kubectl api-resources --namespaced=true
+kubectl explain pod
+kubectl get deploy web -o yaml | head</code></pre>
+  </div>
+</section>
+
+<section class="section reveal" id="namespaces">
+  <h2><span class="section-num">02</span> Namespaces: scope, not security walls</h2>
+  <p>Namespaces partition <b>names</b> for most workload objects. They are not a substitute for NetworkPolicy or RBAC — but exam tasks almost always name one.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Namespaced</div>
+      <ul>
+        <li>Pods, Deployments, Services</li>
+        <li>ConfigMaps, Secrets</li>
+        <li>PVC, NetworkPolicy, Roles</li>
+        <li>Jobs, CronJobs, Ingress</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Cluster-scoped</div>
+      <ul>
+        <li>Nodes, Namespace objects</li>
+        <li>PV, StorageClass</li>
+        <li>ClusterRole / ClusterRoleBinding</li>
+        <li>CSI drivers, PriorityClass</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha · creating in default by accident</div>
+      <p>If the stem says namespace <code>prod</code> and you omit <code>-n</code>/<code>metadata.namespace</code>, the object often lands in <code>default</code>. Graders look in the named namespace. Always verify with <code>kubectl get … -n prod</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="labels-selectors">
+  <h2><span class="section-num">03</span> Labels &amp; selectors</h2>
+  <p>Labels are key/value identity tags. Controllers and Services find Pods with <b>selectors</b>. Mismatched labels are a classic “Service has no Endpoints” failure — see <a href="../networking/services-endpoints.html">Services &amp; endpoints</a>.</p>
+
+  <div class="mermaid-wrap">
+    <pre class="mermaid">flowchart LR
+      D[Deployment<br/>selector: app=web] --> RS[ReplicaSet]
+      RS --> P1[Pod<br/>labels: app=web]
+      RS --> P2[Pod<br/>labels: app=web]
+      S[Service<br/>selector: app=web] --> E[Endpoints]
+      P1 -.-> E
+      P2 -.-> E
+      X[Pod<br/>labels: app=api] -.->|not selected| E
+    </pre>
+  </div>
+
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">label-select.sh</span>
+    </div>
+    <pre><code>kubectl get pods -l app=web -n shop
+kubectl get pods -l 'tier in (frontend,api)'
+kubectl label pod web-0 env=canary --overwrite
+kubectl get svc web -o jsonpath='{.spec.selector}'</code></pre>
+  </div>
+
+  <p>Equality selectors (<code>app=web</code>) cover most exam tasks. Set-based selectors appear in NetworkPolicies and some controller specs — read the docs example carefully.</p>
+</section>
+
+<section class="section reveal" id="annotations">
+  <h2><span class="section-num">04</span> Annotations vs labels</h2>
+  <p>Both live under <code>metadata</code>. Only labels are for identifying and selecting sets of objects. Annotations store non-identifying metadata (tooling, checksums, change-cause).</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th></th><th>Labels</th><th>Annotations</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Purpose</strong></td><td>Identity &amp; selection</td><td>Opaque metadata</td></tr>
+        <tr><td><strong>Used by selectors?</strong></td><td><span class="yes">Yes</span></td><td><span class="no">No</span></td></tr>
+        <tr><td><strong>Size / chars</strong></td><td>Strict, short keys/values</td><td>Larger, freer form</td></tr>
+        <tr><td><strong>Exam example</strong></td><td>Service → Pod match</td><td><code>kubernetes.io/change-cause</code> on a Deployment</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="quiz" data-quiz="label-vs-annotation">
+    <p class="q">You need a Service to load-balance only Pods running image build <code>v42</code>. What belongs on those Pods?</p>
+    <div class="quiz-opts">
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> An annotation <code>build=v42</code> and a Service selector on that annotation</button>
+      <button type="button" class="quiz-opt" data-correct="true"><span class="mark"></span> A label such as <code>build=v42</code> matching the Service selector</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Only the Deployment name — Services select by ownerReference</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> A namespace named <code>v42</code></button>
+    </div>
+    <div class="quiz-explain">Service selectors match labels only. Annotations cannot select Endpoints. OwnerReferences link controllers to Pods; they do not replace Service selectors.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">What must match for a Service to get Endpoints?</span>
+        <span class="pm-chip diff-warm">Warm</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: the Service selector must match Pod labels in the same namespace, and those Pods must be Ready for readiness-gated endpoints.</p></div></div>
+        <h5>Answer</h5>
+        <p>Compare <code>spec.selector</code> on the Service with <code>metadata.labels</code> on Pods. Namespace must match. Then check readiness probes if Endpoints stay empty.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Is a PersistentVolume namespaced?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: No — PVs and StorageClasses are cluster-scoped; PVCs are namespaced claims that bind to PVs.</p></div></div>
+        <h5>Answer</h5>
+        <p>Create/get PV without <code>-n</code>. Create PVC inside the app namespace. Binding couples them — details in <a href="../storage/pv-pvc.html">PV &amp; PVC lifecycle</a>.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Why not put “version notes” in labels?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: Labels are for selection and must stay query-friendly; put long notes in annotations so you don’t break selectors or hit label constraints.</p></div></div>
+        <h5>Answer</h5>
+        <p>Label values have length/character limits and every unique label multiplies selector surface. Use annotations for URLs, build IDs that only humans/tools read, and change-cause text.</p>
+      </div>
+    </details>
+  </div>
+</section>

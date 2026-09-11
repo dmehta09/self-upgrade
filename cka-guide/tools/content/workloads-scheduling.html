@@ -1,0 +1,173 @@
+<section class="hero reveal">
+  <span class="eyebrow">Workloads &amp; Scheduling · Placement</span>
+  <span class="domain-chip">Domain 4 · Workloads &amp; Scheduling · 15%</span>
+  <h1>Scheduling: affinity, taints &amp; admission.</h1>
+  <p class="lead">Pin Pods with nodeSelector and affinity, keep them apart with anti-affinity, and reserve nodes with taints/tolerations. Quotas and LimitRanges enforce policy at admission time.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway">The <b>scheduler</b> filters and scores nodes. You steer it with labels, affinity rules, and taints — while <b>admission</b> objects like ResourceQuota reject oversized asks early.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M5 19l1.5-1.5"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy</div>
+      <p>nodeSelector is a sticky note: “GPU room only.” Affinity is a preference sheet with must/should. Taints are a velvet rope — you need a matching wristband (toleration) to enter. ResourceQuota is the bouncer counting total guests for the party.</p>
+    </div>
+  </div>
+  <div class="mermaid-wrap" role="img" aria-label="Scheduler filters then scores nodes">
+    <pre class="mermaid">
+flowchart TB
+  POD[Pending Pod]
+  FILT[Filter: selector / affinity / taints / resources]
+  SCORE[Score: preferences]
+  BIND[Bind to node]
+  ADM[Admission: Quota / LimitRange]
+  ADM --> POD --> FILT --> SCORE --> BIND
+    </pre>
+  </div>
+</section>
+
+<section class="section reveal" id="selector-affinity">
+  <h2><span class="section-num">02</span> nodeSelector &amp; affinity</h2>
+  <p><code>nodeSelector</code> is a simple AND of node labels. Affinity adds operators, multiple terms, and soft preferences (<code>preferredDuringSchedulingIgnoredDuringExecution</code>).</p>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">labels &amp; selector</span>
+      <button class="code-copy" type="button" aria-label="Copy"><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>kubectl get nodes --show-labels
+kubectl label node node01 disk=ssd --overwrite
+kubectl run ssd-pod --image=nginx --dry-run=client -o yaml \
+  | sed '/containers:/i\  nodeSelector:\n    disk: ssd' | kubectl apply -f -
+kubectl get pod ssd-pod -o wide</code></pre>
+  </div>
+  <div class="codeblock">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">podAntiAffinity · basics</span>
+      <button class="code-copy" type="button" aria-label="Copy"><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchLabels: { app: cache }
+      topologyKey: kubernetes.io/hostname</code></pre>
+  </div>
+  <p class="code-cap">Hard anti-affinity on <code>hostname</code> spreads replicas across nodes — great for HA, fatal if you ask for more replicas than nodes.</p>
+</section>
+
+<section class="section reveal" id="taints">
+  <h2><span class="section-num">03</span> Taints &amp; tolerations</h2>
+  <p>A taint repels Pods unless they tolerate it. Effects: <code>NoSchedule</code>, <code>PreferNoSchedule</code>, <code>NoExecute</code>.</p>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Taint the node</div>
+      <ul>
+        <li><code>kubectl taint nodes node01 sku=gpu:NoSchedule</code></li>
+        <li>Control-plane nodes often already tainted</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Tolerate on the Pod</div>
+      <ul>
+        <li>Match <code>key</code>, <code>operator</code>, <code>effect</code></li>
+        <li><code>NoExecute</code> can evict running Pods</li>
+      </ul>
+    </div>
+  </div>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">taint · tolerate</span>
+      <button class="code-copy" type="button" aria-label="Copy"><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>kubectl taint node node01 dedicated=payments:NoSchedule
+kubectl explain pod.spec.tolerations
+# remove with a trailing hyphen:
+kubectl taint node node01 dedicated=payments:NoSchedule-
+kubectl describe node node01 | sed -n '/Taints/,/Unschedulable/p'</code></pre>
+  </div>
+  <div class="callout warn">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">Pending</span></div>
+      <p>Pending + “didn’t tolerate …” in Events means taints, not “the cluster is broken.” Read <code>kubectl describe pod</code> before you start draining nodes.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="admission">
+  <h2><span class="section-num">04</span> Quotas &amp; LimitRange (admission)</h2>
+  <p>These run at admission — before the scheduler. ResourceQuota caps namespace totals; LimitRange sets defaults/min/max per Pod or container.</p>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">quota · limitrange</span>
+      <button class="code-copy" type="button" aria-label="Copy"><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>kubectl create namespace team-a
+kubectl create quota team-a-q -n team-a \
+  --hard=cpu=2,memory=2Gi,pods=10
+kubectl apply -n team-a -f - &lt;&lt;'EOF'
+apiVersion: v1
+kind: LimitRange
+metadata: { name: mem-defaults }
+spec:
+  limits:
+  - type: Container
+    default: { memory: 256Mi, cpu: 200m }
+    defaultRequest: { memory: 128Mi, cpu: 100m }
+EOF
+kubectl describe quota -n team-a
+kubectl describe limitrange -n team-a</code></pre>
+  </div>
+  <div class="quiz" data-quiz="wl-sched-taint">
+    <p class="q">A node has taint <code>sku=gpu:NoSchedule</code>. A Pod without tolerations will:</p>
+    <div class="quiz-opts">
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span>Always schedule there anyway</button>
+      <button type="button" class="quiz-opt" data-correct="true"><span class="mark"></span>Skip that node unless it tolerates the taint</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span>Delete the taint automatically</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span>Become Guaranteed QoS</button>
+    </div>
+    <div class="quiz-explain"><b>NoSchedule</b> filters the node out. Add a matching toleration (and usually a nodeSelector/affinity) for GPU workloads.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">nodeSelector vs nodeAffinity — when upgrade?</span>
+        <span class="pm-chip diff-warm">Warm-up</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><div class="co-title">Say it out loud</div><p>“Selector is exact label equals. Affinity when I need operators, multiple terms, or preferred soft rules.”</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">How do you untaint a node?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><div class="co-title">Say it out loud</div><p>“Repeat the taint command with a hyphen at the end: kubectl taint node NAME key=value:Effect-”</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">What do ResourceQuota and LimitRange enforce?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><div class="co-title">Say it out loud</div><p>“Admission policy: Quota caps namespace totals; LimitRange sets default and min/max sizes per Pod or container.”</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

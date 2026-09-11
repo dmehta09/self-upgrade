@@ -1,0 +1,158 @@
+<section class="hero reveal">
+  <span class="eyebrow">CLUSTER · extension interfaces</span>
+  <span class="domain-chip">Domain 2 · Cluster Architecture (25%)</span>
+  <h1>CRI, CNI &amp; CSI.</h1>
+  <p class="lead">Kubernetes does not bake in a container engine, network fabric, or storage driver. Three stable interfaces keep the core portable — and CKA expects you to know which layer owns which failure.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway"><b>CRI</b> runs containers, <b>CNI</b> gives Pods network, <b>CSI</b> attaches volumes — kubelet orchestrates all three; none of them is “Docker as the cluster runtime.”</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Three wall sockets <span class="tag">analogy</span></div>
+      <p>In plain English: the house (kubelet) has three sockets. Plug in any compliant appliance — a container runtime, a network plugin, a volume driver — without rewiring the walls. Swap brands; keep the plugs the same.</p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>CRI</dt>
+    <dd>Container Runtime Interface. kubelet ↔ runtime (almost always <b>containerd</b> on modern CKA labs).</dd>
+    <dt>CNI</dt>
+    <dd>Container Network Interface. Assign Pod IPs, routes, (often) NetworkPolicy enforcement.</dd>
+    <dt>CSI</dt>
+    <dd>Container Storage Interface. Provision/attach/mount volumes via controller + node plugins.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="boundaries">
+  <h2><span class="section-num">02</span> Boundaries that matter on the exam</h2>
+  <p>Blame the right interface. Image pull errors are CRI. Pods have no IP / cannot reach peers — CNI. PVC stuck Pending or mount fails — CSI (or StorageClass).</p>
+
+  <div class="mermaid-wrap">
+    <pre class="mermaid">
+flowchart TB
+  subgraph node["Worker node"]
+    KL[kubelet]
+    KL -->|CRI gRPC| CT[containerd]
+    KL -->|CNI exec| CN[CNI plugin]
+    KL -->|CSI node| CS[CSI node plugin]
+    CT --> POD[Pod containers]
+    CN --> NET[Pod veth / IP]
+    CS --> VOL[Volume mount]
+  end
+  API[API server] -.watch Pods.-> KL
+  CSC[CSI controller] -.PV / attach.-> API
+    </pre>
+  </div>
+  <p class="viz-note">kubelet is the hub. Controllers talk CSI attach via the API; the node plugin finishes the mount.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Outdated mental model</div>
+      <ul>
+        <li>“Docker is the Kubernetes runtime”</li>
+        <li>Debug with only <code>docker ps</code> on every node</li>
+        <li>Assume kube-proxy is the only datapath forever</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">2026 / K8s 1.35 default</div>
+      <ul>
+        <li>containerd (or CRI-O) via CRI</li>
+        <li><code>crictl</code> / <code>ctr</code> for node debugging</li>
+        <li>CNI may use eBPF and replace classic kube-proxy</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha · Docker socket ≠ CRI</div>
+      <p>dockershim was removed years ago. A node may still have Docker for building images; that does not mean kubelet uses it. Check the kubelet <code>--container-runtime-endpoint</code> (often <code>unix:///run/containerd/containerd.sock</code>).</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="commands">
+  <h2><span class="section-num">03</span> Commands that map to each interface</h2>
+  <p>On the exam you verify from the API first, then drop to the node when the API cannot help.</p>
+
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">CRI · CNI · CSI checks</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code># CRI — runtime on a node
+crictl info
+crictl ps -a
+crictl images
+
+# CNI — Pod networking
+kubectl get pods -o wide
+ls /etc/cni/net.d/
+kubectl -n kube-system get ds,deploy | grep -Ei 'cni|flannel|calico|cilium'
+
+# CSI — storage plugins
+kubectl get csidrivers
+kubectl get csinode
+kubectl get storageclass,pvc,pv</code></pre>
+  </div>
+
+  <div class="quiz" data-quiz="ext-blame">
+    <p class="q">A Pod is Running but has no IP and cannot be reached by other Pods. Which interface is the first place to look?</p>
+    <div class="quiz-opts">
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> CSI</button>
+      <button type="button" class="quiz-opt" data-correct="true"><span class="mark"></span> CNI</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Only the scheduler</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> etcd compaction</button>
+    </div>
+    <div class="quiz-explain">Pod IP allocation and cross-node routing are CNI’s job. CSI is volumes; scheduler already bound the Pod if it is Running.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Why did Kubernetes invent CRI/CNI/CSI?</span>
+        <span class="pm-chip diff-warm">Warm</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: Stable interfaces let vendors swap runtimes, networks, and storage without forking kubelet.</p></div></div>
+        <h5>Answer</h5>
+        <p>The core stays small and portable. You install a CNI DaemonSet or CSI driver as cluster add-ons; kubelet only speaks the contract.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Is Docker required for CKA clusters?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: No — expect containerd via CRI; use crictl on nodes, not Docker-as-runtime assumptions.</p></div></div>
+        <h5>Answer</h5>
+        <p>Images still look like Docker Hub references. The runtime that pulls and runs them is almost always containerd.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">PVC Pending forever — CRI or CSI?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: CSI and StorageClass provisioning — check PVC Events, provisioner logs, and whether a matching StorageClass exists.</p></div></div>
+        <h5>Answer</h5>
+        <p><code>kubectl describe pvc</code> usually names the culprit. CRI only enters after a volume must be mounted into a container.</p>
+      </div>
+    </details>
+  </div>
+</section>

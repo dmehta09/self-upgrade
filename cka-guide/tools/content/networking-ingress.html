@@ -1,0 +1,188 @@
+<section class="hero reveal">
+  <span class="eyebrow">Services &amp; Networking · Ingress</span>
+  <span class="domain-chip">Domain 3 · Services &amp; Networking (20%)</span>
+  <h1>Ingress controllers &amp; resources.</h1>
+  <p class="lead">Ingress is L7 HTTP(S) routing into the cluster: host + path rules to Services, optional TLS Secret. Still on CKA v1.35 alongside Gateway API—know both. An Ingress object does nothing without a controller.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway">You write an <b>Ingress</b> resource; an <b>Ingress controller</b> watches it and programs a reverse proxy / load balancer. Pick the controller with <b>ingressClassName</b>.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy <span class="tag">plain English</span></div>
+      <p>Ingress is the building directory: “example.com/api → floor 3, suite API.” The controller is the concierge who actually steers visitors. A directory on the wall with no concierge (no controller) changes nothing.</p>
+    </div>
+  </div>
+  <figure class="mermaid-wrap">
+    <pre class="mermaid">flowchart LR
+  C["Client HTTPS"] --> IC["Ingress controller"]
+  IC -->|"Host / path rules"| S1["Service frontend"]
+  IC --> S2["Service api"]
+  S1 --> P1["Pods"]
+  S2 --> P2["Pods"]
+  TLS["tls.secretName"] -.->|"terminates TLS"| IC</pre>
+    <p class="viz-note">Ingress fronts Services (ClusterIP). It is not a replacement for Pod networking or NetworkPolicy.</p>
+  </figure>
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">exam trap</span></div>
+      <p>Creating <code>kind: Ingress</code> alone never opens the edge. Confirm a controller Pod is Running and <code>ingressClassName</code> matches an <code>IngressClass</code>. Annotations are controller-specific—prefer portable fields (<code>pathType</code>, <code>ingressClassName</code>, TLS) on the exam.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="rules">
+  <h2><span class="section-num">02</span> Host, path, TLS</h2>
+  <p><code>pathType</code> is required: <code>Prefix</code>, <code>Exact</code>, or <code>ImplementationSpecific</code>. TLS entries reference a Secret of type <code>kubernetes.io/tls</code> with <code>tls.crt</code> / <code>tls.key</code>.</p>
+  <div class="codeblock">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">ingress-shop.yaml</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+  namespace: shop
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - shop.example.com
+    secretName: shop-tls
+  rules:
+  - host: shop.example.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: api
+            port:
+              number: 80
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80</code></pre>
+  </div>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">TLS secret + apply</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; kubectl -n shop create secret tls shop-tls --cert=tls.crt --key=tls.key
+$&lt;/span&gt; kubectl -n shop apply -f ingress-shop.yaml
+$&lt;/span&gt; kubectl -n shop get ingress shop -o wide
+$&lt;/span&gt; kubectl -n shop describe ingress shop
+$&lt;/span&gt; kubectl get ingressclass</code></pre>
+  </div>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Ingress (classic)</div>
+      <ul>
+        <li>Single resource + many annotations</li>
+        <li>HTTP/HTTPS focused</li>
+        <li>Still valid on CKA v1.35</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Gateway API (modern)</div>
+      <ul>
+        <li>GatewayClass / Gateway / HTTPRoute</li>
+        <li>Role-oriented, portable features</li>
+        <li>Exam’s preferred ingress-traffic model</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="task">
+  <h2><span class="section-num">03</span> Worked task shape</h2>
+  <p>Typical ask: expose two Services on one host with path split, or attach TLS. Verify ADDRESS / events on the Ingress, then curl with <code>Host</code> header if using a NodePort controller.</p>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">smoke test</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; kubectl -n ingress-nginx get svc
+$&lt;/span&gt; curl -k -H "Host: shop.example.com" https://&lt;controller-ip&gt;/api/
+$&lt;/span&gt; kubectl -n shop get endpoints api frontend</code></pre>
+  </div>
+  <div class="quiz">
+    <p class="q">You applied an Ingress with valid rules. <code>kubectl get ingress</code> shows no ADDRESS and traffic fails. First suspicion?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> ClusterIP Services cannot be Ingress backends.</button>
+      <button class="quiz-opt" type="button" data-correct="true"><span class="mark"></span> No Ingress controller is running, or <code>ingressClassName</code> doesn’t match any controller.</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> You must convert the Ingress to a LoadBalancer Service first.</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> TLS Secrets are mandatory even for HTTP-only Ingress.</button>
+    </div>
+    <div class="quiz-explain">Ingress is declarative config for a controller. Without one (or with the wrong class), nothing advertises an address or routes traffic.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Ingress resource vs Ingress controller?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>The resource is API config (rules). The controller is the running software that implements those rules. Both are required for working HTTP ingress via the Ingress API.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Ingress YAML is the map; the controller is the proxy that follows it.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">How does TLS work on Ingress?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p><code>spec.tls</code> lists hosts and a <code>secretName</code> pointing at a TLS Secret in the same namespace. The controller terminates TLS (typical) and forwards HTTP to backend Services.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“TLS block names the host and the tls Secret; controller presents that cert.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Is Ingress gone on CKA v1.35?</span>
+        <span class="pm-chip diff-warm">warm</span>
+      </summary>
+      <div class="qa-body">
+        <p>No—Ingress remains on the curriculum. Gateway API is the modern focus for ingress traffic, but you should still create host/path Ingress and TLS when asked.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“I know Ingress for classic tasks and Gateway API as the successor model the exam emphasizes.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>

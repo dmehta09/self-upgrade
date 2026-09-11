@@ -1,0 +1,146 @@
+<section class="hero reveal">
+  <span class="eyebrow">Cluster · kubeadm</span>
+  <span class="domain-chip">Domain 2 · Cluster Architecture (25%)</span>
+  <h1>kubeadm: create &amp; manage clusters.</h1>
+  <p class="lead">CKA expects you to bootstrap and maintain clusters with <b>kubeadm</b>: init, join, upgrade, and token/cert workflows — not invent a custom installer.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway"><b>kubeadm</b> configures the control plane and worker join path. You still provide OS packages, container runtime (containerd), and a CNI after init.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy <span class="tag">plain English</span></div>
+      <p>kubeadm is the flat-pack furniture instructions: it bolts the control-plane pieces together and prints the join command for more chairs. You still unpack the boxes (packages), plug in power (CRI), and lay the network carpet (CNI).</p>
+    </div>
+  </div>
+  <figure class="mermaid-wrap">
+    <pre class="mermaid">flowchart TB
+  PRE["Preflight: swap off, ports, CRI"] --> INIT["kubeadm init"]
+  INIT --> KUBECONFIG["admin.conf → kubectl"]
+  INIT --> CNI["Install CNI"]
+  INIT --> JOIN["kubeadm join workers"]
+  UP["kubeadm upgrade"] -.-> INIT</pre>
+    <p class="viz-note">Init brings API server, etcd (stacked), scheduler, controller-manager, and prints join credentials.</p>
+  </figure>
+</section>
+
+<section class="section reveal" id="bootstrap">
+  <h2><span class="section-num">02</span> Init &amp; join</h2>
+  <p>Typical exam flow: prepare node → <code>kubeadm init</code> with a pod network CIDR → apply CNI → join workers with token + discovery hash.</p>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">init &amp; join</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+$&lt;/span&gt; mkdir -p $HOME/.kube &amp;&amp; sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config
+$&lt;/span&gt; sudo chown $(id -u):$(id -g) $HOME/.kube/config
+$&lt;/span&gt; kubectl apply -f &lt;cni-manifest.yaml&gt;
+$&lt;/span&gt; kubeadm token create --print-join-command
+$&lt;/span&gt; # on worker:&lt;/span&gt;
+$&lt;/span&gt; sudo kubeadm join &lt;cp-ip&gt;:6443 --token &lt;token&gt; --discovery-token-ca-cert-hash sha256:&lt;hash&gt;</code></pre>
+  </div>
+  <dl class="kv">
+    <dt>admin.conf</dt>
+    <dd>Cluster-admin kubeconfig written under <code>/etc/kubernetes/</code>.</dd>
+    <dt>bootstrap token</dt>
+    <dd>Short-lived join secret; recreate with <code>kubeadm token create</code>.</dd>
+    <dt>Static pods</dt>
+    <dd>Control-plane components as manifests in <code>/etc/kubernetes/manifests/</code>.</dd>
+  </dl>
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">exam trap</span></div>
+      <p>Pods stay Pending with no CNI → CoreDNS won’t be Ready. Match <code>--pod-network-cidr</code> to the CNI you install. Expired join tokens fail with unauthorized — create a fresh token, don’t debug the worker forever.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="maintain">
+  <h2><span class="section-num">03</span> Upgrade &amp; certs</h2>
+  <p>Upgrade order: control plane first (kubeadm → kubelet/kubectl packages), then workers. Drain/uncordon as the task requires.</p>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">upgrade sketch</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; sudo kubeadm upgrade plan
+$&lt;/span&gt; sudo kubeadm upgrade apply v1.35.x
+$&lt;/span&gt; sudo apt-mark unhold kubelet kubectl &amp;&amp; sudo apt-get install -y kubelet=1.35.x-* kubectl=1.35.x-*
+$&lt;/span&gt; sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart kubelet
+$&lt;/span&gt; kubeadm certs check-expiration
+$&lt;/span&gt; sudo kubeadm certs renew all</code></pre>
+  </div>
+  <div class="quiz">
+    <p class="q">After <code>kubeadm init</code>, CoreDNS is Pending and no Pod has an IP. First fix?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> Delete etcd</button>
+      <button class="quiz-opt" type="button" data-correct="true"><span class="mark"></span> Install a CNI plugin matching the pod CIDR</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> Scale CoreDNS to zero</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> Disable the API server</button>
+    </div>
+    <div class="quiz-explain">kubeadm does not install a network plugin. Without CNI, Pod networking never starts.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">What does kubeadm init leave on disk?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>Static Pod manifests under <code>/etc/kubernetes/manifests/</code>, certs under <code>/etc/kubernetes/pki/</code>, and <code>admin.conf</code> for kubectl.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Manifests, PKI, admin kubeconfig — then I still install CNI.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Worker join failed — token expired. Command?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>On a control-plane node: <code>kubeadm token create --print-join-command</code> and rerun join on the worker.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“New token, new join line — don’t fight TLS with a dead token.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Upgrade order?</span>
+        <span class="pm-chip diff-stretch">stretch</span>
+      </summary>
+      <div class="qa-body">
+        <p>kubeadm upgrade plan/apply on control plane, then upgrade kubelet/kubectl packages and restart kubelet; workers after the control plane is healthy.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Control plane first with kubeadm, then kubelet — workers follow.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>

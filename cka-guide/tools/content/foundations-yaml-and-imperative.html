@@ -1,0 +1,198 @@
+<section class="hero reveal">
+  <span class="eyebrow">FOUNDATIONS · YAML · imperative</span>
+  <span class="domain-chip">Foundations · Exam method adjacent</span>
+  <h1>YAML vs imperative.</h1>
+  <p class="lead">CKA rewards correct end state, not purity. Use imperative commands when they are faster and safe; generate YAML with dry-run when you need fields imperative cannot express cleanly.</p>
+</section>
+
+<section class="section reveal" id="when-which">
+  <h2><span class="section-num">01</span> Choose the fastest correct path</h2>
+  <p class="takeaway"><b>Imperative</b> for simple creates; <b>YAML</b> when the stem demands specific fields, volumes, or multi-object graphs.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Power drill vs full toolbox <span class="tag">analogy</span></div>
+      <p>In plain English: <code>kubectl create</code> / <code>run</code> / <code>expose</code> is the power drill — one motion for a common hole. Manifests are the toolbox when the job needs hinges, levels, and three fasteners. Dry-run YAML is borrowing a template so you don’t invent the hinge from scratch.</p>
+    </div>
+  </div>
+
+  <div class="mermaid-wrap">
+    <pre class="mermaid">flowchart TD
+      Q[Read the task] --> C{Only name, image, port, replicas?}
+      C -->|Yes| I[kubectl create / run / expose / scale]
+      C -->|No — probes, mounts, affinity…| Y[Generate YAML skeleton]
+      Y --> D["--dry-run=client -o yaml &gt; file"]
+      D --> E[Edit required fields]
+      E --> A[kubectl apply -f]
+      I --> V[Verify Ready / Endpoints]
+      A --> V
+      V --> T{Time left &amp; unsure?}
+      T -->|Flag &amp; skip| S[Next question]
+      T -->|Done| N[Next question]
+    </pre>
+  </div>
+</section>
+
+<section class="section reveal" id="imperative-kit">
+  <h2><span class="section-num">02</span> Imperative kit that still works</h2>
+  <p>These generators remain the exam speed layer. Confirm flags with <code>--help</code> if muscle memory blanks — help is local and fast.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Intent</th><th>Command shape</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Deployment</strong></td><td><code>kubectl create deployment NAME --image=IMG [-n NS]</code></td></tr>
+        <tr><td><strong>Scale</strong></td><td><code>kubectl scale deploy/NAME --replicas=N</code></td></tr>
+        <tr><td><strong>Expose</strong></td><td><code>kubectl expose deploy/NAME --port=80 --target-port=8080</code></td></tr>
+        <tr><td><strong>ConfigMap / Secret</strong></td><td><code>kubectl create configmap</code> / <code>secret generic</code></td></tr>
+        <tr><td><strong>Namespace / SA</strong></td><td><code>kubectl create namespace</code> / <code>serviceaccount</code></td></tr>
+        <tr><td><strong>Job (quick)</strong></td><td><code>kubectl create job NAME --image=IMG -- …</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha · kubectl run is not your 2019 muscle memory</div>
+      <p>On modern clusters, <code>kubectl run</code> creates a <b>Pod</b> by default — not a Deployment. If the question asks for a Deployment, use <code>kubectl create deployment</code> or dry-run YAML. Exposing a bare Pod also behaves differently under restarts.</p>
+    </div>
+  </div>
+
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">imperative-happy-path.sh</span>
+    </div>
+    <pre><code>kubectl create namespace shop
+kubectl create deployment api --image=nginx:1.27 -n shop
+kubectl scale deployment/api --replicas=3 -n shop
+kubectl expose deployment/api --port=80 --target-port=80 -n shop
+kubectl get deploy,po,svc -n shop</code></pre>
+  </div>
+</section>
+
+<section class="section reveal" id="dry-run-yaml">
+  <h2><span class="section-num">03</span> Generate YAML, then edit</h2>
+  <p>When you need probes, volumeMounts, nodeSelector, or precise labels, scaffold with dry-run and edit. This is the default pattern for partial-credit-friendly work — the file is your audit trail.</p>
+
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">scaffold.sh</span>
+    </div>
+    <pre><code>kubectl create deployment api --image=nginx:1.27 -n shop \
+  --dry-run=client -o yaml &gt; api.yaml
+# edit: replicas, labels, resources, probes…
+kubectl apply -f api.yaml
+kubectl rollout status deployment/api -n shop</code></pre>
+  </div>
+
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Stay imperative</div>
+      <ul>
+        <li>Namespace, SA, basic Deployment</li>
+        <li>Scale, expose ClusterIP</li>
+        <li>Simple ConfigMap from literals</li>
+        <li>Quick Job / CronJob create</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Switch to YAML</div>
+      <ul>
+        <li>Probes, lifecycle hooks</li>
+        <li>PVCs, mounts, SecurityContext</li>
+        <li>Affinity, taints/tolerations</li>
+        <li>NetworkPolicy, Gateway, multi-doc</li>
+      </ul>
+    </div>
+  </div>
+
+  <p>After apply, prefer <code>kubectl apply -f</code> for further edits on that object so you keep a declarative file. Live <code>kubectl edit</code> is fine for tiny fixes — just re-verify.</p>
+</section>
+
+<section class="section reveal" id="timeboxing">
+  <h2><span class="section-num">04</span> Exam timeboxing tip</h2>
+  <p>Two hours, roughly 15–20 tasks. Average ~6–8 minutes. Heavy YAML tasks can steal a whole domain’s worth of points if you dig in.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h4>First pass: bank easy points</h4>
+        <p>Anything solvable with create/scale/expose/label in under three minutes — do it immediately after context switch.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h4>Cap YAML digs</h4>
+        <p>If you are still hunting fields after ~7–8 minutes, flag the item, paste a stub if useful, and move on. Return with leftover time.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h4>Always leave a verifiable state</h4>
+        <p>Partial progress that is applied and Ready can score. A perfect YAML never applied scores zero. Pair with <a href="exam-method.html">exam method</a>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz="yaml-vs-imp">
+    <p class="q">The task requires a Deployment with an HTTP readiness probe on path <code>/healthz</code>. Best first move?</p>
+    <div class="quiz-opts">
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> kubectl run with lots of -- flags until probes appear</button>
+      <button type="button" class="quiz-opt" data-correct="true"><span class="mark"></span> create deployment --dry-run=client -o yaml, add the probe, apply</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Only annotate the Pod; kubelet infers readiness from annotations</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Skip probes; Ready replicas do not matter for scoring</button>
+    </div>
+    <div class="quiz-explain">Probes are YAML fields. Scaffold, edit, apply, then confirm Ready. Imperative run/create won’t express a custom probe cleanly on the exam.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">When is kubectl expose enough?</span>
+        <span class="pm-chip diff-warm">Warm</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: When you already have a labeled Deployment/Pod and only need a Service with matching selector and ports — no Ingress or policy yet.</p></div></div>
+        <h5>Answer</h5>
+        <p>Expose wires a Service selector from the workload’s labels. For NodePort specifics, sessionAffinity, or multi-port edge cases, generate YAML or edit the Service after.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Why redirect dry-run to a file instead of apply piping?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: A file lets you edit carefully, re-apply, and recover if the first apply fails — pipes are one-shot under stress.</p></div></div>
+        <h5>Answer</h5>
+        <p>Exam editors and retries favor <code>&gt; file.yaml</code>. You can <code>kubectl apply -f</code> repeatedly and keep the artifact for the next tweak.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Imperative create then need a probe — what now?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: Get the live object as YAML, add the probe fields, apply — or kubectl edit for a tiny patch — then watch rollout Ready.</p></div></div>
+        <h5>Answer</h5>
+        <p><code>kubectl get deploy NAME -o yaml &gt; file.yaml</code>, strip status/managed noise if needed, add <code>readinessProbe</code>, apply, <code>rollout status</code>. Don’t recreate from scratch unless names collide.</p>
+      </div>
+    </details>
+  </div>
+</section>

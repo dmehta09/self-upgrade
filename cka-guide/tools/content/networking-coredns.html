@@ -1,0 +1,188 @@
+<section class="hero reveal">
+  <span class="eyebrow">Services &amp; Networking · CoreDNS</span>
+  <span class="domain-chip">Domain 3 · Services &amp; Networking (20%)</span>
+  <h1>CoreDNS.</h1>
+  <p class="lead">Cluster DNS is CoreDNS behind the <code>kube-dns</code> Service in <code>kube-system</code>. Config lives in the Corefile ConfigMap. CKA expects FQDN fluency, ndots quirks, and a crisp DNS failure debug path.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway">Pods use <b>cluster DNS</b> to resolve Service (and Pod) names. The stable Service name is still <b>kube-dns</b>; the Pods running the server are CoreDNS.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy <span class="tag">plain English</span></div>
+      <p>CoreDNS is the office phone book. You ask for “api” and it returns the Service ClusterIP. The book’s rules (Corefile) say how to look up internal names and when to ask the public internet. If the librarians (CoreDNS Pods) are down, every app suddenly “can’t connect” even though Services still exist.</p>
+    </div>
+  </div>
+  <dl class="kv">
+    <dt>Service DNS</dt>
+    <dd><code>my-svc.my-ns.svc.cluster.local</code> (short forms work inside the same ns).</dd>
+    <dt>Pod DNS</dt>
+    <dd><code>pod-ip.my-ns.pod.cluster.local</code> (dots in IP become dashes).</dd>
+    <dt>kube-dns Service</dt>
+    <dd>ClusterIP that kubelet puts into Pod <code>/etc/resolv.conf</code> as nameserver.</dd>
+    <dt>Corefile</dt>
+    <dd>ConfigMap (usually <code>coredns</code>) in <code>kube-system</code>—plugins, forward, kubernetes zone.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="names">
+  <h2><span class="section-num">02</span> Names, ndots, and resolv.conf</h2>
+  <p>Inside namespace <code>shop</code>, <code>api</code>, <code>api.shop</code>, and <code>api.shop.svc</code> all expand via search domains. Prefer FQDN with a trailing dot when debugging to skip search path surprises.</p>
+  <figure class="mermaid-wrap">
+    <pre class="mermaid">flowchart LR
+  APP["App lookup: api"] --> RC["/etc/resolv.conf<br/>nameserver = kube-dns<br/>search = ns.svc… svc… cluster.local<br/>ndots:5"]
+  RC --> CD["CoreDNS Pods"]
+  CD --> A["A/AAAA → ClusterIP"]
+  CD --> EXT["forward to upstream<br/>for external names"]</pre>
+    <p class="viz-note"><code>ndots:5</code> means names with fewer than 5 dots try search domains first—short names trigger extra queries; FQDNs behave predictably.</p>
+  </figure>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">inspect DNS plumbing</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; kubectl -n kube-system get svc kube-dns -o wide
+$&lt;/span&gt; kubectl -n kube-system get pods -l k8s-app=kube-dns -o wide
+$&lt;/span&gt; kubectl -n kube-system get cm coredns -o yaml
+$&lt;/span&gt; kubectl -n shop exec deploy/api -- cat /etc/resolv.conf
+$&lt;/span&gt; kubectl -n shop run dnstest --rm -it --image=busybox:1.36 --restart=Never -- nslookup api.shop.svc.cluster.local</code></pre>
+  </div>
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">exam trap</span></div>
+      <p>DNS success ≠ HTTP success. <code>nslookup</code> returning a ClusterIP only proves name→VIP. Empty Endpoints, wrong port, or NetworkPolicy can still break curl. Conversely, NetworkPolicy deny-egress without allowing UDP/TCP 53 breaks DNS first.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="debug">
+  <h2><span class="section-num">03</span> Debug DNS failures</h2>
+  <p>Order matters: CoreDNS Pods Ready → kube-dns Endpoints → resolve from a debug Pod → then app config.</p>
+  <div class="codeblock">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">Corefile sketch</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>.:53 {
+    errors
+    health {
+       lameduck 5s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+       pods insecure
+       fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus :9153
+    forward . /etc/resolv.conf
+    cache 30
+    loop
+    reload
+    loadbalance
+}</code></pre>
+  </div>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">failure triage</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; kubectl -n kube-system get pods -l k8s-app=kube-dns
+$&lt;/span&gt; kubectl -n kube-system logs -l k8s-app=kube-dns -c coredns --tail=100
+$&lt;/span&gt; kubectl -n kube-system get endpoints kube-dns
+$&lt;/span&gt; kubectl -n kube-system edit cm coredns   # fix Corefile, then wait for reload/rollout&lt;/span&gt;
+$&lt;/span&gt; kubectl -n kube-system rollout restart deploy coredns
+$&lt;/span&gt; kubectl run -n shop dig --rm -it --image=busybox:1.36 --restart=Never -- \
+    nslookup kubernetes.io</code></pre>
+  </div>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">In-cluster name works</div>
+      <ul>
+        <li>Use <code>svc.ns.svc.cluster.local</code></li>
+        <li>Confirm Service exists in that ns</li>
+        <li>Then test Endpoints / port</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-bad">
+      <div class="vs-h">External name fails</div>
+      <ul>
+        <li>Corefile <code>forward</code> / upstream DNS</li>
+        <li>Node egress / firewall</li>
+        <li>NP blocking DNS or outbound</li>
+      </ul>
+    </div>
+  </div>
+  <div class="quiz">
+    <p class="q">From a Pod in <code>dev</code>, which name reliably addresses Service <code>redis</code> in namespace <code>cache</code>?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span><code>redis</code> (always, from any namespace)</button>
+      <button class="quiz-opt" type="button" data-correct="true"><span class="mark"></span><code>redis.cache.svc.cluster.local</code></button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span><code>redis.kube-system.svc.cluster.local</code></button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span><code>kube-dns.cache.svc.cluster.local</code></button>
+    </div>
+    <div class="quiz-explain">Short name <code>redis</code> only works inside the <code>cache</code> namespace’s search path. Cross-namespace needs the FQDN with the Service’s namespace.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Where is CoreDNS configured?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>ConfigMap in <code>kube-system</code> (commonly named <code>coredns</code>) holding the Corefile. Pods are selected by <code>k8s-app=kube-dns</code>; clients talk to Service <code>kube-dns</code>.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Corefile ConfigMap in kube-system; Service name kube-dns; deployment is CoreDNS.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">What does ndots:5 change?</span>
+        <span class="pm-chip diff-warm">warm</span>
+      </summary>
+      <div class="qa-body">
+        <p>Lookups with fewer than five dots append search domains before treating the name as absolute. That adds latency and can cause surprising resolutions; trailing-dot FQDNs skip the search list.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“ndots:5 makes short names walk the search path; I use FQDNs when debugging DNS.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Apps can’t resolve Service names—first three checks?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>(1) CoreDNS Pods Ready and logs clean. (2) <code>kube-dns</code> Service/Endpoints present. (3) <code>nslookup</code> from a debug Pod using the FQDN; if that works, inspect app DNS config / NetworkPolicy / wrong namespace name.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“CoreDNS healthy, kube-dns endpoints up, then prove resolution with nslookup before touching the app.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>

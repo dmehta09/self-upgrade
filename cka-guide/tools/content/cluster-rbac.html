@@ -1,0 +1,166 @@
+<section class="hero reveal">
+  <span class="eyebrow">Cluster · RBAC</span>
+  <span class="domain-chip">Domain 2 · Cluster Architecture (25%)</span>
+  <h1>RBAC.</h1>
+  <p class="lead">Role-Based Access Control answers who can do what on which API objects. CKA loves creating Roles/ClusterRoles, binding them, and fixing Forbidden errors fast.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway"><b>Role / ClusterRole</b> = verbs + resources. <b>RoleBinding / ClusterRoleBinding</b> = attach that permission set to a user, group, or ServiceAccount.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy <span class="tag">plain English</span></div>
+      <p>A Role is a keyring labeled “Pods: get, list in this floor.” A Binding hangs that keyring on a badge (user/SA). ClusterRole is a master keyring; ClusterRoleBinding hangs it building-wide.</p>
+    </div>
+  </div>
+  <figure class="mermaid-wrap">
+    <pre class="mermaid">flowchart LR
+  SA[ServiceAccount / User]
+  B[RoleBinding]
+  R[Role]
+  API[API server]
+  SA --> B --> R
+  B --> API
+  R -->|rules| API</pre>
+    <p class="viz-note">Permissions never live on the Pod alone — the ServiceAccount identity + bindings decide authorization.</p>
+  </figure>
+</section>
+
+<section class="section reveal" id="objects">
+  <h2><span class="section-num">02</span> Objects &amp; scope</h2>
+  <dl class="kv">
+    <dt>Role</dt>
+    <dd>Namespaced rules.</dd>
+    <dt>ClusterRole</dt>
+    <dd>Cluster-wide rules (or reusable namespaced via RoleBinding).</dd>
+    <dt>RoleBinding</dt>
+    <dd>Grants a Role or ClusterRole inside one namespace.</dd>
+    <dt>ClusterRoleBinding</dt>
+    <dd>Grants a ClusterRole across the cluster.</dd>
+  </dl>
+  <div class="codeblock">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">role-binding.yaml</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-reader
+  namespace: demo
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: read-pods
+  namespace: demo
+subjects:
+- kind: ServiceAccount
+  name: app
+  namespace: demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pod-reader</code></pre>
+  </div>
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">exam trap</span></div>
+      <p><code>roleRef</code> is immutable — wrong kind/name means delete and recreate the binding. Forgetting <code>apiGroups: [""]</code> for core resources fails silently in your head until authorize says no. Subresources like <code>pods/log</code> need their own rule.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="task">
+  <h2><span class="section-num">03</span> Exam kubectl</h2>
+  <p>Prefer <code>kubectl create … --dry-run=client -o yaml</code> then edit. Debug with <code>kubectl auth can-i</code>.</p>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">RBAC commands</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; kubectl -n demo create sa app
+$&lt;/span&gt; kubectl -n demo create role pod-reader --verb=get,list,watch --resource=pods
+$&lt;/span&gt; kubectl -n demo create rolebinding read-pods --role=pod-reader --serviceaccount=demo:app
+$&lt;/span&gt; kubectl auth can-i list pods -n demo --as=system:serviceaccount:demo:app
+$&lt;/span&gt; kubectl auth can-i --list --as=system:serviceaccount:demo:app -n demo
+$&lt;/span&gt; kubectl get role,rolebinding -n demo
+$&lt;/span&gt; kubectl describe clusterrole view | head</code></pre>
+  </div>
+  <div class="quiz">
+    <p class="q">A ServiceAccount must list Nodes. Which binding type?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> Role + RoleBinding only (nodes are namespaced)</button>
+      <button class="quiz-opt" type="button" data-correct="true"><span class="mark"></span> ClusterRole for nodes + ClusterRoleBinding</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> NetworkPolicy</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> PodSecurity admission</button>
+    </div>
+    <div class="quiz-explain">Node is cluster-scoped. Grant via ClusterRole and ClusterRoleBinding to the ServiceAccount.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Role vs ClusterRole?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>Role is namespaced. ClusterRole is cluster-scoped (and reusable). Binding type decides where the grant applies.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Role is floor keys; ClusterRole can be the building keyring.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">How do you verify a ServiceAccount can list pods?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p><code>kubectl auth can-i list pods -n &lt;ns&gt; --as=system:serviceaccount:&lt;ns&gt;:&lt;sa&gt;</code></p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“can-i --as the ServiceAccount before I call the task done.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Forbidden on pods/log — what’s missing?</span>
+        <span class="pm-chip diff-stretch">stretch</span>
+      </summary>
+      <div class="qa-body">
+        <p>A rule for resource <code>pods/log</code> (and maybe <code>pods/exec</code>). Listing pods ≠ reading logs.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Subresources are separate verbs — I add pods/log explicitly.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>

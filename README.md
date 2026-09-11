@@ -22,6 +22,7 @@ A personal workspace of hands-on learning projects. **Each project lives in its 
 | **[DevOps Field Guide](./devops-guide/index.html)** | The **modern DevOps engineer** journey for interviews — CI/CD, Docker, Kubernetes, Terraform, AWS, zero-downtime deploys & GitOps, reliability & DevSecOps — AWS-first, analogy-first, with animated pipeline/deploy/sizing engines | ✅ Complete · Jun 2026 | [`devops-guide/index.html`](./devops-guide/index.html) |
 | **[AWS MLA Field Guide](./aws-mla-guide/index.html)** | **AWS Machine Learning Engineer Associate (MLA-C02)** — classic MLOps + Bedrock/RAG/agents, Mermaid decision flows, scenario bank & timed mocks | ✅ Complete · Sep 2026 | [`aws-mla-guide/index.html`](./aws-mla-guide/index.html) |
 | **[AWS SAA Field Guide](./aws-saa-guide/index.html)** | **AWS Solutions Architect Associate (SAA-C03)** exam guide — zero-AWS foundations through Well-Architected domains, Mermaid decision flows, scenario bank & timed mocks | ✅ Complete · Sep 2026 | [`aws-saa-guide/index.html`](./aws-saa-guide/index.html) |
+| **[CKA Field Guide](./cka-guide/index.html)** | **Certified Kubernetes Administrator (CKA)** on Kubernetes v1.35 — workloads, Gateway API, cluster architecture, troubleshooting; command-first tasks & timed performance mock | ✅ Complete · Sep 2026 | [`cka-guide/index.html`](./cka-guide/index.html) |
 | **[Aptitude & Reasoning Field Guide](./aptitude-guide/index.html)** | **Aptitude & reasoning** for tech-placement online assessments — quantitative aptitude, logical reasoning, verbal ability & data interpretation, shortcut-first with inline diagrams and a **timed drill engine** that scores you and explains every answer | ✅ Complete · Jun 2026 | [`aptitude-guide/index.html`](./aptitude-guide/index.html) |
 
 > Tip: open the visual hub at [`index.html`](./index.html), or double-click any project's entry HTML (e.g. `claude-guide/index.html`). Each project folder also has its own `README.md`.
@@ -46,6 +47,7 @@ self-upgrade/
 ├── devops-guide/              ← DevOps (CI/CD · containers · Kubernetes · IaC · AWS)
 ├── aws-mla-guide/             ← AWS MLA-C02 exam (MLOps · Bedrock · scenarios · mocks)
 ├── aws-saa-guide/             ← AWS SAA-C03 exam (Well-Architected · scenarios · mocks)
+├── cka-guide/                 ← CKA exam (K8s v1.35 · Gateway API · troubleshooting · task mock)
 └── aptitude-guide/            ← Aptitude & reasoning (quant · reasoning · verbal · DI)
 ```
 

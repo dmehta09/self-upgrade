@@ -1,0 +1,142 @@
+<section class="hero reveal">
+  <span class="eyebrow">TROUBLESHOOTING · logs &amp; debug</span>
+  <span class="domain-chip">Domain 1 · Troubleshooting · 30%</span>
+  <h1>Logs, events &amp; kubectl debug.</h1>
+  <p class="lead">CKA rewards fast signal: Events for cluster decisions, logs for process output, ephemeral debug when the image has no shell.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> Three signal sources</h2>
+  <p class="takeaway"><b>Events</b> explain the control plane; <b>logs</b> explain the container; <b>debug/exec</b> lets you poke the live environment.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16M8 19V9m4 10V5m4 14v-6"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Black box + ATC transcript <span class="tag">analogy</span></div>
+      <p>In plain English: Events are the air-traffic transcript (“cleared to land,” “go around”). Container logs are the cockpit voice recorder. <code>kubectl debug</code> is strapping a mechanic into a jump seat when the plane has no spare seatbelt (distroless image).</p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>kubectl logs</dt>
+    <dd>Stdout/stderr of a container. Use <code>-c</code>, <code>-f</code>, <code>--previous</code>.</dd>
+    <dt>Events</dt>
+    <dd>Namespaced cluster messages on objects. Sort by time when noisy.</dd>
+    <dt>exec</dt>
+    <dd>Shell into a running container if the image includes a shell.</dd>
+    <dt>kubectl debug</dt>
+    <dd>Ephemeral container (or copy Pod) with a tooling image for distroless/debug.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="visual">
+  <h2><span class="section-num">02</span> When to use what</h2>
+  <div class="mermaid-wrap">
+    <pre class="mermaid">
+flowchart LR
+  P[Problem] --> E[describe / events]
+  E --> L[logs / logs -p]
+  L --> X{Need filesystem / curl?}
+  X -->|image has shell| EX[kubectl exec]
+  X -->|distroless / locked| DB[kubectl debug ephemeral]
+  DB --> V[Verify fix on owner object]
+    </pre>
+  </div>
+  <p class="viz-note">Debug containers share the Pod network namespace — great for testing Service reachability.</p>
+</section>
+
+<section class="section reveal" id="commands">
+  <h2><span class="section-num">03</span> Command patterns</h2>
+  <p><b>Constraint:</b> Distroless app Pod fails readiness. You need to curl localhost and inspect DNS from the Pod network.</p>
+
+  <div class="codeblock shell">
+    <pre><code>$&lt;/span&gt; kubectl -n apps describe pod web-0 | sed -n '/Events/,$p'
+$&lt;/span&gt; kubectl -n apps logs web-0 -c app --tail=100
+$&lt;/span&gt; kubectl -n apps logs web-0 -c app --previous
+$&lt;/span&gt; kubectl -n apps exec -it web-0 -c app -- sh   # may fail on distroless
+$&lt;/span&gt; kubectl -n apps debug -it web-0 --image=busybox:1.36 --target=app -- sh</code></pre>
+  </div>
+
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">exec</div>
+      <ul>
+        <li>Fast when shell exists</li>
+        <li>Same container filesystem</li>
+        <li>Fails on minimal images</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">debug / ephemeral</div>
+      <ul>
+        <li>Attach tooling image</li>
+        <li>Share netns with target</li>
+        <li>Does not permanently mutate Deployment</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha · wrong container in a Pod</div>
+      <p>Sidecar + app means default logs/exec may hit the wrong container. Always name <code>-c</code> when <code>describe</code> shows multiple containers. Ephemeral debug needs <code>--target</code> for process namespace tricks.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="quiz">
+  <h2><span class="section-num">04</span> Quick check</h2>
+  <div class="quiz" data-quiz="ephemeral">
+    <p class="q">Best tool when the app image has no shell and you must curl the Service from the Pod’s network?</p>
+    <div class="quiz-opts">
+      <button type="button" class="quiz-opt" data-correct="true"><span class="mark"></span> kubectl debug with an ephemeral busybox/curl image</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Only kubectl logs --previous</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Delete the Namespace</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Edit etcd directly</button>
+    </div>
+    <div class="quiz-explain">Ephemeral containers add a tooling image to the running Pod for interactive checks without rebuilding the app image.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Events vs logs — one sentence each?</span>
+        <span class="pm-chip diff-warm">Warm</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: Events are Kubernetes narrating; logs are the process speaking.</p></div></div>
+        <h5>Answer</h5>
+        <p>Use Events for pull/schedule/probe failures; logs for app stack traces and exit messages.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Why --previous?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: After a crash restart, current logs may be empty — previous is the dead container’s output.</p></div></div>
+        <h5>Answer</h5>
+        <p>Critical for CrashLoopBackOff. Combine with <code>describe</code> Last State exit code.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Does debug permanently change the Deployment?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: Ephemeral containers are temporary on the Pod; fix the owner object separately for lasting change.</p></div></div>
+        <h5>Answer</h5>
+        <p>Use debug to learn; apply the real fix to Deployment/ConfigMap/Service. Some debug copy-pod modes create a new Pod — read the help text on the exam version.</p>
+      </div>
+    </details>
+  </div>
+</section>

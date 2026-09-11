@@ -1,0 +1,178 @@
+<section class="hero reveal">
+  <span class="eyebrow">Cluster · Package &amp; patch</span>
+  <span class="domain-chip">Domain 2 · Cluster Architecture (25%)</span>
+  <h1>Helm &amp; Kustomize.</h1>
+  <p class="lead">CKA expects you to install and change workloads with both <b>Helm</b> (charts/releases) and <b>Kustomize</b> (overlays via <code>kubectl apply -k</code>). Pick the tool the task names.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway"><b>Helm</b> packages templates into a release you upgrade/rollback. <b>Kustomize</b> patches plain YAML without a templating language — bases + overlays.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy <span class="tag">plain English</span></div>
+      <p>Helm is a meal kit with a versioned recipe card (chart) and a receipt (release history). Kustomize is labeling leftovers in your fridge: same ingredients (base YAML), different stickers and spice packets (patches) per kitchen (overlay).</p>
+    </div>
+  </div>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Ship config how?",
+      "axisLabel": "Helm vs Kustomize",
+      "stops": [
+        {
+          "label": "Helm-heavy",
+          "dims": { "Templating power": 90, "Diff clarity": 45, "Rollback story": 85, "Exam speed": 70 },
+          "note": "Charts, values, hooks, release history. Great when the task says helm install/upgrade."
+        },
+        {
+          "label": "Balanced",
+          "dims": { "Templating power": 60, "Diff clarity": 70, "Rollback story": 60, "Exam speed": 80 },
+          "note": "Use Helm when given a chart; use Kustomize when given a base tree and ‘change the image/replicas’."
+        },
+        {
+          "label": "Kustomize-first",
+          "dims": { "Templating power": 35, "Diff clarity": 90, "Rollback story": 40, "Exam speed": 85 },
+          "note": "Pure YAML overlays. Fast kubectl apply -k. No release object — Git/history is your rollback."
+        }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="helm">
+  <h2><span class="section-num">02</span> Helm on the exam</h2>
+  <p>Know install, upgrade, rollback, uninstall, and values overrides. Releases live in a namespace.</p>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">helm lifecycle</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; helm repo add bitnami https://charts.bitnami.com/bitnami
+$&lt;/span&gt; helm repo update
+$&lt;/span&gt; helm install web bitnami/nginx -n demo --create-namespace -f values.yaml
+$&lt;/span&gt; helm upgrade web bitnami/nginx -n demo --set image.tag=1.27
+$&lt;/span&gt; helm history web -n demo
+$&lt;/span&gt; helm rollback web 1 -n demo
+$&lt;/span&gt; helm list -A
+$&lt;/span&gt; helm uninstall web -n demo</code></pre>
+  </div>
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">exam trap</span></div>
+      <p>Wrong namespace → “release not found.” <code>helm upgrade --install</code> is the idempotent pattern. Chart values paths differ — <code>helm show values</code> before guessing <code>--set</code> keys.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="kustomize">
+  <h2><span class="section-num">03</span> Kustomize on the exam</h2>
+  <p>A directory with <code>kustomization.yaml</code> lists resources and patches. Apply with <code>kubectl apply -k &lt;dir&gt;</code>.</p>
+  <div class="codeblock">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">overlay/kustomization.yaml</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../../base
+namespace: demo
+images:
+- name: myapp
+  newTag: "1.35"
+replicas:
+- name: myapp
+  count: 3
+patches:
+- target:
+    kind: Deployment
+    name: myapp
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/env/0/value
+      value: prod</code></pre>
+  </div>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">apply overlay</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; kubectl kustomize overlay/ | less
+$&lt;/span&gt; kubectl apply -k overlay/
+$&lt;/span&gt; kubectl get deploy -n demo</code></pre>
+  </div>
+  <div class="quiz">
+    <p class="q">Task: “Use the overlay in <code>prod/</code> to set replicas to 5.” Best tool?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> Only helm rollback</button>
+      <button class="quiz-opt" type="button" data-correct="true"><span class="mark"></span> Edit kustomization / patch, then kubectl apply -k prod/</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> docker build</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> etcdctl snapshot</button>
+    </div>
+    <div class="quiz-explain">Overlays scream Kustomize. apply -k builds and applies the rendered manifests.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Helm release vs chart?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>A chart is the package (templates + values). A release is an installed instance with revision history.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Chart is the recipe; release is this kitchen’s cook of it.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">How do you apply a Kustomize overlay?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p><code>kubectl apply -k &lt;dir&gt;</code> where the directory contains <code>kustomization.yaml</code>. Preview with <code>kubectl kustomize</code>.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“apply -k on the overlay directory — never hand-apply only the base if the task says overlay.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Bad Helm upgrade — recover?</span>
+        <span class="pm-chip diff-stretch">stretch</span>
+      </summary>
+      <div class="qa-body">
+        <p><code>helm history</code> then <code>helm rollback &lt;release&gt; &lt;revision&gt;</code> in the correct namespace.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“History, then rollback to the last good revision.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>

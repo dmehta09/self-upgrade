@@ -1,0 +1,186 @@
+<section class="hero reveal">
+  <span class="eyebrow">Workloads &amp; Scheduling · Probes</span>
+  <span class="domain-chip">Domain 4 · Workloads &amp; Scheduling · 15%</span>
+  <h1>Probes &amp; self-healing.</h1>
+  <p class="lead">Kubelet probes decide when a container is alive, ready for traffic, or still starting. Pair them with restartPolicy and controllers so failed Pods heal without you babysitting.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway"><b>Liveness</b> restarts sick containers; <b>readiness</b> removes them from Service endpoints; <b>startup</b> gates the other probes until boot finishes.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy</div>
+      <p>Startup is “is the engine still cranking?” Readiness is “open the shop door for customers.” Liveness is “the cashier is frozen — reboot the register.” Mixing them up is how you thrash healthy Pods.</p>
+    </div>
+  </div>
+  <div class="mermaid-wrap" role="img" aria-label="Probe decision flow">
+    <pre class="mermaid">
+flowchart TD
+  Boot[Container starts]
+  SU{startupProbe OK?}
+  RD{readinessProbe OK?}
+  LV{livenessProbe OK?}
+  EP[In Service Endpoints]
+  OUT[Not Ready / no traffic]
+  RST[Restart container]
+  Boot --> SU
+  SU -->|failing| Boot
+  SU -->|pass / absent| RD
+  RD -->|fail| OUT
+  RD -->|pass| EP
+  SU -->|pass / absent| LV
+  LV -->|fail| RST
+  LV -->|pass| LV
+    </pre>
+  </div>
+</section>
+
+<section class="section reveal" id="probe-types">
+  <h2><span class="section-num">02</span> Three probes, three jobs</h2>
+  <dl class="kv">
+    <dt>startupProbe</dt><dd>Protects slow boots; disables liveness/readiness until success</dd>
+    <dt>readinessProbe</dt><dd>Controls Endpoints — failed ≠ restart</dd>
+    <dt>livenessProbe</dt><dd>Failed → kubelet restarts the container</dd>
+    <dt>Mechanisms</dt><dd><code>httpGet</code>, <code>tcpSocket</code>, <code>exec</code>, <code>grpc</code></dd>
+  </dl>
+  <div class="codeblock">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">deployment · probes</span>
+      <button class="code-copy" type="button" aria-label="Copy"><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: api }
+  template:
+    metadata:
+      labels: { app: api }
+    spec:
+      containers:
+      - name: api
+        image: myapi:1.2
+        ports:
+        - containerPort: 8080
+        startupProbe:
+          httpGet: { path: /healthz, port: 8080 }
+          failureThreshold: 30
+          periodSeconds: 5
+        readinessProbe:
+          httpGet: { path: /ready, port: 8080 }
+          periodSeconds: 5
+        livenessProbe:
+          httpGet: { path: /healthz, port: 8080 }
+          periodSeconds: 10</code></pre>
+  </div>
+  <div class="callout warn">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">liveness</span></div>
+      <p>Pointing liveness at a dependency (database down → fail) causes restart storms. Liveness should mean “this process is wedged,” not “the world is unhealthy.” Use readiness for dependency checks.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="restart-heal">
+  <h2><span class="section-num">03</span> restartPolicy &amp; ReplicaSet heal</h2>
+  <p>Containers restart according to <code>restartPolicy</code>. Controllers (ReplicaSet/Deployment) replace whole Pods when they disappear — that is self-healing at the Pod level.</p>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Always (default for Deployments)</div>
+      <ul>
+        <li>Kubelet restarts crashed containers</li>
+        <li>Right for long-running servers</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">OnFailure / Never</div>
+      <ul>
+        <li>Jobs / one-shot Pods</li>
+        <li>Never → no container restart</li>
+      </ul>
+    </div>
+  </div>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">observe self-heal</span>
+      <button class="code-copy" type="button" aria-label="Copy"><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>kubectl get pods -l app=api -w
+kubectl describe pod -l app=api | sed -n '/Conditions/,/Volumes/p'
+kubectl get endpointslices -l kubernetes.io/service-name=api
+kubectl delete pod -l app=api --force --grace-period=0
+kubectl get rs
+kubectl rollout status deployment/api</code></pre>
+  </div>
+  <p>Delete a Pod owned by a ReplicaSet and a replacement appears with a new name. That is the exam “self-healing” demo — not magic, just desired replicas.</p>
+  <div class="quiz" data-quiz="wl-probes-ready">
+    <p class="q">Readiness probe fails. What happens next?</p>
+    <div class="quiz-opts">
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span>Kubelet always restarts the container immediately</button>
+      <button type="button" class="quiz-opt" data-correct="true"><span class="mark"></span>Pod stays up but is removed from Service Endpoints</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span>The Deployment scales to zero</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span>The node is cordoned</button>
+    </div>
+    <div class="quiz-explain"><b>Readiness ≠ restart.</b> Only liveness (or crash) triggers container restart. Readiness steers traffic via Endpoints/EndpointSlices.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="tune">
+  <h2><span class="section-num">04</span> Timing knobs that matter</h2>
+  <p>Know <code>initialDelaySeconds</code>, <code>periodSeconds</code>, <code>timeoutSeconds</code>, <code>failureThreshold</code>, and <code>successThreshold</code>. Startup probes replace long liveness delays for slow JVMs.</p>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">patch probes</span>
+      <button class="code-copy" type="button" aria-label="Copy"><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>kubectl explain pod.spec.containers.livenessProbe --recursive
+kubectl set probe deployment/api --liveness --get-url=http://:8080/healthz --period=10
+kubectl rollout status deployment/api
+kubectl describe deploy api | grep -A20 'Liveness\|Readiness\|Startup'</code></pre>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Liveness vs readiness in one sentence each?</span>
+        <span class="pm-chip diff-warm">Warm-up</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><div class="co-title">Say it out loud</div><p>“Liveness restarts a stuck container. Readiness keeps a not-yet-ready container out of the Service load balancer.”</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Why add a startupProbe for a slow app?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><div class="co-title">Say it out loud</div><p>“So liveness doesn’t kill the container during a long boot. Startup must succeed before the other probes run.”</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">You delete a Deployment Pod. Who recreates it?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><div class="co-title">Say it out loud</div><p>“The ReplicaSet owned by the Deployment notices replicas dropped and creates a replacement Pod.”</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

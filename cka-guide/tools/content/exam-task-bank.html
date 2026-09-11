@@ -1,0 +1,455 @@
+<section class="hero reveal">
+  <span class="eyebrow">EXAM PREP · task bank</span>
+  <span class="domain-chip">Performance drills · CKA v1.35</span>
+  <h1>Performance task bank.</h1>
+  <p class="lead">Flagship labs by domain. Each card is constraint → commands → verify. Do them cold with docs open; then race the clock on the timed mock.</p>
+</section>
+
+<section class="section reveal" id="how">
+  <h2><span class="section-num">01</span> How to use</h2>
+  <p class="takeaway">One card = one exam muscle. Finish verify before you peek at the gotcha.</p>
+  <dl class="kv">
+    <dt>Story</dt>
+    <dd>What the stem feels like in the PSI terminal.</dd>
+    <dt>Constraint</dt>
+    <dd>Exact end state graders care about.</dd>
+    <dt>Commands</dt>
+    <dd>A workable path — not the only path.</dd>
+    <dt>Verify</dt>
+    <dd>What you re-check in the last 30 seconds.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="troubleshooting">
+  <h2><span class="section-num">02</span> Troubleshooting · 30%</h2>
+
+  <article class="card">
+    <h3>CrashLoop + Pending twin</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>Deployment <code>storefront</code> in <code>shop</code> shows 0/2 Ready. One Pod Pending, one CrashLoopBackOff.</dd>
+      <dt>Constraint</dt>
+      <dd>Both Pods become Ready without deleting the Deployment. Fix root causes on the owner object(s).</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubectl -n shop get pods -o wide
+$&lt;/span&gt; kubectl -n shop describe pod &lt;pending&gt;
+$&lt;/span&gt; kubectl -n shop describe pod &lt;crash&gt;
+$&lt;/span&gt; kubectl -n shop logs &lt;crash&gt; -c &lt;c&gt; --previous
+$&lt;/span&gt; kubectl -n shop edit deploy storefront</code></pre>
+    </div>
+    <p><b>Verify:</b> <code>kubectl -n shop get deploy storefront</code> shows READY 2/2; Events quiet.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p><code>logs</code> without <code>--previous</code> is empty after backoff. Pending is Events (taints/PVC/CPU), not app logs.</p>
+      </div>
+    </div>
+    <p><a href="../troubleshooting/pods-apps.html">Lesson → Troubleshoot pods &amp; apps</a></p>
+  </article>
+
+  <article class="card">
+    <h3>Worker NotReady</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>Node <code>worker-b</code> is NotReady. Apps on other nodes still answer; this node’s Pods are Terminating or stuck.</dd>
+      <dt>Constraint</dt>
+      <dd>Restore Ready (or cordon/drain safely if disk must be fixed first). Leave control-plane alone.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubectl get nodes -o wide
+$&lt;/span&gt; kubectl describe node worker-b
+$&lt;/span&gt; kubectl cordon worker-b
+$&lt;/span&gt; kubectl drain worker-b --ignore-daemonsets --delete-emptydir-data
+$&lt;/span&gt; sudo systemctl status kubelet
+$&lt;/span&gt; sudo journalctl -u kubelet -n 50 --no-pager</code></pre>
+    </div>
+    <p><b>Verify:</b> <code>kubectl get node worker-b</code> → Ready; uncordon when healthy.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p>Drain before “fixing” kubelet when possible. DiskPressure / PLEG / containerd stopped are different fixes — read Conditions first.</p>
+      </div>
+    </div>
+    <p><a href="../troubleshooting/nodes.html">Lesson → Troubleshoot nodes</a></p>
+  </article>
+
+  <article class="card">
+    <h3>Service selects nothing</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>Clients hit ClusterIP; curl hangs. Pods are Running and Ready.</dd>
+      <dt>Constraint</dt>
+      <dd>Service <code>api</code> in <code>prod</code> has Endpoints; DNS name resolves from another Pod.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubectl -n prod get svc api -o yaml
+$&lt;/span&gt; kubectl -n prod get endpoints api -o yaml
+$&lt;/span&gt; kubectl -n prod get pods --show-labels
+$&lt;/span&gt; kubectl -n prod run dns-test --rm -it --image=busybox:1.36 --restart=Never -- nslookup api.prod.svc
+$&lt;/span&gt; kubectl -n prod get networkpolicy</code></pre>
+    </div>
+    <p><b>Verify:</b> Endpoints list Pod IPs; <code>wget -qO- api.prod.svc:PORT</code> from a client Pod succeeds (or NP allows it).</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p>Empty Endpoints = selector/port/targetPort mismatch. Full Endpoints + timeout often = NetworkPolicy or wrong port on the app.</p>
+      </div>
+    </div>
+    <p><a href="../troubleshooting/services-dns-np.html">Lesson → Services, DNS &amp; NetworkPolicy</a></p>
+  </article>
+</section>
+
+<section class="section reveal" id="cluster">
+  <h2><span class="section-num">03</span> Cluster Architecture · 25%</h2>
+
+  <article class="card">
+    <h3>RBAC least privilege</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>ServiceAccount <code>ci-bot</code> in <code>ci</code> must list/get Pods and create Jobs only in that namespace.</dd>
+      <dt>Constraint</dt>
+      <dd>Role + RoleBinding (not ClusterRole) grant exactly those verbs; no secrets access.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubectl -n ci create role ci-bot-role --verb=get,list --resource=pods --verb=create --resource=jobs
+$&lt;/span&gt; kubectl -n ci create rolebinding ci-bot-rb --role=ci-bot-role --serviceaccount=ci:ci-bot
+$&lt;/span&gt; kubectl auth can-i create jobs --as=system:serviceaccount:ci:ci-bot -n ci
+$&lt;/span&gt; kubectl auth can-i get secrets --as=system:serviceaccount:ci:ci-bot -n ci</code></pre>
+    </div>
+    <p><b>Verify:</b> can-i create jobs → yes; can-i get secrets → no.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p>ClusterRoleBinding is wrong for namespace-scoped asks. Imperative <code>create role</code> may need a second pass for multiple resource groups — check the Role YAML.</p>
+      </div>
+    </div>
+    <p><a href="../cluster/rbac.html">Lesson → RBAC</a></p>
+  </article>
+
+  <article class="card">
+    <h3>kubeadm join worker</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>New host ready with containerd; must join as worker using a fresh token.</dd>
+      <dt>Constraint</dt>
+      <dd>Node appears Ready; kubelet uses the cluster’s CA; no control-plane join flags.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubeadm token create --print-join-command
+$&lt;/span&gt; # on worker:
+$&lt;/span&gt; sudo kubeadm join &lt;api&gt;:6443 --token &lt;t&gt; --discovery-token-ca-cert-hash sha256:&lt;h&gt;
+$&lt;/span&gt; kubectl get nodes</code></pre>
+    </div>
+    <p><b>Verify:</b> New node Ready; <code>kubectl get pods -A -o wide | grep &lt;node&gt;</code> shows system Pods.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p>Expired tokens fail silently until you read kubelet logs. Do not paste <code>--control-plane</code> for a worker task.</p>
+      </div>
+    </div>
+    <p><a href="../cluster/kubeadm-install.html">Lesson → kubeadm</a></p>
+  </article>
+
+  <article class="card">
+    <h3>Helm install + Kustomize overlay</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>Install chart <code>web</code> into <code>apps</code> with Helm; separately apply a Kustomize overlay that sets replicas=3.</dd>
+      <dt>Constraint</dt>
+      <dd>Release listed; Deployment shows 3 replicas from the overlay path given in the stem.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; helm install web ./charts/web -n apps --create-namespace
+$&lt;/span&gt; helm list -n apps
+$&lt;/span&gt; kubectl apply -k overlays/prod
+$&lt;/span&gt; kubectl -n apps get deploy</code></pre>
+    </div>
+    <p><b>Verify:</b> Helm release deployed; overlay Deployment READY 3/3.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p><code>kubectl apply -f</code> on a kustomization directory fails — need <code>-k</code>. Helm and Kustomize are separate tools; don’t mix flags.</p>
+      </div>
+    </div>
+    <p><a href="../cluster/helm-kustomize.html">Lesson → Helm &amp; Kustomize</a></p>
+  </article>
+</section>
+
+<section class="section reveal" id="networking">
+  <h2><span class="section-num">04</span> Services &amp; Networking · 20%</h2>
+
+  <article class="card">
+    <h3>NetworkPolicy allow-list</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>Namespace <code>db</code> must accept TCP 5432 only from Pods labeled <code>role=api</code> in <code>app</code>.</dd>
+      <dt>Constraint</dt>
+      <dd>Default deny ingress on <code>db</code> workloads; allow that one peer; egress left as stem requires.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubectl -n db apply -f - &lt;&lt;'EOF'
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-allow-api
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: app
+      podSelector:
+        matchLabels:
+          role: api
+    ports:
+    - protocol: TCP
+      port: 5432
+EOF
+$&lt;/span&gt; kubectl -n db get networkpolicy</code></pre>
+    </div>
+    <p><b>Verify:</b> From an <code>role=api</code> Pod, connect; from unlabeled Pod, timeout. Policies are additive — check for competing NPs.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p>Namespace selectors need labels on the namespace (often <code>kubernetes.io/metadata.name</code>). Empty <code>podSelector: {}</code> selects all Pods in the NP’s namespace.</p>
+      </div>
+    </div>
+    <p><a href="../networking/network-policies.html">Lesson → NetworkPolicies</a></p>
+  </article>
+
+  <article class="card">
+    <h3>Gateway API HTTPRoute</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>Existing Gateway <code>edge</code> in <code>gateway-system</code>. Route <code>/shop</code> to Service <code>shop</code> in <code>store</code>.</dd>
+      <dt>Constraint</dt>
+      <dd>HTTPRoute attaches to that Gateway; path prefix works; classic Ingress not required.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubectl -n gateway-system get gateway edge -o yaml
+$&lt;/span&gt; kubectl -n store apply -f httproute-shop.yaml
+$&lt;/span&gt; kubectl -n store describe httproute shop
+$&lt;/span&gt; curl -sS -H "Host: shop.example" http://&lt;gateway-ip&gt;/shop/</code></pre>
+    </div>
+    <p><b>Verify:</b> Route Parent Accepted; backend Service has Endpoints; curl returns 200.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p><code>parentRefs</code> must match Gateway name/namespace/sectionName. Mixing Ingress annotations into Gateway YAML does nothing.</p>
+      </div>
+    </div>
+    <p><a href="../networking/gateway-api.html">Lesson → Gateway API</a></p>
+  </article>
+
+  <article class="card">
+    <h3>CoreDNS ConfigMap tweak</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>Cluster DNS fails for external names; CoreDNS Pods CrashLoop after a bad edit.</dd>
+      <dt>Constraint</dt>
+      <dd>Restore working Corefile; <code>kubernetes</code> plugin present; Pods Ready.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubectl -n kube-system get cm coredns -o yaml
+$&lt;/span&gt; kubectl -n kube-system edit cm coredns
+$&lt;/span&gt; kubectl -n kube-system rollout restart deploy/coredns
+$&lt;/span&gt; kubectl -n kube-system logs -l k8s-app=kube-dns</code></pre>
+    </div>
+    <p><b>Verify:</b> CoreDNS Ready; <code>nslookup kubernetes.default</code> from a test Pod works.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p>YAML indentation in Corefile string breaks the Pod. Fix ConfigMap first; restart only after syntax is valid.</p>
+      </div>
+    </div>
+    <p><a href="../networking/coredns.html">Lesson → CoreDNS</a></p>
+  </article>
+</section>
+
+<section class="section reveal" id="workloads">
+  <h2><span class="section-num">05</span> Workloads &amp; Scheduling · 15%</h2>
+
+  <article class="card">
+    <h3>Rollout undo</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>Bad image pushed to Deployment <code>payments</code>; traffic failing readiness.</dd>
+      <dt>Constraint</dt>
+      <dd>Return to previous revision; leave a record of the current revision first.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubectl -n pay rollout history deploy/payments
+$&lt;/span&gt; kubectl -n pay set image deploy/payments app=bad:1.9
+$&lt;/span&gt; kubectl -n pay rollout undo deploy/payments
+$&lt;/span&gt; kubectl -n pay rollout status deploy/payments</code></pre>
+    </div>
+    <p><b>Verify:</b> READY matches desired; image is the prior good tag.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p><code>rollout undo</code> needs history. If maxUnavailable/maxSurge block progress, check <code>rollout status</code> and Events.</p>
+      </div>
+    </div>
+    <p><a href="../workloads/deployments-rollouts.html">Lesson → Deployments &amp; rollouts</a></p>
+  </article>
+
+  <article class="card">
+    <h3>Taint + toleration</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>Node <code>gpu-1</code> has taint <code>sku=gpu:NoSchedule</code>. Only Deployment <code>trainer</code> may run there.</dd>
+      <dt>Constraint</dt>
+      <dd>Trainer Pods schedule on <code>gpu-1</code>; other workloads stay off it.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubectl taint nodes gpu-1 sku=gpu:NoSchedule
+$&lt;/span&gt; kubectl -n ml patch deploy trainer --type=json -p='[{"op":"add","path":"/spec/template/spec/tolerations","value":[{"key":"sku","operator":"Equal","value":"gpu","effect":"NoSchedule"}]}]'
+$&lt;/span&gt; kubectl -n ml get pods -o wide</code></pre>
+    </div>
+    <p><b>Verify:</b> Trainer Pods on <code>gpu-1</code>; a non-tolerant Pod stays Pending if forced there.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p>Toleration alone does not pin a Pod — add nodeSelector/affinity if the stem requires only that node.</p>
+      </div>
+    </div>
+    <p><a href="../workloads/scheduling.html">Lesson → Scheduling</a></p>
+  </article>
+
+  <article class="card">
+    <h3>Probes + HPA floor</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>Deployment ready but HPA won’t scale; also readiness uses wrong path.</dd>
+      <dt>Constraint</dt>
+      <dd>Readiness probe hits <code>/readyz</code>; requests set; HPA targets CPU and has minReplicas ≥2.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubectl -n web set resources deploy/api --requests=cpu=100m,memory=128Mi
+$&lt;/span&gt; kubectl -n web edit deploy api   # readinessProbe.httpGet.path=/readyz
+$&lt;/span&gt; kubectl -n web autoscale deploy api --cpu-percent=70 --min=2 --max=6
+$&lt;/span&gt; kubectl -n web describe hpa</code></pre>
+    </div>
+    <p><b>Verify:</b> Pods Ready; HPA shows targets (not &lt;unknown&gt;); metrics-server healthy.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p>HPA without CPU requests shows unknown. Liveness ≠ readiness — wrong liveness path causes CrashLoops.</p>
+      </div>
+    </div>
+    <p><a href="../workloads/probes-self-healing.html">Lesson → Probes</a> · <a href="../workloads/resources-hpa.html">Resources &amp; HPA</a></p>
+  </article>
+</section>
+
+<section class="section reveal" id="storage">
+  <h2><span class="section-num">06</span> Storage · 10%</h2>
+
+  <article class="card">
+    <h3>PVC Pending</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>Pod stuck Pending; Events mention unbound PVC <code>data</code>.</dd>
+      <dt>Constraint</dt>
+      <dd>PVC Bound via StorageClass (or static PV matching access mode/capacity); Pod mounts and runs.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubectl -n data get pvc,pv,sc
+$&lt;/span&gt; kubectl -n data describe pvc data
+$&lt;/span&gt; kubectl -n data edit pvc data   # storageClassName / accessModes
+$&lt;/span&gt; kubectl -n data get pods</code></pre>
+    </div>
+    <p><b>Verify:</b> PVC STATUS Bound; Pod Running; volume mounted.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p>ReadWriteOnce ≠ ReadWriteMany. Wrong access mode or missing default StorageClass leaves PVC Pending forever.</p>
+      </div>
+    </div>
+    <p><a href="../storage/pv-pvc.html">Lesson → PV &amp; PVC</a></p>
+  </article>
+
+  <article class="card">
+    <h3>StorageClass default</h3>
+    <dl class="kv">
+      <dt>Story</dt>
+      <dd>PVC without <code>storageClassName</code> stays Pending; cluster has two classes.</dd>
+      <dt>Constraint</dt>
+      <dd>Mark <code>fast-ssd</code> as default; new PVC binds dynamically.</dd>
+    </dl>
+    <p><b>Commands</b></p>
+    <div class="codeblock shell">
+      <pre><code>$&lt;/span&gt; kubectl get sc
+$&lt;/span&gt; kubectl annotate sc fast-ssd storageclass.kubernetes.io/is-default-class=true --overwrite
+$&lt;/span&gt; kubectl annotate sc slow-hdd storageclass.kubernetes.io/is-default-class- --overwrite
+$&lt;/span&gt; kubectl -n data get pvc</code></pre>
+    </div>
+    <p><b>Verify:</b> Only one default SC; PVC Bound with <code>fast-ssd</code>.</p>
+    <div class="callout gotcha">
+      <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+      <div class="co-body">
+        <div class="co-title">Gotcha</div>
+        <p>Two defaults confuse provisioning. Clear the old annotation (trailing <code>-</code>) before relying on the new default.</p>
+      </div>
+    </div>
+    <p><a href="../storage/storageclass.html">Lesson → StorageClass</a></p>
+  </article>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">07</span> Quick check</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Empty Endpoints — first three checks?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: selector labels, targetPort versus container port, then Ready Pods.</p></div></div>
+        <h5>Answer</h5>
+        <p>Match Service selector to Pod labels; align port/targetPort; ensure Pods are Ready (probes).</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">When is RoleBinding wrong?</span>
+        <span class="pm-chip diff-warm">Warm</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: When the stem needs cluster-scoped objects — nodes, PVs, namespaces — use ClusterRole plus ClusterRoleBinding.</p></div></div>
+        <h5>Answer</h5>
+        <p>Namespace Role cannot authorize cluster-scoped resources. Use ClusterRole/ClusterRoleBinding for those verbs.</p>
+      </div>
+    </details>
+  </div>
+</section>

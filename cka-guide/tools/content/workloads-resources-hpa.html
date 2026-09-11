@@ -1,0 +1,185 @@
+<section class="hero reveal">
+  <span class="eyebrow">Workloads &amp; Scheduling · Resources</span>
+  <span class="domain-chip">Domain 4 · Workloads &amp; Scheduling · 15%</span>
+  <h1>Requests, limits &amp; HPA.</h1>
+  <p class="lead">Requests drive scheduling and QoS. Limits cap bursts. HorizontalPodAutoscaler scales replicas from metrics-server — know the trade-offs when you size for the exam cluster.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway"><b>requests</b> reserve capacity for the scheduler; <b>limits</b> cap usage. <b>HPA</b> changes replica count when metrics say the workload is hot or cold.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l3-3 3 2 5-6"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy</div>
+      <p>A request is the table reservation the host needs before seating you. A limit is the fire-code max occupancy. HPA is the manager opening more dining rooms when the waitlist grows — but only if someone is measuring the queue (metrics-server).</p>
+    </div>
+  </div>
+  <div class="mermaid-wrap" role="img" aria-label="Requests schedule, limits enforce, HPA scales">
+    <pre class="mermaid">
+flowchart LR
+  POD[Pod requests/limits]
+  SCH[Scheduler]
+  NODE[Node allocatable]
+  MS[metrics-server]
+  HPA[HorizontalPodAutoscaler]
+  POD --> SCH --> NODE
+  MS --> HPA
+  HPA -->|scale replicas| POD
+    </pre>
+  </div>
+</section>
+
+<section class="section reveal" id="qos">
+  <h2><span class="section-num">02</span> Requests, limits, QoS</h2>
+  <p>Set CPU in cores/millicores and memory in Mi/Gi. QoS class falls out of how you fill the fields — kubelet uses it under node pressure.</p>
+  <dl class="kv">
+    <dt>Guaranteed</dt><dd>Every container has request == limit for CPU and memory</dd>
+    <dt>Burstable</dt><dd>At least one request set, but not Guaranteed</dd>
+    <dt>BestEffort</dt><dd>No requests or limits — first to be evicted under pressure</dd>
+  </dl>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">set resources</span>
+      <button class="code-copy" type="button" aria-label="Copy"><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>kubectl set resources deployment/web \
+  --requests=cpu=100m,memory=128Mi \
+  --limits=cpu=500m,memory=256Mi
+kubectl get pod -l app=web -o custom-columns=\
+NAME:.metadata.name,QOS:.status.qosClass,REQ:.spec.containers[*].resources
+kubectl describe node | sed -n '/Allocated resources/,/Events/p'</code></pre>
+  </div>
+  <div class="callout warn">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">OOM</span></div>
+      <p>Memory limit exceeded → container OOMKilled (exit 137). CPU limit is throttling, not a kill. If Pods won’t schedule, check requests vs node Allocatable — not limits.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="hpa">
+  <h2><span class="section-num">03</span> HorizontalPodAutoscaler</h2>
+  <p>HPA needs metrics-server (or an equivalent metrics API). Classic exam target: CPU utilization relative to requests.</p>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">HPA create &amp; watch</span>
+      <button class="code-copy" type="button" aria-label="Copy"><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>kubectl top nodes
+kubectl top pods
+kubectl autoscale deployment/web --cpu-percent=50 --min=2 --max=6
+kubectl get hpa web -w
+kubectl describe hpa web
+kubectl get deploy web -o jsonpath='{.spec.replicas}{"\n"}'</code></pre>
+  </div>
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Scaling lever",
+      "axisLabel": "Where do you absorb load?",
+      "stops": [
+        {
+          "label": "Fat Pods",
+          "dims": { "Schedule ease": 40, "Waste risk": 75, "Failover blast": 70, "HPA fit": 35 },
+          "note": "Bigger requests/limits per Pod. Fewer replicas, larger failure domain, harder packing on small exam nodes."
+        },
+        {
+          "label": "Balanced",
+          "dims": { "Schedule ease": 70, "Waste risk": 45, "Failover blast": 45, "HPA fit": 75 },
+          "note": "Modest requests plus HPA. Typical CKA answer: size for steady load, let HPA cover spikes."
+        },
+        {
+          "label": "Many tiny",
+          "dims": { "Schedule ease": 85, "Waste risk": 30, "Failover blast": 25, "HPA fit": 90 },
+          "note": "Small Pods scale out well, but watch connection churn, minReadySeconds, and control-plane object count."
+        }
+      ]
+    }
+    </script>
+  </div>
+  <div class="quiz" data-quiz="wl-hpa-metrics">
+    <p class="q">HPA shows <code>&lt;unknown&gt;</code> for targets. First check?</p>
+    <div class="quiz-opts">
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span>Delete the Deployment and recreate it</button>
+      <button type="button" class="quiz-opt" data-correct="true"><span class="mark"></span>Confirm metrics-server is running and Pods have CPU requests</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span>Raise the memory limit only</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span>Switch the Service to NodePort</button>
+    </div>
+    <div class="quiz-explain"><b>HPA needs metrics.</b> CPU% is relative to requests — missing requests or a dead metrics-server yields unknown targets.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="task">
+  <h2><span class="section-num">04</span> Exam task pattern</h2>
+  <p>Guarantee requests exist before you autoscale. Verify with <code>kubectl top</code> and <code>describe hpa</code>.</p>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <div class="code-dots"><i></i><i></i><i></i></div>
+      <span class="code-file">end-to-end</span>
+      <button class="code-copy" type="button" aria-label="Copy"><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>kubectl -n kube-system get deploy metrics-server
+kubectl set resources deployment/web --requests=cpu=200m,memory=128Mi
+kubectl apply -f - &lt;&lt;'EOF'
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+EOF
+kubectl get hpa web</code></pre>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Request vs limit — which one does the scheduler use?</span>
+        <span class="pm-chip diff-warm">Warm-up</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><div class="co-title">Say it out loud</div><p>“The scheduler packs using requests against node Allocatable. Limits are enforced later by the kubelet/cgroup.”</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">What must be true for CPU-based HPA to work?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><div class="co-title">Say it out loud</div><p>“metrics-server must serve metrics, and containers need CPU requests so utilization has a denominator.”</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Name the three QoS classes.</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><div class="co-title">Say it out loud</div><p>“Guaranteed, Burstable, and BestEffort — derived from how requests and limits are set on every container.”</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

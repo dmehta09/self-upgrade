@@ -1,0 +1,246 @@
+<section class="hero reveal">
+  <span class="eyebrow">Services &amp; Networking · Gateway API</span>
+  <span class="domain-chip">Domain 3 · Services &amp; Networking (20%)</span>
+  <h1>Gateway API.</h1>
+  <p class="lead">Modern CKA focus for ingress traffic: <b>GatewayClass</b>, <b>Gateway</b>, and <b>HTTPRoute</b>. Role-oriented, portable routing without annotation soup. Successor model to Ingress—exam expects you to attach routes to a Gateway.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway"><b>GatewayClass</b> = which controller implementation. <b>Gateway</b> = listeners (ports/protocols). <b>HTTPRoute</b> = host/path/header rules → Service backends.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy <span class="tag">plain English</span></div>
+      <p>GatewayClass is the approved bridge design (who builds bridges). Gateway is a concrete bridge with toll booths (listeners on 80/443). HTTPRoute is the road signs bolted onto that bridge: which host/path goes to which warehouse (Service). Infra teams own the bridge; app teams own the signs.</p>
+    </div>
+  </div>
+  <figure class="mermaid-wrap">
+    <pre class="mermaid">flowchart TB
+  GC["GatewayClass<br/>controllerName: …"] --> GW["Gateway<br/>listeners: HTTP/HTTPS"]
+  GW --> HR["HTTPRoute<br/>parentRefs → Gateway"]
+  HR --> S1["Service api"]
+  HR --> S2["Service web"]
+  ROLE1["Cluster operator"] -.-> GC
+  ROLE2["Infra / mesh owner"] -.-> GW
+  ROLE3["App developer"] -.-> HR</pre>
+    <p class="viz-note">Role-oriented split is the point: different personas, different objects, explicit attachment via parentRefs.</p>
+  </figure>
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Ingress pain</div>
+      <ul>
+        <li>One blob + vendor annotations</li>
+        <li>Weak portability across controllers</li>
+        <li>Limited traffic features in core API</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Gateway API wins</div>
+      <ul>
+        <li>Standard route matchers &amp; filters</li>
+        <li>Clear ownership boundaries</li>
+        <li>Extensible without annotation sprawl</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="objects">
+  <h2><span class="section-num">02</span> Objects you’ll touch</h2>
+  <p>On many exam clusters the GatewayClass (and maybe a Gateway) already exist—you attach an HTTPRoute. Always <code>kubectl get gatewayclass,gateway,httproute -A</code> first.</p>
+  <div class="codeblock">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">gateway.yaml</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: edge
+  namespace: default
+spec:
+  gatewayClassName: cilium   # must match an existing GatewayClass&lt;/span&gt;
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: All</code></pre>
+  </div>
+  <div class="codeblock">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">httproute.yaml</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: shop
+  namespace: shop
+spec:
+  parentRefs:
+  - name: edge
+    namespace: default
+  hostnames:
+  - shop.example.com
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    backendRefs:
+    - name: api
+      port: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: frontend
+      port: 80</code></pre>
+  </div>
+  <figure class="reqflow" data-reqflow>
+    <span class="rf-title">North-south via Gateway API</span>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button type="button" class="rf-btn rf-reset" aria-label="Reset">⟲</button>
+      <button type="button" class="rf-btn rf-prev" aria-label="Previous">◀</button>
+      <button type="button" class="rf-btn rf-play" aria-label="Play">▶</button>
+      <button type="button" class="rf-btn rf-next" aria-label="Next">▶</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed">
+        <option value="1400">Slow</option>
+        <option value="1100" selected>Normal</option>
+        <option value="700">Fast</option>
+      </select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Client through Gateway to Service",
+      "nodes": [
+        { "id": "client", "label": "Client", "type": "user", "col": 0, "row": 0 },
+        { "id": "gw", "label": "Gateway", "type": "edge", "col": 1, "row": 0 },
+        { "id": "route", "label": "HTTPRoute", "type": "route", "col": 2, "row": 0 },
+        { "id": "svc", "label": "Service", "type": "svc", "col": 3, "row": 0 },
+        { "id": "pod", "label": "Pod", "type": "pod", "col": 4, "row": 0 }
+      ],
+      "edges": [
+        { "from": "client", "to": "gw", "label": "HTTP Host" },
+        { "from": "gw", "to": "route", "label": "match rules" },
+        { "from": "route", "to": "svc", "label": "backendRef" },
+        { "from": "svc", "to": "pod", "label": "ClusterIP" }
+      ],
+      "steps": [
+        { "edge": ["client", "gw"], "caption": "Client hits the Gateway listener address (LB or Node IP) with Host shop.example.com.", "latency": "~1 ms" },
+        { "edge": ["gw", "route"], "caption": "Controller matches an HTTPRoute attached via parentRefs; path/host rules select the rule.", "latency": "~0 ms" },
+        { "edge": ["route", "svc"], "caption": "backendRefs point at a Service name+port in the route’s namespace (cross-ns needs grants).", "latency": "~0 ms" },
+        { "edge": ["svc", "pod"], "caption": "Normal Service → EndpointSlice → Pod path finishes delivery.", "latency": "~1 ms", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">exam trap</span></div>
+      <p>Wrong <code>parentRefs</code> (name/namespace) or Gateway <code>allowedRoutes</code> blocking your namespace → route never attaches. Check HTTPRoute status / Gateway conditions, not only that the YAML applied. Cross-namespace Service refs may need ReferenceGrant.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="task">
+  <h2><span class="section-num">03</span> Exam kubectl</h2>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">discover &amp; apply</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; kubectl get gatewayclass
+$&lt;/span&gt; kubectl get gateway -A
+$&lt;/span&gt; kubectl -n shop apply -f httproute.yaml
+$&lt;/span&gt; kubectl -n shop describe httproute shop
+$&lt;/span&gt; kubectl -n default get gateway edge -o yaml | less
+$&lt;/span&gt; kubectl api-resources | grep -i gateway</code></pre>
+  </div>
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">CKA posture</div>
+      <p>Prefer Gateway API when the task says “ingress traffic” or gives a Gateway. Still know classic Ingress when the prompt names Ingress explicitly. Don’t invent controllers—reuse the cluster’s GatewayClass name.</p>
+    </div>
+  </div>
+  <div class="quiz">
+    <p class="q">Which trio is the core Gateway API model for HTTP ingress on CKA?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> IngressClass, Ingress, Endpoints</button>
+      <button class="quiz-opt" type="button" data-correct="true"><span class="mark"></span> GatewayClass, Gateway, HTTPRoute</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> Service, ReplicaSet, NetworkPolicy</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> ConfigMap, Secret, ValidatingWebhook</button>
+    </div>
+    <div class="quiz-explain">Those three kinds implement the role-oriented edge. Routes attach to Gateways that declare a GatewayClass.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">How is Gateway API “role-oriented”?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>Infrastructure defines GatewayClass/Gateway (how traffic enters). Application owners define HTTPRoutes (how their hosts/paths map to Services). Attachment is explicit and can be restricted per listener.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Ops owns the Gateway; apps own HTTPRoutes that parentRef into it.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Gateway API vs Ingress—what do you say on the exam?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>Gateway API is the successor for expressive, portable ingress. Ingress still works and remains in curriculum. Use the API the task names; default modern answers lean Gateway + HTTPRoute.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Gateway API replaces annotation-heavy Ingress with GatewayClass, Gateway, and routes—CKA expects both familiarity.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">HTTPRoute applied but no traffic—checklist?</span>
+        <span class="pm-chip diff-stretch">stretch</span>
+      </summary>
+      <div class="qa-body">
+        <p>GatewayClass controller healthy, Gateway Accepted/Programmed, parentRefs correct, allowedRoutes permits the route’s namespace, host/path match the client, backend Service has Endpoints.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“I read Gateway and HTTPRoute status before I blame the app—attachment failures are silent from curl’s point of view.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>

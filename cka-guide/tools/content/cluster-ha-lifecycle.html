@@ -1,0 +1,158 @@
+<section class="hero reveal">
+  <span class="eyebrow">Cluster · HA &amp; lifecycle</span>
+  <span class="domain-chip">Domain 2 · Cluster Architecture (25%)</span>
+  <h1>HA control plane &amp; cluster lifecycle.</h1>
+  <p class="lead">High availability means multiple control-plane nodes behind a stable endpoint, plus safe node add/remove and upgrade discipline. CKA wants the topology and the kubectl/kubeadm moves — not deep etcd surgery.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway"><b>HA</b> = redundant API servers (and etcd quorum) behind a load-balanced <b>controlPlaneEndpoint</b>. Lifecycle = join, drain, cordon, upgrade, and remove nodes cleanly.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy <span class="tag">plain English</span></div>
+      <p>One reception desk closes for lunch and the building freezes. HA puts three receptionists behind one phone number (the endpoint VIP/LB). Workers only dial that number — they never care which desk answers.</p>
+    </div>
+  </div>
+  <figure class="mermaid-wrap">
+    <pre class="mermaid">flowchart TB
+  LB["controlPlaneEndpoint\nVIP / LB :6443"]
+  CP1[API server 1]
+  CP2[API server 2]
+  CP3[API server 3]
+  ETCD[(etcd quorum)]
+  W[Workers]
+  W --> LB --> CP1 &amp; CP2 &amp; CP3
+  CP1 &amp; CP2 &amp; CP3 --> ETCD</pre>
+    <p class="viz-note">Stacked etcd is common on kubeadm HA labs; external etcd is an alternate layout — follow the task.</p>
+  </figure>
+</section>
+
+<section class="section reveal" id="ha">
+  <h2><span class="section-num">02</span> HA control plane with kubeadm</h2>
+  <p>First control plane: <code>kubeadm init --control-plane-endpoint … --upload-certs</code>. Additional control planes join with <code>--control-plane</code> and certificate key.</p>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">HA join sketch</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; sudo kubeadm init --control-plane-endpoint "lb.example:6443" \
+  --upload-certs --pod-network-cidr=10.244.0.0/16
+$&lt;/span&gt; # printed join for extra control planes includes --control-plane --certificate-key&lt;/span&gt;
+$&lt;/span&gt; sudo kubeadm join lb.example:6443 --token &lt;t&gt; \
+  --discovery-token-ca-cert-hash sha256:&lt;h&gt; \
+  --control-plane --certificate-key &lt;key&gt;
+$&lt;/span&gt; kubectl get nodes -o wide
+$&lt;/span&gt; kubectl -n kube-system get pods -l tier=control-plane -o wide</code></pre>
+  </div>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Odd etcd count</div>
+      <ul>
+        <li>3 or 5 members for quorum</li>
+        <li>Lose 1 of 3 and still majority</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Even / single</div>
+      <ul>
+        <li>Single CP = no HA</li>
+        <li>Even counts waste quorum budget</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">exam trap</span></div>
+      <p>Workers must use the <b>endpoint</b>, not a single node IP, or failover won’t work. Certificate-key for joining extra CPs expires quickly — regenerate with <code>kubeadm init phase upload-certs --upload-certs</code> if needed.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="lifecycle">
+  <h2><span class="section-num">03</span> Node lifecycle</h2>
+  <p>Before maintenance: cordon → drain. After: uncordon. Removing a node: drain, then delete Node object / kubeadm reset on the host as the task states.</p>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">drain &amp; remove</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; kubectl cordon worker-1
+$&lt;/span&gt; kubectl drain worker-1 --ignore-daemonsets --delete-emptydir-data
+$&lt;/span&gt; kubectl uncordon worker-1
+$&lt;/span&gt; kubectl delete node worker-1
+$&lt;/span&gt; # on the host if asked:&lt;/span&gt;
+$&lt;/span&gt; sudo kubeadm reset</code></pre>
+  </div>
+  <div class="quiz">
+    <p class="q">Why prefer an odd number of etcd members in HA?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> Even numbers are forbidden by kubectl</button>
+      <button class="quiz-opt" type="button" data-correct="true"><span class="mark"></span> Quorum needs majority; odds maximize fault tolerance per member</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> kube-proxy only works with three nodes</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> CNI requires odd counts</button>
+    </div>
+    <div class="quiz-explain">etcd is a Raft quorum store. With 3 members you tolerate 1 failure; with 4 you still only tolerate 1 — wasted node.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">What is controlPlaneEndpoint?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>A stable DNS/IP:port for the API that front-ends all control-plane nodes — what kubeconfigs and join commands should target.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“One VIP for many API servers — that’s the HA phone number.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">cordon vs drain?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>Cordon marks unschedulable (no new Pods). Drain cordons and evicts workloads so the node can be maintained.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Cordon closes the door; drain also clears the room.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Add a second control-plane node — flags?</span>
+        <span class="pm-chip diff-stretch">stretch</span>
+      </summary>
+      <div class="qa-body">
+        <p>Same join as workers plus <code>--control-plane</code> and a valid <code>--certificate-key</code> from upload-certs.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Join with --control-plane and a fresh certificate-key.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>

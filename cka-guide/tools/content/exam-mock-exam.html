@@ -1,0 +1,283 @@
+<section class="hero reveal">
+  <span class="eyebrow">EXAM PREP · timed mock</span>
+  <span class="domain-chip">120 minutes · performance self-check</span>
+  <h1>Timed task mock.</h1>
+  <p class="lead">Seventeen weighted tasks shaped like CKA. Start the timer, work in your lab, mark done when verified. Reveal solutions only after submit — target ≥66% marked.</p>
+</section>
+
+<section class="section reveal" id="mock">
+  <h2><span class="section-num">01</span> Full mock run</h2>
+  <p>Domain-weighted toward Troubleshooting, Cluster, and Networking. Use a disposable cluster; solutions are command sketches, not unique answers.</p>
+  <div data-mock></div>
+  <script type="application/json" id="mockBank">
+  
+  {
+    "minutes": 120,
+    "tasks": [
+      {
+        "domain": "Troubleshooting",
+        "weight": 8,
+        "stem": "Namespace shop: Deployment storefront has 0/2 Ready (one Pending, one CrashLoopBackOff). Restore 2/2 Ready by fixing root causes; do not delete the Deployment.",
+        "solutionSteps": [
+          "kubectl -n shop get pods -o wide",
+          "kubectl -n shop describe pod {pending-pod}",
+          "kubectl -n shop logs {crash-pod} -c {container} --previous",
+          "kubectl -n shop edit deploy storefront"
+        ],
+        "verify": "kubectl -n shop get deploy storefront shows READY 2/2",
+        "why": "Pending is scheduler/volume/resources; CrashLoop needs previous logs and owner fix.",
+        "lesson": "../troubleshooting/pods-apps.html"
+      },
+      {
+        "domain": "Troubleshooting",
+        "weight": 7,
+        "stem": "Node worker-b is NotReady. Diagnose Conditions, safely evacuate if needed, restore kubelet/runtime, return the node to Ready.",
+        "solutionSteps": [
+          "kubectl describe node worker-b",
+          "kubectl cordon worker-b",
+          "kubectl drain worker-b --ignore-daemonsets --delete-emptydir-data",
+          "sudo systemctl status kubelet && sudo journalctl -u kubelet -n 80 --no-pager"
+        ],
+        "verify": "kubectl get node worker-b → Ready; uncordon when healthy",
+        "why": "Node Conditions and kubelet logs beat random restarts.",
+        "lesson": "../troubleshooting/nodes.html"
+      },
+      {
+        "domain": "Troubleshooting",
+        "weight": 6,
+        "stem": "Service api in prod has no working Endpoints (or traffic times out). Fix selector/ports or NetworkPolicy so clients can reach Ready Pods.",
+        "solutionSteps": [
+          "kubectl -n prod get svc,ep api -o wide",
+          "kubectl -n prod get pods --show-labels",
+          "kubectl -n prod get networkpolicy -o yaml",
+          "kubectl -n prod edit svc api"
+        ],
+        "verify": "Endpoints list Pod IPs; curl from a client Pod succeeds",
+        "why": "Empty Endpoints vs full Endpoints + NP are different bugs.",
+        "lesson": "../troubleshooting/services-dns-np.html"
+      },
+      {
+        "domain": "Troubleshooting",
+        "weight": 5,
+        "stem": "kubectl to the cluster intermittently fails. On the control-plane host, restore apiserver/controller health so API answers again.",
+        "solutionSteps": [
+          "crictl ps | grep kube-apiserver",
+          "sudo journalctl -u kubelet -n 100 --no-pager",
+          "sudo systemctl restart kubelet",
+          "kubectl get --raw=/readyz?verbose"
+        ],
+        "verify": "kubectl get nodes works; static Pods for control plane Running",
+        "why": "CKA emphasizes control-plane component health, not deep etcd restore drills.",
+        "lesson": "../troubleshooting/control-plane.html"
+      },
+      {
+        "domain": "Troubleshooting",
+        "weight": 4,
+        "stem": "Distroless app Pod fails readiness. Use kubectl debug (or ephemeral container) to inspect localhost and DNS from the Pod network; fix the Deployment probe/config.",
+        "solutionSteps": [
+          "kubectl -n apps debug -it pod/{name} --image=busybox:1.36 --target={container}",
+          "kubectl -n apps describe pod {name}",
+          "kubectl -n apps edit deploy {name}"
+        ],
+        "verify": "Pod Ready; probe path matches the app",
+        "why": "You cannot exec into many distroless images without debug.",
+        "lesson": "../troubleshooting/logs-debug.html"
+      },
+      {
+        "domain": "Cluster",
+        "weight": 6,
+        "stem": "Create ServiceAccount ci-bot in namespace ci with a Role allowing get/list on pods and create on jobs only in ci. Bind it. Deny secrets.",
+        "solutionSteps": [
+          "kubectl -n ci create sa ci-bot",
+          "kubectl -n ci create role ci-bot-role --verb=get,list --resource=pods",
+          "kubectl -n ci create role ci-jobs --verb=create --resource=jobs",
+          "kubectl -n ci create rolebinding ci-bot-rb --role=ci-bot-role --serviceaccount=ci:ci-bot",
+          "kubectl auth can-i create jobs --as=system:serviceaccount:ci:ci-bot -n ci"
+        ],
+        "verify": "can-i create jobs yes; can-i get secrets no",
+        "why": "Namespace Role + RoleBinding for least privilege.",
+        "lesson": "../cluster/rbac.html"
+      },
+      {
+        "domain": "Cluster",
+        "weight": 5,
+        "stem": "Generate a fresh kubeadm join command and join host worker-c as a worker (not control-plane). Node must become Ready.",
+        "solutionSteps": [
+          "kubeadm token create --print-join-command",
+          "sudo kubeadm join {api}:6443 --token {t} --discovery-token-ca-cert-hash sha256:{h}",
+          "kubectl get nodes"
+        ],
+        "verify": "worker-c Ready without control-plane taint/role",
+        "why": "Wrong join flags create an accidental control-plane member.",
+        "lesson": "../cluster/kubeadm-install.html"
+      },
+      {
+        "domain": "Cluster",
+        "weight": 5,
+        "stem": "Install Helm chart from the provided path into namespace apps as release web. Separately apply the given Kustomize overlay so replicas=3.",
+        "solutionSteps": [
+          "helm install web {chart-path} -n apps --create-namespace",
+          "helm list -n apps",
+          "kubectl apply -k {overlay-path}",
+          "kubectl -n apps get deploy"
+        ],
+        "verify": "Helm release deployed; Deployment READY 3/3",
+        "why": "Helm uses install/upgrade; Kustomize needs kubectl apply -k.",
+        "lesson": "../cluster/helm-kustomize.html"
+      },
+      {
+        "domain": "Cluster",
+        "weight": 4,
+        "stem": "Explain which node component owns CRI vs CNI vs CSI for a stuck volume attach and a Pod that never gets an IP. Fix the failing interface config as given in the lab notes.",
+        "solutionSteps": [
+          "kubectl describe pod {name}",
+          "kubectl get csidrivers,csinode",
+          "crictl info",
+          "kubectl -n kube-system get pods -o wide | grep -E 'cni|csi|kube-proxy'"
+        ],
+        "verify": "Pod has IP and volume Mounted as required",
+        "why": "CRI runs containers; CNI addresses; CSI attaches/mounts.",
+        "lesson": "../cluster/cri-cni-csi.html"
+      },
+      {
+        "domain": "Networking",
+        "weight": 6,
+        "stem": "Create a NetworkPolicy in namespace db allowing TCP 5432 ingress only from Pods with role=api in namespace app. Default-deny other ingress to selected Pods.",
+        "solutionSteps": [
+          "kubectl -n db apply -f networkpolicy.yaml",
+          "kubectl -n db get networkpolicy -o yaml",
+          "kubectl -n app run test --rm -it --labels=role=api --image=busybox:1.36 --restart=Never -- wget -qO- db.db.svc:5432"
+        ],
+        "verify": "Allowed client connects; unlabeled client times out",
+        "why": "Namespace + pod selectors and policyTypes must match the stem.",
+        "lesson": "../networking/network-policies.html"
+      },
+      {
+        "domain": "Networking",
+        "weight": 5,
+        "stem": "Attach an HTTPRoute in namespace store to Gateway edge (gateway-system) routing path prefix /shop to Service shop:80.",
+        "solutionSteps": [
+          "kubectl -n gateway-system get gateway edge -o yaml",
+          "kubectl -n store apply -f httproute.yaml",
+          "kubectl -n store describe httproute",
+          "curl -sS -H 'Host: shop.example' http://{gw-ip}/shop/"
+        ],
+        "verify": "Parent Accepted; backend Endpoints present; curl 200",
+        "why": "Gateway API parentRefs replace Ingress class/host wiring.",
+        "lesson": "../networking/gateway-api.html"
+      },
+      {
+        "domain": "Networking",
+        "weight": 4,
+        "stem": "Expose Deployment web as ClusterIP Service on port 80 targeting container port 8080. Confirm Endpoints and DNS name web.{ns}.svc.",
+        "solutionSteps": [
+          "kubectl -n web expose deploy web --port=80 --target-port=8080 --name=web",
+          "kubectl -n web get ep web",
+          "kubectl -n web run dns --rm -it --image=busybox:1.36 --restart=Never -- nslookup web.web.svc"
+        ],
+        "verify": "Endpoints non-empty; DNS resolves",
+        "why": "port vs targetPort mismatch is a classic empty-traffic bug.",
+        "lesson": "../networking/services-endpoints.html"
+      },
+      {
+        "domain": "Networking",
+        "weight": 3,
+        "stem": "CoreDNS ConfigMap in kube-system was broken. Restore a valid Corefile with the kubernetes plugin and Ready CoreDNS Pods.",
+        "solutionSteps": [
+          "kubectl -n kube-system get cm coredns -o yaml",
+          "kubectl -n kube-system edit cm coredns",
+          "kubectl -n kube-system rollout restart deploy/coredns",
+          "kubectl -n kube-system get pods -l k8s-app=kube-dns"
+        ],
+        "verify": "CoreDNS Ready; nslookup kubernetes.default works",
+        "why": "Bad Corefile indentation CrashLoops DNS for the whole cluster.",
+        "lesson": "../networking/coredns.html"
+      },
+      {
+        "domain": "Workloads",
+        "weight": 4,
+        "stem": "Deployment payments received a bad image. Undo the rollout to the previous revision and confirm Ready replicas.",
+        "solutionSteps": [
+          "kubectl -n pay rollout history deploy/payments",
+          "kubectl -n pay rollout undo deploy/payments",
+          "kubectl -n pay rollout status deploy/payments"
+        ],
+        "verify": "READY matches desired; image is prior revision",
+        "why": "Always check history before undo.",
+        "lesson": "../workloads/deployments-rollouts.html"
+      },
+      {
+        "domain": "Workloads",
+        "weight": 4,
+        "stem": "Taint node gpu-1 with sku=gpu:NoSchedule. Ensure Deployment trainer in ml tolerates it and can schedule; other Pods without toleration must not land there.",
+        "solutionSteps": [
+          "kubectl taint nodes gpu-1 sku=gpu:NoSchedule",
+          "kubectl -n ml edit deploy trainer",
+          "kubectl -n ml get pods -o wide"
+        ],
+        "verify": "trainer Pods on gpu-1 (with selector/affinity if required); others off-node",
+        "why": "Toleration permits; nodeSelector/affinity pins.",
+        "lesson": "../workloads/scheduling.html"
+      },
+      {
+        "domain": "Workloads",
+        "weight": 3,
+        "stem": "Set CPU/memory requests on deploy api, fix readiness path to /readyz, and create an HPA min=2 max=6 at 70% CPU.",
+        "solutionSteps": [
+          "kubectl -n web set resources deploy/api --requests=cpu=100m,memory=128Mi",
+          "kubectl -n web edit deploy api",
+          "kubectl -n web autoscale deploy api --cpu-percent=70 --min=2 --max=6",
+          "kubectl -n web describe hpa"
+        ],
+        "verify": "HPA shows concrete targets; Pods Ready",
+        "why": "HPA needs requests and metrics-server.",
+        "lesson": "../workloads/resources-hpa.html"
+      },
+      {
+        "domain": "Storage",
+        "weight": 5,
+        "stem": "PVC data in namespace data is Pending. Bind it using the correct StorageClass/access mode (or matching PV) so the consuming Pod runs with the volume mounted.",
+        "solutionSteps": [
+          "kubectl -n data get pvc,pv,sc",
+          "kubectl -n data describe pvc data",
+          "kubectl -n data edit pvc data",
+          "kubectl -n data get pods"
+        ],
+        "verify": "PVC Bound; Pod Running with mount",
+        "why": "Access mode and StorageClass mismatches leave PVC Pending.",
+        "lesson": "../storage/pv-pvc.html"
+      }
+    ]
+  }
+  </script>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">02</span> After the run</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">What score should you treat as a pass rehearsal?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: Mark at least sixty-six percent done under the two-hour timer, with Troubleshooting items verified.</p></div></div>
+        <h5>Answer</h5>
+        <p>Official pass ≥66%. Self-check marks are not a grader — still, timed ≥66% with heavy domains solid is the rehearsal bar.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">How do you spend the last ten minutes?</span>
+        <span class="pm-chip diff-warm">Warm</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: Verify only — Ready replicas, Endpoints, NetworkPolicies, node Ready. No new features.</p></div></div>
+        <h5>Answer</h5>
+        <p>Re-check high-weight tasks. Partial correct state can still score; unfinished heroics usually do not.</p>
+      </div>
+    </details>
+  </div>
+</section>

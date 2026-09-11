@@ -1,0 +1,178 @@
+<section class="hero reveal">
+  <span class="eyebrow">Storage · Volumes</span>
+  <span class="domain-chip">Domain 5 · Storage (10%)</span>
+  <h1>Volumes &amp; access modes.</h1>
+  <p class="lead">Pods are ephemeral; data that must survive restarts lives in <b>volumes</b>. CKA cares that you pick the right volume type and the right <b>access mode</b> so the Pod mounts cleanly.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway">A <b>volume</b> is a directory the kubelet mounts into a container. <b>Access modes</b> declare how many nodes may use the volume and whether writes are allowed.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy <span class="tag">plain English</span></div>
+      <p>The Pod is a hotel guest; the volume is a luggage locker. Ephemeral volumes are lockers that empty when checkout ends. Persistent volumes are lockers that keep bags after you leave — but the building still decides if one guest or many can open the same locker (access mode).</p>
+    </div>
+  </div>
+  <figure class="mermaid-wrap">
+    <pre class="mermaid">flowchart LR
+  POD[Pod]
+  VOL[Volume mount path]
+  BACK[Backing store]
+  POD --> VOL --> BACK
+  BACK --- E["emptyDir / config / secret"]
+  BACK --- P["PVC → PV / CSI"]</pre>
+    <p class="viz-note">Containers only see a path. The volume type decides whether that path is local scratch, config, or durable storage.</p>
+  </figure>
+</section>
+
+<section class="section reveal" id="types">
+  <h2><span class="section-num">02</span> Volume types you’ll meet</h2>
+  <p>Know which are Pod-lifetime scratch vs durable claims. On CKA, PVC-backed volumes dominate stateful tasks; emptyDir and projected volumes show up in config/scratch scenarios.</p>
+  <dl class="kv">
+    <dt>emptyDir</dt>
+    <dd>Scratch space on the node; dies with the Pod (unless sizeLimit / medium=Memory).</dd>
+    <dt>hostPath</dt>
+    <dd>Node filesystem path — useful for node agents, risky for apps; avoid unless the task demands it.</dd>
+    <dt>configMap / secret / projected</dt>
+    <dd>Inject config as files; not for app databases.</dd>
+    <dt>persistentVolumeClaim</dt>
+    <dd>Claim durable storage; the exam path for “keep data across Pod restarts.”</dd>
+  </dl>
+  <div class="codeblock">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">pod-with-volumes.yaml</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+spec:
+  containers:
+  - name: app
+    image: nginx:1.27
+    volumeMounts:
+    - name: cache
+      mountPath: /cache
+    - name: data
+      mountPath: /data
+  volumes:
+  - name: cache
+    emptyDir: {}
+  - name: data
+    persistentVolumeClaim:
+      claimName: app-data</code></pre>
+  </div>
+</section>
+
+<section class="section reveal" id="access-modes">
+  <h2><span class="section-num">03</span> Access modes</h2>
+  <p>Modes are capabilities of the volume (and StorageClass/PV), not wishes of the Pod alone. Mismatch → PVC stays Pending or mount fails.</p>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Common modes</div>
+      <ul>
+        <li><code>ReadWriteOnce</code> (RWO) — one node, read/write</li>
+        <li><code>ReadOnlyMany</code> (ROX) — many nodes, read-only</li>
+        <li><code>ReadWriteMany</code> (RWX) — many nodes, read/write</li>
+        <li><code>ReadWriteOncePod</code> — single Pod only (when supported)</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Exam traps</div>
+      <ul>
+        <li>Assuming every CSI driver supports RWX</li>
+        <li>Scaling a Deployment with RWO across nodes</li>
+        <li>Confusing access mode with reclaim policy</li>
+      </ul>
+    </div>
+  </div>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">inspect mounts &amp; modes</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; kubectl get pvc,pv
+$&lt;/span&gt; kubectl get pv -o custom-columns=NAME:.metadata.name,MODE:.spec.accessModes,STATUS:.status.phase
+$&lt;/span&gt; kubectl describe pod app | sed -n '/Volumes:/,/Events:/p'
+$&lt;/span&gt; kubectl exec app -- df -h /data</code></pre>
+  </div>
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">exam trap</span></div>
+      <p>RWO allows multiple Pods on the <b>same node</b> to mount read/write, but not across nodes. Multi-replica Deployments often need RWX — or a StatefulSet with one volume per Pod.</p>
+    </div>
+  </div>
+  <div class="quiz">
+    <p class="q">You need one shared writable volume for Pods scheduled on different nodes. Which access mode?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> ReadWriteOnce</button>
+      <button class="quiz-opt" type="button" data-correct="true"><span class="mark"></span> ReadWriteMany</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> ReadOnlyMany</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> emptyDir</button>
+    </div>
+    <div class="quiz-explain">RWX is the multi-node read/write mode. RWO is single-node; ROX is read-only; emptyDir is not a durable shared claim.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">emptyDir vs PVC — one sentence?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>emptyDir lasts for the Pod’s life on that node; a PVC claims durable storage that can outlive the Pod.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Scratch dies with the Pod; PVC is the claim for data that must survive.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Name the four access modes CKA may mention.</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>ReadWriteOnce, ReadOnlyMany, ReadWriteMany, and ReadWriteOncePod.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“RWO one node, ROX many read-only, RWX many read/write, RWOP one Pod.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">Deployment with RWO PVC stuck Multi-Attach — what next?</span>
+        <span class="pm-chip diff-stretch">stretch</span>
+      </summary>
+      <div class="qa-body">
+        <p>Replicas landed on different nodes. Reduce to one replica, use a StatefulSet volumeClaimTemplate, or switch to an RWX-capable StorageClass if the task allows.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“RWO cannot follow replicas across nodes — I check Pods’ nodes and the PVC access mode first.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>

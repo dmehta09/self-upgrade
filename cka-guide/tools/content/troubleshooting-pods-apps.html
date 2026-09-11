@@ -1,0 +1,145 @@
+<section class="hero reveal">
+  <span class="eyebrow">TROUBLESHOOTING · pods &amp; apps</span>
+  <span class="domain-chip">Domain 1 · Troubleshooting · 30%</span>
+  <h1>Troubleshoot pods &amp; apps.</h1>
+  <p class="lead">Pending, CrashLoopBackOff, and ImagePullBackOff dominate CKA. Read status → Events → logs (current and previous) before changing YAML.</p>
+</section>
+
+<section class="section reveal" id="triage">
+  <h2><span class="section-num">01</span> Triage order</h2>
+  <p class="takeaway">Never guess from the name alone — <b>describe</b> tells you why; <b>logs</b> tell you what the process did.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">ER triage, not surgery first <span class="tag">analogy</span></div>
+      <p>In plain English: a medic checks airway, breathing, pulse before opening a chest. Pods are the same: phase and Events first, then container logs, then edit the Deployment. Skipping to <code>kubectl delete pod</code> only restarts the same crash.</p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>Pending</dt>
+    <dd>Not scheduled (or waiting on volume). Control-plane / constraints — not yet a crash.</dd>
+    <dt>ImagePullBackOff</dt>
+    <dd>Runtime cannot pull. Wrong image, tag, registry auth, or network to registry.</dd>
+    <dt>CrashLoopBackOff</dt>
+    <dd>Container starts then exits. Backoff grows. Need exit reason + previous logs.</dd>
+    <dt>Running but not Ready</dt>
+    <dd>Probes failing or containers still starting. Check Ready condition and probe config.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="decision">
+  <h2><span class="section-num">02</span> Decision map</h2>
+  <p>Use Events to pick the branch. Scheduler messages vs pull errors vs OOMKilled vs Error.</p>
+
+  <div class="mermaid-wrap">
+    <pre class="mermaid">
+flowchart TD
+  A[kubectl get pods] --> B{Phase?}
+  B -->|Pending| C[describe Events]
+  C --> C1[taints / affinity / PVC / resources]
+  B -->|ImagePull*| D[Image / pullSecrets / registry]
+  B -->|CrashLoop*| E[logs -p + describe]
+  E --> E1[exit code · OOM · config]
+  B -->|Running| F[Ready? probes / app]
+    </pre>
+  </div>
+  <p class="viz-note">Memorize the fork: Pending ≠ CrashLoop. Different tools, different fixes.</p>
+</section>
+
+<section class="section reveal" id="commands">
+  <h2><span class="section-num">03</span> Worked triage</h2>
+  <p><b>Constraint:</b> Deployment <code>web</code> in <code>apps</code> shows 0/2 Ready. One Pod Pending, one CrashLoopBackOff. Fix or explain both.</p>
+
+  <div class="codeblock shell">
+    <pre><code>$&lt;/span&gt; kubectl -n apps get pods -o wide
+$&lt;/span&gt; kubectl -n apps describe pod &lt;pending-pod&gt;
+$&lt;/span&gt; kubectl -n apps describe pod &lt;crash-pod&gt;
+$&lt;/span&gt; kubectl -n apps logs &lt;crash-pod&gt; -c &lt;container&gt; --previous
+$&lt;/span&gt; kubectl -n apps get events --sort-by=.lastTimestamp | tail</code></pre>
+  </div>
+
+  <div class="versus">
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Wrong reflex</div>
+      <ul>
+        <li>Delete Pod and hope</li>
+        <li>Only <code>logs</code> without <code>--previous</code></li>
+        <li>Ignore Events for Pending</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">Exam reflex</div>
+      <ul>
+        <li>describe → last Events</li>
+        <li>logs + <code>--previous</code> after restart</li>
+        <li>Fix owner (Deployment/image/PVC)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha · empty logs on CrashLoop</div>
+      <p>After restart the current container may have no useful output yet. <code>kubectl logs … --previous</code> (or <code>-p</code>) reads the dead instance. Multi-container Pods need <code>-c</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="quiz">
+  <h2><span class="section-num">04</span> Quick check</h2>
+  <div class="quiz" data-quiz="pending-vs-crash">
+    <p class="q">A Pod never gets a nodeName. Events mention “Insufficient cpu”. What is the primary failure class?</p>
+    <div class="quiz-opts">
+      <button type="button" class="quiz-opt" data-correct="true"><span class="mark"></span> Pending — scheduler could not bind</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> CrashLoopBackOff — app OOMed</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> ImagePullBackOff — registry full</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> NetworkPolicy — packets dropped</button>
+    </div>
+    <div class="quiz-explain">No nodeName means the scheduler never bound the Pod. Resource requests that no node can satisfy keep it Pending. CrashLoop only happens after the container starts on a node.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">First three commands for a failing Pod?</span>
+        <span class="pm-chip diff-warm">Warm</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: get, describe, then logs — and use previous when it restarted.</p></div></div>
+        <h5>Answer</h5>
+        <p><code>kubectl get pod</code> → <code>describe</code> (Events + container state) → <code>logs</code> / <code>logs -p</code>. Only then edit the controller or Secret.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">ImagePullBackOff vs ErrImagePull?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: ErrImagePull is the failed attempt; BackOff means kubelet is waiting before retrying the same pull.</p></div></div>
+        <h5>Answer</h5>
+        <p>Both mean pull failure. Fix image name/tag, imagePullSecrets, or registry reachability — not the app binary.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">OOMKilled — requests or limits?</span>
+        <span class="pm-chip diff-stretch">Stretch</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: The kernel kills when the container exceeds its memory limit; requests only affect scheduling.</p></div></div>
+        <h5>Answer</h5>
+        <p>Check <code>Last State: Reason: OOMKilled</code>. Raise limit or reduce app memory. Raising requests alone does not stop OOM if limit is still too low.</p>
+      </div>
+    </details>
+  </div>
+</section>

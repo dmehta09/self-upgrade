@@ -1,0 +1,197 @@
+<section class="hero reveal">
+  <span class="eyebrow">Services &amp; Networking · Services</span>
+  <span class="domain-chip">Domain 3 · Services &amp; Networking (20%)</span>
+  <h1>Services &amp; endpoints.</h1>
+  <p class="lead">A Service gives a stable virtual IP (and DNS name) in front of changing Pod IPs. Selectors populate Endpoints / EndpointSlices; kube-proxy (or equivalent) steers ClusterIP traffic to ready backends.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway">Clients dial the <b>Service</b>; the dataplane fans out to <b>Pod IPs</b> listed in <b>EndpointSlice</b>. Labels + readiness gate who is in the pool.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy <span class="tag">plain English</span></div>
+      <p>A Service is the restaurant’s front desk number. Chefs (Pods) come and go; the desk always answers the same number and hands the call to whoever is on shift (ready Endpoints). kube-proxy is the switchboard programming.</p>
+    </div>
+  </div>
+  <dl class="kv">
+    <dt>ClusterIP</dt>
+    <dd>Default. VIP reachable inside the cluster only.</dd>
+    <dt>NodePort</dt>
+    <dd>Opens the same high port on every node → forwards to ClusterIP backends.</dd>
+    <dt>LoadBalancer</dt>
+    <dd>Cloud (or MetalLB-style) external LB in front of NodePort/ClusterIP.</dd>
+    <dt>ExternalName</dt>
+    <dd>DNS CNAME to an outside name—no proxying of Pods.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="flow">
+  <h2><span class="section-num">02</span> Client → Service → Pod</h2>
+  <p>Walk the request path. Empty Endpoints = labels wrong, wrong namespace, or Pods not Ready.</p>
+  <figure class="reqflow" data-reqflow>
+    <span class="rf-title">ClusterIP request path</span>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button type="button" class="rf-btn rf-reset" aria-label="Reset">⟲</button>
+      <button type="button" class="rf-btn rf-prev" aria-label="Previous">◀</button>
+      <button type="button" class="rf-btn rf-play" aria-label="Play">▶</button>
+      <button type="button" class="rf-btn rf-next" aria-label="Next">▶</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed">
+        <option value="1400">Slow</option>
+        <option value="1100" selected>Normal</option>
+        <option value="700">Fast</option>
+      </select>
+    </div>
+    <script type="application/json" class="rf-config">
+    {
+      "title": "Client to Pod via Service",
+      "nodes": [
+        { "id": "client", "label": "Client Pod", "type": "pod", "col": 0, "row": 0 },
+        { "id": "svc", "label": "Service VIP", "type": "svc", "col": 1, "row": 0 },
+        { "id": "proxy", "label": "kube-proxy", "type": "node", "col": 2, "row": 0 },
+        { "id": "pod", "label": "Backend Pod", "type": "pod", "col": 3, "row": 0 }
+      ],
+      "edges": [
+        { "from": "client", "to": "svc", "label": "dst ClusterIP" },
+        { "from": "svc", "to": "proxy", "label": "intercept" },
+        { "from": "proxy", "to": "pod", "label": "DNAT → Pod IP" }
+      ],
+      "steps": [
+        { "edge": ["client", "svc"], "caption": "Client resolves my-svc DNS (or uses ClusterIP) and sends TCP to the Service VIP:port.", "latency": "~0 ms" },
+        { "edge": ["svc", "proxy"], "caption": "On the node, kube-proxy rules (iptables/IPVS/nft) match the ClusterIP and pick a backend from EndpointSlice.", "latency": "~0 ms" },
+        { "edge": ["proxy", "pod"], "caption": "Packet is rewritten toward a ready Pod IP:targetPort. Return path is tracked so replies un-NAT correctly.", "latency": "~1 ms" },
+        { "node": "pod", "caption": "Backend container accepts on containerPort / targetPort. If the Pod is not Ready, it should not be in the EndpointSlice.", "status": "hit" }
+      ]
+    }
+    </script>
+  </figure>
+  <figure class="mermaid-wrap">
+    <pre class="mermaid">flowchart TB
+  S["Service selector app=api"] --> ES["EndpointSlice"]
+  P1["Pod Ready app=api"] --> ES
+  P2["Pod Ready app=api"] --> ES
+  P3["Pod NotReady"] -.->|"excluded"| X["not listed"]
+  ES --> KP["kube-proxy dataplane"]
+  KP --> P1
+  KP --> P2</pre>
+    <p class="viz-note">EndpointSlice is the modern backing object; <code>kubectl get endpoints</code> still works for quick checks.</p>
+  </figure>
+</section>
+
+<section class="section reveal" id="types">
+  <h2><span class="section-num">03</span> Types, ports, and kubectl</h2>
+  <p><code>port</code> is what clients dial on the Service; <code>targetPort</code> is the Pod/container port. They need not match numerically.</p>
+  <div class="codeblock">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">service-clusterip.yaml</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: shop
+spec:
+  type: ClusterIP
+  selector:
+    app: api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP</code></pre>
+  </div>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">create &amp; verify</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; kubectl -n shop expose deploy api --name=api --port=80 --target-port=8080
+$&lt;/span&gt; kubectl -n shop get svc,endpoints,endpointslices
+$&lt;/span&gt; kubectl -n shop describe svc api
+$&lt;/span&gt; kubectl -n shop get pods -l app=api --show-labels
+$&lt;/span&gt; kubectl -n shop patch svc api -p '{"spec":{"type":"NodePort"}}'
+$&lt;/span&gt; kubectl -n shop get svc api -o jsonpath='{.spec.ports[0].nodePort}{"\n"}'</code></pre>
+  </div>
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">exam trap</span></div>
+      <p>Service exists but Endpoints are empty → selector/labels mismatch, or Pods failing readinessProbe. Fixing DNS won’t help until Endpoints populate. Also: headless Services (<code>clusterIP: None</code>) return Pod IPs via DNS A/AAAA records—no ClusterIP VIP.</p>
+    </div>
+  </div>
+  <div class="quiz">
+    <p class="q">You create a ClusterIP Service with selector <code>app=web</code>, but <code>kubectl get endpoints</code> shows no addresses. Pods are Running. Most likely cause?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> kube-proxy must be restarted on every node first.</button>
+      <button class="quiz-opt" type="button" data-correct="true"><span class="mark"></span> Pod labels don’t match the selector, or Pods aren’t Ready (readiness failing).</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> ClusterIP Services never create Endpoints—only LoadBalancer does.</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> You forgot to create an Ingress for the Service.</button>
+    </div>
+    <div class="quiz-explain">Endpoints/EndpointSlices are derived from matching <b>Ready</b> Pods. Ingress is unrelated to whether Endpoints exist.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">ClusterIP vs NodePort vs LoadBalancer in one breath?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>ClusterIP = internal VIP. NodePort = expose that VIP via a port on every node. LoadBalancer = provision an external address that fronts the Service (usually via NodePort underneath on many clouds).</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“ClusterIP inside, NodePort on nodes, LoadBalancer for an external IP—same selector backends underneath.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">What is kube-proxy’s job?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>Watch Services and EndpointSlices; program the node dataplane so traffic to a Service IP:port is load-balanced to Pod backends. Some CNIs replace kube-proxy with eBPF—conceptually the same responsibility.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“kube-proxy turns Service VIPs into Pod destinations; it doesn’t assign Pod IPs—that’s CNI.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">port vs targetPort vs nodePort?</span>
+        <span class="pm-chip diff-warm">warm</span>
+      </summary>
+      <div class="qa-body">
+        <p><code>port</code>: Service port clients use. <code>targetPort</code>: where it lands on the Pod. <code>nodePort</code>: host port when type is NodePort/LoadBalancer (allocated from the NodePort range if omitted).</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Clients hit Service port; kube-proxy sends to targetPort on the Pod; nodePort is only the node’s published port.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>

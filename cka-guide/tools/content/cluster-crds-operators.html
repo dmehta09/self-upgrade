@@ -1,0 +1,165 @@
+<section class="hero reveal">
+  <span class="eyebrow">Cluster · Extensibility</span>
+  <span class="domain-chip">Domain 2 · Cluster Architecture (25%)</span>
+  <h1>CRDs &amp; operators.</h1>
+  <p class="lead">CustomResourceDefinitions extend the API. Operators (controllers) reconcile those custom resources toward a desired state. CKA wants you to install CRDs, create CRs, and know where to look when they stick.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> The idea</h2>
+  <p class="takeaway">A <b>CRD</b> teaches the API server a new kind. An <b>operator</b> watches instances of that kind and acts — same reconcile loop as Deployments, different domain.</p>
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Analogy <span class="tag">plain English</span></div>
+      <p>CRD is adding a new form type at city hall (“Certificate request”). The operator is the clerk who reads each form and calls the CA, renews dates, and updates the status stamp. Without the clerk, forms pile up Accepted=False forever.</p>
+    </div>
+  </div>
+  <figure class="mermaid-wrap">
+    <pre class="mermaid">flowchart LR
+  CRD[CRD registers kind]
+  API[API server]
+  CR[Custom Resource]
+  OP[Operator / controller]
+  CHILD[Pods / Secrets / …]
+  CRD --> API
+  CR --> API
+  OP -->|watch| CR
+  OP -->|create/update| CHILD
+  OP -->|status| CR</pre>
+    <p class="viz-note">Applying a CRD alone does nothing useful until a controller reconciles CRs.</p>
+  </figure>
+</section>
+
+<section class="section reveal" id="crd">
+  <h2><span class="section-num">02</span> Working with CRDs</h2>
+  <p>After install, <code>kubectl api-resources</code> shows the new kind. CR YAML uses the CRD’s group/version/kind. Namespaced vs cluster-scoped follows the CRD’s scope.</p>
+  <div class="codeblock">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">example-cr.yaml</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>apiVersion: example.com/v1
+kind: Widget
+metadata:
+  name: demo
+  namespace: demo
+spec:
+  size: small
+  replicas: 2</code></pre>
+  </div>
+  <div class="codeblock shell">
+    <div class="code-head">
+      <span class="code-dots"><i></i><i></i><i></i></span>
+      <span class="code-file">discover &amp; manage</span>
+      <button class="code-copy" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button>
+    </div>
+    <pre><code>$&lt;/span&gt; kubectl apply -f crds.yaml
+$&lt;/span&gt; kubectl get crd
+$&lt;/span&gt; kubectl api-resources | grep -i widget
+$&lt;/span&gt; kubectl explain widget.spec
+$&lt;/span&gt; kubectl -n demo apply -f example-cr.yaml
+$&lt;/span&gt; kubectl -n demo get widget demo -o yaml
+$&lt;/span&gt; kubectl -n demo describe widget demo</code></pre>
+  </div>
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha <span class="tag">exam trap</span></div>
+      <p>CR applies but nothing happens → operator Deployment/Pod missing or crashing. Check operator logs and CR <code>.status</code> / conditions. Deleting a CRD cascades delete of all CRs of that type — dangerous on a shared cluster.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="operators">
+  <h2><span class="section-num">03</span> Operators in practice</h2>
+  <p>On CKA you rarely write an operator — you install one (YAML/Helm), create its CR, and verify child objects. Treat status like a Deployment’s conditions.</p>
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">Healthy path</div>
+      <ul>
+        <li>CRD Established=True</li>
+        <li>Operator Pod Running</li>
+        <li>CR status shows Ready / conditions</li>
+        <li>Child Pods/Services appear</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-bad">
+      <div class="vs-h">Stuck path</div>
+      <ul>
+        <li>CRD missing → unknown kind</li>
+        <li>RBAC missing for operator SA</li>
+        <li>Wrong apiVersion on CR</li>
+        <li>Webhook / validation reject</li>
+      </ul>
+    </div>
+  </div>
+  <div class="quiz">
+    <p class="q">kubectl says “no matches for kind Widget”. First check?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> Restart kube-proxy</button>
+      <button class="quiz-opt" type="button" data-correct="true"><span class="mark"></span> CRD installed and apiVersion/kind match kubectl api-resources</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> Increase HPA max replicas</button>
+      <button class="quiz-opt" type="button" data-correct="false"><span class="mark"></span> Flush CoreDNS cache only</button>
+    </div>
+    <div class="quiz-explain">Unknown kind almost always means the CRD isn’t present or you’re using the wrong group/version.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">CRD vs Custom Resource?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>CRD defines the schema/kind in the API. A Custom Resource is one instance of that kind.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“CRD is the type; CR is the object.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">What does an operator do?</span>
+        <span class="pm-chip diff-core">core</span>
+      </summary>
+      <div class="qa-body">
+        <p>A controller that watches CRs and reconciles related Kubernetes objects (and status) to match <code>spec</code>.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“Operator = human ops knowledge encoded as a reconcile loop on CRs.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="qa-q">CR created, no child Pods — checklist?</span>
+        <span class="pm-chip diff-stretch">stretch</span>
+      </summary>
+      <div class="qa-body">
+        <p>Operator Deployment healthy, RBAC for its SA, CR status/events, correct namespace, validating webhooks not rejecting, image pulls for children.</p>
+        <div class="callout qa-say tip">
+          <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="co-body">
+            <div class="co-title">Say it out loud</div>
+            <p>“I check the operator before I rewrite the CR — no controller, no children.”</p>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>

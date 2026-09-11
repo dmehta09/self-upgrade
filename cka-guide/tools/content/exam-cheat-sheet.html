@@ -1,0 +1,177 @@
+<section class="hero reveal">
+  <span class="eyebrow">REFERENCE · cheat-sheet</span>
+  <span class="domain-chip">kubectl · kubeadm · RBAC · net · storage</span>
+  <h1>CKA cheat-sheet.</h1>
+  <p class="lead">Dense command memory for the last week before exam day. Prefer docs.k8s.io inside the real exam — this page is for drills only.</p>
+</section>
+
+<section class="section reveal" id="kubectl">
+  <h2><span class="section-num">01</span> kubectl fluency</h2>
+  <div class="codeblock shell">
+    <pre><code>$&lt;/span&gt; kubectl config use-context &lt;ctx&gt;
+$&lt;/span&gt; kubectl config set-context --current --namespace=&lt;ns&gt;
+$&lt;/span&gt; kubectl api-resources | grep -i net
+$&lt;/span&gt; kubectl explain pod.spec.containers.livenessProbe --recursive
+$&lt;/span&gt; kubectl get events -A --sort-by=.lastTimestamp | tail
+$&lt;/span&gt; kubectl get po,svc,ep,deploy,rs,pvc -n &lt;ns&gt; -o wide
+$&lt;/span&gt; kubectl describe &lt;kind&gt;/&lt;name&gt; -n &lt;ns&gt;
+$&lt;/span&gt; kubectl logs &lt;pod&gt; -c &lt;c&gt; --previous -n &lt;ns&gt;
+$&lt;/span&gt; kubectl exec -it &lt;pod&gt; -n &lt;ns&gt; -- sh
+$&lt;/span&gt; kubectl debug -it &lt;pod&gt; -n &lt;ns&gt; --image=busybox:1.36 --target=&lt;c&gt;
+$&lt;/span&gt; kubectl run tmp --rm -it --restart=Never --image=busybox:1.36 -- sh
+$&lt;/span&gt; kubectl apply -f m.yaml | kubectl apply -k overlays/prod
+$&lt;/span&gt; kubectl delete pod &lt;p&gt; --force --grace-period=0   # last resort</code></pre>
+  </div>
+  <dl class="kv">
+    <dt>-o yaml / -o wide / -o jsonpath</dt>
+    <dd>Inspect, layout, extract fields for scripts.</dd>
+    <dt>--dry-run=client -o yaml</dt>
+    <dd>Imperative scaffold → edit → apply.</dd>
+    <dt>-w / --watch</dt>
+    <dd>Watch Ready / rollout progress.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="workloads-cmds">
+  <h2><span class="section-num">02</span> Workloads &amp; scheduling</h2>
+  <div class="codeblock shell">
+    <pre><code>$&lt;/span&gt; kubectl create deploy web --image=nginx:1.27 --replicas=3
+$&lt;/span&gt; kubectl scale deploy/web --replicas=5
+$&lt;/span&gt; kubectl set image deploy/web nginx=nginx:1.28
+$&lt;/span&gt; kubectl rollout status|history|undo|pause|resume deploy/web
+$&lt;/span&gt; kubectl set resources deploy/web --requests=cpu=100m,memory=128Mi --limits=cpu=500m,memory=256Mi
+$&lt;/span&gt; kubectl autoscale deploy web --cpu-percent=70 --min=2 --max=6
+$&lt;/span&gt; kubectl create cm app-cfg --from-literal=MODE=prod --from-file=cfg.json
+$&lt;/span&gt; kubectl create secret generic app-sec --from-literal=pass=s3cret
+$&lt;/span&gt; kubectl taint nodes &lt;n&gt; sku=gpu:NoSchedule
+$&lt;/span&gt; kubectl taint nodes &lt;n&gt; sku=gpu:NoSchedule-   # remove
+$&lt;/span&gt; kubectl label nodes &lt;n&gt; disk=ssd
+$&lt;/span&gt; kubectl cordon|uncordon|drain &lt;n&gt; --ignore-daemonsets --delete-emptydir-data</code></pre>
+  </div>
+</section>
+
+<section class="section reveal" id="kubeadm-rbac">
+  <h2><span class="section-num">03</span> kubeadm &amp; RBAC</h2>
+  <div class="codeblock shell">
+    <pre><code>$&lt;/span&gt; kubeadm token create --print-join-command
+$&lt;/span&gt; kubeadm token list
+$&lt;/span&gt; sudo kubeadm join &lt;api&gt;:6443 --token &lt;t&gt; --discovery-token-ca-cert-hash sha256:&lt;h&gt;
+$&lt;/span&gt; sudo kubeadm upgrade plan
+$&lt;/span&gt; kubectl -n &lt;ns&gt; create sa bot
+$&lt;/span&gt; kubectl -n &lt;ns&gt; create role r --verb=get,list --resource=pods
+$&lt;/span&gt; kubectl -n &lt;ns&gt; create rolebinding rb --role=r --serviceaccount=&lt;ns&gt;:bot
+$&lt;/span&gt; kubectl create clusterrole cr --verb=get --resource=nodes
+$&lt;/span&gt; kubectl create clusterrolebinding crb --clusterrole=cr --serviceaccount=&lt;ns&gt;:bot
+$&lt;/span&gt; kubectl auth can-i list pods --as=system:serviceaccount:&lt;ns&gt;:bot -n &lt;ns&gt;
+$&lt;/span&gt; helm install|upgrade|list|uninstall &lt;rel&gt; &lt;chart&gt; -n &lt;ns&gt;
+$&lt;/span&gt; kubectl apply -k overlays/prod
+$&lt;/span&gt; kubectl get crd; kubectl explain &lt;crd.kind&gt;</code></pre>
+  </div>
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 3-2 5-3 6H8c-1-1-3-3-3-6a7 7 0 0 1 7-7z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">RBAC reflex</div>
+      <p>Namespace objects → Role + RoleBinding. Cluster-scoped (nodes, PVs, namespaces) → ClusterRole + ClusterRoleBinding. Always finish with <code>auth can-i</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="net-policy-gw">
+  <h2><span class="section-num">04</span> NetworkPolicy · Ingress · Gateway</h2>
+  <div class="codeblock shell">
+    <pre><code>$&lt;/span&gt; kubectl expose deploy web --port=80 --target-port=8080 --name=web
+$&lt;/span&gt; kubectl get svc,ep,endpointslices -n &lt;ns&gt;
+$&lt;/span&gt; kubectl get networkpolicy -A
+$&lt;/span&gt; kubectl get ingress,ingressclass -A
+$&lt;/span&gt; kubectl get gateway,httproute,gatewayclass -A
+$&lt;/span&gt; kubectl -n kube-system get cm coredns -o yaml
+$&lt;/span&gt; kubectl -n kube-system logs -l k8s-app=kube-dns</code></pre>
+  </div>
+  <dl class="kv">
+    <dt>NetworkPolicy</dt>
+    <dd><code>podSelector</code>, <code>policyTypes</code>, <code>from</code>/<code>to</code> with namespaceSelector + podSelector, ports.</dd>
+    <dt>Ingress</dt>
+    <dd>rules.host / path → backend serviceName:port; needs controller + class.</dd>
+    <dt>Gateway API</dt>
+    <dd>Gateway (listeners) + HTTPRoute <code>parentRefs</code> + backendRefs. Prefer for new CKA paths.</dd>
+    <dt>DNS</dt>
+    <dd><code>&lt;svc&gt;.&lt;ns&gt;.svc.cluster.local</code>; debug with busybox <code>nslookup</code>.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="storage-cmds">
+  <h2><span class="section-num">05</span> Storage</h2>
+  <div class="codeblock shell">
+    <pre><code>$&lt;/span&gt; kubectl get pv,pvc,sc -A
+$&lt;/span&gt; kubectl describe pvc &lt;name&gt; -n &lt;ns&gt;
+$&lt;/span&gt; kubectl annotate sc fast storageclass.kubernetes.io/is-default-class=true --overwrite
+$&lt;/span&gt; kubectl annotate sc old storageclass.kubernetes.io/is-default-class- --overwrite</code></pre>
+  </div>
+  <dl class="kv">
+    <dt>Access modes</dt>
+    <dd>RWO / ROX / RWX / RWOP — match PV and PVC.</dd>
+    <dt>Reclaim</dt>
+    <dd>Retain vs Delete on PV after PVC release.</dd>
+    <dt>Dynamic</dt>
+    <dd>StorageClass + PVC → provisioner creates PV.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="troubleshoot-cmds">
+  <h2><span class="section-num">06</span> Troubleshooting spine</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body"><h4>Context &amp; namespace</h4><p><code>use-context</code> then <code>-n</code> / set-context namespace.</p></div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body"><h4>get → describe → Events</h4><p>Phase and last Events before logs.</p></div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body"><h4>logs --previous</h4><p>CrashLoop after restart needs previous container logs.</p></div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body"><h4>Fix the owner</h4><p>Edit Deployment/Job/DaemonSet — not only the Pod.</p></div>
+    </div>
+  </div>
+  <div class="codeblock shell">
+    <pre><code>$&lt;/span&gt; kubectl get nodes -o wide; kubectl top nodes; kubectl top pods -A
+$&lt;/span&gt; kubectl describe node &lt;n&gt; | less
+$&lt;/span&gt; sudo systemctl status kubelet containerd
+$&lt;/span&gt; sudo journalctl -u kubelet -n 100 --no-pager
+$&lt;/span&gt; crictl ps -a; crictl logs &lt;id&gt;</code></pre>
+  </div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">07</span> Quick check</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">apply -f vs apply -k?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: Dash f is a file or directory of manifests. Dash k runs Kustomize on a kustomization root.</p></div></div>
+        <h5>Answer</h5>
+        <p><code>-f</code> raw manifests; <code>-k</code> Kustomize build+apply. Helm is a separate CLI.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Gateway vs Ingress one-liner?</span>
+        <span class="pm-chip diff-warm">Warm</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: Ingress is one resource with annotations; Gateway splits listeners and routes with parentRefs.</p></div></div>
+        <h5>Answer</h5>
+        <p>Both expose HTTP(S) to Services. CKA v1.35 expects Gateway API familiarity alongside classic Ingress.</p>
+      </div>
+    </details>
+  </div>
+</section>

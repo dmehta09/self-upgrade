@@ -1,0 +1,163 @@
+<section class="hero reveal">
+  <span class="eyebrow">TROUBLESHOOTING · nodes</span>
+  <span class="domain-chip">Domain 1 · Troubleshooting · 30%</span>
+  <h1>Troubleshoot nodes.</h1>
+  <p class="lead">NotReady, DiskPressure, and runtime failures are node-plane problems. Prove kubelet and CRI health before blaming the app YAML.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> Node as a worker contract</h2>
+  <p class="takeaway">A node is <b>Ready</b> only when kubelet heartbeats and conditions say the machine can run Pods.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Factory floor badge <span class="tag">analogy</span></div>
+      <p>In plain English: Ready is a badge that says “this station is staffed and powered.” If the shift lead (kubelet) stops checking in, or the floor floods (DiskPressure), the dispatcher (scheduler) stops sending work — even if old machines are still humming.</p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>Ready</dt>
+    <dd>Kubelet reachable; node can accept Pods (unless cordoned).</dd>
+    <dt>NotReady</dt>
+    <dd>Heartbeat lost, runtime down, or critical condition — investigate on the node.</dd>
+    <dt>Cordon</dt>
+    <dd>Marks unschedulable; existing Pods stay until drained or deleted.</dd>
+    <dt>Drain</dt>
+    <dd>Cordon + evict workloads (respect PDBs). Used for maintenance.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="conditions">
+  <h2><span class="section-num">02</span> Conditions &amp; pressures</h2>
+  <p>Read <code>kubectl describe node</code> Conditions and Allocatable. Pressure conditions trigger eviction and block new Pods.</p>
+
+  <div class="mermaid-wrap">
+    <pre class="mermaid">
+flowchart LR
+  KL[kubelet] --> RT[container runtime]
+  KL --> CNI[CNI]
+  KL --> API[API heartbeat]
+  API --> ND[Node object]
+  ND --> SCH[scheduler]
+  RT -.->|down| NR[NotReady]
+  ND -.->|DiskPressure| EV[evictions]
+    </pre>
+  </div>
+  <p class="viz-note">NotReady is often kubelet ↔ runtime or kubelet ↔ apiserver — not a Deployment bug.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-good">
+      <div class="vs-h">On the node (SSH / console)</div>
+      <ul>
+        <li><code>systemctl status kubelet</code></li>
+        <li>runtime: <code>systemctl status containerd</code></li>
+        <li>disk: <code>df -h</code> / image GC</li>
+        <li>journal: kubelet unit logs</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good">
+      <div class="vs-h">From kubectl</div>
+      <ul>
+        <li><code>kubectl get nodes -o wide</code></li>
+        <li><code>kubectl describe node …</code></li>
+        <li><code>kubectl get pods -A -o wide --field-selector spec.nodeName=…</code></li>
+        <li>cordon / drain / uncordon</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="maintenance">
+  <h2><span class="section-num">03</span> Cordon, drain, runtime</h2>
+  <p><b>Constraint:</b> Worker <code>node-2</code> is NotReady after disk fill. Evacuate workloads safely, fix disk/runtime, return capacity.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h4>Confirm &amp; isolate</h4>
+        <p><code>kubectl get node node-2</code> → <code>describe</code>. If still reachable for scheduling mistakes, <code>kubectl cordon node-2</code>.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h4>Drain when Safe</h4>
+        <p><code>kubectl drain node-2 --ignore-daemonsets --delete-emptydir-data</code> (flags as exam allows). Watch PDBs if drain blocks.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h4>Fix plane</h4>
+        <p>Clear disk, restart containerd/kubelet, verify Ready, then <code>kubectl uncordon node-2</code>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Gotcha · cordon ≠ drain</div>
+      <p>Cordon only stops new Pods. Existing Pods keep running on a sick node until you drain or they die. Exam tasks often want both: cordon, fix, uncordon — or a full drain for maintenance.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="quiz">
+  <h2><span class="section-num">04</span> Quick check</h2>
+  <div class="quiz" data-quiz="disk-pressure">
+    <p class="q">Node shows DiskPressure=True and Pods are being evicted. What should you fix first?</p>
+    <div class="quiz-opts">
+      <button type="button" class="quiz-opt" data-correct="true"><span class="mark"></span> Free disk / image space on the node, then recheck kubelet</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Delete the Deployment that owns the Pods</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Scale CoreDNS to zero</button>
+      <button type="button" class="quiz-opt" data-correct="false"><span class="mark"></span> Remove NetworkPolicies cluster-wide</button>
+    </div>
+    <div class="quiz-explain">DiskPressure is a node condition. Evictions are kubelet protecting the node. Clear disk (logs, unused images), restore runtime health, then Pods can reschedule.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">05</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">How do you list Pods on one node?</span>
+        <span class="pm-chip diff-warm">Warm</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: Field-select by spec.nodeName, or use -o wide and filter.</p></div></div>
+        <h5>Answer</h5>
+        <p><code>kubectl get pods -A -o wide --field-selector spec.nodeName=&lt;node&gt;</code>. Essential before drain.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">Runtime down — what breaks?</span>
+        <span class="pm-chip diff-core">Core</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: kubelet cannot create or restart containers via CRI, so the node goes NotReady and Pods stick.</p></div></div>
+        <h5>Answer</h5>
+        <p>Check containerd (or CRI-O) service, socket path in kubelet flags, then restart kubelet after runtime is healthy.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <span class="qa-q">When is drain the wrong first move?</span>
+        <span class="pm-chip diff-stretch">Stretch</span>
+      </summary>
+      <div class="qa-body">
+        <div class="callout qa-say"><div class="co-body"><p>Say it out loud: If the control plane is sick or only one Ready worker remains, draining can strand the cluster — stabilize first.</p></div></div>
+        <h5>Answer</h5>
+        <p>Also avoid blind drain when etcd/apiserver are down — you cannot reschedule. Fix API access, then evacuate.</p>
+      </div>
+    </details>
+  </div>
+</section>
