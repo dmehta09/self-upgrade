@@ -11,7 +11,7 @@
 | Guide | Score | Role today | Verdict |
 |-------|-------|------------|---------|
 | **Aptitude** | 8.5/10 OA | Round 0 gate | Strong warm/core; stretch pool densified |
-| **DSA** | 8.5/10 mid coding | Pattern + timed drill | Blind 75 ~44/75 covered; tracker + wave-1 fill-ins shipped |
+| **DSA** | 9/10 mid coding | Pattern + timed drill | Blind 75 ~52/75; matrix pattern + wave-2 fill-ins shipped |
 | **GenAI** | 8.5/10 conceptual + SD | Verbal / system design | Interview kit is real; avoid memorizing speculative model brand names |
 | **FastAPI** | 8/10 API screen | Backend verbal | Modern stack correct; 2 copy-paste bugs fixed in this pass |
 | **LangStack** | 6.5/10 currency | Framework verbal | Pedagogy excellent; agent factory + Platform naming corrected in this pass |
@@ -159,13 +159,15 @@ Author commands (after this pass):
 
 ### DSA Field Guide
 
-**Coverage:** foundations + 16 patterns + drills + cheatsheet (~62 worked problems) · [Blind 75 tracker](dsa-guide/reference/blind-75.html) (~44/75 covered).
+**Coverage:** foundations + 16 patterns + drills + cheatsheet (~70 worked problems) · [Blind 75 tracker](dsa-guide/reference/blind-75.html) (~52/75 covered).
 
-**Gaps:** Blind-75 remainder (matrix trio, string DP/expand, a few trees/LL/bits) — see tracker next-wave list.
+**Gaps:** Blind-75 remainder (~23 open: LCS/Decode Ways, tree hard set, Merge-k/Reorder, Pacific Atlantic, …) — see tracker.
 
 **Shipped (senior wave):** Min Window, Meeting Rooms II, LRU/design, Dijkstra, Unique Paths / 2D DP, Python coding bank.
 
 **Shipped (stretch):** [Subarray Sum Equals K](dsa-guide/patterns/arrays-hashing.html#subarray-sum-k), [Permutations](dsa-guide/patterns/backtracking.html#permutations) (+ N-Queens bridge note), [Sliding Window Maximum](dsa-guide/patterns/sliding-window.html#sliding-window-maximum).
+
+**Shipped (Blind 75 wave 2):** [Matrix](dsa-guide/patterns/matrix.html) (Set Zeroes / Rotate / Spiral); Word Break; Longest Palindromic Substring; Same Tree; Missing Number; Insert Interval.
 
 **Shipped (Blind 75 wave 1):** Contains Duplicate, Valid Anagram, Longest Consecutive, Maximum Subarray (Kadane), Find Min Rotated, Invert Tree, Word Search, Remove Nth From End + tracker page.
 
@@ -279,6 +281,7 @@ Author commands (after this pass):
 8. ~~Aptitude stretch pool densify + Stretch-only drill chip~~ (done)
 9. ~~Hub Interview/Senior path sync + deep-link dry-run~~ (done)
 10. ~~DSA Blind 75 tracker + wave-1 fill-ins (8 problems)~~ (done)
+11. ~~DSA Blind 75 wave 2: Matrix page + Word Break / LPS / Same Tree / Missing Number / Insert Interval~~ (done)
 
 ### Senior wave shipped
 

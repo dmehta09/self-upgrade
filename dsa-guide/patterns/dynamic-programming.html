@@ -55,12 +55,14 @@
           <a class="nav-link" href="#partition">Partition Equal Subset Sum</a>
           <a class="nav-link" href="#unique-paths">Unique Paths</a>
           <a class="nav-link" href="#maximum-subarray">Maximum Subarray</a>
+          <a class="nav-link" href="#word-break">Word Break</a>
         </div>
         <a class="nav-link" href="../patterns/intervals.html">Intervals</a>
         <a class="nav-link" href="../patterns/greedy.html">Greedy</a>
         <a class="nav-link" href="../patterns/tries.html">Tries</a>
         <a class="nav-link" href="../patterns/union-find.html">Union-Find</a>
         <a class="nav-link" href="../patterns/design.html">Design</a>
+        <a class="nav-link" href="../patterns/matrix.html">Matrix</a>
         <a class="nav-link" href="../patterns/bits.html">Bit Manipulation</a>
       </nav>
       <nav class="nav-group is-drill" aria-label="Practice">
@@ -1153,6 +1155,153 @@ print(max_sub_array([5, 4, -1, 7, 8]))
             </details>
           </section>
 
+
+          <!-- ===== PROBLEM: WORD BREAK ===== -->
+          <section class="section problem reveal" id="word-break">
+            <header class="problem-meta">
+              <h2><span class="section-num">09</span> &nbsp;Word Break</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">DP · Boolean</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~20 min</span>
+                <span class="pm-chip cx">O(n² · L) time · O(n) space</span>
+              </div>
+            </header>
+            <p class="lead">Given a string <code>s</code> and a dictionary of words, return whether <code>s</code> can be segmented into a space-separated sequence of dictionary words. For <code>s = "leetcode"</code> and <code>wordDict = ["leet","code"]</code> the answer is <code>True</code> — <code>"leet"</code> + <code>"code"</code>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Laying tiles along a ruler <span class="tag">analogy</span></div>
+                <p>Imagine a ruler of length <code>n</code> (the string). Each dictionary word is a tile of a fixed length. You can place a tile ending at mark <code>i</code> only if the stretch under the tile matches the word <em>and</em> the mark where the tile starts is already covered. Mark 0 starts covered (empty prefix). If mark <code>n</code> ends covered, the whole string tiles cleanly.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Word Break DP filling boolean prefixes for leetcode">
+              <figcaption class="viz-title">dp[i] = True if s[:i] can be segmented</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": ["T","","","","","","","","",""] },
+                "frames": [
+                  {"values":["T","","","","","","","","",""],"active":[0],"done":[0],"caption":"dp[0]=True — empty prefix is always segmented."},
+                  {"values":["T","","","","T","","","","",""],"active":[4],"done":[0,4],"caption":"At i=4, word 'leet' matches s[0:4] and dp[0] is True → dp[4]=True."},
+                  {"values":["T","","","","T","","","","T",""],"active":[8],"done":[0,4,8],"match":[8],"caption":"At i=8, word 'code' matches s[4:8] and dp[4] is True → dp[8]=True. Whole string segments."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Bottom-up boolean DP. Let <code>dp[i]</code> mean "the prefix <code>s[:i]</code> can be segmented." Seed <code>dp[0] = True</code>. For each end index <code>i</code> from 1 to <code>n</code>, try every dictionary word as an ending tile:</p>
+            <ol>
+              <li>If the word's length <code>L</code> fits (<code>L ≤ i</code>), check whether <code>dp[i - L]</code> is already True.</li>
+              <li>If it is, and <code>s[i - L:i]</code> equals the word, set <code>dp[i] = True</code> and stop trying more words for this <code>i</code>.</li>
+              <li>Return <code>dp[n]</code>.</li>
+            </ol>
+            <p>Put the dictionary in a set for O(1) membership if you prefer scanning split points instead of words — same idea.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-ok">O(n² · L)</span></td><td>Up to n ends × up to n / word tries; string compares cost up to word length L (or O(n) if you scan all splits).</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(n)</span></td><td>One boolean per prefix length, plus the word set.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why must we check <code>dp[i - L]</code> before accepting a word ending at <code>i</code>?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because dictionary words must appear in sorted order</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A matching suffix alone isn't enough — the prefix before that word must already be segmentable</button>
+                <button class="quiz-opt"><span class="mark"></span>So we never use the same word twice</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Matching <code>"code"</code> at the end of <code>"xxcode"</code> only helps if <code>"xx"</code> itself segmented. That's exactly what <code>dp[i - L]</code> records.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Make <code>words = set(wordDict)</code> and <code>dp = [False] * (n + 1)</code> with <code>dp[0] = True</code>. For each <code>i</code>, for each word <code>w</code>: if <code>i &gt;= len(w)</code> and <code>dp[i - len(w)]</code> and <code>s[i - len(w):i] == w</code>, set <code>dp[i] = True</code> and break. Return <code>dp[n]</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">word_break.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="18">
+def word_break(s, wordDict):
+    words = set(wordDict)
+    n = len(s)
+    dp = [False] * (n + 1)
+    dp[0] = True
+    for i in range(1, n + 1):
+        for w in words:
+            L = len(w)
+            if L <= i and dp[i - L] and s[i - L:i] == w:
+                dp[i] = True
+                break
+    return dp[n]
+
+print(word_break("leetcode", ["leet", "code"]))
+print(word_break("applepenapple", ["apple", "pen"]))
+print(word_break("catsandog", ["cats", "dog", "sand", "and", "cat"]))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">True
+True
+False</pre></div>
+                </div>
+                <p>Boolean prefix DP is the interview default: one True/False per cut, try dictionary endings, reuse earlier answers. Trie optimization is a fine follow-up — not required for Blind 75.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">dp[i] True iff some dictionary word ends at i and the prefix before it also segmented. Bottom-up boolean DP beats exponential backtracking with memo of "reachable cuts."</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["dp0 = True"] --> loop[For i = 1..n]
+  loop --> try[Try each word w]
+  try --> fit{"L ok and dp[i-L] and suffix matches?"}
+  fit -->|yes| setT["dp[i] = True"]
+  fit -->|no| try
+  setT --> more{More i?}
+  try -->|exhausted| more
+  more -->|yes| loop
+  more -->|no| ret["Return dp[n]"]
+  ret --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def word_break(s, wordDict):</code><span>Can s be split into dictionary words?</span></li>
+                  <li><code>words = set(wordDict)</code><span>O(1) membership / iterate unique tiles.</span></li>
+                  <li><code>n = len(s)</code><span>Prefix lengths run 0..n.</span></li>
+                  <li><code>dp = [False] * (n + 1)</code><span>dp[i] means s[:i] is segmentable.</span></li>
+                  <li><code>dp[0] = True</code><span>Empty prefix is always valid.</span></li>
+                  <li><code>for i in range(1, n + 1):</code><span>Grow the reachable cut marks left to right.</span></li>
+                  <li><code>for w in words:</code><span>Try each dictionary word as an ending tile.</span></li>
+                  <li><code>L = len(w)</code><span>How far back this tile reaches.</span></li>
+                  <li><code>if L &lt;= i and dp[i - L] and s[i - L:i] == w:</code><span>Fits, prior cut reachable, and characters match.</span></li>
+                  <li><code>dp[i] = True</code><span>This prefix can be segmented.</span></li>
+                  <li><code>break</code><span>One successful tile is enough for this i.</span></li>
+                  <li><code>return dp[n]</code><span>Whole string covered iff last mark is True.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n · |dict| · L) for end × word × compare; space O(n) for the boolean table.</p>
+              </div>
+            </details>
+          </section>
+
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -1172,6 +1321,7 @@ print(max_sub_array([5, 4, -1, 7, 8]))
           <a href="#partition">Partition Equal Subset Sum</a>
           <a href="#unique-paths">Unique Paths</a>
           <a href="#maximum-subarray">Maximum Subarray</a>
+          <a href="#word-break">Word Break</a>
         </aside>
       </div>
 

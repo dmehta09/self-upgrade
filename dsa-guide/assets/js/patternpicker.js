@@ -54,6 +54,7 @@
     "trie":            { label: "Trie",                    lesson: "pat-tries" },
     "union-find":      { label: "Union-Find",              lesson: "pat-union-find" },
     "design":           { label: "Design (LRU / API)",      lesson: "pat-design" },
+    "matrix":          { label: "Matrix",                  lesson: "pat-matrix" },
     "bits":            { label: "Bit manipulation",        lesson: "pat-bits" }
   };
 

@@ -22,7 +22,7 @@ const FILES = [
   "patterns/backtracking.html", "patterns/graphs.html", "patterns/dynamic-programming.html",
   "patterns/intervals.html",
   "patterns/greedy.html", "patterns/tries.html", "patterns/union-find.html",
-  "patterns/design.html", "patterns/bits.html",
+  "patterns/design.html", "patterns/matrix.html", "patterns/bits.html",
   "drill/index.html",
   "reference/cheatsheet.html",
   "reference/python-coding-round.html",
