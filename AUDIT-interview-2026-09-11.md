@@ -24,9 +24,10 @@
 
 ## 0. Hub path (15 min)
 
-- [ ] Open [`index.html`](index.html) → **Interview today** checklist
-- [ ] Confirm progress strip shows the five tracks (after any prior “Mark as learned”)
-- [ ] Deep-link into the first block (Aptitude drill)
+- [x] Open [`index.html`](index.html) → **Interview today** checklist
+- [x] Confirm progress strip shows the five tracks (after any prior “Mark as learned”)
+- [x] Deep-link into the first block (Aptitude drill)
+- [x] Hub deep links + senior DSA stretch anchors verified (2026-09-11 dry-run)
 
 ```bash
 cd /Users/arvasit/Desktop/self-upgrade && python3 -m http.server 8765
@@ -54,9 +55,9 @@ Author commands (after this pass):
 | Formula sheet | [reference/formula-sheet.html](aptitude-guide/reference/formula-sheet.html) | — | skim | ⬜ | |
 | Flashcards (Leitner) | [reference/flashcards.html](aptitude-guide/reference/flashcards.html) | cards | due-first shuffle | ⬜ | |
 
-**How:** Timed drill first → say the shortcut out loud → mark Known only if you can re-derive in &lt;30s.
+**How:** Timed drill first (try **Stretch only** for harder OA) → say the shortcut out loud → mark Known only if you can re-derive in &lt;30s.
 
-**Skip today:** Pure encyclopedia RC reading; optional larger stretch pool only.
+**Skip today:** Pure encyclopedia RC reading.
 
 ---
 
@@ -274,6 +275,7 @@ Author commands (after this pass):
 6. ~~Densify viz captions / whiteboard~~ (done on key pages)
 7. ~~DSA stretch: prefix sums, permutations/N-Queens bridge, monotonic deque~~ (done)
 8. ~~Aptitude stretch pool densify + Stretch-only drill chip~~ (done)
+9. ~~Hub Interview/Senior path sync + deep-link dry-run~~ (done)
 
 ### Senior wave shipped
 
