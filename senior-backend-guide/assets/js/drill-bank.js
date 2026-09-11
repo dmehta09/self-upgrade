@@ -52,9 +52,12 @@
       }
       var ans = revealed
         ? "<div class='sac-label'>First 30s</div><div class='sac-first'>" + escapeHtml(q.first30s || "") + "</div>" +
+          (q.modelAnswer && q.modelAnswer.length
+            ? "<div class='sac-label'>Model steps</div><ol class='steps'>" + q.modelAnswer.map(function (s) { return "<li>" + escapeHtml(s) + "</li>"; }).join("") + "</ol>"
+            : "") +
           "<div class='sac-label'>Say it</div><p>" + escapeHtml(q.sayIt || "") + "</p>" +
           (q.traps && q.traps.length ? "<div class='sac-label'>Traps</div><ul class='sac-traps'>" + q.traps.map(function (t) { return "<li>" + escapeHtml(t) + "</li>"; }).join("") + "</ul>" : "")
-        : "<p class='muted'>Speak your structure for 60–90s, then reveal.</p>";
+        : "<p class='muted'>Speak your structure for 60–90s, then reveal (First 30s → model steps → say it → traps).</p>";
 
       mount.innerHTML =
         "<div class='drill-meta'><span class='dm-k'>" + escapeHtml(q.id) + "</span> · " + escapeHtml(q.domainTitle) +

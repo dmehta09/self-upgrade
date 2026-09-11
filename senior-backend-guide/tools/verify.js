@@ -130,7 +130,65 @@ for (const f of files) {
 }
 
 console.log(`Checked ${files.length} HTML files; ${lessonIds.size} lessons registered.`);
-if (!problems.length) { console.log("✓ No problems found."); process.exit(0); }
+
+// ---- Pedagogy soft gates on bank JSON (AUTHORING.md) ----
+const BANKS_DIR = path.join(ROOT, "tools/banks");
+const OPS_SLUGS = new Set(["debugging", "async", "dependencies", "api-design", "postgres", "mongodb", "redis", "kafka", "distributed", "aws-nginx", "projects"]);
+const OPS_MIN_CHARS = 700;
+const OPS_MIN_STEPS = 6;
+const MIN_TRAPS = 3;
+const PREVENT_RE = /\b(metric|metrics|alert|monitor|slo|sli|p99|game-?day|prevent|observ|runbook|retry|lag|hit rate|threshold)\b/i;
+const MECHANISM_RE = /\b(how would you|implement|debug|design|investigate|prevent|choose|handle)\b/i;
+
+function pedagogyProblems() {
+  const out = [];
+  if (!fs.existsSync(BANKS_DIR)) return out;
+  const files = fs.readdirSync(BANKS_DIR).filter((f) => /^d\d+-.*\.json$/.test(f)).sort();
+  for (const f of files) {
+    let bank;
+    try { bank = JSON.parse(fs.readFileSync(path.join(BANKS_DIR, f), "utf8")); }
+    catch (e) { out.push(`banks/${f}: invalid JSON (${e.message})`); continue; }
+    const slug = bank.slug || "";
+    const ops = OPS_SLUGS.has(slug);
+    for (const q of bank.questions || []) {
+      const id = q.id || "?";
+      const ma = q.modelAnswer || [];
+      const chars = ma.reduce((n, s) => n + String(s).length, 0);
+      const traps = q.traps || [];
+      if (ops && chars < OPS_MIN_CHARS) {
+        out.push(`banks/${f} ${id}: modelAnswer ${chars} chars < ${OPS_MIN_CHARS} (ops depth target)`);
+      }
+      if (ops && ma.length < OPS_MIN_STEPS) {
+        out.push(`banks/${f} ${id}: modelAnswer ${ma.length} steps < ${OPS_MIN_STEPS} (ops depth target)`);
+      }
+      if (traps.length < MIN_TRAPS) {
+        out.push(`banks/${f} ${id}: traps ${traps.length} < ${MIN_TRAPS}`);
+      }
+      if (ma.length) {
+        const tail = ma.slice(-2).join(" ");
+        if (!PREVENT_RE.test(tail) && !PREVENT_RE.test(ma[ma.length - 1] || "")) {
+          out.push(`banks/${f} ${id}: last modelAnswer bullets lack prevent/ops language (metric/alert/monitor/…)`);
+        }
+      }
+      const mech = MECHANISM_RE.test(q.question || "");
+      if (mech && !(q.code && String(q.code).trim()) && !(q.mermaid && String(q.mermaid).trim())) {
+        out.push(`banks/${f} ${id}: mechanism question missing code and mermaid`);
+      }
+    }
+  }
+  return out;
+}
+
+const pedagogy = pedagogyProblems();
+if (pedagogy.length) {
+  console.log(`\nPedagogy soft gates: ${pedagogy.length} warning(s) (non-fatal; see tools/AUTHORING.md):`);
+  for (const p of pedagogy) console.log("  ⚠ " + p);
+}
+
+if (!problems.length) {
+  console.log("✓ No HTML/link problems found.");
+  process.exit(0);
+}
 console.log(`\n${problems.length} problem(s):`);
 for (const p of problems) console.log("  • " + p);
 process.exit(1);

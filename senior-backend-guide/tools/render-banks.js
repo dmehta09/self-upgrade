@@ -120,6 +120,7 @@ function main() {
         domainTitle: bank.title,
         q: q.question,
         first30s: q.first30s,
+        modelAnswer: q.modelAnswer || [],
         sayIt: q.sayIt,
         traps: q.traps || [],
       });
@@ -144,6 +145,20 @@ window.SBE_DRILL = ${JSON.stringify(allQs, null, 2)};
 `;
   fs.writeFileSync(path.join(ROOT, "assets/js/sbe-bank.js"), drillJs);
   console.log("Wrote assets/js/sbe-bank.js (" + allQs.length + " questions)");
+
+  // ownership story probes + senior-vs-mid contrasts (not full SAC modelAnswers)
+  const probesPath = path.join(BANKS, "_ownership-probes.json");
+  if (fs.existsSync(probesPath)) {
+    const probes = JSON.parse(fs.readFileSync(probesPath, "utf8"));
+    (probes || []).forEach((c) => {
+      flash.push({
+        front: c.front,
+        back: c.back,
+        tag: c.tag || "d12-probe",
+      });
+    });
+    console.log("Merged ownership probes: " + (probes || []).length);
+  }
 
   // flashcards fragment helper data embedded in practice page by content author;
   // also write JSON for tooling
