@@ -1,0 +1,364 @@
+{
+  "id": "d02",
+  "slug": "async",
+  "title": "Async Python / FastAPI / Node.js / TypeScript",
+  "primer": "Async interviews catch people who sprinkle await without understanding when work actually runs. Interviewers want you to explain coroutines vs promises, why decorators must await, and how unbounded concurrency melts production. FastAPI and Nest both hide event loops — seniors talk about blocking CPU, missing await, and semaphore limits with concrete failure modes.",
+  "cheatStrip": [
+    {"k": "Missing await", "v": "Creates a coroutine/Promise that may never run or finish before the caller continues"},
+    {"k": "Async decorator", "v": "Wrapper must be async and await the wrapped call or timings/logs lie"},
+    {"k": "forEach(async)", "v": "Does not await iterations — use for..of or Promise.all/allSettled with limits"},
+    {"k": "gather + limit", "v": "asyncio.gather unbounded; gate with Semaphore for fan-out"},
+    {"k": "CPU in async", "v": "Blocks the event loop — use process pool / worker queue, not await magic"},
+    {"k": "try without await", "v": "Sync try/except misses later rejection unless the await is inside the try"}
+  ],
+  "quiz": [
+    {
+      "q": "You call an async function without await in Python. What do you get?",
+      "options": [
+        {"t": "A coroutine object that has not started running yet", "ok": true},
+        {"t": "The function result after synchronous completion", "ok": false},
+        {"t": "An automatic background task that always finishes before return", "ok": false}
+      ],
+      "explain": "Without await/ensure_future/create_task, you only built a coroutine object. It does not run until scheduled."
+    },
+    {
+      "q": "Why does array.forEach(async () => ...) fail to wait?",
+      "options": [
+        {"t": "forEach ignores the returned Promises from the callback", "ok": true},
+        {"t": "async callbacks are illegal in JavaScript", "ok": false},
+        {"t": "Promises inside forEach run sequentially by spec", "ok": false}
+      ],
+      "explain": "forEach invokes the callback and discards the return value; async callbacks return Promises that nobody awaits."
+    },
+    {
+      "q": "Best default for five independent HTTP calls in FastAPI?",
+      "options": [
+        {"t": "asyncio.gather (or TaskGroup) with per-call timeouts", "ok": true},
+        {"t": "Five sequential awaits for clarity", "ok": false},
+        {"t": "multiprocessing.Pool for each HTTP GET", "ok": false}
+      ],
+      "explain": "Independent I/O should run concurrently with bounded timeouts; processes are for CPU, not simple HTTP fan-out."
+    },
+    {
+      "q": "CPU-heavy work inside an async FastAPI route typically causes:",
+      "options": [
+        {"t": "Event-loop blocking so unrelated requests stall", "ok": true},
+        {"t": "Automatic offload to a free OS thread by asyncio", "ok": false},
+        {"t": "Only that request to slow down; others stay at full speed", "ok": false}
+      ],
+      "explain": "The event loop is single-threaded; CPU work prevents scheduling other coroutines until it finishes (unless offloaded)."
+    }
+  ],
+  "questions": [
+    {
+      "id": "d02-q01",
+      "n": 1,
+      "question": "A class has an API method wrapped by a logging function, but the logging code runs immediately instead of after the API response. What could be wrong?",
+      "first30s": "The wrapper is almost certainly treating an async method like a sync function — calling it without await, or decorating so the wrapper returns a coroutine and logs 'done' before the await happens. I'll inspect whether the method and decorator are both async and where the log line sits relative to await.",
+      "modelAnswer": [
+        "Check if the API method is async def; calling it returns a coroutine, so sync logging after the call runs before the body executes.",
+        "Inspect the decorator: if it does result = func(*args) then log('done') without awaiting, logs fire immediately.",
+        "Ensure the wrapper is async def wrapper(...): result = await func(...); log(...); return result.",
+        "If using a sync decorator factory, return an async wrapper when inspect.iscoroutinefunction(func).",
+        "Watch for @decorator without parentheses vs factory mistakes that call the logger at decoration time (import time), not request time.",
+        "Verify FastAPI still sees an async route after decoration (functools.wraps / __wrapped__).",
+        "Add a failing unit test: mock sleep in the route and assert log timestamp is after completion.",
+        "Fix and confirm access logs / structured 'duration_ms' match real latency."
+      ],
+      "sayIt": "If the log says completed before the response exists, the wrapper didn't await. Async methods need async-aware decorators that await the call, then log — otherwise you only logged scheduling the coroutine.",
+      "mermaid": "",
+      "code": "import functools, time\n\ndef log_duration(func):\n    @functools.wraps(func)\n    async def wrapper(*args, **kwargs):\n        t0 = time.perf_counter()\n        result = await func(*args, **kwargs)  # must await\n        print(f\"{func.__name__} took {time.perf_counter()-t0:.3f}s\")\n        return result\n    return wrapper\n\n@log_duration\nasync def get_order(order_id: str):\n    ...",
+      "codeLang": "python",
+      "nestNote": "Nest interceptors/middleware are Promise-aware if you return/await next.handle(); a tap that runs outside the observable/promise chain logs too early — same bug class as missing await.",
+      "traps": [
+        "Logging at decoration/import time instead of call time",
+        "Sync wrapper around async def that never awaits",
+        "Assuming FastAPI 'awaits for you' inside your custom decorator"
+      ],
+      "followUps": [
+        "How do you write one decorator that supports both sync and async callables?",
+        "Where should you put timing so it includes dependency I/O but excludes response serialization edge cases?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d02-q02",
+      "n": 2,
+      "question": "A function calls an async method without await. What behavior would you expect?",
+      "first30s": "In Python you get an un-awaited coroutine object — usually a RuntimeWarning and no side effects from that call. In JavaScript you get a floating Promise that may reject as unhandled. Either way, the caller continues immediately with the wrong type of value.",
+      "modelAnswer": [
+        "Python: async_method() returns a coroutine; without await/create_task it does not run the body.",
+        "Expect RuntimeWarning: coroutine was never awaited when the object is GC'd.",
+        "If the return value is used, you pass a coroutine object downstream (serialization errors, truthy object bugs).",
+        "create_task without retaining/awaiting can still run but errors become 'Task exception was never retrieved'.",
+        "JavaScript/TypeScript: missing await yields a Promise; sync code proceeds; rejections need .catch or await.",
+        "In FastAPI routes, forgetting await on httpx/db calls returns instantly with incomplete work.",
+        "Lint/CI: enable ruff/flake8-async or TypeScript @typescript-eslint to catch floating promises.",
+        "Fix: await, or explicitly schedule with asyncio.create_task and supervise completion/errors."
+      ],
+      "sayIt": "No await means no wait — in Python the coroutine never runs; in Node the Promise is fire-and-forget. I treat un-awaited async calls as bugs unless I deliberately create a supervised background task.",
+      "mermaid": "",
+      "code": "async def fetch_user(uid: str):\n    return {\"id\": uid}\n\nasync def broken():\n    user = fetch_user(\"1\")  # coroutine object, not dict\n    return user[\"id\"]  # TypeError\n\nasync def fixed():\n    user = await fetch_user(\"1\")\n    return user[\"id\"]",
+      "codeLang": "python",
+      "nestNote": "TS: enable no-floating-promises. Nest handlers that return a Promise are awaited by the framework, but internal calls still need await.",
+      "traps": [
+        "Thinking the async function runs synchronously until the first await",
+        "Ignoring RuntimeWarning in logs",
+        "Using time.sleep in async code as a 'fix' for timing issues"
+      ],
+      "followUps": [
+        "When is asyncio.create_task appropriate versus await?",
+        "How do you surface unhandled task exceptions in production?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d02-q03",
+      "n": 3,
+      "question": "A decorator logs execution time as almost zero even though the wrapped API takes several seconds. How would you debug the decorator?",
+      "first30s": "Near-zero duration means the timer stopped when the coroutine was created, not when it finished. I'll put start/stop around await func(...) and confirm the decorator detects coroutine functions.",
+      "modelAnswer": [
+        "Print type(result) after calling func — if it's a coroutine, the timer didn't include real work.",
+        "Rewrite wrapper as async and await; measure with time.perf_counter around the await.",
+        "If the route is sync def doing blocking I/O, duration may be real inside threadpool — separate issue from async decorator.",
+        "Ensure functools.wraps preserves async nature so FastAPI schedules correctly.",
+        "Check for double-wrapping or middleware that also times and confuses which layer logs.",
+        "Validate with asyncio.sleep(2) inside the route — decorator must report ~2s.",
+        "Prefer structured metrics (histogram) over print for production timing.",
+        "Add a unit test asserting duration >= sleep time."
+      ],
+      "sayIt": "A decorator that reports zero on a multi-second API didn't await. Timing must wrap the awaited call; otherwise you measured how long it took to build a coroutine object.",
+      "mermaid": "",
+      "code": "import functools, time, inspect\n\ndef timed(func):\n    if inspect.iscoroutinefunction(func):\n        @functools.wraps(func)\n        async def aw(*a, **k):\n            t0 = time.perf_counter()\n            try:\n                return await func(*a, **k)\n            finally:\n                print(time.perf_counter() - t0)\n        return aw\n    @functools.wraps(func)\n    def sw(*a, **k):\n        t0 = time.perf_counter()\n        try:\n            return func(*a, **k)\n        finally:\n            print(time.perf_counter() - t0)\n    return sw",
+      "codeLang": "python",
+      "nestNote": "Nest: Interceptor timing with tap/finalize on the Observable/Promise chain; logging in the constructor of an interceptor runs once, not per request.",
+      "traps": [
+        "Using time.time() around a non-awaited call",
+        "Decorating at class level incorrectly so self binding breaks",
+        "Measuring only CPU time for I/O-bound routes"
+      ],
+      "followUps": [
+        "How do you time only the handler excluding framework middleware?",
+        "What breaks if a sync decorator wraps an async route in FastAPI?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d02-q04",
+      "n": 4,
+      "question": "A logging wrapper prints 'completed' before an async method actually completes. How would you redesign it?",
+      "first30s": "I'd make the wrapper async-native: await the callee, log success/failure in a finally, and preserve exceptions. Optionally support background tasks only with explicit create_task and a completion callback — never implicit.",
+      "modelAnswer": [
+        "Redesign as async context-manager or async decorator that awaits the function.",
+        "Log start before await; log completed/failed in finally with duration and correlation id.",
+        "Re-raise exceptions after logging so FastAPI error handlers still run.",
+        "For fire-and-forget, require explicit schedule_background(coro) that attaches done callbacks.",
+        "Avoid printing from sync code that receives a Promise/coroutine.",
+        "In libraries, use inspect.iscoroutinefunction to choose wrapper type.",
+        "Emit structured logs (JSON) with request_id from contextvars.",
+        "Test with delayed async mock to assert log order: start → work → completed."
+      ],
+      "sayIt": "I redesign the wrapper so 'completed' can only print after await returns or raises. If we need background work, that's an explicit supervised task with its own completion log — not a sneaky missing await.",
+      "mermaid": "",
+      "code": "from contextlib import asynccontextmanager\nimport logging\n\nlog = logging.getLogger(__name__)\n\n@asynccontextmanager\nasync def log_op(name: str):\n    log.info(\"%s start\", name)\n    try:\n        yield\n        log.info(\"%s completed\", name)\n    except Exception:\n        log.exception(\"%s failed\", name)\n        raise\n\nasync def handler():\n    async with log_op(\"get_order\"):\n        return await load_order()",
+      "codeLang": "python",
+      "nestNote": "Use RxJS finalize/tap on next.handle(), or an async Nest interceptor that awaits the Promise result before logging completed.",
+      "traps": [
+        "Logging completed in a finally that runs before await (wrong structure)",
+        "Swallowing exceptions inside the wrapper",
+        "Using print instead of logger with correlation ids"
+      ],
+      "followUps": [
+        "How do contextvars help bind request_id into decorator logs?",
+        "How would you unit-test log ordering with pytest-asyncio?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d02-q05",
+      "n": 5,
+      "question": "A try/catch catches synchronous errors but misses failures from an async operation. What is wrong?",
+      "first30s": "The async operation isn't being awaited inside the try — so the rejection happens later, outside the sync try/except. I'll move await into the try or attach explicit error handling on the task/promise.",
+      "modelAnswer": [
+        "Show the anti-pattern: try { const p = asyncOp(); } catch — catch never sees async rejection.",
+        "Correct: try { await asyncOp(); } catch (e) { ... }.",
+        "Python equivalent: try/except around await; bare call doesn't raise until awaited.",
+        "If using create_task, add task.add_done_callback or await the task inside try.",
+        "Promise chains need .catch or await in async functions; empty catch on sync block is useless.",
+        "FastAPI: exceptions from awaited deps propagate to exception handlers; unawaited ones become warnings.",
+        "For gather, decide return_exceptions vs raising first error.",
+        "Add lint rules for floating promises / unawaited coroutines."
+      ],
+      "sayIt": "try/except only catches what runs inside it. If you don't await, the failure happens on another turn of the event loop and your catch is already gone — await inside the try, or supervise the task explicitly.",
+      "mermaid": "",
+      "code": "async def bad():\n    try:\n        fetch()  # forgot await — no exception here\n    except Exception:\n        return \"handled\"\n    return \"ok\"\n\nasync def good():\n    try:\n        return await fetch()\n    except httpx.HTTPError:\n        return \"handled\"",
+      "codeLang": "python",
+      "nestNote": "In Nest, filters catch errors from awaited providers; a floating Promise rejection bypasses the exception filter and can crash or log as unhandledRejection.",
+      "traps": [
+        "Wrapping create_task in try/except without awaiting the task",
+        "Assuming .then errors are caught by outer sync try",
+        "Using bare except and returning 200 on failure"
+      ],
+      "followUps": [
+        "How should asyncio.TaskGroup error handling differ from gather?",
+        "Where do you put retries — around await of a single call or the whole request?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d02-q06",
+      "n": 6,
+      "question": "A Node.js service uses array.forEach(async item => ... ) and expects the caller to wait for all operations. What is wrong?",
+      "first30s": "forEach doesn't await the Promises your async callback returns, so the caller continues immediately while work is still in flight. I'd switch to for...of with await, or map + Promise.all / allSettled with a concurrency limit.",
+      "modelAnswer": [
+        "Explain forEach signature: callback return values are ignored.",
+        "Demonstrate: forEach starts all async ops and returns undefined immediately.",
+        "Replace with for (const item of items) { await work(item); } for sequential.",
+        "Or await Promise.all(items.map(work)) for parallel — watch unbounded concurrency.",
+        "Prefer Promise.allSettled when partial failure is OK; inspect rejected reasons.",
+        "For large arrays, use a pool (p-limit, generic-pool) so you don't open 10k sockets.",
+        "Ensure errors propagate to the Express/Nest handler via await.",
+        "Add a regression test that fails if the HTTP response returns before side effects finish."
+      ],
+      "sayIt": "forEach plus async is a classic false sense of waiting — the loop doesn't await. I use for...of or Promise.all with a concurrency cap, and I make sure the request handler awaits that aggregate Promise.",
+      "mermaid": "",
+      "code": "// Broken\nitems.forEach(async (item) => {\n  await save(item);\n});\nres.json({ ok: true }); // runs too early\n\n// Fixed\nawait Promise.all(items.map((item) => save(item)));\nres.json({ ok: true });",
+      "codeLang": "typescript",
+      "nestNote": "Same bug in Nest services. Prefer for-await loops or Promise.all inside async service methods that the controller awaits.",
+      "traps": [
+        "Thinking async forEach magically sequentializes",
+        "Promise.all on huge arrays without limits",
+        "Swallowing per-item errors so the HTTP handler always 200s"
+      ],
+      "followUps": [
+        "When do you choose allSettled over all?",
+        "How would you implement a concurrency limit of 20 in TypeScript?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d02-q07",
+      "n": 7,
+      "question": "You need to call five independent third-party APIs from a FastAPI endpoint. How would you execute them?",
+      "first30s": "Independent I/O should run concurrently with per-call timeouts and clear partial-failure policy. I'd asyncio.gather or TaskGroup the five httpx calls, bound total time, and decide whether any failure fails the request or returns degraded data.",
+      "modelAnswer": [
+        "Use one shared httpx.AsyncClient with connection limits for the process/app lifespan.",
+        "Launch five coroutines with explicit Timeout(connect=..., read=...).",
+        "asyncio.gather(*calls, return_exceptions=True) or TaskGroup depending on fail-fast needs.",
+        "Set an overall deadline with asyncio.wait_for around the gather if the client SLO is tight.",
+        "Map exceptions to 502/504/partial response; never hang on one slow vendor.",
+        "Cache idempotent GETs when safe; add circuit breaker if a vendor is down.",
+        "Emit per-dependency latency metrics labeled by vendor.",
+        "Avoid sequential awaits unless ordering/quota requires it."
+      ],
+      "sayIt": "Five independent APIs are a gather with timeouts, not a chain of awaits. I share an AsyncClient, fail fast on the budget that matters to the user, and degrade or error based on whether each dependency is critical.",
+      "mermaid": "",
+      "code": "import asyncio, httpx\nfrom fastapi import FastAPI\n\napp = FastAPI()\nclient: httpx.AsyncClient\n\n@app.on_event(\"startup\")\nasync def startup():\n    global client\n    client = httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=0.5))\n\n@app.get(\"/dashboard\")\nasync def dashboard():\n    urls = [\"https://a/x\", \"https://b/y\", \"https://c/z\", \"https://d/u\", \"https://e/v\"]\n    results = await asyncio.gather(*[client.get(u) for u in urls], return_exceptions=True)\n    return {\"ok\": [getattr(r, \"status_code\", None) for r in results]}",
+      "codeLang": "python",
+      "nestNote": "Nest: Promise.all on HttpService.axiosRef.get(...) with AbortSignal timeout; inject a shared HttpModule config for maxSockets.",
+      "traps": [
+        "Creating a new httpx client per request without pooling",
+        "No timeouts on outbound calls",
+        "Failing the entire page when one non-critical widget API is down"
+      ],
+      "followUps": [
+        "How do you cancel the other calls if one critical dependency fails?",
+        "Where should the shared AsyncClient live in a FastAPI app?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d02-q08",
+      "n": 8,
+      "question": "You need to process 10,000 async operations but only want 20 in flight at any time. How would you design the concurrency limit?",
+      "first30s": "I'd gate each operation with an asyncio.Semaphore(20) or a worker pool consuming a queue — never gather 10k tasks unbounded. The limit should reflect downstream quotas and local FD/connection caps.",
+      "modelAnswer": [
+        "Create sem = asyncio.Semaphore(20); wrap each op in async with sem: await work(item).",
+        "Optionally use a queue with 20 workers for backpressure and clearer metrics.",
+        "Avoid asyncio.gather(*[work(i) for i in range(10000)]) without a semaphore — memory and sockets explode.",
+        "Tune 20 based on vendor rate limits, DB pool size, and experimentally measured p95.",
+        "Track in_flight gauge and queue depth; reject or spill to a durable queue when overloaded.",
+        "Handle cancellation: on request abort, don't leave 20 orphaned tasks without timeout.",
+        "For CPU-bound map, use ProcessPoolExecutor with a small max_workers instead of asyncio semaphore.",
+        "In Node, use p-limit(20) or a generic pool with the same idea."
+      ],
+      "sayIt": "Ten thousand coroutines without a semaphore is an outage. I cap in-flight work at twenty with a semaphore or worker queue, sized to the dependency's quota and our connection pools.",
+      "mermaid": "",
+      "code": "import asyncio\n\nasync def process_all(items, limit=20):\n    sem = asyncio.Semaphore(limit)\n    async def one(item):\n        async with sem:\n            return await handle(item)\n    return await asyncio.gather(*(one(i) for i in items))",
+      "codeLang": "python",
+      "nestNote": "Use p-limit or bottleneck in Node; Nest Bull queues move the 10k off the request path entirely when work is heavy.",
+      "traps": [
+        "Gathering all tasks then hoping the OS schedules kindly",
+        "Setting limit higher than DB pool size",
+        "Losing error context by bare gather without return_exceptions when partial progress matters"
+      ],
+      "followUps": [
+        "How do you choose the semaphore value relative to httpx limits and Postgres pool size?",
+        "When should this move from in-process semaphore to Kafka/Celery?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d02-q09",
+      "n": 9,
+      "question": "A Node.js endpoint uses Promise.all for 1,000 outbound requests and production becomes unstable. What could be happening?",
+      "first30s": "Unbounded parallel outbound calls exhaust sockets, file descriptors, memory, and downstream rate limits — then the event loop and health checks suffer. Promise.all also fail-fasts on the first rejection while leaving other requests in flight.",
+      "modelAnswer": [
+        "1,000 concurrent sockets → EMFILE, agent maxSockets queueing, or ephemeral port exhaustion.",
+        "Downstream 429s and retries amplify load (retry storm).",
+        "Memory spikes holding all response buffers until all settle.",
+        "Promise.all rejects on first failure while other HTTP calls continue consuming resources.",
+        "Libuv threadpool / DNS contention if many hostnames resolve at once.",
+        "Fix: concurrency limit (e.g. 20–50), shared keep-alive agent, timeouts, and bulkheads per dependency.",
+        "Move bulk fan-out off the request path into a queue workers process.",
+        "Add metrics: active sockets, 429 rate, event-loop delay."
+      ],
+      "sayIt": "Promise.all of a thousand outbound calls is a thundering herd at yourself and your vendor. Cap concurrency, set timeouts, and don't do bulk fan-out on the user-facing request path.",
+      "mermaid": "",
+      "code": "import pLimit from \"p-limit\";\n\nconst limit = pLimit(25);\nconst results = await Promise.all(\n  urls.map((url) => limit(() => fetch(url, { signal: AbortSignal.timeout(2000) })))\n);",
+      "codeLang": "typescript",
+      "nestNote": "Configure HttpModule with maxRedirects and axios httpAgent maxSockets; prefer a job queue for large fan-out from Nest controllers.",
+      "traps": [
+        "Raising UV_THREADPOOL_SIZE as the first fix",
+        "Retrying all 1000 immediately on failure",
+        "Assuming Promise.allSettled alone solves resource exhaustion"
+      ],
+      "followUps": [
+        "How do you diagnose ephemeral port exhaustion on Linux?",
+        "What bulkhead pattern isolates one bad vendor from the rest of the Node process?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d02-q10",
+      "n": 10,
+      "question": "An async endpoint performs CPU-heavy work and blocks unrelated requests. How would you redesign it?",
+      "first30s": "CPU work on the event loop blocks every other coroutine on that worker. I'd move the heavy lift to a process pool, separate worker service, or precompute — and keep the request path to enqueue + poll/webhook.",
+      "modelAnswer": [
+        "Confirm with event-loop lag metrics while the endpoint runs.",
+        "Offload via asyncio.to_thread only for light/blocking I/O — CPU-bound prefers ProcessPoolExecutor to escape the GIL.",
+        "Better: accept request, enqueue job (RQ/Celery/ARQ/Bull), return 202 + job id.",
+        "Scale CPU workers independently from API replicas.",
+        "Chunk work and stream progress if users need feedback.",
+        "Cache results when inputs repeat; avoid recomputing on the request path.",
+        "Keep health checks on a separate process or ensure workers aren't all blocked (multiple uvicorn workers still share nothing for CPU across processes — more processes help).",
+        "Document SLO: interactive APIs never do multi-hundred-ms CPU inline."
+      ],
+      "sayIt": "Async isn't parallel CPU. I pull heavy compute off the event loop into a process pool or job queue and make the HTTP API async in the workflow sense — 202 and status — so unrelated requests keep moving.",
+      "mermaid": "",
+      "code": "from concurrent.futures import ProcessPoolExecutor\nfrom fastapi import FastAPI\nimport asyncio\n\napp = FastAPI()\npool = ProcessPoolExecutor(max_workers=2)\n\ndef cpu_bound(n: int) -> int:\n    return sum(i*i for i in range(n))\n\n@app.post(\"/compute\")\nasync def compute(n: int = 5_000_000):\n    loop = asyncio.get_running_loop()\n    result = await loop.run_in_executor(pool, cpu_bound, n)\n    return {\"result\": result}",
+      "codeLang": "python",
+      "nestNote": "In Nest/Node, CPU-heavy sync work blocks the single thread — use worker_threads, a child process, or a Bull queue consumers on separate processes; more Nest instances (PM2 cluster) only help if work is distributed.",
+      "traps": [
+        "Wrapping CPU work in async def and expecting concurrency miracles",
+        "Using to_thread for multi-second GIL-bound pure Python compute",
+        "Running one uvicorn worker and wondering why all tenants stall"
+      ],
+      "followUps": [
+        "When is run_in_executor with a thread pool the wrong choice in CPython?",
+        "How do you design the 202 job API so clients can poll safely?"
+      ],
+      "links": []
+    }
+  ]
+}

@@ -1,0 +1,1202 @@
+[
+  {
+    "front": "Your request flow is DNS -> AWS Load Balancer -> Nginx -> EC2 -> Docker -> application. You receive a 502 response. How will you debug it step by step?",
+    "back": "A 502 means some hop returned an invalid gateway response — usually connection refused, reset, or crash mid-write — not a patient timeout. I correlate one request id across ALB and nginx, prove target health and local curl to the container, then fix the dead upstream before touching application business logic.",
+    "tag": "d01"
+  },
+  {
+    "front": "Trap — d01 / d01-q01: what's wrong with this instinct?",
+    "back": "Jumping straight into application business logic without checking ALB target health or nginx upstream errors",
+    "tag": "d01-trap"
+  },
+  {
+    "front": "Users intermittently receive 504 responses, while application health checks remain green. How will you determine where the timeout occurs?",
+    "back": "Intermittent 504s with green health are almost always a timeout-budget mismatch on the real path — slow dependency or saturated workers — not a dead process. I line up ALB and nginx timings for one request id, find which timer fired first, then fix the slow work instead of blindly raising every timeout.",
+    "tag": "d01"
+  },
+  {
+    "front": "Trap — d01 / d01-q02: what's wrong with this instinct?",
+    "back": "Raising all timeouts until 504s disappear without finding the slow dependency",
+    "tag": "d01-trap"
+  },
+  {
+    "front": "Nginx is running, but one API route returns the Nginx default 404 page instead of the backend response. How will you trace the request?",
+    "back": "An nginx-branded 404 almost always means the wrong server or location won, not that FastAPI threw NotFound. I prove Host and URI selection with nginx -T, curl the container with the same path, and fix proxy_pass or location precedence before changing application routes.",
+    "tag": "d01"
+  },
+  {
+    "front": "Trap — d01 / d01-q03: what's wrong with this instinct?",
+    "back": "Assuming the app route is missing because the browser shows 404 — without checking the response body fingerprint",
+    "tag": "d01-trap"
+  },
+  {
+    "front": "An application works when called directly on its port but fails through the load balancer. What would you check and in what order?",
+    "back": "If localhost works and the load balancer fails, I treat the app as innocent until proven otherwise and walk listener → target group → security group → health check → nginx. Most of these incidents are wrong port, wrong health path, or SG rules — not application bugs.",
+    "tag": "d01"
+  },
+  {
+    "front": "Trap — d01 / d01-q04: what's wrong with this instinct?",
+    "back": "Rewriting application code before verifying target group port and health check matcher",
+    "tag": "d01-trap"
+  },
+  {
+    "front": "One EC2 instance behind the load balancer is failing while the others work normally. How would you isolate the fault?",
+    "back": "One bad instance is a gift — I drain it from the target group immediately, then diff that host against a healthy twin. Disk full, drifted container, or AZ networking usually explains it; I don't restart the whole fleet first.",
+    "tag": "d01"
+  },
+  {
+    "front": "Trap — d01 / d01-q05: what's wrong with this instinct?",
+    "back": "Rolling all instances when only one target is unhealthy",
+    "tag": "d01-trap"
+  },
+  {
+    "front": "Production API latency increases from 100 ms to 2 seconds immediately after a deployment. How would you prove whether the deployment caused it?",
+    "back": "Correlation with deploy time isn't enough — I need version-dimensioned latency and a successful rollback or canary contrast. If only the new SHA is slow and reverting restores p95, the deployment caused it; then I dig into the diff for queries, cache, or blocking I/O.",
+    "tag": "d01"
+  },
+  {
+    "front": "Trap — d01 / d01-q06: what's wrong with this instinct?",
+    "back": "Blaming the deploy because it was recent without version-split metrics",
+    "tag": "d01-trap"
+  },
+  {
+    "front": "Your API returns 200 responses but users report that requests occasionally hang until the client times out. How would you investigate?",
+    "back": "Occasional hangs aren't visible on a 200-rate graph — I need in-flight age and traces. Usually every worker is stuck on a slow dependency or a sync call in an async path, so clients time out while health stays green and some requests still finish as 200 late.",
+    "tag": "d01"
+  },
+  {
+    "front": "Trap — d01 / d01-q07: what's wrong with this instinct?",
+    "back": "Only graphing HTTP status codes and declaring the API healthy",
+    "tag": "d01-trap"
+  },
+  {
+    "front": "The service has normal CPU and memory but p95 and p99 latency suddenly increase. What signals would you inspect?",
+    "back": "When resources look fine but p95 explodes, the process is blocked on I/O or locks. I split latency by dependency and pool wait — the answer is usually a slow DB, exhausted connection pool, or outbound API — not 'add more CPU'.",
+    "tag": "d01"
+  },
+  {
+    "front": "Trap — d01 / d01-q08: what's wrong with this instinct?",
+    "back": "Scaling CPU horizontally when the bottleneck is DB locks or pool wait",
+    "tag": "d01-trap"
+  },
+  {
+    "front": "A container repeatedly restarts in production. How would you determine whether the cause is OOM, health checks, process crashes, or infrastructure?",
+    "back": "Restart loops are a taxonomy problem: OOMKilled, exit code, or probe kill. I read the container's last state and events before changing application code, then fix the matching cause — memory limit, bad liveness path, crash on boot, or a sick node.",
+    "tag": "d01"
+  },
+  {
+    "front": "Trap — d01 / d01-q09: what's wrong with this instinct?",
+    "back": "Increasing replicas without reading OOMKilled or ExitCode",
+    "tag": "d01-trap"
+  },
+  {
+    "front": "A production problem occurs only during high concurrency and cannot be reproduced with one request. How would you investigate it?",
+    "back": "If it only fails under concurrency, I refuse to debug with one request. I ramp load, watch connection pools and locks, and look for races or exhaustion — then I ship a concurrent regression test so we don't 'fix' it with a quiet afternoon.",
+    "tag": "d01"
+  },
+  {
+    "front": "Trap — d01 / d01-q10: what's wrong with this instinct?",
+    "back": "Trying to reproduce only with Postman one-at-a-time",
+    "tag": "d01-trap"
+  },
+  {
+    "front": "A class has an API method wrapped by a logging function, but the logging code runs immediately instead of after the API response. What could be wrong?",
+    "back": "If the log says completed before the response exists, the wrapper didn't await. Async methods need async-aware decorators that await the call, then log — otherwise you only logged scheduling the coroutine.",
+    "tag": "d02"
+  },
+  {
+    "front": "Trap — d02 / d02-q01: what's wrong with this instinct?",
+    "back": "Logging at decoration/import time instead of call time",
+    "tag": "d02-trap"
+  },
+  {
+    "front": "A function calls an async method without await. What behavior would you expect?",
+    "back": "No await means no wait — in Python the coroutine never runs; in Node the Promise is fire-and-forget. I treat un-awaited async calls as bugs unless I deliberately create a supervised background task.",
+    "tag": "d02"
+  },
+  {
+    "front": "Trap — d02 / d02-q02: what's wrong with this instinct?",
+    "back": "Thinking the async function runs synchronously until the first await",
+    "tag": "d02-trap"
+  },
+  {
+    "front": "A decorator logs execution time as almost zero even though the wrapped API takes several seconds. How would you debug the decorator?",
+    "back": "A decorator that reports zero on a multi-second API didn't await. Timing must wrap the awaited call; otherwise you measured how long it took to build a coroutine object.",
+    "tag": "d02"
+  },
+  {
+    "front": "Trap — d02 / d02-q03: what's wrong with this instinct?",
+    "back": "Using time.time() around a non-awaited call",
+    "tag": "d02-trap"
+  },
+  {
+    "front": "A logging wrapper prints 'completed' before an async method actually completes. How would you redesign it?",
+    "back": "I redesign the wrapper so 'completed' can only print after await returns or raises. If we need background work, that's an explicit supervised task with its own completion log — not a sneaky missing await.",
+    "tag": "d02"
+  },
+  {
+    "front": "Trap — d02 / d02-q04: what's wrong with this instinct?",
+    "back": "Logging completed in a finally that runs before await (wrong structure)",
+    "tag": "d02-trap"
+  },
+  {
+    "front": "A try/catch catches synchronous errors but misses failures from an async operation. What is wrong?",
+    "back": "try/except only catches what runs inside it. If you don't await, the failure happens on another turn of the event loop and your catch is already gone — await inside the try, or supervise the task explicitly.",
+    "tag": "d02"
+  },
+  {
+    "front": "Trap — d02 / d02-q05: what's wrong with this instinct?",
+    "back": "Wrapping create_task in try/except without awaiting the task",
+    "tag": "d02-trap"
+  },
+  {
+    "front": "A Node.js service uses array.forEach(async item => ... ) and expects the caller to wait for all operations. What is wrong?",
+    "back": "forEach plus async is a classic false sense of waiting — the loop doesn't await. I use for...of or Promise.all with a concurrency cap, and I make sure the request handler awaits that aggregate Promise.",
+    "tag": "d02"
+  },
+  {
+    "front": "Trap — d02 / d02-q06: what's wrong with this instinct?",
+    "back": "Thinking async forEach magically sequentializes",
+    "tag": "d02-trap"
+  },
+  {
+    "front": "You need to call five independent third-party APIs from a FastAPI endpoint. How would you execute them?",
+    "back": "Five independent APIs are a gather with timeouts, not a chain of awaits. I share an AsyncClient, fail fast on the budget that matters to the user, and degrade or error based on whether each dependency is critical.",
+    "tag": "d02"
+  },
+  {
+    "front": "Trap — d02 / d02-q07: what's wrong with this instinct?",
+    "back": "Creating a new httpx client per request without pooling",
+    "tag": "d02-trap"
+  },
+  {
+    "front": "You need to process 10,000 async operations but only want 20 in flight at any time. How would you design the concurrency limit?",
+    "back": "Ten thousand coroutines without a semaphore is an outage. I cap in-flight work at twenty with a semaphore or worker queue, sized to the dependency's quota and our connection pools.",
+    "tag": "d02"
+  },
+  {
+    "front": "Trap — d02 / d02-q08: what's wrong with this instinct?",
+    "back": "Gathering all tasks then hoping the OS schedules kindly",
+    "tag": "d02-trap"
+  },
+  {
+    "front": "A Node.js endpoint uses Promise.all for 1,000 outbound requests and production becomes unstable. What could be happening?",
+    "back": "Promise.all of a thousand outbound calls is a thundering herd at yourself and your vendor. Cap concurrency, set timeouts, and don't do bulk fan-out on the user-facing request path.",
+    "tag": "d02"
+  },
+  {
+    "front": "Trap — d02 / d02-q09: what's wrong with this instinct?",
+    "back": "Raising UV_THREADPOOL_SIZE as the first fix",
+    "tag": "d02-trap"
+  },
+  {
+    "front": "An async endpoint performs CPU-heavy work and blocks unrelated requests. How would you redesign it?",
+    "back": "Async isn't parallel CPU. I pull heavy compute off the event loop into a process pool or job queue and make the HTTP API async in the workflow sense — 202 and status — so unrelated requests keep moving.",
+    "tag": "d02"
+  },
+  {
+    "front": "Trap — d02 / d02-q10: what's wrong with this instinct?",
+    "back": "Wrapping CPU work in async def and expecting concurrency miracles",
+    "tag": "d02-trap"
+  },
+  {
+    "front": "Your application integrates three third-party APIs and one becomes slow. How would you prevent it from degrading the entire request path?",
+    "back": "One slow vendor should not own our worker pool. I give it its own timeout and concurrency bulkhead, degrade that feature when the breaker opens, and keep the rest of the request healthy.",
+    "tag": "d03"
+  },
+  {
+    "front": "Trap — d03 / d03-q01: what's wrong with this instinct?",
+    "back": "Sharing one global timeout and one connection pool across all vendors",
+    "tag": "d03-trap"
+  },
+  {
+    "front": "A third-party API normally responds in 200 ms but sometimes takes 15 seconds. How would you design the integration?",
+    "back": "I won't budget 15 seconds for a call that is usually 200 ms — that turns rare vendor lag into our outage. Short timeout, safe fallback, and move non-critical work async.",
+    "tag": "d03"
+  },
+  {
+    "front": "Trap — d03 / d03-q02: what's wrong with this instinct?",
+    "back": "Matching timeout to the worst observed 15s 'just in case'",
+    "tag": "d03-trap"
+  },
+  {
+    "front": "A payment provider times out, but you do not know whether the payment was actually processed. How would you design the workflow?",
+    "back": "After a payment timeout I assume the charge might have succeeded. Same idempotency key, pending state, reconcile via status or webhook — never a blind second capture.",
+    "tag": "d03"
+  },
+  {
+    "front": "Trap — d03 / d03-q03: what's wrong with this instinct?",
+    "back": "Retrying with a new idempotency key after timeout",
+    "tag": "d03-trap"
+  },
+  {
+    "front": "An external API returns intermittent 5xx errors. How would you decide whether and how to retry?",
+    "back": "Intermittent 5xx gets a small number of jittered retries only when safe. No key, no retry on money-moving POSTs — and I never retry harder than the dependency can handle.",
+    "tag": "d03"
+  },
+  {
+    "front": "Trap — d03 / d03-q04: what's wrong with this instinct?",
+    "back": "Retrying every POST by default",
+    "tag": "d03-trap"
+  },
+  {
+    "front": "When can retries make an outage worse?",
+    "back": "Retries are a privilege, not a default. Without jitter, budgets, and idempotency, they turn a vendor hiccup into a self-DDoS — so I cap, spread, and trip a breaker.",
+    "tag": "d03"
+  },
+  {
+    "front": "Trap — d03 / d03-q05: what's wrong with this instinct?",
+    "back": "Adding more retries as the first response to rising 5xx",
+    "tag": "d03-trap"
+  },
+  {
+    "front": "One dependency is unavailable for 30 minutes. How should your application behave for requests that depend on it?",
+    "back": "For a half-hour outage I fail fast or go degraded — I don't burn workers on hopeless retries. Critical flows get an honest 503 or queued processing; everything else serves cache or turns the feature off.",
+    "tag": "d03"
+  },
+  {
+    "front": "Trap — d03 / d03-q06: what's wrong with this instinct?",
+    "back": "Leaving users spinning on spinners for the entire 30 minutes",
+    "tag": "d03-trap"
+  },
+  {
+    "front": "How would you implement circuit breaking for an unreliable dependency?",
+    "back": "Circuit breaking is fail-fast with a recovery probe. I open on sustained errors, stop calling the vendor, serve fallback, then half-open carefully so we don't flap or storm.",
+    "tag": "d03"
+  },
+  {
+    "front": "Trap — d03 / d03-q07: what's wrong with this instinct?",
+    "back": "One global breaker for all dependencies",
+    "tag": "d03-trap"
+  },
+  {
+    "front": "Two external providers offer the same capability. How would you design failover between them?",
+    "back": "Failover is an interface plus safe ownership of each operation. I trip off the primary when its breaker opens, stick writes to one provider per intent, and keep the secondary warm with synthetics so failover isn't a surprise.",
+    "tag": "d03"
+  },
+  {
+    "front": "Trap — d03 / d03-q08: what's wrong with this instinct?",
+    "back": "Calling both providers on every write 'for safety'",
+    "tag": "d03-trap"
+  },
+  {
+    "front": "A provider imposes strict rate limits and your traffic suddenly increases 20x. How would you protect your system?",
+    "back": "When traffic jumps 20x against a strict vendor quota, I rate-limit outbound calls and queue the rest. Better an honest 503 or delayed job than a ban and a total outage.",
+    "tag": "d03"
+  },
+  {
+    "front": "Trap — d03 / d03-q09: what's wrong with this instinct?",
+    "back": "Scaling API replicas 20x and multiplying outbound RPS",
+    "tag": "d03-trap"
+  },
+  {
+    "front": "How would you make an external API integration idempotent from your application's point of view?",
+    "back": "From our side, idempotency is a durable key tied to business intent, unique constraints, and deduped webhooks. Retries may hit the network twice, but inventory and money move once.",
+    "tag": "d03"
+  },
+  {
+    "front": "Trap — d03 / d03-q10: what's wrong with this instinct?",
+    "back": "Using random keys on each retry",
+    "tag": "d03-trap"
+  },
+  {
+    "front": "How would you design an idempotent create-order API?",
+    "back": "Idempotent create-order is a durable key plus unique constraint, not hope. Same key and body returns the same order; same key different body is 409; payments reuse the key so retries don't double-charge.",
+    "tag": "d04"
+  },
+  {
+    "front": "Trap — d04 / d04-q01: what's wrong with this instinct?",
+    "back": "Generating the idempotency key on the server per attempt",
+    "tag": "d04-trap"
+  },
+  {
+    "front": "An API operation can take 20 minutes. Would you keep the HTTP request open? How would you design it?",
+    "back": "Twenty minutes does not belong on an open HTTP socket. I accept with 202, process in a worker, and let the client poll or get a webhook — proxies won't punish us with 504s.",
+    "tag": "d04"
+  },
+  {
+    "front": "Trap — d04 / d04-q02: what's wrong with this instinct?",
+    "back": "Raising every proxy timeout to 30 minutes",
+    "tag": "d04-trap"
+  },
+  {
+    "front": "How would you design an asynchronous job-submission API with job status tracking?",
+    "back": "A job API is a state machine with a queue behind it. Clients get an id immediately, poll a boring status resource, and we make submission idempotent so retries don't duplicate work.",
+    "tag": "d04"
+  },
+  {
+    "front": "Trap — d04 / d04-q03: what's wrong with this instinct?",
+    "back": "Using only in-memory job maps on one instance",
+    "tag": "d04-trap"
+  },
+  {
+    "front": "How would you design pagination for a table containing hundreds of millions of rows?",
+    "back": "At hundreds of millions of rows I paginate with keyset cursors on an indexed sort key, not OFFSET. Clients get a next cursor; I don't COUNT the galaxy on every page view.",
+    "tag": "d04"
+  },
+  {
+    "front": "Trap — d04 / d04-q04: what's wrong with this instinct?",
+    "back": "OFFSET/LIMIT deep paging in production",
+    "tag": "d04-trap"
+  },
+  {
+    "front": "When would you choose cursor pagination over offset pagination?",
+    "back": "Cursors for scale and stability; offset for small, static lists. If users can page into the middle of millions of rows, offset is already the wrong design.",
+    "tag": "d04"
+  },
+  {
+    "front": "Trap — d04 / d04-q05: what's wrong with this instinct?",
+    "back": "Defaulting to offset because ORMs make it easy",
+    "tag": "d04-trap"
+  },
+  {
+    "front": "How would you design consistent error responses across a large FastAPI/NestJS codebase?",
+    "back": "Consistency comes from a single envelope and centralized handlers. Routes throw typed domain errors; the framework edge turns them into the same JSON shape with a correlation id.",
+    "tag": "d04"
+  },
+  {
+    "front": "Trap — d04 / d04-q06: what's wrong with this instinct?",
+    "back": "Different error shapes per microservice with no translation at the BFF",
+    "tag": "d04-trap"
+  },
+  {
+    "front": "How would you separate validation errors, business errors, dependency errors, and unexpected errors?",
+    "back": "Validation is the client's fault, business rules are domain conflicts, dependencies are someone else's SLO, and unexpected is ours. Separating them in types and status codes makes both UX and paging correct.",
+    "tag": "d04"
+  },
+  {
+    "front": "Trap — d04 / d04-q07: what's wrong with this instinct?",
+    "back": "Returning 500 for 'sku out of stock'",
+    "tag": "d04-trap"
+  },
+  {
+    "front": "One endpoint is generating excessive database traffic. How would you redesign it?",
+    "back": "I don't 'add indexes' blindly — I count queries per request. Usually it's N+1 or a hot list without cache; I batch, cache, or precompute a read model so one user action isn't a hundred SQL round-trips.",
+    "tag": "d04"
+  },
+  {
+    "front": "Trap — d04 / d04-q08: what's wrong with this instinct?",
+    "back": "Caching before understanding write invalidation",
+    "tag": "d04-trap"
+  },
+  {
+    "front": "How would you structure a large FastAPI or NestJS application so controllers do not contain business logic?",
+    "back": "If a route function knows SQL and discount rules, the structure is wrong. Controllers adapt HTTP; services own business decisions; repositories speak to the database — FastAPI Depends and Nest DI both support that if we use them with discipline.",
+    "tag": "d04"
+  },
+  {
+    "front": "Trap — d04 / d04-q09: what's wrong with this instinct?",
+    "back": "Anemic 'service' that is just a pass-through while logic stays in the controller",
+    "tag": "d04-trap"
+  },
+  {
+    "front": "How would you decide what belongs in the synchronous request path versus asynchronous processing?",
+    "back": "Synchronous means the user can't proceed without it. Emails, indexes, and 20-minute reports are async. I keep the request path short, durable where it matters, and honest about eventual consistency.",
+    "tag": "d04"
+  },
+  {
+    "front": "Trap — d04 / d04-q10: what's wrong with this instinct?",
+    "back": "Awaiting Slack notifications on the checkout path",
+    "tag": "d04-trap"
+  },
+  {
+    "front": "A PostgreSQL query is fast with one million rows but becomes slow with one hundred million. How would you investigate?",
+    "back": "At 100M the plan or cache behavior changed. EXPLAIN ANALYZE with BUFFERS tells me if it's a bad join, missing index, or I/O — I fix the plan before throwing hardware at it.",
+    "tag": "d05"
+  },
+  {
+    "front": "Trap — d05 / d05-q01: what's wrong with this instinct?",
+    "back": "Adding random indexes without reading the plan",
+    "tag": "d05-trap"
+  },
+  {
+    "front": "How would you use EXPLAIN or EXPLAIN ANALYZE to debug a slow PostgreSQL query?",
+    "back": "I run EXPLAIN ANALYZE with BUFFERS, find the hottest node, and fix estimate skew or I/O — not guesswork indexes.",
+    "tag": "d05"
+  },
+  {
+    "front": "Trap — d05 / d05-q02: what's wrong with this instinct?",
+    "back": "Using EXPLAIN alone and trusting estimates",
+    "tag": "d05-trap"
+  },
+  {
+    "front": "Two users try to purchase the last available item at exactly the same time. How would you prevent overselling?",
+    "back": "I never trust check-then-update in app memory. One conditional UPDATE or SELECT FOR UPDATE on the stock row, short transaction, sold-out if zero rows.",
+    "tag": "d05"
+  },
+  {
+    "front": "Trap — d05 / d05-q03: what's wrong with this instinct?",
+    "back": "Read stock in app, decrement, write back without locking",
+    "tag": "d05-trap"
+  },
+  {
+    "front": "When would you use optimistic locking versus pessimistic locking?",
+    "back": "Optimistic version columns when collisions are rare; FOR UPDATE when I know two writers will fight over the same row and must serialize.",
+    "tag": "d05"
+  },
+  {
+    "front": "Trap — d05 / d05-q04: what's wrong with this instinct?",
+    "back": "Optimistic locking with silent overwrite on 0-row updates",
+    "tag": "d05-trap"
+  },
+  {
+    "front": "A read-then-update workflow produces lost updates under concurrency. How would you redesign it?",
+    "back": "Lost updates are a smell of check-then-act. I make the write atomic or version it so concurrent writers cannot silently clobber each other.",
+    "tag": "d05"
+  },
+  {
+    "front": "Trap — d05 / d05-q05: what's wrong with this instinct?",
+    "back": "Assuming READ COMMITTED prevents lost updates (it doesn't for this pattern)",
+    "tag": "d05-trap"
+  },
+  {
+    "front": "How would you choose between READ COMMITTED, REPEATABLE READ, and SERIALIZABLE for a business operation?",
+    "back": "I stay on READ COMMITTED unless the business needs a snapshot or true serializability — and I design for retries when I raise isolation.",
+    "tag": "d05"
+  },
+  {
+    "front": "Trap — d05 / d05-q06: what's wrong with this instinct?",
+    "back": "Raising isolation 'to be safe' without retry logic",
+    "tag": "d05-trap"
+  },
+  {
+    "front": "Two transactions deadlock in production. How would you investigate and reduce the likelihood of future deadlocks?",
+    "back": "Deadlocks are lock-order cycles. I read the log, enforce a global lock order, shrink transactions, and retry the loser idempotently.",
+    "tag": "d05"
+  },
+  {
+    "front": "Trap — d05 / d05-q07: what's wrong with this instinct?",
+    "back": "Retrying forever without backoff or idempotency",
+    "tag": "d05-trap"
+  },
+  {
+    "front": "Your application opens far more PostgreSQL connections than expected. How would you find the source and fix it?",
+    "back": "Connection storms are usually pool math or leaks. I count pg_stat_activity, fix pool sizing, and put PgBouncer in front so Postgres isn't the connection radiator.",
+    "tag": "d05"
+  },
+  {
+    "front": "Trap — d05 / d05-q08: what's wrong with this instinct?",
+    "back": "Raising max_connections instead of pooling",
+    "tag": "d05-trap"
+  },
+  {
+    "front": "How would you perform a schema migration or index creation on a large production table without unacceptable downtime?",
+    "back": "No big-bang locks on hot tables. CONCURRENTLY for indexes, batched backfills for data, additive schema first.",
+    "tag": "d05"
+  },
+  {
+    "front": "Trap — d05 / d05-q09: what's wrong with this instinct?",
+    "back": "Running CREATE INDEX (non-concurrent) on a 100M-row hot table",
+    "tag": "d05-trap"
+  },
+  {
+    "front": "How would you design a zero-downtime database migration when old and new application versions must run simultaneously?",
+    "back": "Rolling deploys need expand-contract. Schema stays compatible with both versions until the fleet and backfill are done — then contract.",
+    "tag": "d05"
+  },
+  {
+    "front": "Trap — d05 / d05-q10: what's wrong with this instinct?",
+    "back": "Renaming/dropping columns in the same deploy that changes app code",
+    "tag": "d05-trap"
+  },
+  {
+    "front": "A MongoDB collection has 100 million documents and a frequently used query became slow. What would you inspect first?",
+    "back": "First explain executionStats. If docsExamined ≫ nReturned, the index or query shape is wrong — I fix that before talking about sharding.",
+    "tag": "d06"
+  },
+  {
+    "front": "Trap — d06 / d06-q01: what's wrong with this instinct?",
+    "back": "Adding indexes blindly without explain",
+    "tag": "d06-trap"
+  },
+  {
+    "front": "How would you decide between embedding and referencing for a MongoDB document model?",
+    "back": "Modeling follows queries. Embed co-read bounded data; reference shared or unbounded data — and denormalize snapshots when history must not change.",
+    "tag": "d06"
+  },
+  {
+    "front": "Trap — d06 / d06-q02: what's wrong with this instinct?",
+    "back": "Embedding unbounded arrays 'for convenience'",
+    "tag": "d06-trap"
+  },
+  {
+    "front": "An aggregation pipeline is slow in production. How would you identify the expensive stage and optimize it?",
+    "back": "Find the expensive stage, filter early with an index, and treat $lookup/$unwind/$group as suspects until proven cheap.",
+    "tag": "d06"
+  },
+  {
+    "front": "Trap — d06 / d06-q03: what's wrong with this instinct?",
+    "back": "$match after $lookup on the full collection",
+    "tag": "d06-trap"
+  },
+  {
+    "front": "How would you choose MongoDB indexes from real query patterns rather than from the schema alone?",
+    "back": "Indexes follow the workload. I rank real queries, build compound keys with ESR, and delete indexes that only look good on the schema.",
+    "tag": "d06"
+  },
+  {
+    "front": "Trap — d06 / d06-q04: what's wrong with this instinct?",
+    "back": "Indexing every field 'just in case'",
+    "tag": "d06-trap"
+  },
+  {
+    "front": "A document contains an array that grows indefinitely and is frequently queried. How would you redesign the model?",
+    "back": "Infinite arrays don't belong in one document. Child collection or time buckets, maybe a small embedded preview for the hot read.",
+    "tag": "d06"
+  },
+  {
+    "front": "Trap — d06 / d06-q05: what's wrong with this instinct?",
+    "back": "Capping with $slice in queries but still storing unbounded data",
+    "tag": "d06-trap"
+  },
+  {
+    "front": "How would you choose a shard key for a high-write MongoDB workload?",
+    "back": "Shard key = cardinality + even writes + targeted reads. I won't shard on status or plain timestamps that create hot shards.",
+    "tag": "d06"
+  },
+  {
+    "front": "Trap — d06 / d06-q06: what's wrong with this instinct?",
+    "back": "Sharding on low-cardinality fields",
+    "tag": "d06-trap"
+  },
+  {
+    "front": "What characteristics can make a MongoDB shard key a hotspot?",
+    "back": "Hotspots come from monotonic inserts, low cardinality, or traffic skew. The key must spread writes, not just unique them.",
+    "tag": "d06"
+  },
+  {
+    "front": "Trap — d06 / d06-q07: what's wrong with this instinct?",
+    "back": "Thinking 'unique' equals 'well distributed'",
+    "tag": "d06-trap"
+  },
+  {
+    "front": "A query becomes scatter/gather in a sharded cluster. What does that mean for performance and how would you reduce it?",
+    "back": "Scatter-gather fans out to every shard. Hot paths must be targeted by shard key — otherwise each read taxes the whole cluster.",
+    "tag": "d06"
+  },
+  {
+    "front": "Trap — d06 / d06-q08: what's wrong with this instinct?",
+    "back": "Assuming secondary indexes make queries targeted (they don't replace shard key routing)",
+    "tag": "d06-trap"
+  },
+  {
+    "front": "You need to update tens of millions of MongoDB documents. How would you make the migration safe, resumable, and observable?",
+    "back": "Big migrations are checkpointed bulkWrite loops — idempotent, throttled, observable, and resumable from last _id.",
+    "tag": "d06"
+  },
+  {
+    "front": "Trap — d06 / d06-q09: what's wrong with this instinct?",
+    "back": "updateMany on the whole collection with no resume story",
+    "tag": "d06-trap"
+  },
+  {
+    "front": "How would you design multi-tenant data isolation in MongoDB?",
+    "back": "tenantId on every doc and every query, indexes and shard key aligned, auth-bound tenant — escalate to DB- or cluster-per-tenant when compliance or noise demands it.",
+    "tag": "d06"
+  },
+  {
+    "front": "Trap — d06 / d06-q10: what's wrong with this instinct?",
+    "back": "Filtering tenant only in the UI",
+    "tag": "d06-trap"
+  },
+  {
+    "front": "When should an API use Redis instead of querying PostgreSQL directly?",
+    "back": "Redis for hot, slightly stale reads and coordination. Postgres for truth and transactions — I cache when the hit rate and latency win are proven.",
+    "tag": "d07"
+  },
+  {
+    "front": "Trap — d07 / d07-q01: what's wrong with this instinct?",
+    "back": "Caching everything including low-hit unique keys",
+    "tag": "d07-trap"
+  },
+  {
+    "front": "Redis goes down during peak traffic. How should the application degrade?",
+    "back": "Redis down: timeout fast, degrade by feature, and cap DB fallback — an uncapped fallback is an outage multiplier.",
+    "tag": "d07"
+  },
+  {
+    "front": "Trap — d07 / d07-q02: what's wrong with this instinct?",
+    "back": "Infinite retries to Redis on the request path",
+    "tag": "d07-trap"
+  },
+  {
+    "front": "How would you implement cache-aside for a read-heavy endpoint?",
+    "back": "Cache-aside: GET, miss to DB, SET with TTL; invalidate on write; singleflight so misses don't herd.",
+    "tag": "d07"
+  },
+  {
+    "front": "Trap — d07 / d07-q03: what's wrong with this instinct?",
+    "back": "Caching without TTL",
+    "tag": "d07-trap"
+  },
+  {
+    "front": "How would you handle stale cache data after a PostgreSQL update?",
+    "back": "Commit first, then invalidate or SET the new value. TTL is the safety net for races and missed deletes.",
+    "tag": "d07"
+  },
+  {
+    "front": "Trap — d07 / d07-q04: what's wrong with this instinct?",
+    "back": "Invalidating before commit (rollback leaves hole or race)",
+    "tag": "d07-trap"
+  },
+  {
+    "front": "What is a cache stampede scenario and how would you prevent it?",
+    "back": "Stampede = thundering herd on miss. One refresher via lock or singleflight; others wait or get stale.",
+    "tag": "d07"
+  },
+  {
+    "front": "Trap — d07 / d07-q05: what's wrong with this instinct?",
+    "back": "Only jittering TTL but not locking the hottest key",
+    "tag": "d07-trap"
+  },
+  {
+    "front": "A popular Redis key becomes a hot key. How would you handle it?",
+    "back": "Hot keys need L1 caching or key sharding — scaling the cluster alone won't help if one key owns one slot.",
+    "tag": "d07"
+  },
+  {
+    "front": "Trap — d07 / d07-q06: what's wrong with this instinct?",
+    "back": "Adding Redis nodes without splitting the key",
+    "tag": "d07-trap"
+  },
+  {
+    "front": "How would you choose TTLs for data with different freshness requirements?",
+    "back": "TTL is a freshness SLA. Short + invalidate for volatile data, longer for static, jitter everything, short negative cache for misses.",
+    "tag": "d07"
+  },
+  {
+    "front": "Trap — d07 / d07-q07: what's wrong with this instinct?",
+    "back": "One global TTL for all keys",
+    "tag": "d07-trap"
+  },
+  {
+    "front": "How would you design a distributed per-user and per-IP rate limiter using Redis?",
+    "back": "Per-user and per-IP keys with atomic INCR or sliding-window Lua, checked early in the middleware, with an explicit Redis-down policy.",
+    "tag": "d07"
+  },
+  {
+    "front": "Trap — d07 / d07-q08: what's wrong with this instinct?",
+    "back": "Non-atomic get/set rate counters",
+    "tag": "d07-trap"
+  },
+  {
+    "front": "Two application instances update the same Redis-based counter concurrently. How would you make the operation safe?",
+    "back": "INCR or Lua — not get-add-set. Redis atomic ops are the concurrency control.",
+    "tag": "d07"
+  },
+  {
+    "front": "Trap — d07 / d07-q09: what's wrong with this instinct?",
+    "back": "GET + SET across instances",
+    "tag": "d07-trap"
+  },
+  {
+    "front": "How would you prevent a cache outage from causing a database avalanche?",
+    "back": "Avalanche prevention is bounded fallback: breakers, semaphores, stale serve, and shedding — not 'just query Postgres.'",
+    "tag": "d07"
+  },
+  {
+    "front": "Trap — d07 / d07-q10: what's wrong with this instinct?",
+    "back": "Silent unlimited DB fallback",
+    "tag": "d07-trap"
+  },
+  {
+    "front": "A Kafka consumer is processing messages slower than producers are publishing them. How would you diagnose and scale it?",
+    "back": "Lag tells me I'm falling behind. I find whether it's handler time or skew, then add partitions/consumers or make each message cheaper.",
+    "tag": "d08"
+  },
+  {
+    "front": "Trap — d08 / d08-q01: what's wrong with this instinct?",
+    "back": "Adding consumers without adding partitions",
+    "tag": "d08-trap"
+  },
+  {
+    "front": "A consumer processes the same event twice. How should the application handle duplicates?",
+    "back": "Duplicates are expected. I key every side effect and upsert under a unique constraint so the second delivery is a no-op.",
+    "tag": "d08"
+  },
+  {
+    "front": "Trap — d08 / d08-q02: what's wrong with this instinct?",
+    "back": "Assuming Kafka exactly-once means the business effect is exactly-once without work",
+    "tag": "d08-trap"
+  },
+  {
+    "front": "A consumer updates PostgreSQL and crashes before committing its Kafka offset. What could happen?",
+    "back": "DB committed, offset not: redelivery. That's at-least-once — idempotency makes it safe; committing early makes loss possible.",
+    "tag": "d08"
+  },
+  {
+    "front": "Trap — d08 / d08-q03: what's wrong with this instinct?",
+    "back": "Believing 'we commit sync so duplicates can't happen'",
+    "tag": "d08-trap"
+  },
+  {
+    "front": "How would you design an idempotent Kafka consumer?",
+    "back": "Idempotent consumer = unique event id + transactional dedupe with the side effect + offset commit after success + DLQ for poison.",
+    "tag": "d08"
+  },
+  {
+    "front": "Trap — d08 / d08-q04: what's wrong with this instinct?",
+    "back": "Idempotency key that's not unique across retries (e.g. random UUID generated in consumer)",
+    "tag": "d08-trap"
+  },
+  {
+    "front": "How would you choose a Kafka partition key for an order or user domain?",
+    "back": "Partition key = ordering scope. orderId for order timelines, userId for user timelines — never one key for the whole topic.",
+    "tag": "d08"
+  },
+  {
+    "front": "Trap — d08 / d08-q05: what's wrong with this instinct?",
+    "back": "Random keys when you needed per-entity ordering",
+    "tag": "d08-trap"
+  },
+  {
+    "front": "One Kafka partition is receiving much more traffic than the others. How would you diagnose and fix the imbalance?",
+    "back": "Hot partition is key skew. Find the key, change keying or isolate the whale — extra consumers can't share one partition.",
+    "tag": "d08"
+  },
+  {
+    "front": "Trap — d08 / d08-q06: what's wrong with this instinct?",
+    "back": "Scaling consumer count expecting the hot partition to split",
+    "tag": "d08-trap"
+  },
+  {
+    "front": "How would you design retries without allowing one poison message to block unrelated processing?",
+    "back": "Retry transient errors with a budget, then DLQ and move on — one bad message must not stall the partition.",
+    "tag": "d08"
+  },
+  {
+    "front": "Trap — d08 / d08-q07: what's wrong with this instinct?",
+    "back": "Infinite retries on deserialization errors",
+    "tag": "d08-trap"
+  },
+  {
+    "front": "When would you choose Kafka versus SQS, RabbitMQ, or a synchronous API call?",
+    "back": "Sync for immediate answers, SQS/Rabbit for work queues, Kafka when I need a replayable event log and independent consumer groups at scale.",
+    "tag": "d08"
+  },
+  {
+    "front": "Trap — d08 / d08-q08: what's wrong with this instinct?",
+    "back": "Using Kafka for every tiny async job",
+    "tag": "d08-trap"
+  },
+  {
+    "front": "How would you evolve an event schema without breaking existing consumers?",
+    "back": "Additive evolution under registry compatibility rules. Breaking changes take expand-contract and versioned event types — never silent field deletes.",
+    "tag": "d08"
+  },
+  {
+    "front": "Trap — d08 / d08-q09: what's wrong with this instinct?",
+    "back": "Renaming fields in place",
+    "tag": "d08-trap"
+  },
+  {
+    "front": "How would you use the outbox pattern to keep database state and published events consistent?",
+    "back": "Outbox: one DB transaction for state + event row, async relay to Kafka. No dual-write hope.",
+    "tag": "d08"
+  },
+  {
+    "front": "Trap — d08 / d08-q10: what's wrong with this instinct?",
+    "back": "Publishing to Kafka inside the request without an outbox",
+    "tag": "d08-trap"
+  },
+  {
+    "front": "Service A succeeds but service B fails halfway through a business workflow. How would you recover without corrupting state?",
+    "back": "I wouldn't reach for 2PC across services. I'd run a saga with idempotent steps and compensations keyed by a workflow id, so a mid-flight failure either retries the failed step or unwinds completed ones without corrupting inventory or money.",
+    "tag": "d09"
+  },
+  {
+    "front": "Trap — d09 / d09-q01: what's wrong with this instinct?",
+    "back": "Proposing XA/2PC across microservices as the default.",
+    "tag": "d09-trap"
+  },
+  {
+    "front": "When should a system prefer strong consistency, and when is eventual consistency acceptable?",
+    "back": "Strong consistency for money and stock; eventual for projections and caches. I'd put the invariant in one strongly consistent write path and let read models catch up with an explicit lag budget and repair job.",
+    "tag": "d09"
+  },
+  {
+    "front": "Trap — d09 / d09-q02: what's wrong with this instinct?",
+    "back": "Saying 'eventual consistency everywhere' without naming what can be wrong temporarily.",
+    "tag": "d09-trap"
+  },
+  {
+    "front": "How would you make an end-to-end workflow safe when both API requests and asynchronous messages can be duplicated?",
+    "back": "I'd carry one idempotency key from the HTTP API through the outbox into every consumer, with unique constraints at each write. Retries become safe no-ops instead of double side effects.",
+    "tag": "d09"
+  },
+  {
+    "front": "Trap — d09 / d09-q03: what's wrong with this instinct?",
+    "back": "Idempotency only on the API while queue consumers re-apply effects freely.",
+    "tag": "d09-trap"
+  },
+  {
+    "front": "What does 'exactly once' mean in a practical distributed system, and where can it break down?",
+    "back": "I treat exactly-once as effectively-once: at-least-once delivery with an idempotent write and a dedupe key. It breaks when the side effect isn't idempotent or you ack before the durable write.",
+    "tag": "d09"
+  },
+  {
+    "front": "Trap — d09 / d09-q04: what's wrong with this instinct?",
+    "back": "Claiming the message broker guarantees exactly-once for all downstream side effects.",
+    "tag": "d09-trap"
+  },
+  {
+    "front": "How would you prevent cascading failures when a downstream service becomes slow?",
+    "back": "Timeouts, bulkheads, and a circuit breaker—fail fast, cap in-flight calls to the sick dependency, and degrade instead of letting one slow service exhaust our pools.",
+    "tag": "d09"
+  },
+  {
+    "front": "Trap — d09 / d09-q05: what's wrong with this instinct?",
+    "back": "Infinite retries without backoff or breaker.",
+    "tag": "d09-trap"
+  },
+  {
+    "front": "How would you design backpressure when incoming work is greater than worker capacity?",
+    "back": "I'd absorb spikes in a durable queue with lag-based autoscaling, bound in-process concurrency, and return 429 at the edge when we're saturated—unbounded memory queues are not backpressure.",
+    "tag": "d09"
+  },
+  {
+    "front": "Trap — d09 / d09-q06: what's wrong with this instinct?",
+    "back": "Buffering everything in process memory 'temporarily'.",
+    "tag": "d09-trap"
+  },
+  {
+    "front": "How would you design graceful load shedding during an overload event?",
+    "back": "Graceful shedding means dropping low-priority work early with 503/Retry-After while protecting checkout and auth. I'd trigger on lag and pool wait, not after the process is already thrashing.",
+    "tag": "d09"
+  },
+  {
+    "front": "Trap — d09 / d09-q07: what's wrong with this instinct?",
+    "back": "Returning 200 with empty bodies silently (clients don't back off).",
+    "tag": "d09-trap"
+  },
+  {
+    "front": "How would you choose timeouts and retry policies across a chain of dependent services?",
+    "back": "Timeouts are a budget, not a single magic number. I'd slice the outer SLA across hops, propagate deadlines, and only retry when the remaining budget and idempotency allow it.",
+    "tag": "d09"
+  },
+  {
+    "front": "Trap — d09 / d09-q08: what's wrong with this instinct?",
+    "back": "Same 30s timeout on every hop with three retries each (minutes of amplification).",
+    "tag": "d09-trap"
+  },
+  {
+    "front": "How would you design a job so work is not lost when a worker process crashes or the EC2 instance is terminated?",
+    "back": "Jobs survive crashes because the queue owns the work: visibility timeout plus heartbeat, idempotent handlers, and clean SIGTERM that releases the message. Workers are disposable.",
+    "tag": "d09"
+  },
+  {
+    "front": "Trap — d09 / d09-q09: what's wrong with this instinct?",
+    "back": "Storing the only copy of work in process memory or a local disk scratch file.",
+    "tag": "d09-trap"
+  },
+  {
+    "front": "How would you design a reliable scheduled job that can safely recover after missed executions?",
+    "back": "A reliable scheduler stores a watermark, catch-up from last success to now with idempotent chunked work, and a lock so only one leader runs. Cron alone is not recovery.",
+    "tag": "d09"
+  },
+  {
+    "front": "Trap — d09 / d09-q10: what's wrong with this instinct?",
+    "back": "Assuming the cron always fires and skipping watermark tracking.",
+    "tag": "d09-trap"
+  },
+  {
+    "front": "How would you design a highly available backend using Route 53, ALB, EC2/ECS, Nginx, PostgreSQL, Redis, and S3?",
+    "back": "HA for me is Multi-AZ at every hop: Route 53 to a cross-AZ ALB, private ECS/EC2 with Nginx, RDS Multi-AZ, Redis failover, and S3. One AZ loss should drop capacity, not the product.",
+    "tag": "d10"
+  },
+  {
+    "front": "Trap — d10 / d10-q01: what's wrong with this instinct?",
+    "back": "Single-AZ RDS or a lone EC2 'for cost' with no failover story.",
+    "tag": "d10-trap"
+  },
+  {
+    "front": "How would you decide whether TLS should terminate at the load balancer or Nginx?",
+    "back": "I'd terminate at the ALB with ACM unless compliance forces TLS to the instance—then re-encrypt to Nginx. Either way I honor X-Forwarded-Proto for secure cookies and redirects.",
+    "tag": "d10"
+  },
+  {
+    "front": "Trap — d10 / d10-q02: what's wrong with this instinct?",
+    "back": "Terminating at ALB then assuming the app sees HTTPS without trusting proxy headers.",
+    "tag": "d10-trap"
+  },
+  {
+    "front": "How would you troubleshoot a request that works by IP address but not through the domain name?",
+    "back": "If IP works but the domain doesn't, I chase DNS first, then TLS SANs/SNI, then ALB/Nginx Host-based rules. The app is usually fine—the name path isn't.",
+    "tag": "d10"
+  },
+  {
+    "front": "Trap — d10 / d10-q03: what's wrong with this instinct?",
+    "back": "Immediately restarting the app or redeploying ECS.",
+    "tag": "d10-trap"
+  },
+  {
+    "front": "How would you preserve and validate client IP information across a proxy/load-balancer chain?",
+    "back": "I only trust X-Forwarded-For from known load-balancer CIDRs with a fixed hop count. Spoofed client-supplied XFF is ignored so rate limits and audit logs key on the real client.",
+    "tag": "d10"
+  },
+  {
+    "front": "Trap — d10 / d10-q04: what's wrong with this instinct?",
+    "back": "Using the first XFF entry blindly (attacker-controlled).",
+    "tag": "d10-trap"
+  },
+  {
+    "front": "How would you decide between ALB, NLB, and API Gateway for a backend service?",
+    "back": "ALB for normal HTTP FastAPI, NLB when I need L4/PrivateLink/static IP, API Gateway when the product needs managed API edge features. I pick from requirements, not defaults.",
+    "tag": "d10"
+  },
+  {
+    "front": "Trap — d10 / d10-q05: what's wrong with this instinct?",
+    "back": "Using API Gateway for every internal service and paying latency/cost without using its features.",
+    "tag": "d10-trap"
+  },
+  {
+    "front": "How would you keep application servers private while exposing the system securely to the internet?",
+    "back": "Internet stops at the ALB. Apps and data stores stay in private subnets with SG chains ALB→app→RDS, egress via NAT or VPC endpoints, and admin access via SSM—not open SSH.",
+    "tag": "d10"
+  },
+  {
+    "front": "Trap — d10 / d10-q06: what's wrong with this instinct?",
+    "back": "Assigning public IPs to ECS tasks 'so health checks work' (fix the ALB health check path instead).",
+    "tag": "d10-trap"
+  },
+  {
+    "front": "How would you design autoscaling for a backend where CPU is not a reliable signal of demand?",
+    "back": "When CPU lies, I scale on queue lag or concurrent requests via custom CloudWatch metrics, with slow scale-in and a floor capacity. CPU stays a backup signal only.",
+    "tag": "d10"
+  },
+  {
+    "front": "Trap — d10 / d10-q07: what's wrong with this instinct?",
+    "back": "Only scaling on CPU for an I/O-bound FastAPI service.",
+    "tag": "d10-trap"
+  },
+  {
+    "front": "How would you make an EC2-based deployment highly available across Availability Zones?",
+    "back": "Multi-AZ HA means ASG+ALB across subnets, Multi-AZ data stores, and enough spare capacity that losing one AZ still meets SLO. Identical Launch Templates so replacements are boring.",
+    "tag": "d10"
+  },
+  {
+    "front": "Trap — d10 / d10-q08: what's wrong with this instinct?",
+    "back": "Two instances in the same AZ thinking that's HA.",
+    "tag": "d10-trap"
+  },
+  {
+    "front": "How would you design zero-downtime deployment on EC2 behind an ALB?",
+    "back": "Zero-downtime on EC2+ALB is drain-then-kill: healthy new targets first, deregistration delay covering in-flight p99, and SIGTERM-aware processes. Never terminate before the ALB stops sending traffic.",
+    "tag": "d10"
+  },
+  {
+    "front": "Trap — d10 / d10-q09: what's wrong with this instinct?",
+    "back": "ASG terminating instances immediately on refresh without draining.",
+    "tag": "d10-trap"
+  },
+  {
+    "front": "One AWS Availability Zone fails during peak traffic. What components must fail over and what should you test beforehand?",
+    "back": "AZ failure is a capacity and failover event: remaining AZ apps take traffic, RDS/Redis fail over with retries, and NAT/IP capacity must already be sized. I'd prove it with a game day, not a slide.",
+    "tag": "d10"
+  },
+  {
+    "front": "Trap — d10 / d10-q10: what's wrong with this instinct?",
+    "back": "Assuming Multi-AZ RDS means zero connection errors (clients must reconnect).",
+    "tag": "d10-trap"
+  },
+  {
+    "front": "How would you secure a public FastAPI or NestJS API against common abuse and unauthorized access?",
+    "back": "Public APIs get defense in depth: TLS, authn, authz, validation, and rate limits at the edge and in the app. Deny by default and never trust client-supplied tenancy or roles.",
+    "tag": "d11"
+  },
+  {
+    "front": "Trap — d11 / d11-q01: what's wrong with this instinct?",
+    "back": "Only checking auth on the frontend.",
+    "tag": "d11-trap"
+  },
+  {
+    "front": "How would you design access-token and refresh-token handling for a large application?",
+    "back": "Short access JWTs plus rotating refresh tokens—refresh only hits the auth service, access is verified via JWKS. Rotation and short TTL limit the blast radius of theft.",
+    "tag": "d11"
+  },
+  {
+    "front": "Trap — d11 / d11-q02: what's wrong with this instinct?",
+    "back": "Week-long access tokens in localStorage.",
+    "tag": "d11-trap"
+  },
+  {
+    "front": "How would you revoke a refresh token or session without forcing every user to log in again?",
+    "back": "I revoke at session/family granularity: kill that refresh chain in the DB and denylist access jtis if needed. Short access TTLs mean other users keep working uninterrupted.",
+    "tag": "d11"
+  },
+  {
+    "front": "Trap — d11 / d11-q03: what's wrong with this instinct?",
+    "back": "Rotating the global JWT signing key to log out one user.",
+    "tag": "d11-trap"
+  },
+  {
+    "front": "How would you protect login and password-reset endpoints against brute-force attacks?",
+    "back": "Brute-force protection is layered rate limits, backoff/lockout, CAPTCHA at thresholds, and safe password-reset tokens—plus MFA for high privilege. Generic errors avoid account enumeration.",
+    "tag": "d11"
+  },
+  {
+    "front": "Trap — d11 / d11-q04: what's wrong with this instinct?",
+    "back": "Locking only by IP (easy to bypass with botnets) or only by account (easy DoS of a victim).",
+    "tag": "d11-trap"
+  },
+  {
+    "front": "How would you enforce tenant isolation so one SaaS customer can never access another customer's records?",
+    "back": "Isolation starts with tenant from the token, then every SQL and S3 key is scoped to it—ideally with Postgres RLS as a seatbelt. Client-sent tenant IDs are never authoritative.",
+    "tag": "d11"
+  },
+  {
+    "front": "Trap — d11 / d11-q05: what's wrong with this instinct?",
+    "back": "Looking up by resource UUID alone without tenant predicate.",
+    "tag": "d11-trap"
+  },
+  {
+    "front": "How would you design authorization when users can have both roles and resource-level permissions?",
+    "back": "Roles cover broad capabilities; relationships cover 'can edit this record'. One authorize() entry point on every mutation keeps FastAPI handlers honest and testable.",
+    "tag": "d11"
+  },
+  {
+    "front": "Trap — d11 / d11-q06: what's wrong with this instinct?",
+    "back": "Only checking roles and forgetting shared documents outside the role.",
+    "tag": "d11-trap"
+  },
+  {
+    "front": "How would you securely handle secrets for AWS credentials, database passwords, and third-party API keys?",
+    "back": "IAM roles beat access keys; Secrets Manager beats .env in git. Least privilege, rotation, and CloudTrail on secret reads are the baseline.",
+    "tag": "d11"
+  },
+  {
+    "front": "Trap — d11 / d11-q07: what's wrong with this instinct?",
+    "back": "Long-lived AWS keys in environment variables committed to the repo.",
+    "tag": "d11-trap"
+  },
+  {
+    "front": "A secret is accidentally committed to source control. What actions should follow?",
+    "back": "Rotate first—assume the secret is public. Then scrub history, audit access, redeploy, and add scanning so it can't happen silently again.",
+    "tag": "d11"
+  },
+  {
+    "front": "Trap — d11 / d11-q08: what's wrong with this instinct?",
+    "back": "Deleting the file in a new commit but leaving history intact with the secret.",
+    "tag": "d11-trap"
+  },
+  {
+    "front": "How would you protect a webhook endpoint from spoofed or replayed requests?",
+    "back": "Webhooks need HMAC over the raw body, a tight timestamp window, and event-id dedupe. Without that, anyone who can POST your URL can forge events.",
+    "tag": "d11"
+  },
+  {
+    "front": "Trap — d11 / d11-q09: what's wrong with this instinct?",
+    "back": "Verifying against JSON.dumps(parsed) instead of the raw bytes (canonicalization mismatch or bypass).",
+    "tag": "d11-trap"
+  },
+  {
+    "front": "How would you securely serve private images or documents stored in S3?",
+    "back": "Private bucket, authorize in FastAPI, then short-lived presigned GET—or CloudFront signed URLs at scale. No public-read ACLs on customer documents.",
+    "tag": "d11"
+  },
+  {
+    "front": "Trap — d11 / d11-q10: what's wrong with this instinct?",
+    "back": "Public-read bucket 'because the app needs to show images'.",
+    "tag": "d11-trap"
+  },
+  {
+    "front": "You are given a major new feature and two junior interns. How would you approach, decompose, delegate, review, and deliver it?",
+    "back": "I keep the risky design and integration, give juniors well-bounded slices with contracts, and review early so we don't discover architectural mistakes on merge day.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q01: what's wrong with this instinct?",
+    "back": "Throwing a vague epic at interns and disappearing into meetings.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "Requirements are ambiguous but the delivery date is fixed. How would you reduce risk before implementation?",
+    "back": "Fixed date plus ambiguity means write assumptions, confirm a thin slice, and protect irreversible decisions. I won't pretend uncertainty away or freeze until a perfect PRD.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q02: what's wrong with this instinct?",
+    "back": "Building three speculative variants 'just in case'.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "How would you break a large feature into tasks that junior developers can implement safely and independently?",
+    "back": "Juniors stay safe when contracts exist first and tasks are vertical, small, and copy an established pattern. Independence without interfaces is just parallel confusion.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q03: what's wrong with this instinct?",
+    "back": "Horizontal tasks that block on each other until the last day.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "What parts of the feature would you own personally and what would you delegate?",
+    "back": "I keep the irreversible and high-blast-radius decisions, delegate patterned implementation, and co-own anything that can corrupt data or leak tenants. Outcome stays on me.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q04: what's wrong with this instinct?",
+    "back": "Delegating everything then blaming juniors for architectural failure.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "A junior engineer proposes an architecture you believe will fail under scale. How would you handle the situation?",
+    "back": "I challenge with scenarios and numbers, not ego. We converge on a design that survives load, and the junior still feels authorship of the fix.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q05: what's wrong with this instinct?",
+    "back": "Publicly shutting them down without teaching.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "The ideal architecture needs six weeks but the business needs something in two weeks. How would you decide what to ship?",
+    "back": "Two weeks means a safe thin slice plus honest debt—not a fragile full vision. Invariants stay; polish and generality wait with a dated plan.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q06: what's wrong with this instinct?",
+    "back": "Heroically promising the six-week design in two weeks.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "A feature is almost complete when a major requirement changes. How would you reassess scope and implementation?",
+    "back": "Mid-flight change means pause, impact map, and explicit options with dates. I won't duct-tape incompatible requirements and call it done.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q07: what's wrong with this instinct?",
+    "back": "Quietly stretching nights to absorb infinite scope.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "Two engineers are building related components and their APIs are drifting apart. How would you prevent integration problems?",
+    "back": "Prevent drift with a checked-in contract and CI that fails when either side changes it unilaterally. Integration week should be boring.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q08: what's wrong with this instinct?",
+    "back": "Waiting until merge day to try the first end-to-end call.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "A production bug is discovered just before release. How would you decide whether to delay the release or proceed?",
+    "back": "Ship-or-delay is risk math: severity, blast radius, workaround, and rollback. I won't launch a known data-corrupting bug to hit a symbolic date.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q09: what's wrong with this instinct?",
+    "back": "Always ship because 'we can patch tomorrow'.",
+    "tag": "d12-trap"
+  },
+  {
+    "front": "How would you ensure a feature is operable in production, not just functionally correct in development?",
+    "back": "A feature isn't done until it has metrics, alerts, and a runbook. Functional demos in dev don't survive contact with production dependencies and real concurrency.",
+    "tag": "d12"
+  },
+  {
+    "front": "Trap — d12 / d12-q10: what's wrong with this instinct?",
+    "back": "Calling done when QA passed on staging with empty data.",
+    "tag": "d12-trap"
+  }
+]

@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redis, caching & rate limiting | Senior Backend Scenario Q&A</title>
+  <meta name="description" content="Senior Backend Scenario Q&amp;A — Redis, caching &amp; rate limiting. A sharp, crisp visual guide to John Ousterhout's Senior Backend Scenario Q&amp;A: complexity, deep modules, information hiding, comments &amp; naming — each idea in plain English then precise, with Python examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2314b8a6' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='3' width='20' height='8' rx='2'/><rect x='2' y='13' width='20' height='8' rx='2'/><path d='M6 7h.01M6 17h.01'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/senior-backend.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="domains" data-page="domains-redis" data-lesson="sb-d07">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Senior Backend Scenario Q&A home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/></svg></span>
+        <span class="brand-text"><b>Senior Backend Scenario Q&A</b><span>120 production scenarios · FastAPI-first</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home · roadmap</a>
+        <a class="nav-link" href="../method.html">Answer method</a>
+      </nav>
+      <nav class="nav-group is-domains" aria-label="Scenario domains">
+        <h4><span class="dot"></span>Scenario domains</h4>
+        <a class="nav-link" href="../domains/debugging.html">01 · Debugging</a>
+        <a class="nav-link" href="../domains/async.html">02 · Async</a>
+        <a class="nav-link" href="../domains/dependencies.html">03 · Dependencies</a>
+        <a class="nav-link" href="../domains/api-design.html">04 · API design</a>
+        <a class="nav-link" href="../domains/postgres.html">05 · PostgreSQL</a>
+        <a class="nav-link" href="../domains/mongodb.html">06 · MongoDB</a>
+        <a class="nav-link" href="../domains/redis.html">07 · Redis</a>
+        <a class="nav-link" href="../domains/kafka.html">08 · Kafka</a>
+        <a class="nav-link" href="../domains/distributed.html">09 · Distributed</a>
+        <a class="nav-link" href="../domains/aws-nginx.html">10 · AWS / Nginx</a>
+        <a class="nav-link" href="../domains/security.html">11 · Security</a>
+        <a class="nav-link" href="../domains/ownership.html">12 · Ownership</a>
+      </nav>
+      <nav class="nav-group is-practice" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../practice/drills.html">Rapid-fire drills</a>
+        <a class="nav-link" href="../practice/flashcards.html">Flashcards</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheets.html">Cheatsheets</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">Redis, caching &amp; rate limiting</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal">
+            <span class="eyebrow">Domain · d07</span>
+            <h1>Redis, Caching &amp; Rate Limiting</h1>
+            <p class="lead">Redis is for hot paths: cache-aside, counters, locks, and rate limits — not a second source of truth. Design for stampede, hot keys, and TTL freshness, and always plan what happens when Redis dies so PostgreSQL does not avalanche. Atomicity comes from INCR, MULTI/EXEC, or Lua — not from get-modify-set in application code.</p>
+          </section>
+
+          <section class="section reveal" id="primer">
+            <h2><span class="section-num">01</span> &nbsp;Decision cheat strip</h2>
+            <div class="cheat-strip">
+<div class="chip-card"><strong>Pattern</strong><span>Cache-aside: read Redis → miss → DB → SET TTL</span></div>
+<div class="chip-card"><strong>Stampede</strong><span>Lock / singleflight so one refreshes</span></div>
+<div class="chip-card"><strong>Hot key</strong><span>Local cache or shard keyspace (key:0..N)</span></div>
+<div class="chip-card"><strong>TTL</strong><span>Match freshness SLO; jitter to avoid sync expiry</span></div>
+<div class="chip-card"><strong>Rate limit</strong><span>Sliding window ZSET or INCR+EXPIRE</span></div>
+<div class="chip-card"><strong>Avalanche</strong><span>Timeouts, bulkheads, serve stale, shed load</span></div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="cards">
+            <h2><span class="section-num">02</span> &nbsp;Scenario cards (open → rehearse)</h2>
+            <p class="muted">Work closed-book first: say your structure out loud, then open the card. Mark the domain practiced when you can recite the “say it” lines cold.</p>
+
+<details class="sac reveal" id="d07-q01">
+  <summary><span class="sac-id">d07-q01</span><span class="sac-q">When should an API use Redis instead of querying PostgreSQL directly?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">When the same read is hot, tolerates slight staleness, and DB cost or latency dominates — not for every query by default.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Use Redis for high-QPS reads with stable keys (session, product config, permission bitsets, feed fragments) where TTL/staleness is acceptable.</li>
+<li>Keep PostgreSQL as source of truth for durable, transactional, strongly consistent writes and complex queries.</li>
+<li>Cache after measuring: p95 DB time, QPS, and hit-rate potential — don't cache unique one-off queries.</li>
+<li>Prefer cache-aside with explicit invalidation/TTL; avoid dual-writing critical money state only to Redis.</li>
+<li>Also use Redis for ephemeral coordination: rate limits, locks, short-lived idempotency keys.</li></ol>
+    
+    
+    <div class="sac-nest"><strong>Nest / Node:</strong> Inject a cache port in Nest providers so services don't scatter raw Redis calls.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Redis for hot, slightly stale reads and coordination. Postgres for truth and transactions — I cache when the hit rate and latency win are proven.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Caching everything including low-hit unique keys</li>
+<li>Treating Redis as the system of record for balances</li>
+<li>No TTL and no invalidation plan</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>What hit rate justifies the complexity?</li>
+<li>When would you use read replicas instead of Redis?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d07-q02">
+  <summary><span class="sac-id">d07-q02</span><span class="sac-q">Redis goes down during peak traffic. How should the application degrade?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Fail fast on Redis with timeouts, then either serve stale/local data, skip non-critical cache, or shed load — never unbounded synchronous fallback to the DB.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Short connect/command timeouts and circuit breaker around Redis so threads don't pile up.</li>
+<li>Decide policy per feature: fail-open (skip cache, hit DB with cap) vs fail-closed (rate limiter denies / feature disables).</li>
+<li>Protect PostgreSQL with concurrency limits, cached-in-process soft state, and load shedding on non-critical endpoints.</li>
+<li>Optionally serve last-known-good from local/memory cache with longer TTL during outage.</li>
+<li>Alert on Redis health and DB QPS spike; rehearse the degradation in game days.</li></ol>
+    
+    
+    <div class="sac-nest"><strong>Nest / Node:</strong> Separate Redis modules (cache vs rate-limit) so one policy doesn't blindly apply to both.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Redis down: timeout fast, degrade by feature, and cap DB fallback — an uncapped fallback is an outage multiplier.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Infinite retries to Redis on the request path</li>
+<li>Failing open on rate limiting (abuse flood)</li>
+<li>No circuit breaker → thread pool exhaustion</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>Should rate limiting fail open or closed?</li>
+<li>How do you warm the cache after Redis recovers?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d07-q03">
+  <summary><span class="sac-id">d07-q03</span><span class="sac-q">How would you implement cache-aside for a read-heavy endpoint?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Read Redis by key; on miss load Postgres, SET with TTL, return. Invalidate or overwrite on writes. Add stampede protection for hot keys.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Key design: versioned, namespaced keys including tenant/id (e.g. prod:user:{id}:profile:v2).</li>
+<li>Read path: GET → hit return; miss → DB → SET EX ttl → return.</li>
+<li>Write path: update DB then DEL/SET the key (invalidate or write-through); accept brief race windows consciously.</li>
+<li>Add jittered TTLs; singleflight/lock on miss for popular keys.</li>
+<li>Metrics: hit rate, miss latency, DB load on misses; negative-cache empty results carefully.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">sequenceDiagram
+  Client-&gt;&gt;API: GET
+  API-&gt;&gt;Redis: GET key
+  alt hit
+    Redis--&gt;&gt;API: value
+  else miss
+    API-&gt;&gt;Postgres: SELECT
+    API-&gt;&gt;Redis: SET EX
+  end
+  API--&gt;&gt;Client: response</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">val = redis.get(key)
+if val is None:
+    val = db.fetch()
+    redis.setex(key, ttl, serialize(val))
+return val</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Serialize JSON/msgpack consistently; include schema version in the key or payload.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Cache-aside: GET, miss to DB, SET with TTL; invalidate on write; singleflight so misses don't herd.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Caching without TTL</li>
+<li>Updating DB but forgetting invalidation</li>
+<li>Caching personalized responses under a shared key</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>Write-through vs cache-aside trade-offs?</li>
+<li>How do you handle null / not-found caching?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d07-q04">
+  <summary><span class="sac-id">d07-q04</span><span class="sac-q">How would you handle stale cache data after a PostgreSQL update?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Invalidate or overwrite the cache key in the same request after a successful DB commit — and accept TTL as a backstop for missed invalidations.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>After COMMIT, DELETE the affected keys (or SET the fresh value). Prefer explicit invalidation for correctness-sensitive data.</li>
+<li>Keep TTLs short enough that missed invalidations self-heal; use key versioning when payload shape changes.</li>
+<li>For multi-key entities, maintain a key inventory or hierarchical tags (careful: tag systems can be expensive).</li>
+<li>If using replicas, beware read-your-writes: invalidate then read primary, or version stamp the payload.</li>
+<li>Measure stale-read complaints; for strong freshness, skip cache on that path.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">async with db.transaction():
+    await db.update(...)
+await redis.delete(cache_key)  # after commit</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Hook invalidation in the repository/unit-of-work after commit callbacks.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Commit first, then invalidate or SET the new value. TTL is the safety net for races and missed deletes.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Invalidating before commit (rollback leaves hole or race)</li>
+<li>Infinite TTL with best-effort invalidation only</li>
+<li>Forgetting secondary keys derived from the entity</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you invalidate lists that contain the entity?</li>
+<li>Would CDC/outbox-driven invalidation help?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d07-q05">
+  <summary><span class="sac-id">d07-q05</span><span class="sac-q">What is a cache stampede scenario and how would you prevent it?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Stampede is many requests missing the same key at once and all hitting the DB. Prevent with singleflight, a lock, probabilistic early refresh, or serving stale while one refreshes.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Scenario: hot key TTL expires (or cold start) → N concurrent misses → N identical DB queries.</li>
+<li>Singleflight / request coalescing in-process: one loader, others wait.</li>
+<li>Distributed: SET lock key NX EX; winner loads DB and fills cache; losers wait/retry or serve stale.</li>
+<li>Probabilistic early expiration / soft TTL: refresh before hard expiry under load.</li>
+<li>Jitter TTLs so many keys don't expire in the same second; monitor miss spikes.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">ok = redis.set(f'lock:{key}', '1', nx=True, ex=5)
+if ok:
+    val = db.fetch()
+    redis.setex(key, ttl, val)
+    redis.delete(f'lock:{key}')
+else:
+    # wait briefly and GET again, or serve stale
+    ...</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> In multi-instance Node, in-process singleflight alone is not enough — need Redis NX lock or similar.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Stampede = thundering herd on miss. One refresher via lock or singleflight; others wait or get stale.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Only jittering TTL but not locking the hottest key</li>
+<li>Lock without TTL (deadlock if refresher dies)</li>
+<li>Retry loops without backoff while lock held</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How does 'serve stale-while-revalidate' work with Redis?</li>
+<li>What's the difference between stampede and hot-key CPU saturation?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d07-q06">
+  <summary><span class="sac-id">d07-q06</span><span class="sac-q">A popular Redis key becomes a hot key. How would you handle it?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">A hot key saturates one shard/CPU. I'd add a local in-process cache, or split the keyspace across N sibling keys and aggregate.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Confirm with Redis hot-key metrics / proxy stats / latency on one cluster node.</li>
+<li>L1 local cache (with short TTL) on app instances to absorb read QPS.</li>
+<li>Shard the key: value replicated on key:0..N-1 randomly read; for counters, INCR random shard and SUM on read (approximate or exact merge).</li>
+<li>Reconsider storing a huge value; compress or split fields.</li>
+<li>If Cluster mode, note hash-tag pinning can concentrate load — avoid accidental hot hash slots.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python"># read sharding for a hot blob
+shard = random.randint(0, N - 1)
+return redis.get(f'config:{shard}')</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Hot keys need L1 caching or key sharding — scaling the cluster alone won't help if one key owns one slot.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Adding Redis nodes without splitting the key</li>
+<li>Hash tags that force many hot keys onto one slot</li>
+<li>Global locks on the hot key for every read</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you shard a hot counter accurately?</li>
+<li>When is client-side caching (TRACKING) appropriate?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d07-q07">
+  <summary><span class="sac-id">d07-q07</span><span class="sac-q">How would you choose TTLs for data with different freshness requirements?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">TTL follows the business freshness SLO: seconds for volatile counters, minutes for profiles, hours for rare config — always with jitter and an invalidation story for critical updates.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Classify data: strict freshness (skip cache or TTL seconds + invalidate), eventual (minutes), static (hours/days).</li>
+<li>Set TTL slightly above typical update interval; use explicit DEL on writes for stricter paths.</li>
+<li>Add random jitter (±10–20%) to prevent synchronized expiry stampedes.</li>
+<li>Negative caching: short TTL for misses to avoid DB hammering on hot 404s.</li>
+<li>Review TTLs with hit-rate and stale-read metrics; document per-key-family policy.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">ttl = base_ttl + random.randint(0, jitter)</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>TTL is a freshness SLA. Short + invalidate for volatile data, longer for static, jitter everything, short negative cache for misses.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>One global TTL for all keys</li>
+<li>No jitter on millions of keys with the same expiry</li>
+<li>Eternal keys for data that does change</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you expire keys that are too large to scan with KEYS?</li>
+<li>Volatile-LRU vs allkeys-lru eviction — when does TTL still matter?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d07-q08">
+  <summary><span class="sac-id">d07-q08</span><span class="sac-q">How would you design a distributed per-user and per-IP rate limiter using Redis?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd use Redis atomic counters or a sliding-window ZSET, with separate keys for userId and IP, evaluated in the gateway/middleware before expensive work.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Fixed window: INCR key; on first INCR set EXPIRE windowSeconds; reject when count > limit (simple, bursty at boundaries).</li>
+<li>Sliding window: ZADD timestamps, ZREMRANGEBYSCORE old, ZCARD — more accurate; often via Lua for atomicity.</li>
+<li>Keys: rl:user:{id}:{bucket}, rl:ip:{ip}:{bucket}; apply both limits (AND).</li>
+<li>Fail-closed or fail-open policy when Redis is down — usually fail-closed for auth abuse paths.</li>
+<li>Return standard headers (remaining/reset); shard hot IP keys if under attack; observe top offenders.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text">-- simplified fixed window
+local c = redis.call('INCR', KEYS[1])
+if c == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+return c</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Apply in Nest guard/middleware before controllers; don't rely only on per-instance memory limits.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Per-user and per-IP keys with atomic INCR or sliding-window Lua, checked early in the middleware, with an explicit Redis-down policy.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Non-atomic get/set rate counters</li>
+<li>Only IP limits (NAT) or only user limits (pre-auth flood)</li>
+<li>Failing open on login endpoints during Redis outage</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>Token bucket vs sliding window?</li>
+<li>How do you rate-limit at API gateway vs app?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d07-q09">
+  <summary><span class="sac-id">d07-q09</span><span class="sac-q">Two application instances update the same Redis-based counter concurrently. How would you make the operation safe?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Use Redis atomic primitives — INCR/INCRBY or a Lua script — never GET, add in process, SET.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Prefer INCR/INCRBY/DECR for single counters; they are atomic across clients.</li>
+<li>For multi-key or conditional updates, use Lua (EVAL) or MULTI/EXEC transactions.</li>
+<li>Avoid read-modify-write in app code across instances — classic race.</li>
+<li>If absolute accuracy across Redis failover matters, understand Redis persistence/replication limits or keep durable counters in Postgres.</li>
+<li>Test with concurrent workers; monitor for script errors and key type mismatches.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">redis.incrby('metrics:signup', 1)
+# or Lua for compare-and-swap style logic</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>INCR or Lua — not get-add-set. Redis atomic ops are the concurrency control.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>GET + SET across instances</li>
+<li>Using MULTI without understanding WATCH for optimistic cases</li>
+<li>Storing counters only in Redis when finance needs auditability</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>When do you need Lua vs a single INCR?</li>
+<li>How does Redis Cluster affect multi-key Lua?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d07-q10">
+  <summary><span class="sac-id">d07-q10</span><span class="sac-q">How would you prevent a cache outage from causing a database avalanche?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Treat Redis failure as expected: circuit-break, admit only a bounded number of DB fallbacks, shed non-critical traffic, and keep a small local stale cache.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Timeouts + circuit breaker on Redis so the app fails fast instead of wedging.</li>
+<li>Bulkhead: limit concurrent DB queries on cache-miss/fallback paths (semaphore).</li>
+<li>Serve stale L1 content where safe; disable expensive list endpoints under degradation mode.</li>
+<li>Load shed / adaptive concurrency at the edge when DB saturation rises.</li>
+<li>Game-day: kill Redis in staging and verify DB QPS stays within ceiling; alert on fallback rate.</li></ol>
+    
+    
+    <div class="sac-nest"><strong>Nest / Node:</strong> Feature-flag 'degraded_mode' to flip caches off intentionally during incidents with known DB headroom.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Avalanche prevention is bounded fallback: breakers, semaphores, stale serve, and shedding — not 'just query Postgres.'</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Silent unlimited DB fallback</li>
+<li>Retry storms compounding load</li>
+<li>No distinction between critical and optional reads</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you size the fallback semaphore?</li>
+<li>What's the role of request coalescing during partial outages?</li></ul>
+    
+  </div>
+</details>
+          </section>
+
+          <section class="section reveal" id="check">
+            <h2><span class="section-num">03</span> &nbsp;Self-check</h2>
+<div class="quiz">
+      <div class="quiz-q">Cache-aside on read means:</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>App reads cache, on miss loads DB and populates cache</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>DB trigger always writes Redis before commit</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Redis replaces PostgreSQL as system of record</button>
+      <div class="quiz-explain">Cache-aside keeps the app in control of read path population; DB remains source of truth.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">Best primitive for an atomic counter across instances?</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>INCR / INCRBY (or Lua if multi-key logic)</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>GET, add in app, SET</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Separate Redis key per instance without merge</button>
+      <div class="quiz-explain">INCR is atomic server-side; get-modify-set races across instances.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">Cache stampede is:</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Many clients miss the same key and stampede the DB</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Redis replication lag only</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>TTL jitter alone causing writes</button>
+      <div class="quiz-explain">Synchronized expiry or cold start causes thundering herd on the origin.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">Redis outage protection should include:</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Fail-open/closed policy, timeouts, and DB load shedding</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Unlimited DB fallback with no concurrency cap</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Crash the app until Redis returns</button>
+      <div class="quiz-explain">Degrade deliberately; uncapped DB fallback creates an avalanche.</div>
+    </div>
+          </section>
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../domains/mongodb.html"><span class="pn-k">Previous</span><span class="pn-t">MongoDB modeling &amp; scaling</span></a>
+            <a class="next" href="../domains/kafka.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Kafka &amp; event-driven systems</span></a>
+          </nav>
+        </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#primer">Decision cheat strip</a>
+          <a href="#cards">Scenario cards (open → rehearse)</a>
+          <a href="#check">Self-check</a>
+        </nav>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Senior Backend Scenario Q&A &middot; Scenario interview Q&amp;A · FastAPI-first · Nest notes</span>
+        <span class="fmono">Built to open offline &middot; Sep 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
+</body>
+</html>

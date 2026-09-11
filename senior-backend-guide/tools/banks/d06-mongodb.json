@@ -1,0 +1,334 @@
+{
+  "id": "d06",
+  "slug": "mongodb",
+  "title": "MongoDB: Modeling, Indexing & Scaling",
+  "primer": "MongoDB performance is query-driven: indexes follow real filters and sort keys, not the ER diagram. Embedding wins for co-accessed bounded data; references win when data is shared, large, or unbounded. At scale, shard key cardinality and hotspot avoidance matter more than 'just add shards,' and scatter-gather queries punish bad access patterns.",
+  "cheatStrip": [
+    {"k": "Slow find", "v": "explain('executionStats') → IXSCAN vs COLLSCAN"},
+    {"k": "Model", "v": "Embed bounded co-read data; ref shared/unbounded"},
+    {"k": "Arrays", "v": "Cap size; bucket or child collection if unbounded"},
+    {"k": "Shard key", "v": "High cardinality + even write distribution"},
+    {"k": "Scatter/gather", "v": "Query lacks shard key → fans out to all shards"},
+    {"k": "Migrations", "v": "Batched bulkWrite with resume token / _id cursor"}
+  ],
+  "quiz": [
+    {
+      "q": "What makes an unbounded array dangerous in a document?",
+      "options": [
+        {"t": "Document growth, expensive updates, and 16MB limit risk", "ok": true},
+        {"t": "MongoDB cannot index array fields", "ok": false},
+        {"t": "Arrays disable sharding entirely", "ok": false}
+      ],
+      "explain": "Growing arrays bloat documents, slow updates/rewrites, and can hit the 16MB BSON limit."
+    },
+    {
+      "q": "A query without the shard key in a sharded cluster typically:",
+      "options": [
+        {"t": "Scatter-gathers across shards", "ok": true},
+        {"t": "Automatically routes to one shard via _id", "ok": false},
+        {"t": "Is rejected by mongos", "ok": false}
+      ],
+      "explain": "Without shard-key equality (or a selective prefix), mongos must query many/all shards."
+    },
+    {
+      "q": "Best first step for a slow frequent query on 100M docs?",
+      "options": [
+        {"t": "explain() and confirm index use / docs examined", "ok": true},
+        {"t": "Immediately reshard the collection", "ok": false},
+        {"t": "Switch the entire app to aggregation", "ok": false}
+      ],
+      "explain": "Prove COLLSCAN vs IXSCAN and examine ratio before bigger changes."
+    },
+    {
+      "q": "Tenant isolation 'shared collection + tenantId' needs:",
+      "options": [
+        {"t": "tenantId on every query and compound indexes starting with it", "ok": true},
+        {"t": "Only application UI filtering", "ok": false},
+        {"t": "A separate MongoDB process per HTTP request", "ok": false}
+      ],
+      "explain": "Defense in depth: query predicates, indexes, and preferably enforced filters in the data access layer."
+    }
+  ],
+  "questions": [
+    {
+      "id": "d06-q01",
+      "n": 1,
+      "question": "A MongoDB collection has 100 million documents and a frequently used query became slow. What would you inspect first?",
+      "first30s": "I would capture the exact filter/sort/projection, run explain('executionStats'), and check whether we still hit an index or started scanning millions of docs.",
+      "modelAnswer": [
+        "Confirm the query shape from production logs (filter, sort, collation, hint) — small predicate changes kill index use.",
+        "Run explain('executionStats'): winning plan, IXSCAN vs COLLSCAN, keysExamined / docsExamined / nReturned ratio.",
+        "Check index list and usage (existing indexes, partial/sparse, ESR rule: Equality, Sort, Range).",
+        "Look at working set vs RAM, replication lag, and whether the collection recently grew past cache.",
+        "Fix with a compound index matching the query, covered projection if possible, then re-measure; only then consider schema or shard changes."
+      ],
+      "sayIt": "First explain executionStats. If docsExamined ≫ nReturned, the index or query shape is wrong — I fix that before talking about sharding.",
+      "mermaid": "",
+      "code": "db.orders.find({ status: 'open', customerId: 42 })\n  .sort({ createdAt: -1 })\n  .explain('executionStats')",
+      "codeLang": "text",
+      "nestNote": "Log slow queries with filter keys (not necessarily full PII values) from the Mongo driver.",
+      "traps": [
+        "Adding indexes blindly without explain",
+        "Sorting in memory because the index doesn't include the sort key",
+        "Blaming 'Mongo is slow' when the query is a collection scan"
+      ],
+      "followUps": [
+        "What is a covered query?",
+        "How do you find unused indexes safely?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d06-q02",
+      "n": 2,
+      "question": "How would you decide between embedding and referencing for a MongoDB document model?",
+      "first30s": "Embed when data is read together, has clear ownership, and stays bounded. Reference when shared, independently updated, or unbounded.",
+      "modelAnswer": [
+        "Ask access patterns: one read should ideally get what the API needs — embed those fields.",
+        "Embed: address on order, small config blobs, bounded comment previews — atomic updates with the parent.",
+        "Reference: users shared across docs, large media metadata, infinite event histories.",
+        "Hybrid: embed a denormalized snapshot (product name at order time) and keep a reference for the source of truth.",
+        "Revisit when document size, update contention, or fan-out updates become painful."
+      ],
+      "sayIt": "Modeling follows queries. Embed co-read bounded data; reference shared or unbounded data — and denormalize snapshots when history must not change.",
+      "mermaid": "",
+      "code": "// Embed bounded line items on order\n// { _id, customerId, items: [{ sku, qty, price }] }\n// Reference unbounded events\n// order_events: { orderId, type, at }",
+      "codeLang": "text",
+      "nestNote": "Avoid generic repository patterns that force relational joins via $lookup everywhere.",
+      "traps": [
+        "Embedding unbounded arrays 'for convenience'",
+        "Referencing everything and $lookup-joining like SQL by default",
+        "Forgetting denormalized snapshots go stale on purpose (or not)"
+      ],
+      "followUps": [
+        "When is $lookup acceptable in hot paths?",
+        "How do you update denormalized fields across many documents?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d06-q03",
+      "n": 3,
+      "question": "An aggregation pipeline is slow in production. How would you identify the expensive stage and optimize it?",
+      "first30s": "I explain the aggregation, find the stage with the biggest time/docs, and push $match/$sort early with indexes — avoid blowing up with $lookup or unbounded $group.",
+      "modelAnswer": [
+        "Run aggregate([...], { explain: true }) / explain('executionStats') and identify costly stages.",
+        "Move selective $match (and $sort+$limit) as early as possible so later stages see fewer docs; ensure indexes support that match/sort.",
+        "Watch $lookup (N+1 style blowups), $unwind on large arrays, and $group spilling to disk.",
+        "Project only needed fields early; avoid returning huge intermediate documents.",
+        "Consider pre-aggregations, materialized collections, or changing the schema if the pipeline is a permanent hot path."
+      ],
+      "sayIt": "Find the expensive stage, filter early with an index, and treat $lookup/$unwind/$group as suspects until proven cheap.",
+      "mermaid": "",
+      "code": "db.orders.aggregate([\n  { $match: { createdAt: { $gte: ISODate('2026-01-01') } } },\n  { $group: { _id: '$status', n: { $sum: 1 } } }\n], { explain: true })",
+      "codeLang": "text",
+      "nestNote": "Prefer indexed finds for simple queries; aggregation is for multi-stage transforms.",
+      "traps": [
+        "$match after $lookup on the full collection",
+        "Using aggregation when a compound index + find would suffice",
+        "Ignoring allowDiskUse as a permanent crutch"
+      ],
+      "followUps": [
+        "How do you index for $match + $sort + $limit?",
+        "When would you use a materialized view collection?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d06-q04",
+      "n": 4,
+      "question": "How would you choose MongoDB indexes from real query patterns rather than from the schema alone?",
+      "first30s": "I inventory the top queries by frequency and latency, then design compound indexes for those predicates — schema fields alone don't tell me selectivity or sort order.",
+      "modelAnswer": [
+        "Collect slow/query logs or APM: filter keys, sort, projection, frequency.",
+        "Apply ESR: Equality fields first, then Sort, then Range — build compound indexes accordingly.",
+        "Prefer one compound index that serves a critical query over many single-field indexes.",
+        "Use partial indexes for hot subsets (e.g. status: 'open') and TTL indexes for expiring data.",
+        "Drop unused indexes after verifying; every index costs write amplification and RAM."
+      ],
+      "sayIt": "Indexes follow the workload. I rank real queries, build compound keys with ESR, and delete indexes that only look good on the schema.",
+      "mermaid": "",
+      "code": "// Query: { tenantId, status } sort createdAt\ndb.orders.createIndex({ tenantId: 1, status: 1, createdAt: -1 })",
+      "codeLang": "text",
+      "nestNote": "Review indexes in PR checklist whenever a new repository query is added.",
+      "traps": [
+        "Indexing every field 'just in case'",
+        "Left-prefix mistakes (index unused because equality order wrong)",
+        "Ignoring collation / case-insensitive needs"
+      ],
+      "followUps": [
+        "How do multikey indexes on arrays behave?",
+        "What's the cost of too many indexes on a write-heavy collection?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d06-q05",
+      "n": 5,
+      "question": "A document contains an array that grows indefinitely and is frequently queried. How would you redesign the model?",
+      "first30s": "Unbounded arrays are a modeling smell — I'd move events into a child collection keyed by parent id, or bucket by time, and keep only a bounded recent slice embedded if needed.",
+      "modelAnswer": [
+        "Diagnose: document size growth, slow $push/$pull, multikey index bloat, risk of 16MB limit.",
+        "Extract the array into a separate collection: { parentId, …, createdAt } with indexes on parentId + createdAt.",
+        "Optionally keep a bounded embedded preview (last N) for fast reads of the parent.",
+        "For high-volume time series, use bucketing (one doc per day/hour) instead of one mega-array.",
+        "Migrate with batched reads/writes; update queries to page the child collection."
+      ],
+      "sayIt": "Infinite arrays don't belong in one document. Child collection or time buckets, maybe a small embedded preview for the hot read.",
+      "mermaid": "",
+      "code": "// Before: { _id, events: [ ...growing ] }\n// After:\n// parent: { _id, lastEvents: [ /* max 20 */ ] }\n// events: { parentId, type, at } indexed { parentId: 1, at: -1 }",
+      "codeLang": "text",
+      "nestNote": "API pagination should target the events collection, not load the whole parent.",
+      "traps": [
+        "Capping with $slice in queries but still storing unbounded data",
+        "Using $unwind on huge arrays in hot aggregations",
+        "One document per user that accumulates lifetime history"
+      ],
+      "followUps": [
+        "How do you migrate without dual-write races?",
+        "When are bucket patterns better than one-doc-per-event?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d06-q06",
+      "n": 6,
+      "question": "How would you choose a shard key for a high-write MongoDB workload?",
+      "first30s": "I need high cardinality and even write distribution so inserts don't hammer one chunk/shard, while still supporting targeted queries with that key.",
+      "modelAnswer": [
+        "List write pattern and top queries that must be targeted (avoid scatter-gather on hot paths).",
+        "Prefer a key with high cardinality and monotonic-write awareness — pure increasing _id/timestamps can hotspot on one shard.",
+        "Common pattern: { tenantId, _id } or hashed field when range queries aren't needed; compound keys for tenant isolation + uniqueness.",
+        "Avoid low-cardinality keys (status, country) that create jumbo hot chunks.",
+        "Load-test distribution; plan for resharding cost if the key is wrong — choosing carefully beats early sharding."
+      ],
+      "sayIt": "Shard key = cardinality + even writes + targeted reads. I won't shard on status or plain timestamps that create hot shards.",
+      "mermaid": "",
+      "code": "// Example: tenant-scoped compound shard key\nsh.shardCollection('app.orders', { tenantId: 1, _id: 1 })",
+      "codeLang": "text",
+      "nestNote": "Include shard key fields in repository query helpers so developers can't omit them easily.",
+      "traps": [
+        "Sharding on low-cardinality fields",
+        "Assuming more shards fix a hotspot key",
+        "Picking a key that forces scatter-gather on every API read"
+      ],
+      "followUps": [
+        "Hashed vs ranged shard keys — trade-offs?",
+        "What is a jumbo chunk?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d06-q07",
+      "n": 7,
+      "question": "What characteristics can make a MongoDB shard key a hotspot?",
+      "first30s": "Low cardinality, monotonically increasing values, or a popular tenant/key that attracts most writes — all funnel inserts to one chunk or shard.",
+      "modelAnswer": [
+        "Monotonic keys (Date, ObjectId time portion, auto-inc) send new writes to the highest chunk — right-hand hotspot.",
+        "Low cardinality (enum status, boolean) creates few fat chunks that can't split usefully.",
+        "Skewed real-world distribution: one celebrity tenantId dominates traffic.",
+        "Hot documents updated constantly on one shard key value.",
+        "Mitigations: hashed keys, compound keys with high-cardinality suffix, isolate whales, or rethink access patterns."
+      ],
+      "sayIt": "Hotspots come from monotonic inserts, low cardinality, or traffic skew. The key must spread writes, not just unique them.",
+      "mermaid": "",
+      "code": "",
+      "codeLang": "text",
+      "nestNote": "",
+      "traps": [
+        "Thinking 'unique' equals 'well distributed'",
+        "Hashing away range queries you still need without a plan",
+        "Ignoring one mega-tenant after choosing tenantId alone"
+      ],
+      "followUps": [
+        "How do you detect imbalance across shards in metrics?",
+        "Can you change a shard key later and what does it cost?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d06-q08",
+      "n": 8,
+      "question": "A query becomes scatter/gather in a sharded cluster. What does that mean for performance and how would you reduce it?",
+      "first30s": "Scatter-gather means mongos fans the query to many/all shards and merges results — latency and load scale with shard count. I reduce it by including the shard key in queries or redesigning the key/access path.",
+      "modelAnswer": [
+        "Confirm in explain: shards touched, sorting/merging on mongos, high cumulative docs examined.",
+        "Add shard-key equality (or selective prefix) to hot queries so they become targeted.",
+        "For pagination/sort without shard key, expect merge cost — prefer targeted queries or precomputed views.",
+        "If the business query can never include the shard key, reconsider shard key or duplicate data into a query-optimized collection.",
+        "Monitor mongos CPU and per-shard ops; scatter-gather under load becomes a cluster-wide amplification bug."
+      ],
+      "sayIt": "Scatter-gather fans out to every shard. Hot paths must be targeted by shard key — otherwise each read taxes the whole cluster.",
+      "mermaid": "",
+      "code": "// Targeted: includes shard key\ndb.orders.find({ tenantId: 'acme', _id: orderId })\n// Scatter: missing tenantId on sharded { tenantId: 1, _id: 1 }",
+      "codeLang": "text",
+      "nestNote": "Lint or wrapper: require tenantId in find criteria for sharded tenant collections.",
+      "traps": [
+        "Assuming secondary indexes make queries targeted (they don't replace shard key routing)",
+        "Adding shards to 'fix' scatter-gather (often makes it worse)",
+        "Sorting globally without limits on scatter queries"
+      ],
+      "followUps": [
+        "How does mongos merge sorted results?",
+        "When is scatter-gather acceptable?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d06-q09",
+      "n": 9,
+      "question": "You need to update tens of millions of MongoDB documents. How would you make the migration safe, resumable, and observable?",
+      "first30s": "Batched bulkWrite by _id ranges with a checkpoint, idempotent updates, rate limits, and metrics — never one multi-update that can't resume.",
+      "modelAnswer": [
+        "Design idempotent document transforms (safe to re-run) and a migration version field if needed.",
+        "Iterate with a cursor/_id range; bulkWrite ordered:false in batches (e.g. 500–1000); persist lastProcessedId checkpoint.",
+        "Throttle (sleep/token bucket) to protect WT cache and replication lag; pause when lag or CPU exceeds SLO.",
+        "Observe: documents/sec, errors, lag, percent complete; dead-letter failed _ids.",
+        "Verify with sampling/checksums; support resume after crash from checkpoint."
+      ],
+      "sayIt": "Big migrations are checkpointed bulkWrite loops — idempotent, throttled, observable, and resumable from last _id.",
+      "mermaid": "",
+      "code": "let lastId = checkpoint.load();\nwhile (true) {\n  const batch = await col.find({ _id: { $gt: lastId } }).sort({ _id: 1 }).limit(1000).toArray();\n  if (!batch.length) break;\n  await col.bulkWrite(batch.map(doc => ({ updateOne: { filter: { _id: doc._id }, update: { $set: { … } } } })), { ordered: false });\n  lastId = batch[batch.length - 1]._id;\n  checkpoint.save(lastId);\n}",
+      "codeLang": "python",
+      "nestNote": "Run as a worker job with lock so two migrators don't double-load the cluster.",
+      "traps": [
+        "updateMany on the whole collection with no resume story",
+        "Unordered bulk without tracking per-doc failures",
+        "Migrating at full speed until secondary lag pages someone"
+      ],
+      "followUps": [
+        "How do you dual-write during expand-contract in Mongo?",
+        "When would you use change streams for migration?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d06-q10",
+      "n": 10,
+      "question": "How would you design multi-tenant data isolation in MongoDB?",
+      "first30s": "Choose isolation tier: shared collection with tenantId, database-per-tenant, or cluster-per-tenant for the noisiest/compliance-heavy customers — enforce tenant predicates in every query.",
+      "modelAnswer": [
+        "Default: shared collection(s) with tenantId on every document; compound indexes starting with tenantId; shard key often includes tenantId.",
+        "Enforce isolation in the data access layer (mandatory filter), not only in controllers; consider atlas/server-side validation or wrappers.",
+        "Stronger isolation: separate database per tenant for compliance/noisy neighbors; highest: dedicated cluster.",
+        "Never trust client-supplied tenantId alone — bind from authenticated session.",
+        "Test for cross-tenant leakage; audit queries missing tenantId; watch jumbo tenants for hotspot/shard skew."
+      ],
+      "sayIt": "tenantId on every doc and every query, indexes and shard key aligned, auth-bound tenant — escalate to DB- or cluster-per-tenant when compliance or noise demands it.",
+      "mermaid": "",
+      "code": "db.orders.createIndex({ tenantId: 1, createdAt: -1 })\ndb.orders.find({ tenantId: auth.tenantId, … })",
+      "codeLang": "text",
+      "nestNote": "Nest middleware/CLS can inject tenantId into repositories so handlers can't omit it.",
+      "traps": [
+        "Filtering tenant only in the UI",
+        "Unique indexes that aren't tenant-scoped (email global vs per-tenant)",
+        "One mega-tenant melting a shared shard"
+      ],
+      "followUps": [
+        "How do unique constraints work per tenant?",
+        "When do you move a tenant to its own database?"
+      ],
+      "links": []
+    }
+  ]
+}

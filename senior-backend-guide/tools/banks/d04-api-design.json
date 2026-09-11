@@ -1,0 +1,364 @@
+{
+  "id": "d04",
+  "slug": "api-design",
+  "title": "API Design & Backend Architecture",
+  "primer": "API design questions test whether you protect correctness under retries, scale reads without OFFSET tax, and keep controllers thin. Interviewers listen for idempotency keys, cursor pagination, async jobs for long work, and consistent error contracts. Seniors separate validation, business, dependency, and unexpected failures so clients and on-call can act differently.",
+  "cheatStrip": [
+    {"k": "Idempotency-Key", "v": "Client-supplied key + server unique constraint for safe POST retries"},
+    {"k": "Long work", "v": "202 + job id + poll/webhook — never hold HTTP for minutes"},
+    {"k": "Cursor > offset", "v": "Keyset/cursor for large/stable pages; offset drifts and gets slow"},
+    {"k": "Error envelope", "v": "Stable code, message, details, correlation_id across FastAPI/Nest"},
+    {"k": "Thin controllers", "v": "HTTP in, DTO validation, call service/use-case; no SQL in routes"},
+    {"k": "Sync vs async", "v": "Sync only what the user must know before response; else queue"}
+  ],
+  "quiz": [
+    {
+      "q": "A create-order POST may be retried by the client after a timeout. What do you require?",
+      "options": [
+        {"t": "An Idempotency-Key (or equivalent) persisted with a unique constraint", "ok": true},
+        {"t": "Clients must never retry POST", "ok": false},
+        {"t": "Only a random order id generated after the insert", "ok": false}
+      ],
+      "explain": "Retries need a stable key so the server returns the original result instead of creating duplicates."
+    },
+    {
+      "q": "Why avoid OFFSET 10_000_000 on a huge table?",
+      "options": [
+        {"t": "The database still walks/skips many rows; cost grows with offset", "ok": true},
+        {"t": "SQL forbids large offsets", "ok": false},
+        {"t": "Cursors cannot express page size", "ok": false}
+      ],
+      "explain": "Large OFFSET is O(offset) work on typical plans; keyset/cursor seeks by indexed columns."
+    },
+    {
+      "q": "A report takes 20 minutes. Best HTTP shape?",
+      "options": [
+        {"t": "POST returns 202 with job id; client polls status or receives webhook", "ok": true},
+        {"t": "Keep the request open for 20 minutes", "ok": false},
+        {"t": "Return 200 with an empty body and email eventually", "ok": false}
+      ],
+      "explain": "Proxies and clients time out long requests; async job APIs are the standard pattern."
+    },
+    {
+      "q": "Where should business rules live in a large FastAPI/Nest app?",
+      "options": [
+        {"t": "In application/service (use-case) layer, not controllers", "ok": true},
+        {"t": "Only in route handlers for locality", "ok": false},
+        {"t": "Only in the database as triggers", "ok": false}
+      ],
+      "explain": "Controllers handle transport; domain/application services own rules so they stay testable and reusable."
+    }
+  ],
+  "questions": [
+    {
+      "id": "d04-q01",
+      "n": 1,
+      "question": "How would you design an idempotent create-order API?",
+      "first30s": "Clients will retry — so create-order needs an Idempotency-Key scoped to the intent, durable dedupe, and a deterministic response on replay. I'll sketch header, unique constraint, request hash, and state machine before talking about Kafka or microservices.",
+      "modelAnswer": [
+        "Require Idempotency-Key header (UUID from client) on POST /orders.",
+        "Begin transaction: insert into idempotency_keys(key, request_hash, status) with UNIQUE(key).",
+        "If key exists with same hash, return the stored order response (200/201 as originally).",
+        "If key exists with different hash, return 409 conflict.",
+        "Create order row + reserve inventory in the same transaction or with compensating workflow.",
+        "Call payment with the same idempotency key; keep order pending until paid if needed.",
+        "Return 201 with order id and Location; persist response body for replays.",
+        "Expire keys after a retention window (e.g. 24–72h) with care for late retries."
+      ],
+      "sayIt": "Idempotent create-order is a durable key plus unique constraint, not hope. Same key and body returns the same order; same key different body is 409; payments reuse the key so retries don't double-charge.",
+      "mermaid": "",
+      "code": "from fastapi import FastAPI, Header, HTTPException, Response\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass OrderIn(BaseModel):\n    sku: str\n    qty: int\n\n@app.post(\"/orders\", status_code=201)\nasync def create_order(body: OrderIn, response: Response, idempotency_key: str = Header(...)):\n    row = await repo.get_idempotency(idempotency_key)\n    if row:\n        if row.hash != body.model_dump_json():\n            raise HTTPException(409, detail=\"Idempotency key reuse with different body\")\n        response.status_code = row.status_code\n        return row.body\n    order = await repo.create_order(body, idempotency_key)\n    return order",
+      "codeLang": "python",
+      "nestNote": "Nest: IdempotencyInterceptor reads header, uses a repository with UNIQUE constraint; controllers stay free of dedupe logic.",
+      "traps": [
+        "Generating the idempotency key on the server per attempt",
+        "Deduping only in Redis without considering eviction before retry window ends",
+        "Returning 500 on replay instead of the original 201 body"
+      ],
+      "followUps": [
+        "How do you handle partial failure after the order row inserts but before the response is stored?",
+        "Should GET /orders/{id} also be the recovery path for clients that lost the response?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d04-q02",
+      "n": 2,
+      "question": "An API operation can take 20 minutes. Would you keep the HTTP request open? How would you design it?",
+      "first30s": "I would not keep HTTP open for 20 minutes — ALB, nginx, and clients will time out. Accept the work asynchronously: 202, job id, status endpoint, and optional webhook or WebSocket for completion.",
+      "modelAnswer": [
+        "POST /reports returns 202 Accepted with { job_id, status_url } immediately after durable enqueue.",
+        "Persist job record (queued/running/succeeded/failed) before ACK to the queue when possible.",
+        "Workers process with heartbeat/lease so crashed workers redeliver safely (idempotent job handler).",
+        "GET /jobs/{id} returns status, progress, error, and result location when done.",
+        "Optional webhook/callback URL or subscribe channel for completion.",
+        "Align timeouts: request path milliseconds; workers free to run 20 minutes with their own deadlines.",
+        "Authorize status reads so users only see their jobs.",
+        "Provide cancel if business allows; document retention of results."
+      ],
+      "sayIt": "Twenty minutes does not belong on an open HTTP socket. I accept with 202, process in a worker, and let the client poll or get a webhook — proxies won't punish us with 504s.",
+      "mermaid": "flowchart LR\n  Client -->|POST| API\n  API -->|202_job_id| Client\n  API --> Queue\n  Queue --> Worker\n  Worker --> Store\n  Client -->|GET_status| API\n  API --> Store",
+      "code": "from fastapi import FastAPI, status\nfrom pydantic import BaseModel\nimport uuid\n\napp = FastAPI()\n\nclass ReportReq(BaseModel):\n    from_date: str\n    to_date: str\n\n@app.post(\"/reports\", status_code=status.HTTP_202_ACCEPTED)\nasync def start_report(body: ReportReq):\n    job_id = str(uuid.uuid4())\n    await jobs.insert(job_id, body, state=\"queued\")\n    await queue.enqueue(\"build_report\", job_id)\n    return {\"job_id\": job_id, \"status_url\": f\"/jobs/{job_id}\"}\n\n@app.get(\"/jobs/{job_id}\")\nasync def job_status(job_id: str):\n    return await jobs.get(job_id)",
+      "codeLang": "python",
+      "nestNote": "Nest + Bull/BullMQ: controller enqueues, processor updates job entity; gateway timeouts never see the 20-minute work.",
+      "traps": [
+        "Raising every proxy timeout to 30 minutes",
+        "Returning 200 before the job is durably queued",
+        "No authz on job status endpoints"
+      ],
+      "followUps": [
+        "Exactly-once vs at-least-once: how does the worker stay safe?",
+        "How do you expire or clean up large report artifacts?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d04-q03",
+      "n": 3,
+      "question": "How would you design an asynchronous job-submission API with job status tracking?",
+      "first30s": "Same spine as long operations: validated submit, durable job record, queue, worker updates, status API with clear terminal states. I'll also cover errors, retries, and idempotent submission so double-clicks don't spawn two jobs.",
+      "modelAnswer": [
+        "POST /jobs with payload schema validation; support Idempotency-Key for submit.",
+        "States: queued → running → succeeded | failed | canceled (explicit enum).",
+        "Store created_at, started_at, finished_at, progress, error_code, result_ref.",
+        "Workers update state with optimistic locking / lease to avoid double runners.",
+        "GET list with filters (mine, status); GET by id; optional SSE/websocket for progress.",
+        "Dead-letter after N failures; surface last_error to operators.",
+        "Metrics: queue depth, time-to-start, time-to-finish, failure rate.",
+        "OpenAPI documents status machine and polling recommendations (intervals, backoff)."
+      ],
+      "sayIt": "A job API is a state machine with a queue behind it. Clients get an id immediately, poll a boring status resource, and we make submission idempotent so retries don't duplicate work.",
+      "mermaid": "",
+      "code": "",
+      "codeLang": "python",
+      "nestNote": "Mirror with Bull job ids mapped to your DB row if you need richer queryable status than the queue UI provides.",
+      "traps": [
+        "Using only in-memory job maps on one instance",
+        "Ambiguous statuses like 'done' without success/failure",
+        "Letting clients poll every 50ms without guidance"
+      ],
+      "followUps": [
+        "How do you design cursor pagination for listing millions of historical jobs?",
+        "When do you choose webhooks over polling?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d04-q04",
+      "n": 4,
+      "question": "How would you design pagination for a table containing hundreds of millions of rows?",
+      "first30s": "I avoid deep OFFSET. Keyset/cursor pagination on a stable indexed sort (e.g. created_at, id), bounded page size, and no COUNT(*) on every request. Total counts, if needed, are estimated or async.",
+      "modelAnswer": [
+        "Choose a deterministic sort key: (created_at DESC, id DESC) with a matching index.",
+        "API: GET /items?limit=50&cursor=opaque_token encoding the last key seen.",
+        "Query: WHERE (created_at, id) < (:ts, :id) ORDER BY created_at DESC, id DESC LIMIT 51.",
+        "If 51 rows, return next_cursor from row 50; do not scan the rest of the table.",
+        "Keep cursors opaque/signed to prevent clients inventing filters that break indexes.",
+        "Avoid exact total count on hot paths; use estimated counts or omit.",
+        "For jumps to arbitrary page numbers, accept they are expensive or unsupported at this scale.",
+        "Monitor p95 of list queries; add covering indexes for common filters + sort."
+      ],
+      "sayIt": "At hundreds of millions of rows I paginate with keyset cursors on an indexed sort key, not OFFSET. Clients get a next cursor; I don't COUNT the galaxy on every page view.",
+      "mermaid": "",
+      "code": "-- Keyset page\nSELECT id, created_at, ...\nFROM orders\nWHERE (created_at, id) < ($1, $2)\nORDER BY created_at DESC, id DESC\nLIMIT 51;",
+      "codeLang": "text",
+      "nestNote": "",
+      "traps": [
+        "OFFSET/LIMIT deep paging in production",
+        "SELECT COUNT(*) FROM huge_table on every list call",
+        "Nullable sort columns that make keyset comparisons wrong"
+      ],
+      "followUps": [
+        "How do you paginate with additional filters (tenant_id, status) safely?",
+        "What happens when new rows insert at the top while the user pages?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d04-q05",
+      "n": 5,
+      "question": "When would you choose cursor pagination over offset pagination?",
+      "first30s": "Cursor when the dataset is large, pages are deep, or results must stay stable under inserts/deletes. Offset is fine for tiny admin tables or true 'page 7 of 10' UI on small collections.",
+      "modelAnswer": [
+        "Choose cursor/keyset for feeds, audit logs, orders, any high-cardinality table.",
+        "Offset causes drifting pages when rows insert/delete above the current page.",
+        "Offset cost grows with page depth; cursor seeks the index.",
+        "Offset is OK for low-cardinality admin UIs with total pages under a few hundred.",
+        "Hybrid: offset for page 1–3 UX, but most APIs should still expose cursors.",
+        "Cursors struggle with arbitrary 'jump to page 50' — product should prefer 'load more'/'next'.",
+        "Document that cursors may expire if encoding includes filters/versions.",
+        "Be honest with PM: infinite scroll maps to cursors; numbered pages at scale do not."
+      ],
+      "sayIt": "Cursors for scale and stability; offset for small, static lists. If users can page into the middle of millions of rows, offset is already the wrong design.",
+      "mermaid": "",
+      "code": "",
+      "codeLang": "python",
+      "nestNote": "",
+      "traps": [
+        "Defaulting to offset because ORMs make it easy",
+        "Exposing raw SQL offsets in public APIs",
+        "Promising total page counts on unbounded datasets"
+      ],
+      "followUps": [
+        "How do bidirectional cursors (prev/next) work with keyset pagination?",
+        "When would search-after in Elasticsearch mirror this choice?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d04-q06",
+      "n": 6,
+      "question": "How would you design consistent error responses across a large FastAPI/NestJS codebase?",
+      "first30s": "One error envelope and centralized handlers — not ad-hoc JSON per route. Every error carries a stable machine code, human message, optional details, HTTP status, and correlation id so clients and support share a vocabulary.",
+      "modelAnswer": [
+        "Define a schema: { error: { code, message, details?, correlation_id } }.",
+        "FastAPI: exception handlers for RequestValidationError, domain errors, and catch-all.",
+        "Nest: ExceptionFilter hierarchy mapping domain exceptions to HTTP.",
+        "Map codes to statuses once (VALIDATION_ERROR→400, NOT_FOUND→404, CONFLICT→409, DEPENDENCY→502/503).",
+        "Never leak stack traces or SQL to clients; log them server-side with the same correlation_id.",
+        "OpenAPI components.document the error schema; generate clients that understand codes.",
+        "Lint/code review: ban bare HTTPException(detail=str(e)) without a code.",
+        "Include correlation_id from middleware (X-Request-Id) in every error body."
+      ],
+      "sayIt": "Consistency comes from a single envelope and centralized handlers. Routes throw typed domain errors; the framework edge turns them into the same JSON shape with a correlation id.",
+      "mermaid": "",
+      "code": "from fastapi import FastAPI, Request\nfrom fastapi.responses import JSONResponse\n\napp = FastAPI()\n\nclass AppError(Exception):\n    def __init__(self, code: str, message: str, status_code: int = 400):\n        self.code, self.message, self.status_code = code, message, status_code\n\n@app.exception_handler(AppError)\nasync def app_error_handler(request: Request, exc: AppError):\n    cid = request.headers.get(\"x-request-id\")\n    return JSONResponse(\n        status_code=exc.status_code,\n        content={\"error\": {\"code\": exc.code, \"message\": exc.message, \"correlation_id\": cid}},\n    )",
+      "codeLang": "python",
+      "nestNote": "Implement a BaseExceptionFilter and domain exceptions (NotFoundError, ConflictError); avoid returning res.status().json({}) ad hoc in each controller.",
+      "traps": [
+        "Different error shapes per microservice with no translation at the BFF",
+        "Returning plain strings as bodies",
+        "Exposing internal exception class names as the public contract"
+      ],
+      "followUps": [
+        "How do you version error codes when messages change?",
+        "Where should localization of message happen — client or server?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d04-q07",
+      "n": 7,
+      "question": "How would you separate validation errors, business errors, dependency errors, and unexpected errors?",
+      "first30s": "Four classes, four client behaviors: 422/400 fix the request, 409/422 business rule, 502/503 retry or degrade, 500 file a bug. I'll map each to exception types, logs, and metrics so on-call knows whether to page the vendor or us.",
+      "modelAnswer": [
+        "Validation: schema/input problems → 400/422, code VALIDATION_ERROR, details as field list; no pager.",
+        "Business: conflict, insufficient funds, state machine violation → 409/422 with stable business codes.",
+        "Dependency: timeouts, 5xx from vendors → 502/503, code DEPENDENCY_UNAVAILABLE, maybe Retry-After.",
+        "Unexpected: unhandled bugs → 500, generic message, full stack in logs/Sentry with correlation_id.",
+        "Implement distinct exception types so handlers don't guess from strings.",
+        "Metrics labeled by class; alert on unexpected and dependency, not on validation spikes from bad bots.",
+        "Do not convert dependency failures into 500 — that misleads operators.",
+        "Document the taxonomy in the API guidelines for all teams."
+      ],
+      "sayIt": "Validation is the client's fault, business rules are domain conflicts, dependencies are someone else's SLO, and unexpected is ours. Separating them in types and status codes makes both UX and paging correct.",
+      "mermaid": "",
+      "code": "class ValidationAppError(AppError): ...\nclass BusinessAppError(AppError): ...\nclass DependencyAppError(AppError): ...\n# unexpected: bare Exception → 500 handler",
+      "codeLang": "python",
+      "nestNote": "HttpException vs custom BusinessException vs UpstreamException filters; map Axios errors to DependencyAppError in a single anti-corruption layer.",
+      "traps": [
+        "Returning 500 for 'sku out of stock'",
+        "Returning 400 for payment provider downtime",
+        "Logging validation errors at error level and waking on-call"
+      ],
+      "followUps": [
+        "Should business rule violations be 400 or 409? How do you decide?",
+        "How do multi-cause validation errors appear in the details array?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d04-q08",
+      "n": 8,
+      "question": "One endpoint is generating excessive database traffic. How would you redesign it?",
+      "first30s": "First measure: which queries, QPS, and whether it's N+1, missing cache, chatty pagination, or over-fetching. Then redesign with fewer round-trips — join/batch, cache, denormalize read models, or split the chatty UI need from the write path.",
+      "modelAnswer": [
+        "Trace the endpoint: count queries per request, rows read, and p95 DB time.",
+        "Fix N+1 with joinedload/selectinload or a single SQL join/aggregation.",
+        "Return only needed fields; stop SELECT * for list endpoints.",
+        "Add read-through cache (Redis) for hot keys with TTL and invalidation on writes.",
+        "Introduce a read model / materialized view if the endpoint aggregates many tables.",
+        "Batch APIs: allow clients to fetch many ids in one call instead of loops.",
+        "Rate-limit abusive patterns; add pagination cursor limits.",
+        "If fan-out is inherent, move to async precompute and serve snapshot."
+      ],
+      "sayIt": "I don't 'add indexes' blindly — I count queries per request. Usually it's N+1 or a hot list without cache; I batch, cache, or precompute a read model so one user action isn't a hundred SQL round-trips.",
+      "mermaid": "",
+      "code": "# Before: N+1\n# for order in orders: await get_customer(order.customer_id)\n# After: batch\ncustomers = await repo.get_customers({o.customer_id for o in orders})",
+      "codeLang": "python",
+      "nestNote": "TypeORM relations default can N+1 — use QueryBuilder joins or DataLoader-style batching in Nest resolvers/services.",
+      "traps": [
+        "Caching before understanding write invalidation",
+        "Adding replicas without reducing query count",
+        "Returning unbounded lists that force full table reads"
+      ],
+      "followUps": [
+        "How do you safely invalidate cache when the write path is a different service?",
+        "When is CQRS worth it for this endpoint?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d04-q09",
+      "n": 9,
+      "question": "How would you structure a large FastAPI or NestJS application so controllers do not contain business logic?",
+      "first30s": "Controllers are HTTP adapters: parse, authz, call an application service, map results/errors. Business rules live in services/use-cases/domain, with repositories at the edge — same idea in FastAPI modules and Nest providers.",
+      "modelAnswer": [
+        "Layers: transport (routers/controllers) → application/use-case services → domain → infrastructure (DB, HTTP clients).",
+        "FastAPI routers depend on service classes via Depends; no raw SQL in route functions.",
+        "Nest: controllers inject services; services inject repositories — avoid logic in controllers.",
+        "DTOs/schemas at the edge; domain entities/value objects inward.",
+        "Transactions orchestrated in application services, not in controllers.",
+        "Shared exception types bubble to centralized handlers.",
+        "Package by module/bounded context (orders, billing) rather than one giant utils.",
+        "Test use-cases without TestClient/HTTP when logic is heavy."
+      ],
+      "sayIt": "If a route function knows SQL and discount rules, the structure is wrong. Controllers adapt HTTP; services own business decisions; repositories speak to the database — FastAPI Depends and Nest DI both support that if we use them with discipline.",
+      "mermaid": "",
+      "code": "# FastAPI sketch\n@router.post(\"/orders\")\nasync def create(body: OrderIn, svc: OrderService = Depends(get_order_service)):\n    return await svc.create(body)",
+      "codeLang": "python",
+      "nestNote": "Nest naturally pushes logic to injectable services — keep controllers to one-liners that call this.orders.create(dto) and map to HTTP codes via filters.",
+      "traps": [
+        "Anemic 'service' that is just a pass-through while logic stays in the controller",
+        "Circular imports from dumping everything in one package",
+        "Reaching into other modules' repositories bypassing their services"
+      ],
+      "followUps": [
+        "How do you draw boundaries between modules in a modular monolith?",
+        "Where do you put authorization checks — controller, service, or both?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d04-q10",
+      "n": 10,
+      "question": "How would you decide what belongs in the synchronous request path versus asynchronous processing?",
+      "first30s": "Sync only what the user must know before the response to make a correct next decision. Everything else — emails, analytics, slow reports, non-critical enrichment — goes async with clear eventual consistency and failure handling.",
+      "modelAnswer": [
+        "Ask: does the client need this result to continue safely? If yes, sync (with tight timeouts).",
+        "Money/inventory invariants that must hold before 201 → sync transaction or explicit pending state.",
+        "Side effects user can learn later (email, notifications, search indexing) → queue.",
+        "Work longer than ~1–2s user budget → async job API.",
+        "Fan-out to many deps → often async or partial sync with degraded fields.",
+        "Document consistency: read-your-writes vs eventual for each feature.",
+        "Provide compensation/retry for async failures; surface dead letters.",
+        "Measure: if sync path p95 threatens SLO, reclassify work as async."
+      ],
+      "sayIt": "Synchronous means the user can't proceed without it. Emails, indexes, and 20-minute reports are async. I keep the request path short, durable where it matters, and honest about eventual consistency.",
+      "mermaid": "",
+      "code": "",
+      "codeLang": "python",
+      "nestNote": "Nest: await critical service calls in the request; @InjectQueue for mail/indexing. Don't await five non-critical providers in the controller.",
+      "traps": [
+        "Awaiting Slack notifications on the checkout path",
+        "Returning 201 before the durable write commits",
+        "Async everything including authz checks"
+      ],
+      "followUps": [
+        "How do you explain eventual consistency to product when search lags orders by seconds?",
+        "What belongs in an outbox pattern versus a simple queue publish after commit?"
+      ],
+      "links": []
+    }
+  ]
+}

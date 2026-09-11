@@ -1,0 +1,404 @@
+          <section class="hero reveal">
+            <span class="eyebrow">Domain · d01</span>
+            <h1>Production Debugging &amp; Incident Investigation</h1>
+            <p class="lead">Interviewers use production debugging to test whether you can isolate a failure hop-by-hop under pressure, not whether you memorize nginx flags. They want a calm structure: classify the status code, pick a correlation id, walk the path from edge to app, and prove each layer with logs and health signals. Seniors name concrete artifacts — ALB target health, nginx error.log, upstream timeouts, docker events — instead of vague 'check the logs'.</p>
+          </section>
+
+          <section class="section reveal" id="primer">
+            <h2><span class="section-num">01</span> &nbsp;Decision cheat strip</h2>
+            <div class="cheat-strip">
+<div class="chip-card"><strong>502 vs 504</strong><span>502 = bad gateway / upstream dead or reset; 504 = gateway waited and timed out</span></div>
+<div class="chip-card"><strong>Correlation id</strong><span>Propagate X-Request-Id from ALB/nginx into app logs before comparing layers</span></div>
+<div class="chip-card"><strong>Health ≠ latency</strong><span>Green /health can coexist with hanging workers and slow upstreams</span></div>
+<div class="chip-card"><strong>p95 &gt; mean</strong><span>Tail latency reveals queueing, GC, lock contention, and slow deps mean hides</span></div>
+<div class="chip-card"><strong>Isolate one hop</strong><span>Bypass ALB → hit nginx → hit container port → hit app; change one variable</span></div>
+<div class="chip-card"><strong>Recent change</strong><span>Deploy time, config reload, AMI, security group, and cert expiry first</span></div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="cards">
+            <h2><span class="section-num">02</span> &nbsp;Scenario cards (open → rehearse)</h2>
+            <p class="muted">Work closed-book first: say your structure out loud, then open the card. Mark the domain practiced when you can recite the “say it” lines cold.</p>
+
+<details class="sac reveal" id="d01-q01">
+  <summary><span class="sac-id">d01-q01</span><span class="sac-q">Your request flow is DNS -&gt; AWS Load Balancer -&gt; Nginx -&gt; EC2 -&gt; Docker -&gt; application. You receive a 502 response. How will you debug it step by step?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I treat 502 as 'proxy got a bad/empty upstream response,' not a client timeout. I'll pick one failing request id, then walk DNS → ALB target health → nginx upstream → container port → app process, proving each hop with a concrete signal before moving inward.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Confirm the 502 source: response headers / ALB access logs vs nginx access.log. Note whether ALB generated it (target reset) or nginx (upstream prematurely closed).</li>
+<li>Check ALB target group health: Unhealthy targets, deregistration, failing health checks, security group blocking health path, or wrong port/path.</li>
+<li>On the instance: curl -v localhost:<nginx> and localhost:<container> with the same Host/path. Connection refused vs reset vs HTTP error narrows Docker vs app.</li>
+<li>Read nginx error.log for upstream timed out / connect() failed / no live upstreams / SSL handshake — pair with the $request_id or X-Request-Id.</li>
+<li>docker ps / docker events: exited containers, restarts, OOMKilled. Inspect app logs for crash at that timestamp.</li>
+<li>Verify listen address: app bound to 127.0.0.1 only, wrong published port, or nginx proxy_pass to a dead container IP after recreate.</li>
+<li>Check recent deploys/config: nginx reload with bad upstream, new AMI, changed target port, or ALB stickiness sending to a bad node.</li>
+<li>Mitigate: drain bad targets, roll back last change, fix health check path, then re-verify one synthetic request end-to-end with correlation id.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TB
+  Client --&gt; DNS
+  DNS --&gt; ALB
+  ALB --&gt; Nginx
+  Nginx --&gt; Docker
+  Docker --&gt; App
+  ALB -.-&gt;|target_health| Health
+  Nginx -.-&gt;|error.log| UpstreamErr
+  Docker -.-&gt;|events_OOM| Restart</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">bash</span></div><pre><code data-lang="bash"># Prove the hop that returns 502
+curl -sv -H &quot;X-Request-Id: debug-$(date +%s)&quot; https://api.example.com/v1/orders
+aws elbv2 describe-target-health --target-group-arn &quot;$TG_ARN&quot;
+sudo tail -n 200 /var/log/nginx/error.log
+docker ps -a --filter name=api &amp;&amp; docker events --since 30m --filter event=oom --filter event=die</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Same hop walk applies to Nest behind nginx; Node process crashes still show as upstream resets. Distinguish Express/Nest uncaughtException exits from nginx proxy_read_timeout (that tends toward 504).</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>A 502 means some hop returned an invalid gateway response — usually connection refused, reset, or crash mid-write — not a patient timeout. I correlate one request id across ALB and nginx, prove target health and local curl to the container, then fix the dead upstream before touching application business logic.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Jumping straight into application business logic without checking ALB target health or nginx upstream errors</li>
+<li>Confusing 502 (bad/empty upstream) with 504 (gateway waited too long)</li>
+<li>Assuming green DNS or a prior successful deploy means the current container is still listening on the expected port</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you distinguish an ALB-generated 502 from an nginx-generated 502 in logs?</li>
+<li>What if only one AZ's targets are unhealthy — what do you check next?</li></ul>
+    <div class="sac-label">Go deeper</div><div class="sac-links"><a href="https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-troubleshooting.html" target="_blank" rel="noopener">AWS ELB HTTP 502</a><a href="https://nginx.org/en/docs/http/ngx_http_proxy_module.html" target="_blank" rel="noopener">nginx upstream errors</a></div>
+  </div>
+</details>
+
+<details class="sac reveal" id="d01-q02">
+  <summary><span class="sac-id">d01-q02</span><span class="sac-q">Users intermittently receive 504 responses, while application health checks remain green. How will you determine where the timeout occurs?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">504 means a gateway gave up waiting — I map every timeout knob (ALB idle, nginx proxy_read_timeout, app/server, outbound HTTP client) and find which one fired first using timestamps and correlation ids. Green health only proves the cheap probe path, not that workers finish real requests in time.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Pull one 504 sample: ALB access log target_processing_time / request_processing_time vs nginx $upstream_response_time and $request_time.</li>
+<li>Compare timeout budgets: ALB idle timeout (often 60s), nginx proxy_connect/send/read_timeout, uvicorn/gunicorn timeout, httpx/aiohttp client timeouts to deps.</li>
+<li>If ALB time ≈ ALB idle and nginx never logged completion → bottleneck before nginx finished, or nginx itself hung waiting on upstream.</li>
+<li>If nginx error.log shows upstream timed out → app or something behind nginx exceeded proxy_read_timeout while health still passed on /health.</li>
+<li>Instrument slow handlers: DB query time, lock waits, outbound API p95 — hanging workers keep /health green if health bypasses the pool or hits a separate process.</li>
+<li>Check connection pool exhaustion and thread/async worker saturation under concurrency spikes that match the intermittent window.</li>
+<li>Reproduce with load: raise concurrency until 504s appear; confirm whether raising only nginx timeout masks the symptom or moves the failure to the client.</li>
+<li>Fix the true slow hop (query, dep, pool size) or align timeouts intentionally (client < nginx < ALB) with fail-fast, not infinite waits.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">bash</span></div><pre><code data-lang="bash"># Compare budgets (example)
+# ALB idle_timeout.timeout_seconds vs nginx:
+# proxy_read_timeout 60s; proxy_connect_timeout 5s;
+# App: httpx.Timeout(connect=2.0, read=10.0)
+grep upstream /var/log/nginx/error.log | tail
+aws logs filter-log-events --log-group-name /aws/applicationloadbalancer/... --filter-pattern '&quot;elb_status_code&quot;:&quot;504&quot;'</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> In Nest, long-running interceptors or sync CPU in the event loop produce the same pattern: health on a separate route stays 200 while ALB/nginx hit 504. Prefer timeouts on HttpService/axios and queue heavy work.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Intermittent 504s with green health are almost always a timeout-budget mismatch on the real path — slow dependency or saturated workers — not a dead process. I line up ALB and nginx timings for one request id, find which timer fired first, then fix the slow work instead of blindly raising every timeout.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Raising all timeouts until 504s disappear without finding the slow dependency</li>
+<li>Trusting /health as proof that request workers are free</li>
+<li>Ignoring that client, ALB, and nginx may have different idle timeouts</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How would you order timeout values across client, ALB, nginx, and the app?</li>
+<li>What metrics prove worker pool saturation versus a single slow SQL query?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d01-q03">
+  <summary><span class="sac-id">d01-q03</span><span class="sac-q">Nginx is running, but one API route returns the Nginx default 404 page instead of the backend response. How will you trace the request?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Default nginx 404 means the request never matched a location that proxies to the app — or the upstream returned nothing and a static/default server answered. I'll dump the effective server/location selection for that Host and URI, then prove whether the backend even saw the request.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Capture Host header, exact path, method, and whether HTTP vs HTTPS — default_server and SNI mismatches often hit the wrong server block.</li>
+<li>nginx -T (or include dump) and find which server{} and location{} win for that URI; look for missing trailing slash, regex location order, or alias vs root mistakes.</li>
+<li>Confirm proxy_pass exists for that location and that try_files / static root is not short-circuiting before proxy.</li>
+<li>Check access.log: upstream status empty vs 404 from upstream — default HTML 'nginx' page is usually nginx itself, not FastAPI's JSON 404.</li>
+<li>Hit the container directly with the same path; if app returns JSON 404, the route isn't registered; if app 200, nginx routing is wrong.</li>
+<li>Verify strip-prefix behavior: proxy_pass http://upstream/api/ vs http://upstream; without URI rewrite, /api/v1 may become wrong path on the app.</li>
+<li>Reload only after validating config; use a canary location or temporary return 418 to prove which block matched.</li>
+<li>Fix the winning location/upstream, add a regression curl in CI for that Host+path, and alert on nginx 404 rate for API vhosts.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">bash</span></div><pre><code data-lang="bash">nginx -T 2&gt;/dev/null | less
+curl -i -H 'Host: api.example.com' http://127.0.0.1/v1/orders
+curl -i http://127.0.0.1:8000/v1/orders  # direct to uvicorn</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest global prefix (e.g. setGlobalPrefix('api')) must match what nginx forwards after rewrite; a mismatch yields framework 404 JSON, whereas default nginx HTML means the proxy never reached Nest.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>An nginx-branded 404 almost always means the wrong server or location won, not that FastAPI threw NotFound. I prove Host and URI selection with nginx -T, curl the container with the same path, and fix proxy_pass or location precedence before changing application routes.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Assuming the app route is missing because the browser shows 404 — without checking the response body fingerprint</li>
+<li>Editing the wrong server block while default_server still catches the Host</li>
+<li>Forgetting proxy_pass URI slash semantics that strip or preserve path prefixes</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you prove which location block matched in production without guessing?</li>
+<li>What is the difference between an nginx default 404 page and a FastAPI JSON 404?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d01-q04">
+  <summary><span class="sac-id">d01-q04</span><span class="sac-q">An application works when called directly on its port but fails through the load balancer. What would you check and in what order?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Direct-port success isolates the app; failure via LB means edge config — listeners, target groups, security groups, health checks, Host/TLS, or path routing. I compare one request that works to localhost with one that fails through the ALB and diff headers, ports, and health.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Confirm direct success: curl instance_ip:app_port and docker-published port; note status, body, and timing.</li>
+<li>ALB listener rules: host/path conditions, HTTPS cert, redirects, and whether traffic hits the intended target group.</li>
+<li>Target group: protocol/port matching the process, health check path/matcher (200 vs 302), interval, and healthy host count.</li>
+<li>Security groups: ALB SG → instance SG on the app/nginx port; NACL; public vs private subnet reachability from ALB.</li>
+<li>If nginx is in path: ALB → nginx port works? nginx → app fails? Re-run hop isolation.</li>
+<li>Header/TLS differences: X-Forwarded-Proto/For, Host, sticky sessions, HTTP/2, request body size limits, WAF blocks.</li>
+<li>Idle timeout / deregistration: long requests fail only via ALB; connection drains mid-deploy.</li>
+<li>Fix the mismatched hop (usually health check path or SG), verify ALB access logs show 200, then remove temporary direct-port access.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">bash</span></div><pre><code data-lang="bash">curl -i http://$INSTANCE:8000/healthz
+curl -i https://api.example.com/healthz
+aws elbv2 describe-target-health --target-group-arn &quot;$TG_ARN&quot;
+aws ec2 describe-security-groups --group-ids &quot;$APP_SG&quot;</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>If localhost works and the load balancer fails, I treat the app as innocent until proven otherwise and walk listener → target group → security group → health check → nginx. Most of these incidents are wrong port, wrong health path, or SG rules — not application bugs.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Rewriting application code before verifying target group port and health check matcher</li>
+<li>Opening the instance to 0.0.0.0/0 as a 'fix' instead of ALB security-group peering</li>
+<li>Ignoring that health checks may use HTTP while the listener is HTTPS-only for clients</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>Health checks fail but manual curl to the instance succeeds — what are the usual causes?</li>
+<li>How do X-Forwarded-Proto mismatches break cookie Secure or redirect loops behind an ALB?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d01-q05">
+  <summary><span class="sac-id">d01-q05</span><span class="sac-q">One EC2 instance behind the load balancer is failing while the others work normally. How would you isolate the fault?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I quarantine the bad target so users stop hitting it, then compare that host to a healthy peer: processes, disk, time, container state, and recent node-local changes. Fleet-wide config bugs don't usually single out one instance.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Identify the bad target from ALB target health / 5xx spiked host; deregister or set unhealthy weight to stop traffic.</li>
+<li>Compare curl through ALB with Availability-Zone / target sticky disabled vs direct to the instance IP.</li>
+<li>On the bad node: docker ps, nginx -t, disk full (df -h), inode exhaustion, clock skew, file descriptor limits.</li>
+<li>diff against a healthy sibling: AMI/launch template version, user-data, env files, mounted secrets, nginx upstream file.</li>
+<li>Check instance-local events: OOM, kernel logs, NVMe failures, ENI issues, security group accidentally unique to that instance.</li>
+<li>App metrics labeled by instance_id/host: error rate, restart count, GC, connection errors to Redis/DB from that AZ.</li>
+<li>If AZ-specific: subnet route, NAT, VPC endpoint, or AZ outage — not just 'the box'.</li>
+<li>Replace or repair the node (ASG instance refresh), verify healthy, re-register, and add host-dimension alerts so one bad canary is obvious.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">bash</span></div><pre><code data-lang="bash">aws elbv2 deregister-targets --target-group-arn &quot;$TG_ARN&quot; --targets Id=$BAD_ID
+ssh $BAD_HOST 'df -h; docker ps -a; free -m; sudo journalctl -u docker --since &quot;1 hour ago&quot; | tail'</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>One bad instance is a gift — I drain it from the target group immediately, then diff that host against a healthy twin. Disk full, drifted container, or AZ networking usually explains it; I don't restart the whole fleet first.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Rolling all instances when only one target is unhealthy</li>
+<li>Leaving the bad instance in rotation while 'investigating'</li>
+<li>Ignoring AZ-scoped networking and blaming application code on a single host</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you safely drain an instance without dropping in-flight requests?</li>
+<li>What metrics dimensions do you need to spot a single bad host quickly?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d01-q06">
+  <summary><span class="sac-id">d01-q06</span><span class="sac-q">Production API latency increases from 100 ms to 2 seconds immediately after a deployment. How would you prove whether the deployment caused it?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I align latency charts to the exact deploy marker and compare canary versus baseline, not vibes. Proof means the regression starts at deploy time, affects only new versions or new config, and rolls back when we revert — with the same traffic shape.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Mark deploy timestamp (CI, ECS/ASG deploy, or feature flag). Overlay p50/p95 latency, error rate, and saturation.</li>
+<li>Split metrics by version/build SHA, task definition, or canary target group — only new version slow ⇒ deploy-caused.</li>
+<li>Check what changed: dependency versions, ORM queries, N+1, removed cache, sync calls in async path, lower worker count, new middleware.</li>
+<li>Compare DB: slow query log, lock waits, plan changes after migration shipped in the same deploy.</li>
+<li>Rule out coincidence: traffic spike, dependency incident, noisy neighbor — look at shared graphs without a deploy marker.</li>
+<li>Run controlled rollback or shift 100% to previous target group; latency returning to 100 ms is strong causal proof.</li>
+<li>If canary-only: hold canary, dump profiles/traces (OpenTelemetry) for the new build's hot spans.</li>
+<li>Document root cause, add a latency SLO burn alert on deploy, and require canary + automatic rollback next time.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># Pseudo: compare latency by version label after deploy
+# rate(http_request_duration_seconds_bucket{version=&quot;2.14.0&quot;}[5m])
+# vs version=&quot;2.13.2&quot; around deploy timestamp</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Correlation with deploy time isn't enough — I need version-dimensioned latency and a successful rollback or canary contrast. If only the new SHA is slow and reverting restores p95, the deployment caused it; then I dig into the diff for queries, cache, or blocking I/O.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Blaming the deploy because it was recent without version-split metrics</li>
+<li>Rolling forward with 'one more fix' instead of proving with rollback</li>
+<li>Looking only at mean latency and missing a p95 cliff</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>What is your canary and automatic rollback criteria for latency regressions?</li>
+<li>How do you separate a bad migration from bad application code in the same release?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d01-q07">
+  <summary><span class="sac-id">d01-q07</span><span class="sac-q">Your API returns 200 responses but users report that requests occasionally hang until the client times out. How would you investigate?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Hangs with eventual 200 or client-side timeouts mean the server accepted work but didn't finish in time — often queueing, blocked workers, or a missing response flush. I'll look at in-flight request age, worker utilization, and traces for spans that never end, not just status-code dashboards.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Instrument in-flight gauge and request age histogram; alert when age exceeds SLO while status still pending.</li>
+<li>Check whether clients time out first (browser/ALB) while the app later logs a 200 — classic slow handler finishing after the client left.</li>
+<li>Inspect concurrency: uvicorn workers, anyio thread limits, DB pool wait, Redis connection pool — all busy waiting on I/O.</li>
+<li>Distributed traces: find orphaned/long spans (DB, HTTP client) around hang windows; enable sampling for slow traces.</li>
+<li>nginx access: requests with large $request_time and empty/partial upstream; upstream keepalive issues.</li>
+<li>Look for deadlocks: asyncio tasks waiting on each other, sync ORM inside async route, or lock ordered wrong under load.</li>
+<li>Reproduce with concurrent load matching production; a single curl will miss pool exhaustion.</li>
+<li>Mitigate with deadlines (asyncio.wait_for / httpx timeout), shed load, fix blocking call, and return 503 when queue depth is too high instead of hanging.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">import asyncio
+from fastapi import FastAPI
+import httpx
+
+app = FastAPI()
+
+@app.get(&quot;/orders/{oid}&quot;)
+async def get_order(oid: str):
+    async with httpx.AsyncClient(timeout=2.0) as client:
+        # Bound outbound wait — never hang the worker unbounded
+        r = await asyncio.wait_for(client.get(f&quot;http://billing/orders/{oid}&quot;), timeout=2.5)
+        return r.json()</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> In Nest/Node, an await that never resolves (missing timeout on axios) pins the request; forEach(async) fire-and-forget can also leave clients waiting on something else. Use AbortSignal timeouts and concurrency limits.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Occasional hangs aren't visible on a 200-rate graph — I need in-flight age and traces. Usually every worker is stuck on a slow dependency or a sync call in an async path, so clients time out while health stays green and some requests still finish as 200 late.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Only graphing HTTP status codes and declaring the API healthy</li>
+<li>Reproducing with a single sequential curl under no load</li>
+<li>Infinite client retries that amplify worker saturation</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you expose 'requests older than 5s' as a metric in FastAPI/uvicorn?</li>
+<li>When should the API return 503 with Retry-After instead of letting clients hang?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d01-q08">
+  <summary><span class="sac-id">d01-q08</span><span class="sac-q">The service has normal CPU and memory but p95 and p99 latency suddenly increase. What signals would you inspect?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Flat CPU/memory with a bad tail means waiting, not computing — I inspect dependency latency, queue/pool wait, locks, GC/event-loop lag, and noisy neighbors. Mean can look fine while p99 burns the SLO.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Break latency by span: app handler, DB, Redis, HTTP deps — find which component's p95 moved.</li>
+<li>Connection pool metrics: checkout wait time, pool size vs in-use, timeouts acquiring connections.</li>
+<li>DB: lock waits, slow queries, buffer cache hit, vacuum/autovacuum spikes, connection count.</li>
+<li>Event-loop lag / asyncio delay metrics; GC pause if using a threaded or JVM sidecar (less common in CPython but relevant for workers).</li>
+<li>Queue depth: Kafka consumer lag, Celery/RQ depth, or internal anyio task queues.</li>
+<li>Network: DNS latency spikes, TLS handshake time, AZ packet loss, NAT gateway exhaustion.</li>
+<li>Saturation elsewhere: thread pool for run_in_executor, file descriptors, ephemeral port exhaustion.</li>
+<li>Correlate with deploys, traffic shape (fanout), and dependency status pages; fix the waiting hop and add tail-latency SLOs.</li></ol>
+    
+    
+    <div class="sac-nest"><strong>Nest / Node:</strong> Node: monitor event-loop delay (perf_hooks) and libuv threadpool usage for fs/crypto; same 'flat CPU, bad p99' pattern.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>When resources look fine but p95 explodes, the process is blocked on I/O or locks. I split latency by dependency and pool wait — the answer is usually a slow DB, exhausted connection pool, or outbound API — not 'add more CPU'.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Scaling CPU horizontally when the bottleneck is DB locks or pool wait</li>
+<li>Watching only average latency</li>
+<li>Ignoring outbound dependency SLIs</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>Which RED/USE signals would you put on a single dashboard for this?</li>
+<li>How do you tell lock contention from missing indexes using p95 alone?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d01-q09">
+  <summary><span class="sac-id">d01-q09</span><span class="sac-q">A container repeatedly restarts in production. How would you determine whether the cause is OOM, health checks, process crashes, or infrastructure?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I classify the restart using docker/kube exit codes and events first — OOMKilled, non-zero exit, or health-check kill look different. Then I align timestamps with app logs, probe failures, and node events so I don't guess.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>docker inspect / kubectl describe: LastState, OOMKilled, ExitCode, RestartCount, reason (Error vs OOMKilled).</li>
+<li>docker events / kube events around restarts: health unhealthy, killed, deadline exceeded.</li>
+<li>Distinguish liveness kill (probe fail) from crash: app logs show clean listen then probe 404/5xx vs traceback then exit.</li>
+<li>Memory: cgroup limit vs RSS/working set; sudden jump ⇒ leak or cache; flat then OOM ⇒ limit too low for peak.</li>
+<li>Process crash: uncaught exception, segfault (native deps), failed migration on boot — read previous container logs.</li>
+<li>Infrastructure: node pressure, spot interruption, disk pressure, docker daemon restart, failed image pull after GC.</li>
+<li>ALB/target: flapping health if container isn't ready — fix readiness vs liveness so traffic doesn't hit booting tasks.</li>
+<li>Remediate specifically: raise memory or fix leak, correct probe path, fix crash, or replace bad node; add restart-reason metrics.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">bash</span></div><pre><code data-lang="bash">docker inspect -f '{{.State.OOMKilled}} {{.State.ExitCode}} {{.RestartCount}}' api
+docker events --since 2h --filter container=api
+docker logs api --previous --tail 200</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Restart loops are a taxonomy problem: OOMKilled, exit code, or probe kill. I read the container's last state and events before changing application code, then fix the matching cause — memory limit, bad liveness path, crash on boot, or a sick node.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Increasing replicas without reading OOMKilled or ExitCode</li>
+<li>Using the same probe for liveness and a heavy dependency check, causing kill loops</li>
+<li>Assuming every restart is an application exception</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How should readiness and liveness probes differ for a FastAPI service?</li>
+<li>What ExitCode patterns suggest segfault versus unhandled Python exception?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d01-q10">
+  <summary><span class="sac-id">d01-q10</span><span class="sac-q">A production problem occurs only during high concurrency and cannot be reproduced with one request. How would you investigate it?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Concurrency bugs need concurrent load, shared-resource metrics, and race-aware tracing. I'll reproduce with controlled parallelism, watch pools/locks/limits, and capture dumps when contention peaks — a single curl will never show it.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Define the symptom under load: error type, latency cliff, or wrong data — and the concurrency threshold where it starts.</li>
+<li>Load-test in staging with production-like pools (DB, Redis, httpx limits) and ramp RPS/concurrency.</li>
+<li>Watch shared resources: DB connections, row locks, unique constraint races, Redis hot keys, rate limits, file descriptors, ephemeral ports.</li>
+<li>Check async pitfalls: shared mutable state without locks, non-thread-safe clients used across tasks, missing idempotency under double-submit.</li>
+<li>Capture evidence at peak: slow-query log, pg_stat_activity, thread/task dump, connection pool wait histograms.</li>
+<li>Feature-flag mitigations: lower concurrency, shed load, serialize critical section, or enable idempotency keys.</li>
+<li>Add regression test: concurrent integration test that fails before the fix (e.g. 100 parallel creates).</li>
+<li>Fix root cause (pooling, locking, idempotency, backpressure) and set alerts on pool wait and lock time, not only CPU.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">import asyncio, httpx
+
+async def hammer():
+    async with httpx.AsyncClient(base_url=&quot;http://localhost:8000&quot;, timeout=5.0) as c:
+        sem = asyncio.Semaphore(50)
+        async def one(i):
+            async with sem:
+                r = await c.post(&quot;/orders&quot;, json={&quot;sku&quot;: &quot;x&quot;, &quot;key&quot;: f&quot;idemp-{i%10}&quot;})
+                return r.status_code
+        codes = await asyncio.gather(*[one(i) for i in range(500)])
+        print(sorted(set(codes)), codes.count(409), codes.count(500))
+
+asyncio.run(hammer())</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Node cluster/PM2 multi-process can hide in-memory race bugs that appear on a single Nest process under async concurrency — test both shapes.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>If it only fails under concurrency, I refuse to debug with one request. I ramp load, watch connection pools and locks, and look for races or exhaustion — then I ship a concurrent regression test so we don't 'fix' it with a quiet afternoon.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Trying to reproduce only with Postman one-at-a-time</li>
+<li>Increasing DB max_connections without fixing pool sizing or query time</li>
+<li>Calling it a 'Heisenbug' without capturing pool/lock metrics at failure</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you size an asyncio HTTP client and DB pool relative to worker count?</li>
+<li>What race conditions appear when two requests create the same order without an idempotency key?</li></ul>
+    
+  </div>
+</details>
+          </section>
+
+          <section class="section reveal" id="check">
+            <h2><span class="section-num">03</span> &nbsp;Self-check</h2>
+<div class="quiz">
+      <div class="quiz-q">Users see 502 from the ALB while target health is intermittent. What does 502 most strongly imply?</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The upstream closed or reset before returning a valid HTTP response</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>The gateway waited the full idle timeout and gave up</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>DNS failed to resolve the client hostname</button>
+      <div class="quiz-explain">502 Bad Gateway means the proxy got an invalid/empty response from upstream (connection refused, reset, crash mid-response). 504 is the timeout case.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">App /health is green but clients hang until the browser times out. Where should you look first?</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Worker/thread pool saturation and request queue depth, not CPU alone</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Only ALB idle timeout — health green proves workers are free</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>DNS TTL — hung requests are almost always name resolution</button>
+      <div class="quiz-explain">Health checks use a cheap path and may bypass the saturated pool. Hanging 200-path work often means all workers are busy on slow I/O or blocking CPU.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">p95 jumps while CPU and memory stay flat. Which signal set is most useful?</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Outbound dependency latency, DB wait, lock waits, and connection pool wait</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Only host CPU steal time</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Only container restart count</button>
+      <div class="quiz-explain">Flat resources with bad tails usually mean waiting on network/DB/locks/pools, not raw compute exhaustion.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">docker events show OOMKilled. What should you correlate next?</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>cgroup memory limit, RSS growth, and whether the limit matches expected peak</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>nginx access.log status codes only</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>ALB deregistration delay exclusively</button>
+      <div class="quiz-explain">OOMKilled is a hard memory limit signal — confirm limit vs usage and what allocated (cache, leak, spike).</div>
+    </div>
+          </section>

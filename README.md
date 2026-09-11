@@ -24,6 +24,7 @@ A personal workspace of hands-on learning projects. **Each project lives in its 
 | **[AWS SAA Field Guide](./aws-saa-guide/index.html)** | **AWS Solutions Architect Associate (SAA-C03)** exam guide — zero-AWS foundations through Well-Architected domains, Mermaid decision flows, scenario bank & timed mocks | ✅ Complete · Sep 2026 | [`aws-saa-guide/index.html`](./aws-saa-guide/index.html) |
 | **[CKA Field Guide](./cka-guide/index.html)** | **Certified Kubernetes Administrator (CKA)** on Kubernetes v1.35 — workloads, Gateway API, cluster architecture, troubleshooting; command-first tasks & timed performance mock | ✅ Complete · Sep 2026 | [`cka-guide/index.html`](./cka-guide/index.html) |
 | **[Cert Mocks Guide](./cert-mocks-guide/index.html)** | Full timed mocks for **SAA-C03**, **MLA-C02**, and **CKA v1.35** — 3 end-to-end exams each, domain-weighted, with remediation links into the learning guides | ✅ Complete · Sep 2026 | [`cert-mocks-guide/index.html`](./cert-mocks-guide/index.html) |
+| **[Senior Backend Scenario Q&A](./senior-backend-guide/index.html)** | **120 production interview scenarios** — debugging, async, Postgres, Kafka, Redis, AWS, security, ownership — FastAPI-first answers with Nest notes, drills & flashcards | ✅ Complete · Sep 2026 | [`senior-backend-guide/index.html`](./senior-backend-guide/index.html) |
 | **[Aptitude & Reasoning Field Guide](./aptitude-guide/index.html)** | **Aptitude & reasoning** for tech-placement online assessments — quantitative aptitude, logical reasoning, verbal ability & data interpretation, shortcut-first with inline diagrams and a **timed drill engine** that scores you and explains every answer | ✅ Complete · Jun 2026 | [`aptitude-guide/index.html`](./aptitude-guide/index.html) |
 
 > Tip: open the visual hub at [`index.html`](./index.html), or double-click any project's entry HTML (e.g. `claude-guide/index.html`). Each project folder also has its own `README.md`.
@@ -50,6 +51,7 @@ self-upgrade/
 ├── aws-saa-guide/             ← AWS SAA-C03 exam (Well-Architected · scenarios · mocks)
 ├── cka-guide/                 ← CKA exam (K8s v1.35 · Gateway API · troubleshooting · task mock)
 ├── cert-mocks-guide/          ← Full timed mocks (SAA · MLA · CKA × 3 each)
+├── senior-backend-guide/      ← Senior backend scenario Q&A (120 cards)
 └── aptitude-guide/            ← Aptitude & reasoning (quant · reasoning · verbal · DI)
 ```
 

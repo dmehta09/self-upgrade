@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PostgreSQL performance & concurrency | Senior Backend Scenario Q&A</title>
+  <meta name="description" content="Senior Backend Scenario Q&amp;A — PostgreSQL performance &amp; concurrency. A sharp, crisp visual guide to John Ousterhout's Senior Backend Scenario Q&amp;A: complexity, deep modules, information hiding, comments &amp; naming — each idea in plain English then precise, with Python examples." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2314b8a6' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='3' width='20' height='8' rx='2'/><rect x='2' y='13' width='20' height='8' rx='2'/><path d='M6 7h.01M6 17h.01'/></svg>" />
+  <link rel="stylesheet" href="../assets/css/styles.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/senior-backend.css" />
+  <script>window.SITE_BASE = "../";</script>
+</head>
+<body data-tool="domains" data-page="domains-postgres" data-lesson="sb-d05">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="scroll-progress"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="../index.html" aria-label="Senior Backend Scenario Q&A home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#06121a" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/></svg></span>
+        <span class="brand-text"><b>Senior Backend Scenario Q&A</b><span>120 production scenarios · FastAPI-first</span></span>
+      </a>
+      <nav class="nav-group" aria-label="Start here">
+        <h4>Start here</h4>
+        <a class="nav-link" href="../index.html">Home · roadmap</a>
+        <a class="nav-link" href="../method.html">Answer method</a>
+      </nav>
+      <nav class="nav-group is-domains" aria-label="Scenario domains">
+        <h4><span class="dot"></span>Scenario domains</h4>
+        <a class="nav-link" href="../domains/debugging.html">01 · Debugging</a>
+        <a class="nav-link" href="../domains/async.html">02 · Async</a>
+        <a class="nav-link" href="../domains/dependencies.html">03 · Dependencies</a>
+        <a class="nav-link" href="../domains/api-design.html">04 · API design</a>
+        <a class="nav-link" href="../domains/postgres.html">05 · PostgreSQL</a>
+        <a class="nav-link" href="../domains/mongodb.html">06 · MongoDB</a>
+        <a class="nav-link" href="../domains/redis.html">07 · Redis</a>
+        <a class="nav-link" href="../domains/kafka.html">08 · Kafka</a>
+        <a class="nav-link" href="../domains/distributed.html">09 · Distributed</a>
+        <a class="nav-link" href="../domains/aws-nginx.html">10 · AWS / Nginx</a>
+        <a class="nav-link" href="../domains/security.html">11 · Security</a>
+        <a class="nav-link" href="../domains/ownership.html">12 · Ownership</a>
+      </nav>
+      <nav class="nav-group is-practice" aria-label="Practice">
+        <h4><span class="dot"></span>Practice</h4>
+        <a class="nav-link" href="../practice/drills.html">Rapid-fire drills</a>
+        <a class="nav-link" href="../practice/flashcards.html">Flashcards</a>
+      </nav>
+      <nav class="nav-group is-reference" aria-label="Reference">
+        <h4><span class="dot"></span>Reference</h4>
+        <a class="nav-link" href="../reference/cheatsheets.html">Cheatsheets</a>
+        <a class="nav-link" href="../reference/glossary.html">Glossary</a>
+      </nav>
+    </aside>
+    <div class="sidebar-scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">PostgreSQL performance &amp; concurrency</span></nav>
+        <div class="topbar-spacer"></div>
+        <button class="search-trigger" aria-label="Search (press / )">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="st-label">Search</span><kbd>/</kbd>
+        </button>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle light / dark theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4 12H2m20 0h-2M5 5 6.4 6.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></svg>
+        </button>
+      </header>
+
+      <div class="content has-toc" id="main">
+        <div class="prose">
+          <section class="hero reveal">
+            <span class="eyebrow">Domain · d05</span>
+            <h1>PostgreSQL: Performance, Transactions &amp; Concurrency</h1>
+            <p class="lead">Senior Postgres answers start with evidence: EXPLAIN (ANALYZE, BUFFERS), then indexes and plans, then concurrency control. MVCC explains why reads do not block writers, but isolation level and locking still decide lost updates, overselling, and deadlocks. Production safety means connection pooling (PgBouncer), CREATE INDEX CONCURRENTLY, and expand-contract migrations so old and new app versions coexist.</p>
+          </section>
+
+          <section class="section reveal" id="primer">
+            <h2><span class="section-num">01</span> &nbsp;Decision cheat strip</h2>
+            <div class="cheat-strip">
+<div class="chip-card"><strong>Slow query</strong><span>EXPLAIN (ANALYZE, BUFFERS) → seq scan / bad join / bloat / stats</span></div>
+<div class="chip-card"><strong>Oversell</strong><span>SELECT … FOR UPDATE or atomic UPDATE … WHERE stock &gt; 0</span></div>
+<div class="chip-card"><strong>Lost update</strong><span>Optimistic version column or pessimistic row lock</span></div>
+<div class="chip-card"><strong>Isolation</strong><span>RC default; RR for snapshots; SERIALIZABLE when invariants need it</span></div>
+<div class="chip-card"><strong>Connections</strong><span>App pool + PgBouncer transaction pooling</span></div>
+<div class="chip-card"><strong>Migrations</strong><span>CONCURRENTLY + expand/contract, never big exclusive locks</span></div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="cards">
+            <h2><span class="section-num">02</span> &nbsp;Scenario cards (open → rehearse)</h2>
+            <p class="muted">Work closed-book first: say your structure out loud, then open the card. Mark the domain practiced when you can recite the “say it” lines cold.</p>
+
+<details class="sac reveal" id="d05-q01">
+  <summary><span class="sac-id">d05-q01</span><span class="sac-q">A PostgreSQL query is fast with one million rows but becomes slow with one hundred million. How would you investigate?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Scale changed the plan or I/O profile — I would capture the slow query, run EXPLAIN (ANALYZE, BUFFERS) on production-like data, and check whether we flipped to seq scan, nested loop explosion, or bad cardinality estimates.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Reproduce with realistic data volume and the same parameters; compare EXPLAIN plans at 1M vs 100M.</li>
+<li>Look for seq scans on large tables, nested loops with huge inner rows, hash/sort spills to disk, and misestimated rows (ANALYZE / extended stats).</li>
+<li>Check indexes: missing composite indexes matching WHERE/JOIN/ORDER BY, unused indexes, and whether the planner can use an index-only scan (visibility map).</li>
+<li>Inspect table/index bloat, vacuum/autovacuum lag, and shared_buffers / OS cache hit ratio from BUFFERS.</li>
+<li>Fix with the right index or rewrite (avoid SELECT *), update statistics, partition if appropriate, then re-measure latency and I/O.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+SELECT …;</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Log slow queries via ORM/query logger with bind params; never tune against empty staging tables.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>At 100M the plan or cache behavior changed. EXPLAIN ANALYZE with BUFFERS tells me if it's a bad join, missing index, or I/O — I fix the plan before throwing hardware at it.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Adding random indexes without reading the plan</li>
+<li>Assuming 'it worked at 1M' means the same plan still applies</li>
+<li>Tuning only on EXPLAIN without ANALYZE (estimates lie)</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>When would you partition vs just index?</li>
+<li>How do you tell bloat from a genuinely expensive join?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d05-q02">
+  <summary><span class="sac-id">d05-q02</span><span class="sac-q">How would you use EXPLAIN or EXPLAIN ANALYZE to debug a slow PostgreSQL query?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">EXPLAIN shows the planned tree; EXPLAIN ANALYZE runs it and shows actual time and rows. I always want BUFFERS so I can separate CPU from disk.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Start with EXPLAIN (ANALYZE, BUFFERS) on a safe replica or low-traffic window; use FORMAT TEXT for readability.</li>
+<li>Read bottom-up: find the node with the largest actual time; compare estimated vs actual rows — large skew means bad stats or correlated predicates.</li>
+<li>Flag seq scans on big tables, nested loops with huge inner loops, and sorts/hashes that spill (temp files).</li>
+<li>Use BUFFERS: high 'read' vs 'hit' means cold cache or working set larger than memory; high 'hit' with high time means CPU/CPU-bound plan shape.</li>
+<li>Iterate: add/adjust indexes, rewrite predicates to be sargable, ANALYZE, or break the query — re-run until actual time drops.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">EXPLAIN (ANALYZE, BUFFERS)
+SELECT o.id
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+WHERE o.created_at &gt;= now() - interval '7 days'
+  AND c.tier = 'gold';</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Wrap debug in a transaction you ROLLBACK if the statement mutates; prefer a replica for heavy ANALYZE.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I run EXPLAIN ANALYZE with BUFFERS, find the hottest node, and fix estimate skew or I/O — not guesswork indexes.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Using EXPLAIN alone and trusting estimates</li>
+<li>Ignoring BUFFERS and blaming 'CPU' when it's disk</li>
+<li>Running ANALYZE on the primary at peak without thinking about load</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>What is an index-only scan and when does it fail?</li>
+<li>How do you capture a plan from a prepared statement / ORM?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d05-q03">
+  <summary><span class="sac-id">d05-q03</span><span class="sac-q">Two users try to purchase the last available item at exactly the same time. How would you prevent overselling?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">This is a concurrency invariant: stock must never go negative. I would make the decrement atomic under a row lock or a single conditional UPDATE, not read-modify-write in the app.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Model inventory as a row (or SKU row) and update stock in one statement: UPDATE … SET stock = stock - 1 WHERE id = $1 AND stock >= 1 RETURNING *.</li>
+<li>If zero rows returned, treat as sold out — no separate check-then-update race.</li>
+<li>Alternatively: BEGIN; SELECT … FOR UPDATE; check stock; UPDATE; COMMIT — pessimistic lock serializes buyers on that row.</li>
+<li>Keep the transaction short; never hold FOR UPDATE across external payment calls — reserve/hold pattern with TTL if payment is slow.</li>
+<li>Add a CHECK (stock >= 0) as a last line of defense and monitor constraint violations.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">UPDATE inventory
+SET stock = stock - 1
+WHERE sku = $1 AND stock &gt;= 1
+RETURNING stock;</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> In Nest/TypeORM use a transactional repository method; do not load entity, mutate, save without version/lock.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I never trust check-then-update in app memory. One conditional UPDATE or SELECT FOR UPDATE on the stock row, short transaction, sold-out if zero rows.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Read stock in app, decrement, write back without locking</li>
+<li>Holding FOR UPDATE while calling Stripe</li>
+<li>Relying only on unique constraints that don't model quantity</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do soft holds / reservations differ from hard decrements?</li>
+<li>Would SERIALIZABLE alone be enough here?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d05-q04">
+  <summary><span class="sac-id">d05-q04</span><span class="sac-q">When would you use optimistic locking versus pessimistic locking?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Optimistic: version column, retry on conflict — best when conflicts are rare. Pessimistic: SELECT FOR UPDATE — best when contention is expected and you must serialize.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Optimistic: add version (or updated_at) column; UPDATE … WHERE id = $1 AND version = $2; if 0 rows, conflict → reload/retry or fail to client.</li>
+<li>Use optimistic for user-edited documents, admin forms, and low-contention aggregates where most writes do not collide.</li>
+<li>Pessimistic: SELECT … FOR UPDATE (or FOR NO KEY UPDATE) inside a short transaction when you expect races (inventory, seats, wallet balance).</li>
+<li>Avoid long-lived pessimistic locks; they increase wait time and deadlock risk.</li>
+<li>Hybrid: optimistic by default; escalate to row locks for hot money paths.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">UPDATE accounts
+SET balance = balance - $1, version = version + 1
+WHERE id = $2 AND version = $3
+RETURNING version;</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> @Version() in TypeORM / Prisma version fields map to optimistic updates; still use raw SQL for tight inventory paths.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Optimistic version columns when collisions are rare; FOR UPDATE when I know two writers will fight over the same row and must serialize.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Optimistic locking with silent overwrite on 0-row updates</li>
+<li>Pessimistic locks held across HTTP round-trips</li>
+<li>Confusing MVCC snapshots with mutual exclusion</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>What is FOR UPDATE SKIP LOCKED used for?</li>
+<li>How do you backoff retries under optimistic conflicts?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d05-q05">
+  <summary><span class="sac-id">d05-q05</span><span class="sac-q">A read-then-update workflow produces lost updates under concurrency. How would you redesign it?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Lost update means two transactions read the same version and both write — last write wins. I redesign to a single atomic UPDATE or add a version check.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Eliminate read-modify-write in application memory where possible: push the delta into SQL (SET counter = counter + $1).</li>
+<li>If business logic needs the old value, SELECT FOR UPDATE then update in the same short transaction.</li>
+<li>Or use optimistic concurrency: WHERE version = :read_version and bump version; surface 409 on conflict.</li>
+<li>Raise isolation only if needed — SERIALIZABLE can detect write skew, but app-level versioning is clearer for lost updates.</li>
+<li>Add tests that run concurrent workers and assert final state; monitor conflict/retry rates.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">-- Bad: SELECT balance; …; UPDATE balance = $new
+-- Good:
+UPDATE wallets SET balance = balance + $1 WHERE id = $2;</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Service layer should expose incrementBalance(), not get+set, to prevent accidental RMW.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Lost updates are a smell of check-then-act. I make the write atomic or version it so concurrent writers cannot silently clobber each other.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Assuming READ COMMITTED prevents lost updates (it doesn't for this pattern)</li>
+<li>Retrying blindly without re-reading state</li>
+<li>Using UNIQUE constraints as a substitute for numeric invariants</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How does write skew differ from lost update?</li>
+<li>Would Redis INCR be appropriate for this counter?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d05-q06">
+  <summary><span class="sac-id">d05-q06</span><span class="sac-q">How would you choose between READ COMMITTED, REPEATABLE READ, and SERIALIZABLE for a business operation?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Default READ COMMITTED for most OLTP. REPEATABLE READ when a transaction needs a stable snapshot. SERIALIZABLE when multi-row invariants must look as if transactions ran one at a time.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>READ COMMITTED (Postgres default): each statement sees latest committed rows; fine for simple CRUD; watch non-repeatable reads and lost-update patterns.</li>
+<li>REPEATABLE READ: transaction-wide snapshot — good for consistent reports, multi-step reads, and some compare-and-set designs; may get serialization failures on conflicts.</li>
+<li>SERIALIZABLE: strongest; Postgres SSI aborts transactions that would violate serializability (write skew). Use for complex invariants across rows.</li>
+<li>Prefer explicit locks or atomic SQL for hot paths instead of raising isolation globally — cheaper and clearer.</li>
+<li>Always handle retry on serialization_failure (40001) when using RR/SERIALIZABLE.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">BEGIN ISOLATION LEVEL SERIALIZABLE;
+-- critical multi-row invariant
+COMMIT;</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Set isolation per transaction in the unit-of-work, not as a global Nest middleware default.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I stay on READ COMMITTED unless the business needs a snapshot or true serializability — and I design for retries when I raise isolation.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Raising isolation 'to be safe' without retry logic</li>
+<li>Thinking RR in Postgres matches MySQL RR anomaly set exactly</li>
+<li>Using SERIALIZABLE as a substitute for application idempotency</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>What anomalies does READ COMMITTED still allow?</li>
+<li>How do you test for write skew?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d05-q07">
+  <summary><span class="sac-id">d05-q07</span><span class="sac-q">Two transactions deadlock in production. How would you investigate and reduce the likelihood of future deadlocks?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Postgres detects deadlocks and aborts one transaction. I pull the deadlock detail from logs, map the lock order, and make all code paths acquire locks in a consistent order.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Enable/inspect deadlock logs (log_lock_waits, deadlock details): which relations, PIDs, and lock modes.</li>
+<li>Reproduce with the same statement order; identify cycles (A locks row1 waits row2; B locks row2 waits row1).</li>
+<li>Fix by canonical lock ordering (e.g. always lock account ids sorted), shorter transactions, and fewer multi-row updates in one TX.</li>
+<li>Prefer single-statement updates; use SKIP LOCKED for worker queues; avoid lock escalation patterns from ORM batch saves.</li>
+<li>Add metrics/alerts on deadlock count; retry the aborted transaction safely if idempotent.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">-- Example: always lock in id order
+SELECT * FROM accounts WHERE id = ANY($1) ORDER BY id FOR UPDATE;</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Centralize money-move in one service method so all call sites share lock order.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Deadlocks are lock-order cycles. I read the log, enforce a global lock order, shrink transactions, and retry the loser idempotently.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Retrying forever without backoff or idempotency</li>
+<li>Blaming 'Postgres is broken' instead of application lock order</li>
+<li>Holding locks while doing HTTP I/O</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do advisory locks differ from row locks?</li>
+<li>What does deadlock_timeout control?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d05-q08">
+  <summary><span class="sac-id">d05-q08</span><span class="sac-q">Your application opens far more PostgreSQL connections than expected. How would you find the source and fix it?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd query pg_stat_activity for count by application_name/state, then trace app pools — missing pooling, pool-per-pod explosion, or leaked connections.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Inspect SELECT usename, application_name, state, count(*) FROM pg_stat_activity GROUP BY 1,2,3; look for idle in transaction and connection storms after deploys.</li>
+<li>Map expected max: replicas × workers × pool_size. Cap pool_size; set statement/idle timeouts.</li>
+<li>Introduce PgBouncer (transaction pooling for most apps) so Postgres sees far fewer server connections than client connections.</li>
+<li>Fix leaks: ensure connections return to pool, no long idle-in-transaction, ORM session scoped correctly per request.</li>
+<li>Alert on connection saturation and idle-in-transaction age; load-test pool settings before raising max_connections.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">SELECT application_name, state, count(*)
+FROM pg_stat_activity
+GROUP BY 1, 2
+ORDER BY 3 DESC;</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> One Nest process ≠ one pool forever if you fork workers; configure pool per process deliberately.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Connection storms are usually pool math or leaks. I count pg_stat_activity, fix pool sizing, and put PgBouncer in front so Postgres isn't the connection radiator.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Raising max_connections instead of pooling</li>
+<li>Session pooling features incompatible with transaction pooling (temp tables, prepared stmts) without checking</li>
+<li>Ignoring idle in transaction as a connection holder</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>Transaction vs session pooling in PgBouncer — when does each break?</li>
+<li>How do you set application_name for attribution?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d05-q09">
+  <summary><span class="sac-id">d05-q09</span><span class="sac-q">How would you perform a schema migration or index creation on a large production table without unacceptable downtime?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Avoid ACCESS EXCLUSIVE locks that block writes for long periods. Use CREATE INDEX CONCURRENTLY, additive migrations, and batch backfills.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Prefer additive changes: nullable new columns, new tables, new indexes — avoid rewriting the whole table in one transaction.</li>
+<li>CREATE INDEX CONCURRENTLY (and DROP INDEX CONCURRENTLY); monitor for invalid indexes and REINDEX CONCURRENTLY if needed.</li>
+<li>For column backfills: batched UPDATEs with primary-key ranges, throttling, and progress table; never UPDATE entire table in one TX.</li>
+<li>Use tools (pt-like patterns / gh-ost style thinking) or Postgres-native expand techniques; schedule heavy work off-peak.</li>
+<li>Validate with locks query (pg_locks / pg_stat_progress_create_index) and a rollback plan.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">CREATE INDEX CONCURRENTLY IF NOT EXISTS orders_created_at_idx
+  ON orders (created_at);</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Run concurrent index builds from a migration job that can retry; do not wrap CONCURRENTLY in an explicit transaction block.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>No big-bang locks on hot tables. CONCURRENTLY for indexes, batched backfills for data, additive schema first.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Running CREATE INDEX (non-concurrent) on a 100M-row hot table</li>
+<li>Wrapping CONCURRENTLY inside a transaction (fails)</li>
+<li>Single UPDATE that rewrites every row and bloats the table</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>What locks does ALTER TABLE ADD COLUMN with default take on modern Postgres?</li>
+<li>How do you detect an INVALID index after a failed concurrent build?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d05-q10">
+  <summary><span class="sac-id">d05-q10</span><span class="sac-q">How would you design a zero-downtime database migration when old and new application versions must run simultaneously?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Expand-contract: ship schema both versions understand, dual-write or backfill, switch reads, then remove the old shape after old pods are gone.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Expand: add new columns/tables/indexes compatible with old code (old code ignores new fields).</li>
+<li>Deploy code that writes both old and new shapes (or writes new and backfills asynchronously).</li>
+<li>Backfill historical rows in batches; verify with checksums/counts.</li>
+<li>Switch reads to the new shape; deploy code that only needs the new schema.</li>
+<li>Contract: drop old columns/tables only after all instances and jobs no longer reference them; keep migrations reversible where practical.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  A[Expand schema] --&gt; B[Dual-write / backfill]
+  B --&gt; C[Switch reads]
+  C --&gt; D[Contract old shape]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">-- Expand
+ALTER TABLE users ADD COLUMN email_normalized text;
+-- later Contract
+-- ALTER TABLE users DROP COLUMN email_legacy;</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Feature-flag the read path so you can flip without another schema deploy.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Rolling deploys need expand-contract. Schema stays compatible with both versions until the fleet and backfill are done — then contract.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Renaming/dropping columns in the same deploy that changes app code</li>
+<li>Assuming blue/green means you can break old readers immediately</li>
+<li>Backfill without idempotency or resume cursors</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you migrate a primary key without downtime?</li>
+<li>What changes are unsafe even with expand-contract?</li></ul>
+    
+  </div>
+</details>
+          </section>
+
+          <section class="section reveal" id="check">
+            <h2><span class="section-num">03</span> &nbsp;Self-check</h2>
+<div class="quiz">
+      <div class="quiz-q">What does BUFFERS add to EXPLAIN ANALYZE?</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Shared/local hit vs read counts so you see I/O vs cache</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Only the estimated row counts from the planner</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Automatic index recommendations</button>
+      <div class="quiz-explain">BUFFERS shows buffer hits/reads so you know whether time is CPU planning/execution or disk I/O.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">Postgres default isolation is:</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>READ COMMITTED</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>REPEATABLE READ</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>SERIALIZABLE</button>
+      <div class="quiz-explain">PostgreSQL defaults to READ COMMITTED; each statement sees a fresh snapshot of committed data.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">Safest way to add an index on a large hot table?</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>CREATE INDEX CONCURRENTLY</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>CREATE INDEX inside a long migration transaction</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Drop the table, recreate with indexes, reload</button>
+      <div class="quiz-explain">CONCURRENTLY avoids a long ACCESS EXCLUSIVE lock; plain CREATE INDEX blocks writes.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">Expand-contract migration means:</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Add new shape, dual-write/read, switch, then remove old</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Rename columns in one deploy with downtime</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Only use ORMs that auto-migrate</button>
+      <div class="quiz-explain">Keep schema compatible with both app versions during rolling deploys, then contract.</div>
+    </div>
+          </section>
+          <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
+          <nav class="page-nav reveal">
+            <a href="../domains/api-design.html"><span class="pn-k">Previous</span><span class="pn-t">API design &amp; architecture</span></a>
+            <a class="next" href="../domains/mongodb.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">MongoDB modeling &amp; scaling</span></a>
+          </nav>
+        </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#primer">Decision cheat strip</a>
+          <a href="#cards">Scenario cards (open → rehearse)</a>
+          <a href="#check">Self-check</a>
+        </nav>
+      </div>
+
+      <footer class="footer">
+        <span class="fmono">Senior Backend Scenario Q&A &middot; Scenario interview Q&amp;A · FastAPI-first · Nest notes</span>
+        <span class="fmono">Built to open offline &middot; Sep 2026</span>
+      </footer>
+    </div>
+  </div>
+  <script src="../assets/js/lessons.js"></script>
+  <script src="../assets/js/search-index.js"></script>
+  <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/search.js"></script>
+  <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
+</body>
+</html>

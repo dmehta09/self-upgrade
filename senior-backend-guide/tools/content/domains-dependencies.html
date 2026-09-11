@@ -1,0 +1,469 @@
+          <section class="hero reveal">
+            <span class="eyebrow">Domain · d03</span>
+            <h1>Third-Party APIs &amp; Dependency Failures</h1>
+            <p class="lead">Production systems fail at the seams with vendors, payments, and partner APIs. Interviewers want timeouts, bulkheads, retries with jitter, circuit breakers, and idempotency — not 'we would hope they are up'. Seniors explain how a slow dependency becomes your outage via thread pools and sync waits, and how to degrade without corrupting money or inventory.</p>
+          </section>
+
+          <section class="section reveal" id="primer">
+            <h2><span class="section-num">01</span> &nbsp;Decision cheat strip</h2>
+            <div class="cheat-strip">
+<div class="chip-card"><strong>Timeouts first</strong><span>Every outbound call needs connect/read deadlines tighter than your client SLO</span></div>
+<div class="chip-card"><strong>Bulkhead</strong><span>Isolate pools/semaphores per dependency so one vendor cannot consume all workers</span></div>
+<div class="chip-card"><strong>Retry wisely</strong><span>Only idempotent/safe calls; exponential backoff + jitter; honor Retry-After</span></div>
+<div class="chip-card"><strong>Circuit breaker</strong><span>Open on error rate/latency; shed fast; half-open probe; avoid retry storms</span></div>
+<div class="chip-card"><strong>Idempotency keys</strong><span>Required for payments and any 'maybe succeeded' timeout ambiguity</span></div>
+<div class="chip-card"><strong>Degrade</strong><span>Cached/partial/feature-off beats hanging the entire request path</span></div>
+            </div>
+          </section>
+
+          <section class="section reveal" id="cards">
+            <h2><span class="section-num">02</span> &nbsp;Scenario cards (open → rehearse)</h2>
+            <p class="muted">Work closed-book first: say your structure out loud, then open the card. Mark the domain practiced when you can recite the “say it” lines cold.</p>
+
+<details class="sac reveal" id="d03-q01">
+  <summary><span class="sac-id">d03-q01</span><span class="sac-q">Your application integrates three third-party APIs and one becomes slow. How would you prevent it from degrading the entire request path?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Slow dependencies exhaust shared workers and connection pools — I isolate them with timeouts, per-dependency concurrency limits, and optional circuit breaking so the other two APIs and our handlers keep moving.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Put aggressive timeouts on the slow vendor's client (connect + read), separate from other clients.</li>
+<li>Bulkhead: dedicated asyncio.Semaphore / httpx limits / thread pool for that dependency.</li>
+<li>Run independent calls concurrently; don't let the slow one sit on the critical path if the feature is optional.</li>
+<li>Circuit breaker: open when p95 or error rate exceeds threshold; return cached/degraded data.</li>
+<li>Fail partial: return 200 with missing widget vs block checkout if that vendor is non-critical.</li>
+<li>Monitor per-dependency latency and in-flight; alert before global p95 burns.</li>
+<li>Move non-interactive calls off-request into queues when possible.</li>
+<li>Load-test with one dependency delayed (toxiproxy/fault injection) to prove isolation.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">import asyncio, httpx
+
+# Per-dependency bulkhead
+payments_sem = asyncio.Semaphore(20)
+search_sem = asyncio.Semaphore(50)
+
+async def call_payments(client: httpx.AsyncClient, path: str):
+    async with payments_sem:
+        return await client.get(path, timeout=httpx.Timeout(0.5, read=2.0))</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest: separate HttpModule registrations or axios instances per vendor with maxSockets; use a circuit-breaker library (opossum) around each client.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>One slow vendor should not own our worker pool. I give it its own timeout and concurrency bulkhead, degrade that feature when the breaker opens, and keep the rest of the request healthy.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Sharing one global timeout and one connection pool across all vendors</li>
+<li>Waiting on optional enrichment APIs before returning core data</li>
+<li>Retrying the slow dependency aggressively without a breaker</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you decide which dependency is on the critical path?</li>
+<li>What dashboards prove a bulkhead is working during a vendor incident?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d03-q02">
+  <summary><span class="sac-id">d03-q02</span><span class="sac-q">A third-party API normally responds in 200 ms but sometimes takes 15 seconds. How would you design the integration?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Design for the tail, not the mean: short client timeouts, retries only when safe, hedges or async fallback for rare spikes, and SLOs that assume p99 can be awful. A 15s wait is usually worse than a fast failure.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Set read timeout around a small multiple of healthy p99 (e.g. 1–2s), not 15s.</li>
+<li>Classify the call: user-critical sync vs acceptable eventually — push the latter to a queue.</li>
+<li>For sync path: timeout → cached value / default / 503 with Retry-After.</li>
+<li>Optional hedging: duplicate request to a secondary after 300ms if the API is idempotent and cost-acceptable.</li>
+<li>Record latency histogram; alert on p95, not only averages.</li>
+<li>Negotiate vendor SLA and status webhooks; don't discover 15s only from user complaints.</li>
+<li>Ensure nginx/ALB timeouts are higher than your client timeout so users get your error, not a generic 504.</li>
+<li>Document degraded mode behavior in the API contract.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">import httpx
+
+TIMEOUT = httpx.Timeout(connect=0.3, read=1.5, write=1.5, pool=0.3)
+
+async def fetch_profile(client: httpx.AsyncClient, user_id: str):
+    try:
+        r = await client.get(f&quot;/profiles/{user_id}&quot;, timeout=TIMEOUT)
+        r.raise_for_status()
+        return r.json()
+    except httpx.TimeoutException:
+        return {&quot;id&quot;: user_id, &quot;name&quot;: &quot;Unknown&quot;, &quot;degraded&quot;: True}</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I won't budget 15 seconds for a call that is usually 200 ms — that turns rare vendor lag into our outage. Short timeout, safe fallback, and move non-critical work async.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Matching timeout to the worst observed 15s 'just in case'</li>
+<li>No fallback, so every spike becomes a user-facing hang</li>
+<li>Averaging latency and missing the 15s tail</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>When is request hedging a good idea versus harmful?</li>
+<li>How do you align browser, ALB, nginx, and outbound timeouts?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d03-q03">
+  <summary><span class="sac-id">d03-q03</span><span class="sac-q">A payment provider times out, but you do not know whether the payment was actually processed. How would you design the workflow?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Timeouts create uncertainty — I never invent a second charge. I use idempotency keys, persist a pending payment intent, and reconcile with the provider's status API or webhooks before confirming success to the user.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Create a local payment record in pending with a unique idempotency key before calling the provider.</li>
+<li>Send the same key on all retries so the provider dedupes.</li>
+<li>On timeout: leave status pending_uncertain; do not mark paid or immediately create a new charge.</li>
+<li>Reconcile: poll provider GET-by-idempotency-key / payment id, or wait for signed webhooks.</li>
+<li>Expose user state honestly: 'processing' not 'failed' until reconciliation says so.</li>
+<li>Background reconciler with backoff; alert on pending older than N minutes.</li>
+<li>Make fulfillment (inventory, email) wait on confirmed paid — never on HTTP 200 from an uncertain call.</li>
+<li>Runbook: manual tools to inspect provider dashboard by idempotency key during incidents.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  CreatePending --&gt; CallProvider
+  CallProvider --&gt;|timeout| Reconcile
+  CallProvider --&gt;|ok| MarkPaid
+  Reconcile --&gt;|found_paid| MarkPaid
+  Reconcile --&gt;|not_found| RetrySameKey
+  RetrySameKey --&gt; CallProvider</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># Pseudocode
+# POST /v1/charges with Idempotency-Key: order_123
+# On httpx.TimeoutException: leave Payment.status = &quot;pending&quot;
+# Worker: GET /v1/charges?idempotency_key=order_123 until terminal state</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>After a payment timeout I assume the charge might have succeeded. Same idempotency key, pending state, reconcile via status or webhook — never a blind second capture.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Retrying with a new idempotency key after timeout</li>
+<li>Marking the order failed and allowing the user to pay again immediately</li>
+<li>Trusting only the client timeout as source of truth for money movement</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you handle duplicate webhooks for the same payment?</li>
+<li>What do you show the user while reconciliation is in progress?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d03-q04">
+  <summary><span class="sac-id">d03-q04</span><span class="sac-q">An external API returns intermittent 5xx errors. How would you decide whether and how to retry?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I retry only if the operation is idempotent or safe to duplicate, with exponential backoff and jitter, capped attempts, and respect for Retry-After. Non-idempotent POSTs need idempotency keys or no automatic retry.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Classify method/semantics: GET/PUT with idempotency ⇒ retryable; POST charge without key ⇒ don't auto-retry.</li>
+<li>Retry on 502/503/504 and selected network errors; usually not on 400/401/403/404.</li>
+<li>Use exponential backoff + full jitter; honor Retry-After on 429/503.</li>
+<li>Cap attempts (e.g. 3) and total retry budget inside the request SLO.</li>
+<li>Prefer idempotency keys when the vendor supports them for POST.</li>
+<li>Stop retrying when circuit breaker is open.</li>
+<li>Log attempt count and final outcome; metric retry rate by dependency.</li>
+<li>Document which errors are retried in the client library so all callers share policy.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">import random, asyncio, httpx
+
+async def get_with_retry(client: httpx.AsyncClient, url: str, attempts=3):
+    delay = 0.2
+    for i in range(attempts):
+        try:
+            r = await client.get(url, timeout=2.0)
+            if r.status_code in (502, 503, 504) and i &lt; attempts - 1:
+                raise httpx.HTTPStatusError(&quot;retry&quot;, request=r.request, response=r)
+            r.raise_for_status()
+            return r
+        except (httpx.TransportError, httpx.HTTPStatusError):
+            if i == attempts - 1:
+                raise
+            await asyncio.sleep(delay * random.random())
+            delay *= 2</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> axios-retry or custom Nest interceptor with the same idempotency rules; never globally retry all methods.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Intermittent 5xx gets a small number of jittered retries only when safe. No key, no retry on money-moving POSTs — and I never retry harder than the dependency can handle.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Retrying every POST by default</li>
+<li>Fixed synchronized sleep that aligns all clients</li>
+<li>Infinite retries until the client times out</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you implement full jitter vs equal jitter?</li>
+<li>Which 4xx codes might still be worth retrying and why?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d03-q05">
+  <summary><span class="sac-id">d03-q05</span><span class="sac-q">When can retries make an outage worse?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Retries amplify load when the dependency is already saturated — especially synchronized client retries, missing jitter, or retrying non-idempotent calls that create duplicate side effects. That's how a blip becomes a multi-hour incident.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Thundering herd: all instances retry at the same delay after a timeout.</li>
+<li>Retry storms: each layer (browser, API, worker) retries independently without a shared budget.</li>
+<li>Non-idempotent retries duplicate orders, emails, or charges.</li>
+<li>Retrying while circuit should be open keeps beating a dead dependency.</li>
+<li>Huge fan-out (Promise.all 1000) + retry multiplies traffic 3–5x.</li>
+<li>Hot-key contention: retries pile onto the same failing shard.</li>
+<li>Mitigations: jitter, caps, breaker, hedge carefully, backoff at every layer, load shedding.</li>
+<li>Prefer queued processing with limited concurrency over eager request-path retries.</li></ol>
+    
+    
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Retries are a privilege, not a default. Without jitter, budgets, and idempotency, they turn a vendor hiccup into a self-DDoS — so I cap, spread, and trip a breaker.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Adding more retries as the first response to rising 5xx</li>
+<li>Retrying at API gateway, service, and worker simultaneously with no coordination</li>
+<li>Ignoring Retry-After and hammering on 429</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>What is a retry budget and how would you enforce one?</li>
+<li>How do you test for retry amplification in staging?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d03-q06">
+  <summary><span class="sac-id">d03-q06</span><span class="sac-q">One dependency is unavailable for 30 minutes. How should your application behave for requests that depend on it?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Thirty minutes is longer than any sensible sync retry — fail fast or degrade intentionally. Critical paths should return a clear error or queued acceptance; non-critical paths should serve cache or hide the feature.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Trip circuit breaker quickly after sustained failures; stop waiting on full timeouts each request.</li>
+<li>Critical dependency (payments, auth): return 503 with Retry-After / status page link; don't pretend success.</li>
+<li>Non-critical: cached data, last-known-good, or omit the section with a degraded flag.</li>
+<li>Accept-and-queue when work can complete later (e.g. send email) — return 202.</li>
+<li>Protect core invariants: don't mark paid, ship, or delete without the dependency confirming.</li>
+<li>Communicate: feature flags to disable the integration UX during the outage.</li>
+<li>Keep reconciling pending work when the vendor recovers.</li>
+<li>Post-incident: adjust timeouts/breaker thresholds using the 30-minute timeline.</li></ol>
+    
+    
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>For a half-hour outage I fail fast or go degraded — I don't burn workers on hopeless retries. Critical flows get an honest 503 or queued processing; everything else serves cache or turns the feature off.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Leaving users spinning on spinners for the entire 30 minutes</li>
+<li>Silently succeeding without performing the side effect</li>
+<li>Blocking unrelated endpoints that share the same worker pool</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you product-communicate degraded mode without lying in the API?</li>
+<li>What pending work piles up and how do you drain it safely after recovery?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d03-q07">
+  <summary><span class="sac-id">d03-q07</span><span class="sac-q">How would you implement circuit breaking for an unreliable dependency?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">A circuit breaker tracks recent failures/latency, opens to fail fast, half-opens to probe, and closes on success. I'll define thresholds from SLOs, isolate state per dependency, and emit metrics for open/half-open transitions.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>States: closed (normal) → open (fail fast) → half-open (limited probes) → closed.</li>
+<li>Trip on error rate, consecutive failures, or extreme latency — measured on a rolling window.</li>
+<li>On open: immediate fallback/error without outbound I/O; sleep for open duration.</li>
+<li>Half-open: allow one or N trial calls; success closes, failure re-opens.</li>
+<li>Scope breakers per dependency and optionally per tenant/shard to avoid global trips.</li>
+<li>Combine with timeouts — breakers don't replace deadlines.</li>
+<li>Libraries: resilience4j-inspired patterns, aiobreaker, opossum (Node) — or a small in-process implementation with Redis for multi-instance coordination when needed.</li>
+<li>Alert when open; dashboards show rejected-fast vs upstream errors.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  Closed --&gt;|error_rate_high| Open
+  Open --&gt;|cooldown_elapsed| HalfOpen
+  HalfOpen --&gt;|probe_ok| Closed
+  HalfOpen --&gt;|probe_fail| Open</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">class CircuitBreaker:
+    def __init__(self, failure_threshold=5, recovery_timeout=30):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failures = 0
+        self.opened_at = 0.0
+        self.state = &quot;closed&quot;
+
+    def before_call(self, now: float):
+        if self.state == &quot;open&quot; and now - self.opened_at &gt;= self.recovery_timeout:
+            self.state = &quot;half_open&quot;
+        if self.state == &quot;open&quot;:
+            raise RuntimeError(&quot;circuit_open&quot;)
+
+    def on_success(self):
+        self.failures = 0
+        self.state = &quot;closed&quot;
+
+    def on_failure(self, now: float):
+        self.failures += 1
+        if self.failures &gt;= self.failure_threshold or self.state == &quot;half_open&quot;:
+            self.state = &quot;open&quot;
+            self.opened_at = now</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> opossum around Nest HttpService calls; share state carefully across cluster instances or accept per-process breakers.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Circuit breaking is fail-fast with a recovery probe. I open on sustained errors, stop calling the vendor, serve fallback, then half-open carefully so we don't flap or storm.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>One global breaker for all dependencies</li>
+<li>Half-open allowing full traffic immediately</li>
+<li>No metrics — breaker opens silently and looks like an app bug</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>Should breaker state be local per instance or centralized?</li>
+<li>How do you avoid flapping when errors are borderline?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d03-q08">
+  <summary><span class="sac-id">d03-q08</span><span class="sac-q">Two external providers offer the same capability. How would you design failover between them?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I'd treat them as active/standby or weighted primary with health-aware failover, keeping response mapping and idempotency consistent. Failover must not double side effects — keys and reconciliation matter as much as DNS switching.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Normalize both providers behind an interface (ports/adapters) with a common domain model.</li>
+<li>Primary with health score (latency, errors); fail over when breaker opens or SLO burns.</li>
+<li>Idempotency: store which provider owns a given operation; don't replay the same logical op to both blindly.</li>
+<li>For reads: failover is easy; for writes: prefer sticky provider per entity until terminal state.</li>
+<li>Map errors and statuses carefully — provider A 'pending' ≠ provider B 'failed'.</li>
+<li>Run periodic synthetic probes to the secondary so cold standby isn't broken.</li>
+<li>Config/feature-flag traffic split for canarying the secondary.</li>
+<li>Observe cost and rate limits — failover can slam the backup's quota.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">class ProviderRouter:
+    def __init__(self, primary, secondary, primary_breaker):
+        self.primary, self.secondary = primary, secondary
+        self.breaker = primary_breaker
+
+    async def fetch(self, key: str):
+        try:
+            self.breaker.before_call(now())
+            out = await self.primary.fetch(key)
+            self.breaker.on_success()
+            return out
+        except Exception:
+            self.breaker.on_failure(now())
+            return await self.secondary.fetch(key)</code></pre></div>
+    
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Failover is an interface plus safe ownership of each operation. I trip off the primary when its breaker opens, stick writes to one provider per intent, and keep the secondary warm with synthetics so failover isn't a surprise.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Calling both providers on every write 'for safety'</li>
+<li>Failing over without testing the secondary under production load</li>
+<li>Mixing provider transaction ids in one database column without a provider discriminator</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you fail back to primary without a flip-flop?</li>
+<li>What contract tests do you run against both providers?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d03-q09">
+  <summary><span class="sac-id">d03-q09</span><span class="sac-q">A provider imposes strict rate limits and your traffic suddenly increases 20x. How would you protect your system?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">I shed and shape load before we get banned: client-side rate limiting, queues, caching, and bulkheads keyed to the provider's quota. A 20x spike without a queue will burn the rate limit and then cascade into our own 5xx.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Enforce an outbound rate limiter (token bucket) matching the provider's documented RPS/quota.</li>
+<li>Buffer excess in a durable queue; process at sustained allowed rate.</li>
+<li>Cache idempotent GETs aggressively; collapse duplicate in-flight requests (singleflight).</li>
+<li>Priority lanes: checkout beats batch sync when quota is scarce.</li>
+<li>Backoff on 429 using Retry-After; never busy-spin.</li>
+<li>Graceful degradation: disable non-essential features that call the provider.</li>
+<li>Request more quota / burst capacity from the vendor with evidence graphs.</li>
+<li>Load-test the limiter so our API returns 503/429 cleanly instead of hanging.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">import asyncio, time
+
+class TokenBucket:
+    def __init__(self, rate_per_sec: float, capacity: float):
+        self.rate, self.capacity = rate_per_sec, capacity
+        self.tokens, self.updated = capacity, time.monotonic()
+        self.lock = asyncio.Lock()
+
+    async def acquire(self):
+        async with self.lock:
+            now = time.monotonic()
+            self.tokens = min(self.capacity, self.tokens + (now - self.updated) * self.rate)
+            self.updated = now
+            if self.tokens &lt; 1:
+                await asyncio.sleep((1 - self.tokens) / self.rate)
+                return await self.acquire()
+            self.tokens -= 1</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Use Bottleneck or a Redis rate limiter shared across Nest replicas so each instance doesn't take the full quota.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>When traffic jumps 20x against a strict vendor quota, I rate-limit outbound calls and queue the rest. Better an honest 503 or delayed job than a ban and a total outage.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Scaling API replicas 20x and multiplying outbound RPS</li>
+<li>Ignoring 429 bodies and Retry-After</li>
+<li>No product prioritization — batch jobs starve checkout</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How do you share a token bucket across multiple service replicas?</li>
+<li>What user-facing behavior do you choose when the queue depth is too high?</li></ul>
+    
+  </div>
+</details>
+
+<details class="sac reveal" id="d03-q10">
+  <summary><span class="sac-id">d03-q10</span><span class="sac-q">How would you make an external API integration idempotent from your application's point of view?</span></summary>
+  <div class="sac-body">
+    <div class="sac-label">First 30 seconds</div>
+    <div class="sac-first">Idempotency means retries don't create duplicate side effects. I generate a stable key per business intent, persist it before the call, send it to the provider when supported, and dedupe webhook/response handling on my side.</div>
+    <div class="sac-label">Model answer</div>
+    <ol class="steps"><li>Define the idempotency scope: one key per user intent (place order, capture payment), not per HTTP attempt.</li>
+<li>Persist key + request hash + state in your DB with a unique constraint before outbound I/O.</li>
+<li>Send Idempotency-Key / provider equivalent on mutating calls.</li>
+<li>On replay: return the original result if the same key+hash arrives; conflict if same key different body.</li>
+<li>Dedupe inbound webhooks by event id with an processed_events table.</li>
+<li>Make local effects transactional with state transitions (pending→succeeded).</li>
+<li>TTL/retention for keys long enough to cover retries and late webhooks.</li>
+<li>Test chaos: timeout, retry, duplicate webhook — assert single side effect.</li></ol>
+    
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">from fastapi import FastAPI, Header, HTTPException
+from pydantic import BaseModel
+
+app = FastAPI()
+# assume db with unique(idempotency_key)
+
+class CreateOrder(BaseModel):
+    sku: str
+    qty: int
+
+@app.post(&quot;/orders&quot;)
+async def create_order(body: CreateOrder, idempotency_key: str = Header(...)):
+    existing = await db.fetch_order_by_key(idempotency_key)
+    if existing:
+        if existing.request_hash != hash(body):
+            raise HTTPException(409, &quot;Idempotency key reuse with different body&quot;)
+        return existing.response
+    # insert pending with key, call provider with same key, finalize
+    ...</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Nest middleware/guard can require Idempotency-Key on POST; store in Postgres/Redis with the same unique semantics.</div>
+    <div class="sac-label">Say it out loud</div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>From our side, idempotency is a durable key tied to business intent, unique constraints, and deduped webhooks. Retries may hit the network twice, but inventory and money move once.</p></div></div>
+    <div class="sac-label">Traps / weak answers</div>
+    <ul class="sac-traps"><li>Using random keys on each retry</li>
+<li>Only deduping in memory on one instance</li>
+<li>Ignoring webhook duplicates after a successful sync response</li></ul>
+    <div class="sac-label">Follow-ups</div>
+    <ul class="sac-follow"><li>How long should you retain idempotency keys and why?</li>
+<li>What happens if two different bodies reuse the same key?</li></ul>
+    
+  </div>
+</details>
+          </section>
+
+          <section class="section reveal" id="check">
+            <h2><span class="section-num">03</span> &nbsp;Self-check</h2>
+<div class="quiz">
+      <div class="quiz-q">A dependency sometimes takes 15s while your ALB idle timeout is 60s. What is the first control to add?</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>An outbound client timeout (e.g. 2–3s) with a defined fallback</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Remove the ALB so clients wait forever</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Retry immediately three times with no backoff</button>
+      <div class="quiz-explain">Bound the wait on the dependency; otherwise workers pile up and you turn vendor slowness into your outage.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">Payment API times out; you do not know if charge succeeded. What should you avoid?</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Blindly posting a new charge without an idempotency key / status check</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Recording a pending state and reconciling with the provider</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>Using the same idempotency key on retry</button>
+      <div class="quiz-explain">Timeouts create uncertainty — retries without idempotency double-charge.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">When do retries make an outage worse?</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>When many clients retry at once without jitter during a total dependency outage</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>When a single idempotent read retries once after a blip</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>When you respect Retry-After on 429</button>
+      <div class="quiz-explain">Synchronized retries amplify load (thundering herd) on a struggling dependency.</div>
+    </div>
+<div class="quiz">
+      <div class="quiz-q">Circuit breaker 'open' means:</div>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Calls fail fast locally without hitting the dependency until a probe succeeds</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>All retries are disabled forever</button>
+<button class="quiz-opt" data-correct="false"><span class="mark"></span>TLS is terminated at nginx</button>
+      <div class="quiz-explain">Open state sheds load quickly; half-open allows limited probes to recover.</div>
+    </div>
+          </section>

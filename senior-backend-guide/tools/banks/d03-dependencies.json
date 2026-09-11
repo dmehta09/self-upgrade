@@ -1,0 +1,364 @@
+{
+  "id": "d03",
+  "slug": "dependencies",
+  "title": "Third-Party APIs & Dependency Failures",
+  "primer": "Production systems fail at the seams with vendors, payments, and partner APIs. Interviewers want timeouts, bulkheads, retries with jitter, circuit breakers, and idempotency — not 'we would hope they are up'. Seniors explain how a slow dependency becomes your outage via thread pools and sync waits, and how to degrade without corrupting money or inventory.",
+  "cheatStrip": [
+    {"k": "Timeouts first", "v": "Every outbound call needs connect/read deadlines tighter than your client SLO"},
+    {"k": "Bulkhead", "v": "Isolate pools/semaphores per dependency so one vendor cannot consume all workers"},
+    {"k": "Retry wisely", "v": "Only idempotent/safe calls; exponential backoff + jitter; honor Retry-After"},
+    {"k": "Circuit breaker", "v": "Open on error rate/latency; shed fast; half-open probe; avoid retry storms"},
+    {"k": "Idempotency keys", "v": "Required for payments and any 'maybe succeeded' timeout ambiguity"},
+    {"k": "Degrade", "v": "Cached/partial/feature-off beats hanging the entire request path"}
+  ],
+  "quiz": [
+    {
+      "q": "A dependency sometimes takes 15s while your ALB idle timeout is 60s. What is the first control to add?",
+      "options": [
+        {"t": "An outbound client timeout (e.g. 2–3s) with a defined fallback", "ok": true},
+        {"t": "Remove the ALB so clients wait forever", "ok": false},
+        {"t": "Retry immediately three times with no backoff", "ok": false}
+      ],
+      "explain": "Bound the wait on the dependency; otherwise workers pile up and you turn vendor slowness into your outage."
+    },
+    {
+      "q": "Payment API times out; you do not know if charge succeeded. What should you avoid?",
+      "options": [
+        {"t": "Blindly posting a new charge without an idempotency key / status check", "ok": true},
+        {"t": "Recording a pending state and reconciling with the provider", "ok": false},
+        {"t": "Using the same idempotency key on retry", "ok": false}
+      ],
+      "explain": "Timeouts create uncertainty — retries without idempotency double-charge."
+    },
+    {
+      "q": "When do retries make an outage worse?",
+      "options": [
+        {"t": "When many clients retry at once without jitter during a total dependency outage", "ok": true},
+        {"t": "When a single idempotent read retries once after a blip", "ok": false},
+        {"t": "When you respect Retry-After on 429", "ok": false}
+      ],
+      "explain": "Synchronized retries amplify load (thundering herd) on a struggling dependency."
+    },
+    {
+      "q": "Circuit breaker 'open' means:",
+      "options": [
+        {"t": "Calls fail fast locally without hitting the dependency until a probe succeeds", "ok": true},
+        {"t": "All retries are disabled forever", "ok": false},
+        {"t": "TLS is terminated at nginx", "ok": false}
+      ],
+      "explain": "Open state sheds load quickly; half-open allows limited probes to recover."
+    }
+  ],
+  "questions": [
+    {
+      "id": "d03-q01",
+      "n": 1,
+      "question": "Your application integrates three third-party APIs and one becomes slow. How would you prevent it from degrading the entire request path?",
+      "first30s": "Slow dependencies exhaust shared workers and connection pools — I isolate them with timeouts, per-dependency concurrency limits, and optional circuit breaking so the other two APIs and our handlers keep moving.",
+      "modelAnswer": [
+        "Put aggressive timeouts on the slow vendor's client (connect + read), separate from other clients.",
+        "Bulkhead: dedicated asyncio.Semaphore / httpx limits / thread pool for that dependency.",
+        "Run independent calls concurrently; don't let the slow one sit on the critical path if the feature is optional.",
+        "Circuit breaker: open when p95 or error rate exceeds threshold; return cached/degraded data.",
+        "Fail partial: return 200 with missing widget vs block checkout if that vendor is non-critical.",
+        "Monitor per-dependency latency and in-flight; alert before global p95 burns.",
+        "Move non-interactive calls off-request into queues when possible.",
+        "Load-test with one dependency delayed (toxiproxy/fault injection) to prove isolation."
+      ],
+      "sayIt": "One slow vendor should not own our worker pool. I give it its own timeout and concurrency bulkhead, degrade that feature when the breaker opens, and keep the rest of the request healthy.",
+      "mermaid": "",
+      "code": "import asyncio, httpx\n\n# Per-dependency bulkhead\npayments_sem = asyncio.Semaphore(20)\nsearch_sem = asyncio.Semaphore(50)\n\nasync def call_payments(client: httpx.AsyncClient, path: str):\n    async with payments_sem:\n        return await client.get(path, timeout=httpx.Timeout(0.5, read=2.0))",
+      "codeLang": "python",
+      "nestNote": "Nest: separate HttpModule registrations or axios instances per vendor with maxSockets; use a circuit-breaker library (opossum) around each client.",
+      "traps": [
+        "Sharing one global timeout and one connection pool across all vendors",
+        "Waiting on optional enrichment APIs before returning core data",
+        "Retrying the slow dependency aggressively without a breaker"
+      ],
+      "followUps": [
+        "How do you decide which dependency is on the critical path?",
+        "What dashboards prove a bulkhead is working during a vendor incident?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d03-q02",
+      "n": 2,
+      "question": "A third-party API normally responds in 200 ms but sometimes takes 15 seconds. How would you design the integration?",
+      "first30s": "Design for the tail, not the mean: short client timeouts, retries only when safe, hedges or async fallback for rare spikes, and SLOs that assume p99 can be awful. A 15s wait is usually worse than a fast failure.",
+      "modelAnswer": [
+        "Set read timeout around a small multiple of healthy p99 (e.g. 1–2s), not 15s.",
+        "Classify the call: user-critical sync vs acceptable eventually — push the latter to a queue.",
+        "For sync path: timeout → cached value / default / 503 with Retry-After.",
+        "Optional hedging: duplicate request to a secondary after 300ms if the API is idempotent and cost-acceptable.",
+        "Record latency histogram; alert on p95, not only averages.",
+        "Negotiate vendor SLA and status webhooks; don't discover 15s only from user complaints.",
+        "Ensure nginx/ALB timeouts are higher than your client timeout so users get your error, not a generic 504.",
+        "Document degraded mode behavior in the API contract."
+      ],
+      "sayIt": "I won't budget 15 seconds for a call that is usually 200 ms — that turns rare vendor lag into our outage. Short timeout, safe fallback, and move non-critical work async.",
+      "mermaid": "",
+      "code": "import httpx\n\nTIMEOUT = httpx.Timeout(connect=0.3, read=1.5, write=1.5, pool=0.3)\n\nasync def fetch_profile(client: httpx.AsyncClient, user_id: str):\n    try:\n        r = await client.get(f\"/profiles/{user_id}\", timeout=TIMEOUT)\n        r.raise_for_status()\n        return r.json()\n    except httpx.TimeoutException:\n        return {\"id\": user_id, \"name\": \"Unknown\", \"degraded\": True}",
+      "codeLang": "python",
+      "nestNote": "",
+      "traps": [
+        "Matching timeout to the worst observed 15s 'just in case'",
+        "No fallback, so every spike becomes a user-facing hang",
+        "Averaging latency and missing the 15s tail"
+      ],
+      "followUps": [
+        "When is request hedging a good idea versus harmful?",
+        "How do you align browser, ALB, nginx, and outbound timeouts?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d03-q03",
+      "n": 3,
+      "question": "A payment provider times out, but you do not know whether the payment was actually processed. How would you design the workflow?",
+      "first30s": "Timeouts create uncertainty — I never invent a second charge. I use idempotency keys, persist a pending payment intent, and reconcile with the provider's status API or webhooks before confirming success to the user.",
+      "modelAnswer": [
+        "Create a local payment record in pending with a unique idempotency key before calling the provider.",
+        "Send the same key on all retries so the provider dedupes.",
+        "On timeout: leave status pending_uncertain; do not mark paid or immediately create a new charge.",
+        "Reconcile: poll provider GET-by-idempotency-key / payment id, or wait for signed webhooks.",
+        "Expose user state honestly: 'processing' not 'failed' until reconciliation says so.",
+        "Background reconciler with backoff; alert on pending older than N minutes.",
+        "Make fulfillment (inventory, email) wait on confirmed paid — never on HTTP 200 from an uncertain call.",
+        "Runbook: manual tools to inspect provider dashboard by idempotency key during incidents."
+      ],
+      "sayIt": "After a payment timeout I assume the charge might have succeeded. Same idempotency key, pending state, reconcile via status or webhook — never a blind second capture.",
+      "mermaid": "flowchart LR\n  CreatePending --> CallProvider\n  CallProvider -->|timeout| Reconcile\n  CallProvider -->|ok| MarkPaid\n  Reconcile -->|found_paid| MarkPaid\n  Reconcile -->|not_found| RetrySameKey\n  RetrySameKey --> CallProvider",
+      "code": "# Pseudocode\n# POST /v1/charges with Idempotency-Key: order_123\n# On httpx.TimeoutException: leave Payment.status = \"pending\"\n# Worker: GET /v1/charges?idempotency_key=order_123 until terminal state",
+      "codeLang": "text",
+      "nestNote": "",
+      "traps": [
+        "Retrying with a new idempotency key after timeout",
+        "Marking the order failed and allowing the user to pay again immediately",
+        "Trusting only the client timeout as source of truth for money movement"
+      ],
+      "followUps": [
+        "How do you handle duplicate webhooks for the same payment?",
+        "What do you show the user while reconciliation is in progress?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d03-q04",
+      "n": 4,
+      "question": "An external API returns intermittent 5xx errors. How would you decide whether and how to retry?",
+      "first30s": "I retry only if the operation is idempotent or safe to duplicate, with exponential backoff and jitter, capped attempts, and respect for Retry-After. Non-idempotent POSTs need idempotency keys or no automatic retry.",
+      "modelAnswer": [
+        "Classify method/semantics: GET/PUT with idempotency ⇒ retryable; POST charge without key ⇒ don't auto-retry.",
+        "Retry on 502/503/504 and selected network errors; usually not on 400/401/403/404.",
+        "Use exponential backoff + full jitter; honor Retry-After on 429/503.",
+        "Cap attempts (e.g. 3) and total retry budget inside the request SLO.",
+        "Prefer idempotency keys when the vendor supports them for POST.",
+        "Stop retrying when circuit breaker is open.",
+        "Log attempt count and final outcome; metric retry rate by dependency.",
+        "Document which errors are retried in the client library so all callers share policy."
+      ],
+      "sayIt": "Intermittent 5xx gets a small number of jittered retries only when safe. No key, no retry on money-moving POSTs — and I never retry harder than the dependency can handle.",
+      "mermaid": "",
+      "code": "import random, asyncio, httpx\n\nasync def get_with_retry(client: httpx.AsyncClient, url: str, attempts=3):\n    delay = 0.2\n    for i in range(attempts):\n        try:\n            r = await client.get(url, timeout=2.0)\n            if r.status_code in (502, 503, 504) and i < attempts - 1:\n                raise httpx.HTTPStatusError(\"retry\", request=r.request, response=r)\n            r.raise_for_status()\n            return r\n        except (httpx.TransportError, httpx.HTTPStatusError):\n            if i == attempts - 1:\n                raise\n            await asyncio.sleep(delay * random.random())\n            delay *= 2",
+      "codeLang": "python",
+      "nestNote": "axios-retry or custom Nest interceptor with the same idempotency rules; never globally retry all methods.",
+      "traps": [
+        "Retrying every POST by default",
+        "Fixed synchronized sleep that aligns all clients",
+        "Infinite retries until the client times out"
+      ],
+      "followUps": [
+        "How do you implement full jitter vs equal jitter?",
+        "Which 4xx codes might still be worth retrying and why?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d03-q05",
+      "n": 5,
+      "question": "When can retries make an outage worse?",
+      "first30s": "Retries amplify load when the dependency is already saturated — especially synchronized client retries, missing jitter, or retrying non-idempotent calls that create duplicate side effects. That's how a blip becomes a multi-hour incident.",
+      "modelAnswer": [
+        "Thundering herd: all instances retry at the same delay after a timeout.",
+        "Retry storms: each layer (browser, API, worker) retries independently without a shared budget.",
+        "Non-idempotent retries duplicate orders, emails, or charges.",
+        "Retrying while circuit should be open keeps beating a dead dependency.",
+        "Huge fan-out (Promise.all 1000) + retry multiplies traffic 3–5x.",
+        "Hot-key contention: retries pile onto the same failing shard.",
+        "Mitigations: jitter, caps, breaker, hedge carefully, backoff at every layer, load shedding.",
+        "Prefer queued processing with limited concurrency over eager request-path retries."
+      ],
+      "sayIt": "Retries are a privilege, not a default. Without jitter, budgets, and idempotency, they turn a vendor hiccup into a self-DDoS — so I cap, spread, and trip a breaker.",
+      "mermaid": "",
+      "code": "",
+      "codeLang": "python",
+      "nestNote": "",
+      "traps": [
+        "Adding more retries as the first response to rising 5xx",
+        "Retrying at API gateway, service, and worker simultaneously with no coordination",
+        "Ignoring Retry-After and hammering on 429"
+      ],
+      "followUps": [
+        "What is a retry budget and how would you enforce one?",
+        "How do you test for retry amplification in staging?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d03-q06",
+      "n": 6,
+      "question": "One dependency is unavailable for 30 minutes. How should your application behave for requests that depend on it?",
+      "first30s": "Thirty minutes is longer than any sensible sync retry — fail fast or degrade intentionally. Critical paths should return a clear error or queued acceptance; non-critical paths should serve cache or hide the feature.",
+      "modelAnswer": [
+        "Trip circuit breaker quickly after sustained failures; stop waiting on full timeouts each request.",
+        "Critical dependency (payments, auth): return 503 with Retry-After / status page link; don't pretend success.",
+        "Non-critical: cached data, last-known-good, or omit the section with a degraded flag.",
+        "Accept-and-queue when work can complete later (e.g. send email) — return 202.",
+        "Protect core invariants: don't mark paid, ship, or delete without the dependency confirming.",
+        "Communicate: feature flags to disable the integration UX during the outage.",
+        "Keep reconciling pending work when the vendor recovers.",
+        "Post-incident: adjust timeouts/breaker thresholds using the 30-minute timeline."
+      ],
+      "sayIt": "For a half-hour outage I fail fast or go degraded — I don't burn workers on hopeless retries. Critical flows get an honest 503 or queued processing; everything else serves cache or turns the feature off.",
+      "mermaid": "",
+      "code": "",
+      "codeLang": "python",
+      "nestNote": "",
+      "traps": [
+        "Leaving users spinning on spinners for the entire 30 minutes",
+        "Silently succeeding without performing the side effect",
+        "Blocking unrelated endpoints that share the same worker pool"
+      ],
+      "followUps": [
+        "How do you product-communicate degraded mode without lying in the API?",
+        "What pending work piles up and how do you drain it safely after recovery?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d03-q07",
+      "n": 7,
+      "question": "How would you implement circuit breaking for an unreliable dependency?",
+      "first30s": "A circuit breaker tracks recent failures/latency, opens to fail fast, half-opens to probe, and closes on success. I'll define thresholds from SLOs, isolate state per dependency, and emit metrics for open/half-open transitions.",
+      "modelAnswer": [
+        "States: closed (normal) → open (fail fast) → half-open (limited probes) → closed.",
+        "Trip on error rate, consecutive failures, or extreme latency — measured on a rolling window.",
+        "On open: immediate fallback/error without outbound I/O; sleep for open duration.",
+        "Half-open: allow one or N trial calls; success closes, failure re-opens.",
+        "Scope breakers per dependency and optionally per tenant/shard to avoid global trips.",
+        "Combine with timeouts — breakers don't replace deadlines.",
+        "Libraries: resilience4j-inspired patterns, aiobreaker, opossum (Node) — or a small in-process implementation with Redis for multi-instance coordination when needed.",
+        "Alert when open; dashboards show rejected-fast vs upstream errors."
+      ],
+      "sayIt": "Circuit breaking is fail-fast with a recovery probe. I open on sustained errors, stop calling the vendor, serve fallback, then half-open carefully so we don't flap or storm.",
+      "mermaid": "flowchart LR\n  Closed -->|error_rate_high| Open\n  Open -->|cooldown_elapsed| HalfOpen\n  HalfOpen -->|probe_ok| Closed\n  HalfOpen -->|probe_fail| Open",
+      "code": "class CircuitBreaker:\n    def __init__(self, failure_threshold=5, recovery_timeout=30):\n        self.failure_threshold = failure_threshold\n        self.recovery_timeout = recovery_timeout\n        self.failures = 0\n        self.opened_at = 0.0\n        self.state = \"closed\"\n\n    def before_call(self, now: float):\n        if self.state == \"open\" and now - self.opened_at >= self.recovery_timeout:\n            self.state = \"half_open\"\n        if self.state == \"open\":\n            raise RuntimeError(\"circuit_open\")\n\n    def on_success(self):\n        self.failures = 0\n        self.state = \"closed\"\n\n    def on_failure(self, now: float):\n        self.failures += 1\n        if self.failures >= self.failure_threshold or self.state == \"half_open\":\n            self.state = \"open\"\n            self.opened_at = now",
+      "codeLang": "python",
+      "nestNote": "opossum around Nest HttpService calls; share state carefully across cluster instances or accept per-process breakers.",
+      "traps": [
+        "One global breaker for all dependencies",
+        "Half-open allowing full traffic immediately",
+        "No metrics — breaker opens silently and looks like an app bug"
+      ],
+      "followUps": [
+        "Should breaker state be local per instance or centralized?",
+        "How do you avoid flapping when errors are borderline?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d03-q08",
+      "n": 8,
+      "question": "Two external providers offer the same capability. How would you design failover between them?",
+      "first30s": "I'd treat them as active/standby or weighted primary with health-aware failover, keeping response mapping and idempotency consistent. Failover must not double side effects — keys and reconciliation matter as much as DNS switching.",
+      "modelAnswer": [
+        "Normalize both providers behind an interface (ports/adapters) with a common domain model.",
+        "Primary with health score (latency, errors); fail over when breaker opens or SLO burns.",
+        "Idempotency: store which provider owns a given operation; don't replay the same logical op to both blindly.",
+        "For reads: failover is easy; for writes: prefer sticky provider per entity until terminal state.",
+        "Map errors and statuses carefully — provider A 'pending' ≠ provider B 'failed'.",
+        "Run periodic synthetic probes to the secondary so cold standby isn't broken.",
+        "Config/feature-flag traffic split for canarying the secondary.",
+        "Observe cost and rate limits — failover can slam the backup's quota."
+      ],
+      "sayIt": "Failover is an interface plus safe ownership of each operation. I trip off the primary when its breaker opens, stick writes to one provider per intent, and keep the secondary warm with synthetics so failover isn't a surprise.",
+      "mermaid": "",
+      "code": "class ProviderRouter:\n    def __init__(self, primary, secondary, primary_breaker):\n        self.primary, self.secondary = primary, secondary\n        self.breaker = primary_breaker\n\n    async def fetch(self, key: str):\n        try:\n            self.breaker.before_call(now())\n            out = await self.primary.fetch(key)\n            self.breaker.on_success()\n            return out\n        except Exception:\n            self.breaker.on_failure(now())\n            return await self.secondary.fetch(key)",
+      "codeLang": "python",
+      "nestNote": "",
+      "traps": [
+        "Calling both providers on every write 'for safety'",
+        "Failing over without testing the secondary under production load",
+        "Mixing provider transaction ids in one database column without a provider discriminator"
+      ],
+      "followUps": [
+        "How do you fail back to primary without a flip-flop?",
+        "What contract tests do you run against both providers?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d03-q09",
+      "n": 9,
+      "question": "A provider imposes strict rate limits and your traffic suddenly increases 20x. How would you protect your system?",
+      "first30s": "I shed and shape load before we get banned: client-side rate limiting, queues, caching, and bulkheads keyed to the provider's quota. A 20x spike without a queue will burn the rate limit and then cascade into our own 5xx.",
+      "modelAnswer": [
+        "Enforce an outbound rate limiter (token bucket) matching the provider's documented RPS/quota.",
+        "Buffer excess in a durable queue; process at sustained allowed rate.",
+        "Cache idempotent GETs aggressively; collapse duplicate in-flight requests (singleflight).",
+        "Priority lanes: checkout beats batch sync when quota is scarce.",
+        "Backoff on 429 using Retry-After; never busy-spin.",
+        "Graceful degradation: disable non-essential features that call the provider.",
+        "Request more quota / burst capacity from the vendor with evidence graphs.",
+        "Load-test the limiter so our API returns 503/429 cleanly instead of hanging."
+      ],
+      "sayIt": "When traffic jumps 20x against a strict vendor quota, I rate-limit outbound calls and queue the rest. Better an honest 503 or delayed job than a ban and a total outage.",
+      "mermaid": "",
+      "code": "import asyncio, time\n\nclass TokenBucket:\n    def __init__(self, rate_per_sec: float, capacity: float):\n        self.rate, self.capacity = rate_per_sec, capacity\n        self.tokens, self.updated = capacity, time.monotonic()\n        self.lock = asyncio.Lock()\n\n    async def acquire(self):\n        async with self.lock:\n            now = time.monotonic()\n            self.tokens = min(self.capacity, self.tokens + (now - self.updated) * self.rate)\n            self.updated = now\n            if self.tokens < 1:\n                await asyncio.sleep((1 - self.tokens) / self.rate)\n                return await self.acquire()\n            self.tokens -= 1",
+      "codeLang": "python",
+      "nestNote": "Use Bottleneck or a Redis rate limiter shared across Nest replicas so each instance doesn't take the full quota.",
+      "traps": [
+        "Scaling API replicas 20x and multiplying outbound RPS",
+        "Ignoring 429 bodies and Retry-After",
+        "No product prioritization — batch jobs starve checkout"
+      ],
+      "followUps": [
+        "How do you share a token bucket across multiple service replicas?",
+        "What user-facing behavior do you choose when the queue depth is too high?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d03-q10",
+      "n": 10,
+      "question": "How would you make an external API integration idempotent from your application's point of view?",
+      "first30s": "Idempotency means retries don't create duplicate side effects. I generate a stable key per business intent, persist it before the call, send it to the provider when supported, and dedupe webhook/response handling on my side.",
+      "modelAnswer": [
+        "Define the idempotency scope: one key per user intent (place order, capture payment), not per HTTP attempt.",
+        "Persist key + request hash + state in your DB with a unique constraint before outbound I/O.",
+        "Send Idempotency-Key / provider equivalent on mutating calls.",
+        "On replay: return the original result if the same key+hash arrives; conflict if same key different body.",
+        "Dedupe inbound webhooks by event id with an processed_events table.",
+        "Make local effects transactional with state transitions (pending→succeeded).",
+        "TTL/retention for keys long enough to cover retries and late webhooks.",
+        "Test chaos: timeout, retry, duplicate webhook — assert single side effect."
+      ],
+      "sayIt": "From our side, idempotency is a durable key tied to business intent, unique constraints, and deduped webhooks. Retries may hit the network twice, but inventory and money move once.",
+      "mermaid": "",
+      "code": "from fastapi import FastAPI, Header, HTTPException\nfrom pydantic import BaseModel\n\napp = FastAPI()\n# assume db with unique(idempotency_key)\n\nclass CreateOrder(BaseModel):\n    sku: str\n    qty: int\n\n@app.post(\"/orders\")\nasync def create_order(body: CreateOrder, idempotency_key: str = Header(...)):\n    existing = await db.fetch_order_by_key(idempotency_key)\n    if existing:\n        if existing.request_hash != hash(body):\n            raise HTTPException(409, \"Idempotency key reuse with different body\")\n        return existing.response\n    # insert pending with key, call provider with same key, finalize\n    ...",
+      "codeLang": "python",
+      "nestNote": "Nest middleware/guard can require Idempotency-Key on POST; store in Postgres/Redis with the same unique semantics.",
+      "traps": [
+        "Using random keys on each retry",
+        "Only deduping in memory on one instance",
+        "Ignoring webhook duplicates after a successful sync response"
+      ],
+      "followUps": [
+        "How long should you retain idempotency keys and why?",
+        "What happens if two different bodies reuse the same key?"
+      ],
+      "links": []
+    }
+  ]
+}

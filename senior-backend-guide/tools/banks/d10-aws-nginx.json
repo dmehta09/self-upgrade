@@ -1,0 +1,342 @@
+{
+  "id": "d10",
+  "slug": "aws-nginx",
+  "title": "AWS / Nginx / Networking",
+  "primer": "Senior interviews expect you to place FastAPI behind real AWS edges: DNS, load balancers, private subnets, Multi-AZ data stores, and Nginx as a reverse proxy. They care about TLS termination tradeoffs, client-IP trust, zero-downtime deregistration, and what actually fails when an AZ dies—not diagram wallpaper.",
+  "cheatStrip": [
+    {"k": "HA shape", "v": "Route53 → ALB → Nginx/ECS Multi-AZ → RDS Multi-AZ + Redis + S3"},
+    {"k": "TLS", "v": "Terminate at ALB for simplicity; re-encrypt to Nginx if policy requires"},
+    {"k": "Client IP", "v": "Trust X-Forwarded-For only from known hops; strip spoofed"},
+    {"k": "LB choice", "v": "ALB=HTTP/L7; NLB=TCP/ultra-low latency; API GW=managed API edge"},
+    {"k": "Private apps", "v": "App in private subnets; egress via NAT; no public IP on tasks"},
+    {"k": "ZDD", "v": "ALB deregistration delay ≥ in-flight p99; drain before kill"}
+  ],
+  "quiz": [
+    {
+      "q": "Where should application tasks run in a secure VPC layout?",
+      "options": [
+        {"t": "Public subnets with security groups wide open for convenience", "ok": false},
+        {"t": "Private subnets behind an ALB; outbound via NAT Gateway", "ok": true},
+        {"t": "Only on-prem VPN with no AWS load balancer", "ok": false}
+      ],
+      "explain": "Internet clients hit the ALB in public subnets; app instances stay private. NAT provides controlled egress for patches and third-party APIs."
+    },
+    {
+      "q": "Why can a site work by IP but fail by hostname?",
+      "options": [
+        {"t": "DNS/TLS/SNI/virtual-host mismatch—IP bypasses name-based routing", "ok": true},
+        {"t": "PostgreSQL refuses hostname connections only", "ok": false},
+        {"t": "S3 buckets cannot be reached by DNS", "ok": false}
+      ],
+      "explain": "ALB listener rules, Nginx server_name, and TLS certificates all key off the Host/SNI name. Hitting the IP skips that path."
+    },
+    {
+      "q": "What is the main zero-downtime lever when removing an EC2 target from an ALB?",
+      "options": [
+        {"t": "Immediately terminate the instance on deploy start", "ok": false},
+        {"t": "Deregister and wait deregistration_delay so in-flight requests finish", "ok": true},
+        {"t": "Disable health checks permanently", "ok": false}
+      ],
+      "explain": "ALB stops new connections and waits the configured delay (and connection drain) before the target is gone—match it to your p99 request duration."
+    },
+    {
+      "q": "ALB vs NLB for a typical public FastAPI JSON API?",
+      "options": [
+        {"t": "NLB by default for path-based routing and WAF", "ok": false},
+        {"t": "ALB for HTTP routing, sticky optional, WAF integration; NLB when you need raw TCP/ultra static IP", "ok": true},
+        {"t": "API Gateway is required for every EC2 service", "ok": false}
+      ],
+      "explain": "Most HTTP APIs want ALB features. NLB shines for TCP, extreme performance, or private-link style static IPs."
+    }
+  ],
+  "questions": [
+    {
+      "id": "d10-q01",
+      "n": 1,
+      "question": "How would you design a highly available backend using Route 53, ALB, EC2/ECS, Nginx, PostgreSQL, Redis, and S3?",
+      "first30s": "I'd put DNS on Route 53 health-checking an ALB spanning two AZs, run FastAPI behind Nginx on ECS/EC2 in private subnets, and use Multi-AZ RDS, clustered Redis, and S3 for durable objects.",
+      "modelAnswer": [
+        "Route 53 alias to ALB (or failover/weighted if multi-region); health checks on the ALB/target group.",
+        "ALB in public subnets across ≥2 AZs; target group to Nginx+app tasks/instances in private subnets across the same AZs.",
+        "Nginx terminates or proxies to uvicorn/gunicorn; keep config identical via AMI/user-data or container image.",
+        "RDS PostgreSQL Multi-AZ for automatic standby failover; app uses the cluster endpoint with connection retry.",
+        "Redis: ElastiCache Multi-AZ/failover group for sessions/cache; treat cache as disposable, DB as source of truth.",
+        "S3 for media/artifacts (versioning + SSE); no local disk as durable store. IAM task roles, not long-lived keys."
+      ],
+      "sayIt": "HA for me is Multi-AZ at every hop: Route 53 to a cross-AZ ALB, private ECS/EC2 with Nginx, RDS Multi-AZ, Redis failover, and S3. One AZ loss should drop capacity, not the product.",
+      "mermaid": "flowchart TB\n  users[Users] --> r53[Route53]\n  r53 --> alb[ALB_multiAZ]\n  alb --> ngx1[Nginx_AZ_a]\n  alb --> ngx2[Nginx_AZ_b]\n  ngx1 --> api1[FastAPI]\n  ngx2 --> api2[FastAPI]\n  api1 --> rds[RDS_MultiAZ]\n  api2 --> rds\n  api1 --> redis[ElastiCache]\n  api2 --> redis\n  api1 --> s3[S3]",
+      "code": "",
+      "codeLang": "text",
+      "nestNote": "Same topology for Nest; put the Node process behind Nginx or ALB directly—don't expose container ports publicly.",
+      "traps": [
+        "Single-AZ RDS or a lone EC2 'for cost' with no failover story.",
+        "Storing uploads on instance disk instead of S3."
+      ],
+      "followUps": [
+        "How do you handle Redis failover without stampedes to Postgres?",
+        "When would you add a second region?"
+      ],
+      "links": [
+        {"label": "AWS Well-Architected — Reliability", "href": "https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/welcome.html"}
+      ]
+    },
+    {
+      "id": "d10-q02",
+      "n": 2,
+      "question": "How would you decide whether TLS should terminate at the load balancer or Nginx?",
+      "first30s": "Default: terminate TLS at the ALB with an ACM certificate for operational simplicity. Re-encrypt to Nginx/app only when compliance requires encryption in transit on the private hop.",
+      "modelAnswer": [
+        "ALB termination: ACM auto-renewal, easy HTTPS listener, HTTP to targets on a private network—good for most SaaS APIs.",
+        "Nginx termination: when you need custom TLS policies, mTLS, or the ALB is TCP/NLB and cannot do HTTP features you need.",
+        "ALB → Nginx re-encrypt (TLS to target): defense-in-depth / regulated environments; costs CPU and cert management on targets.",
+        "Never send cleartext across untrusted networks; inside a locked-down VPC, HTTP to targets is a conscious tradeoff, not ignorance.",
+        "Document trust: apps must still know original proto via X-Forwarded-Proto for redirect/cookie Secure flags.",
+        "Prefer ACM on ALB; if terminating at Nginx, automate cert issuance (ACM PCA, Let's Encrypt carefully) and rotation."
+      ],
+      "sayIt": "I'd terminate at the ALB with ACM unless compliance forces TLS to the instance—then re-encrypt to Nginx. Either way I honor X-Forwarded-Proto for secure cookies and redirects.",
+      "mermaid": "",
+      "code": "# Nginx trust forwarded proto from ALB only\nset_real_ip_from 10.0.0.0/8;\nreal_ip_header X-Forwarded-For;",
+      "codeLang": "bash",
+      "nestNote": "Nest behind ALB: enable `app.set('trust proxy', hopCount)` or equivalent so `req.secure` reflects X-Forwarded-Proto.",
+      "traps": [
+        "Terminating at ALB then assuming the app sees HTTPS without trusting proxy headers.",
+        "Managing wildcard certs on every EC2 by hand with no rotation."
+      ],
+      "followUps": [
+        "How does mTLS change the termination point?",
+        "Where do you enforce HSTS?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d10-q03",
+      "n": 3,
+      "question": "How would you troubleshoot a request that works by IP address but not through the domain name?",
+      "first30s": "That pattern screams DNS, TLS/SNI, or Host-header routing—not the app itself. I'd verify what name resolves to, then what certificate and virtual host that name selects.",
+      "modelAnswer": [
+        "dig/nslookup the hostname; confirm it points at the expected ALB/CloudFront, not a stale IP or wrong account.",
+        "Compare curl -v by IP vs by Host: `curl -vk https://IP -H 'Host: api.example.com'` to separate DNS from vhost.",
+        "Check TLS: certificate CN/SAN must include the hostname; SNI must be sent (modern clients do).",
+        "ALB listener rules and Nginx `server_name` may only match the hostname; default server may 404/wrong cert on bare IP.",
+        "Check Route 53 record type (alias vs A), propagation, and split-horizon/private zones if on VPN.",
+        "Browser-only failures: HSTS, cached DNS, or corporate proxy—verify with curl from the same network."
+      ],
+      "sayIt": "If IP works but the domain doesn't, I chase DNS first, then TLS SANs/SNI, then ALB/Nginx Host-based rules. The app is usually fine—the name path isn't.",
+      "mermaid": "",
+      "code": "dig +short api.example.com\ncurl -vk https://api.example.com/health\ncurl -vk https://<alb-ip>/health -H 'Host: api.example.com'",
+      "codeLang": "bash",
+      "nestNote": "",
+      "traps": [
+        "Immediately restarting the app or redeploying ECS.",
+        "Ignoring that ALB HTTPS requires matching cert for the hostname."
+      ],
+      "followUps": [
+        "How would CloudFront in front change this debugging path?",
+        "What if HTTP works but HTTPS fails only on the domain?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d10-q04",
+      "n": 4,
+      "question": "How would you preserve and validate client IP information across a proxy/load-balancer chain?",
+      "first30s": "Client IP is only trustworthy if we know how many hops append X-Forwarded-For and we ignore anything clients spoof. I'd configure real_ip at Nginx and trust proxy at FastAPI with an explicit hop count.",
+      "modelAnswer": [
+        "ALB appends the client IP to X-Forwarded-For; the immediate peer IP is the ALB node.",
+        "Nginx: `set_real_ip_from` for VPC CIDRs / ALB; `real_ip_header X-Forwarded-For`; `real_ip_recursive on` as appropriate.",
+        "FastAPI/uvicorn: configure proxy headers / trusted hosts so `request.client` reflects the real client after N trusted hops.",
+        "Never blindly trust the leftmost XFF from the open internet without verifying the chain.",
+        "Prefer ALB's `X-Amzn-Trace-Id` plus structured logs; for rate limits, use the validated client IP.",
+        "Document the hop count in runbooks; mis-counting causes rate limits to key on the ALB IP (one bucket for everyone)."
+      ],
+      "sayIt": "I only trust X-Forwarded-For from known load-balancer CIDRs with a fixed hop count. Spoofed client-supplied XFF is ignored so rate limits and audit logs key on the real client.",
+      "mermaid": "flowchart LR\n  c[Client] --> alb[ALB_appends_XFF]\n  alb --> ngx[Nginx_real_ip]\n  ngx --> api[FastAPI_trust_hops]",
+      "code": "# FastAPI / Starlette TrustedHost + careful forwarded handling\n# Prefer a middleware that takes the rightmost untrusted → leftmost trusted hop",
+      "codeLang": "python",
+      "nestNote": "Nest/Express: `app.set('trust proxy', 1)` (or hop count matching ALB→Nginx). Wrong value breaks IP-based throttling.",
+      "traps": [
+        "Using the first XFF entry blindly (attacker-controlled).",
+        "Logging only the TCP peer (always the LB) and thinking it's the user."
+      ],
+      "followUps": [
+        "How does PROXY protocol on NLB change this?",
+        "How do you rate-limit users behind CGNAT?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d10-q05",
+      "n": 5,
+      "question": "How would you decide between ALB, NLB, and API Gateway for a backend service?",
+      "first30s": "ALB for HTTP APIs with path routing and WAF; NLB for raw TCP/ultra-low latency/static private IP; API Gateway when you want managed auth, throttling, and serverless/productized API edges.",
+      "modelAnswer": [
+        "ALB: L7 HTTP/HTTPS, host/path routing, OIDC, WAF, target groups to ECS/EC2/Lambda—default for FastAPI microservices.",
+        "NLB: L4 TCP/UDP, preserves source IP (with caveats), extreme scale/low latency, AWS PrivateLink—good for databases' proxies, gRPC at scale, or non-HTTP.",
+        "API Gateway (HTTP/REST/WebSocket): API keys, usage plans, JWT authorizers, request validation, fan-out to Lambda/HTTP; higher per-request cost, great for public API products.",
+        "Combine: API GW → VPC link → NLB/ALB for private services when you need GW features plus container backends.",
+        "Choose on protocol, routing needs, auth/throttle features, latency budget, and cost model—not fashion.",
+        "For a single internal FastAPI service behind Cognito/custom auth in-app, ALB alone is usually enough."
+      ],
+      "sayIt": "ALB for normal HTTP FastAPI, NLB when I need L4/PrivateLink/static IP, API Gateway when the product needs managed API edge features. I pick from requirements, not defaults.",
+      "mermaid": "",
+      "code": "",
+      "codeLang": "text",
+      "nestNote": "",
+      "traps": [
+        "Using API Gateway for every internal service and paying latency/cost without using its features.",
+        "Putting HTTP path routing expectations on an NLB."
+      ],
+      "followUps": [
+        "When is CloudFront + ALB better than API Gateway?",
+        "How do you expose a private ALB via PrivateLink?"
+      ],
+      "links": [
+        {"label": "Elastic Load Balancing features", "href": "https://aws.amazon.com/elasticloadbalancing/features/"}
+      ]
+    },
+    {
+      "id": "d10-q06",
+      "n": 6,
+      "question": "How would you keep application servers private while exposing the system securely to the internet?",
+      "first30s": "Public subnet holds only the ALB (and maybe NAT/bastion). App tasks live in private subnets with no public IPs; egress goes through NAT; security groups allow ALB→app only.",
+      "modelAnswer": [
+        "Split VPC: public subnets (ALB, NAT Gateway) and private subnets (ECS/EC2, RDS, Redis).",
+        "Security groups: ALB accepts 443 from world (or CloudFront); app SG accepts only from ALB SG on app port; RDS accepts only from app SG.",
+        "No SSH from 0.0.0.0/0—use SSM Session Manager or a tightly locked bastion.",
+        "NAT Gateway for outbound package mirrors, webhooks, third-party APIs; VPC endpoints for S3/ECR/Secrets to cut NAT cost and exposure.",
+        "WAF on ALB for common exploits/rate rules; Force HTTPS at the listener.",
+        "Private DNS inside VPC for service discovery; never publish private instance IPs in public DNS."
+      ],
+      "sayIt": "Internet stops at the ALB. Apps and data stores stay in private subnets with SG chains ALB→app→RDS, egress via NAT or VPC endpoints, and admin access via SSM—not open SSH.",
+      "mermaid": "flowchart TB\n  inet[Internet] --> alb[ALB_public]\n  alb --> app[App_private]\n  app --> rds[RDS_private]\n  app --> nat[NAT_egress]\n  nat --> inet",
+      "code": "",
+      "codeLang": "text",
+      "nestNote": "",
+      "traps": [
+        "Assigning public IPs to ECS tasks 'so health checks work' (fix the ALB health check path instead).",
+        "Wide SG rules like 0.0.0.0/0 on app port."
+      ],
+      "followUps": [
+        "When do you add a Network Firewall or egress proxy?",
+        "How do Lambda functions in VPC reach the internet?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d10-q07",
+      "n": 7,
+      "question": "How would you design autoscaling for a backend where CPU is not a reliable signal of demand?",
+      "first30s": "CPU-idle services still drown—queue lag, in-flight requests, and p99 latency are better signals. I'd publish custom CloudWatch metrics and scale on those with sensible cooldowns.",
+      "modelAnswer": [
+        "Identify the real bottleneck: SQS depth, Kafka lag, active DB connections, request concurrency, event-loop lag.",
+        "Emit custom metrics from the app or queue (ApproximateNumberOfMessagesVisible, consumer lag, concurrent requests).",
+        "Target tracking or step scaling on that metric; keep CPU as a secondary safeguard.",
+        "Scale out early on lag; scale in slowly to avoid thrash; set min capacity for cold-start protection.",
+        "For ECS: scale services on ALB RequestCountPerTarget or custom metrics; ensure deploy + scale policies don't fight.",
+        "Load-test to correlate metric → capacity; alert when scaling hits max and lag still grows (shed load)."
+      ],
+      "sayIt": "When CPU lies, I scale on queue lag or concurrent requests via custom CloudWatch metrics, with slow scale-in and a floor capacity. CPU stays a backup signal only.",
+      "mermaid": "",
+      "code": "# PutMetricData sketch: ConcurrentRequests / worker\n# ASG policy: target tracking on that metric",
+      "codeLang": "text",
+      "nestNote": "Nest workers consuming BullMQ should scale on waiting job count, not Node process CPU alone.",
+      "traps": [
+        "Only scaling on CPU for an I/O-bound FastAPI service.",
+        "Scale-in that's too aggressive during traffic troughs between bursts."
+      ],
+      "followUps": [
+        "How do you prevent autoscaling from launching into a broken deploy?",
+        "What metric would you use for a WebSocket-heavy service?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d10-q08",
+      "n": 8,
+      "question": "How would you make an EC2-based deployment highly available across Availability Zones?",
+      "first30s": "Spread instances across at least two AZs behind a cross-AZ ALB, use an ASG with multi-AZ subnets, and put stateful dependencies on Multi-AZ managed services.",
+      "modelAnswer": [
+        "ASG spanning private subnets in ≥2 AZs; ALB target group with instances in each AZ.",
+        "Capacity balanced: don't put min=1 in a single AZ; use capacity rebalancing / diverse instance types if needed.",
+        "Health checks: ALB HTTP health on /health that verifies critical deps carefully (avoid flapping on blips).",
+        "RDS Multi-AZ, ElastiCache failover, EFS/S3 instead of AZ-local disk for shared assets.",
+        "AMI/Launch Template identical; user-data/cloud-init registers to ALB automatically.",
+        "Test AZ loss: verify remaining AZ can take 100% (or accept degraded capacity with known SLO)."
+      ],
+      "sayIt": "Multi-AZ HA means ASG+ALB across subnets, Multi-AZ data stores, and enough spare capacity that losing one AZ still meets SLO. Identical Launch Templates so replacements are boring.",
+      "mermaid": "",
+      "code": "",
+      "codeLang": "text",
+      "nestNote": "",
+      "traps": [
+        "Two instances in the same AZ thinking that's HA.",
+        "Local disk sessions that vanish when an AZ fails."
+      ],
+      "followUps": [
+        "How do you size capacity for N-1 AZ survival?",
+        "What breaks if you disable ALB cross-zone load balancing?"
+      ],
+      "links": []
+    },
+    {
+      "id": "d10-q09",
+      "n": 9,
+      "question": "How would you design zero-downtime deployment on EC2 behind an ALB?",
+      "first30s": "I'd use rolling replace with connection draining: register healthy new instances, deregister old ones, wait deregistration_delay until in-flight requests finish, then terminate.",
+      "modelAnswer": [
+        "Launch new instances from the new AMI/Launch Template; wait until ALB health checks pass.",
+        "Deregister old targets; set deregistration_delay (e.g. 30–120s) ≥ p99 request time + buffer.",
+        "App handles SIGTERM: stop taking new work (or rely on ALB stopping new connections), finish in-flight, close pools.",
+        "For ASG instance refresh / rolling update: set min healthy %, checkpoints, and bake health checks that prove the new version.",
+        "Run dual versions only if migrations are forward-compatible (expand/contract).",
+        "Verify with synthetic traffic during deploy; auto-rollback on health/alarm failure."
+      ],
+      "sayIt": "Zero-downtime on EC2+ALB is drain-then-kill: healthy new targets first, deregistration delay covering in-flight p99, and SIGTERM-aware processes. Never terminate before the ALB stops sending traffic.",
+      "mermaid": "flowchart LR\n  new[Register_new] --> healthy[Health_pass]\n  healthy --> drain[Deregister_old]\n  drain --> wait[Wait_dereg_delay]\n  wait --> term[Terminate_old]",
+      "code": "# Target group attribute\n# deregistration_delay.timeout_seconds = 90",
+      "codeLang": "bash",
+      "nestNote": "Nest: enable shutdown hooks (`app.enableShutdownHooks()`) and set ECS/ASG stop timeout > longest request.",
+      "traps": [
+        "ASG terminating instances immediately on refresh without draining.",
+        "Health check that only hits Nginx while the new app process isn't ready."
+      ],
+      "followUps": [
+        "How does this differ on ECS rolling update vs EC2 ASG?",
+        "What deregistration delay do you choose for long uploads?"
+      ],
+      "links": [
+        {"label": "ALB connection draining", "href": "https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-target-groups.html#deregistration-delay"}
+      ]
+    },
+    {
+      "id": "d10-q10",
+      "n": 10,
+      "question": "One AWS Availability Zone fails during peak traffic. What components must fail over and what should you test beforehand?",
+      "first30s": "I'd walk the dependency list: ALB nodes, ASG capacity in remaining AZs, RDS failover, Redis failover, and NAT. Game-day those failovers under load before peak season.",
+      "modelAnswer": [
+        "ALB: multi-AZ by design—confirm targets exist in surviving AZs and cross-zone balancing behavior.",
+        "Compute: ASG should launch replacements in healthy AZs; ensure subnet IP capacity and service quotas allow it.",
+        "RDS Multi-AZ: expect brief failover downtime (DNS/connection blip); apps must retry with backoff.",
+        "ElastiCache: failover to replica; expect cache coldness and possible stampede—use request coalescing/soft TTLs.",
+        "NAT Gateway is AZ-specific: apps in a dead AZ lose that NAT; surviving AZ NAT must handle egress or use HA NAT design.",
+        "Game days: simulate AZ impairment, watch error budgets, verify alarms/runbooks, and document capacity headroom (N-1)."
+      ],
+      "sayIt": "AZ failure is a capacity and failover event: remaining AZ apps take traffic, RDS/Redis fail over with retries, and NAT/IP capacity must already be sized. I'd prove it with a game day, not a slide.",
+      "mermaid": "",
+      "code": "",
+      "codeLang": "text",
+      "nestNote": "",
+      "traps": [
+        "Assuming Multi-AZ RDS means zero connection errors (clients must reconnect).",
+        "Never testing that the surviving AZ has enough CPU/connection capacity for peak."
+      ],
+      "followUps": [
+        "What's your RTO/RPO if the RDS failover is insufficient and you need a region DR?",
+        "How do you prevent cache stampedes after Redis failover?"
+      ],
+      "links": [
+        {"label": "AWS FIS AZ availability", "href": "https://docs.aws.amazon.com/fis/latest/userguide/fis-actions-reference.html"}
+      ]
+    }
+  ]
+}
