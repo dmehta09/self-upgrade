@@ -13,10 +13,11 @@
      blurb        one-line intro description
      sections    ["quant", ...]  filter the global bank by section key
      topics      ["qa-percent", ...] filter by topic id (= lesson id)
+     diffs       ["stretch", ...] filter by difficulty (warm|core|stretch)
      count        questions per run (default 5)
      counts       [10,20,30] → show selectable count chips
      timerSec     total seconds (fixed)        | secPerQ → timer = count×secPerQ
-     chips        [{label, sections?, topics?}] → topic filter chips (center mode)
+     chips        [{label, sections?, topics?, diffs?}] → topic filter chips (center mode)
      shuffle      default true
      questions    inline [{q, options, answer, explain, topic?}] (self-contained)
    ============================================================ */
@@ -38,7 +39,11 @@
 
     var drillKey = cfg.id || cfg.title || ((cfg.sections || []).join("+") + "|" + (cfg.topics || []).join("+"));
     var store = readStore();
-    var filter = { sections: (cfg.sections || []).slice(), topics: (cfg.topics || []).slice() };
+    var filter = {
+      sections: (cfg.sections || []).slice(),
+      topics: (cfg.topics || []).slice(),
+      diffs: (cfg.diffs || []).slice()
+    };
     var chosenCount = cfg.count || 5;
     var shuffleOn = cfg.shuffle !== false;
 
@@ -47,7 +52,8 @@
       return (window.APTI_QUESTIONS || []).filter(function (q) {
         var okS = !filter.sections.length || filter.sections.indexOf(q.section) !== -1;
         var okT = !filter.topics.length || filter.topics.indexOf(q.topic) !== -1;
-        return okS && okT;
+        var okD = !filter.diffs.length || filter.diffs.indexOf(q.diff) !== -1;
+        return okS && okT && okD;
       });
     }
     function timerFor(n) { return cfg.secPerQ ? n * cfg.secPerQ : (cfg.timerSec || 0); }
@@ -62,7 +68,8 @@
     /* ---------- intro ---------- */
     function sameFilter(ch) {
       return (ch.sections || []).join(",") === filter.sections.join(",") &&
-             (ch.topics || []).join(",") === filter.topics.join(",");
+             (ch.topics || []).join(",") === filter.topics.join(",") &&
+             (ch.diffs || []).join(",") === filter.diffs.join(",");
     }
     function renderIntro() {
       stopTimer(); host.innerHTML = "";
@@ -80,7 +87,10 @@
         var row = el("div", "dr-row"); row.appendChild(el("span", "dr-lbl", "Topic"));
         cfg.chips.forEach(function (ch) {
           var b = el("button", "dr-chip" + (sameFilter(ch) ? " active" : ""), ch.label); b.type = "button";
-          b.addEventListener("click", function () { filter = { sections: ch.sections || [], topics: ch.topics || [] }; renderIntro(); });
+          b.addEventListener("click", function () {
+            filter = { sections: ch.sections || [], topics: ch.topics || [], diffs: ch.diffs || [] };
+            renderIntro();
+          });
           row.appendChild(b);
         });
         intro.appendChild(row);

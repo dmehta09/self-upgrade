@@ -198,5 +198,55 @@ window.APTI_QUESTIONS = [
   { section:"di", topic:"di-ds", diff:"warm", q:"Data-sufficiency questions ask whether the statements are ___ to answer.", options:["sufficient","interesting","long","true"], answer:0, explain:"DS tests sufficiency, not the final numeric value." },
   { section:"di", topic:"di-ds", diff:"core", q:"Value of integer x? (1) x &gt; 5  (2) x &lt; 7. Using both:", options:["x = 6","x = 5","x = 7","Cannot say"], answer:0, explain:"5 &lt; x &lt; 7 with x an integer &rarr; x = 6 (both needed)." },
   { section:"di", topic:"di-ds", diff:"core", q:"In DS you should:", options:["Stop once you know it&rsquo;s answerable","Always compute the full answer","Pick the biggest number","Always guess A"], answer:0, explain:"Judge sufficiency only &mdash; full computation wastes time." },
-  { section:"di", topic:"di-ds", diff:"warm", q:"Is n even?  (1) n = 2k for some integer k. Statement (1) is:", options:["Sufficient","Insufficient","Irrelevant","Contradictory"], answer:0, explain:"n = 2k is the definition of even &rarr; sufficient." }
+  { section:"di", topic:"di-ds", diff:"warm", q:"Is n even?  (1) n = 2k for some integer k. Statement (1) is:", options:["Sufficient","Insufficient","Irrelevant","Contradictory"], answer:0, explain:"n = 2k is the definition of even &rarr; sufficient." },
+
+  /* ---------- STRETCH DENSIFY (OA harder items) ---------- */
+  { section:"quant", topic:"qa-percent", diff:"stretch", q:"A price rises 25% then falls 20%. Net change?", options:["0%","+5%","&minus;5%","+2%"], answer:0, explain:"1.25 &times; 0.8 = 1.00 &rarr; break-even (the classic 25-up / 20-down trap)." },
+  { section:"quant", topic:"qa-percent", diff:"stretch", q:"x is 20% more than y. y is what % less than x?", options:["16 <sup>2</sup>&frasl;<sub>3</sub>%","20%","25%","80%"], answer:0, explain:"If y=100, x=120. Drop from 120 to 100 is 20/120 = 1/6 = 16 <sup>2</sup>&frasl;<sub>3</sub>%." },
+
+  { section:"quant", topic:"qa-tsd", diff:"stretch", q:"A goes 60 km at 30 km/h and returns at 60 km/h. Average speed for the trip?", options:["40 km/h","45 km/h","50 km/h","90 km/h"], answer:0, explain:"Harmonic mean for equal distances: 2ab/(a+b) = 2&times;30&times;60/90 = 40. (Not the arithmetic mean 45.)" },
+  { section:"quant", topic:"qa-tsd", diff:"stretch", q:"Two trains 120 m and 80 m long run toward each other at 20 m/s and 10 m/s. Time to cross?", options:["<sup>20</sup>&frasl;<sub>3</sub> s","10 s","6 s","4 s"], answer:0, explain:"Relative speed 30 m/s; distance = sum of lengths 200 m &rarr; 200/30 = 20/3 s." },
+
+  { section:"quant", topic:"qa-pnc", diff:"stretch", q:"How many distinct 4-letter words from BANK (letters may not repeat)?", options:["24","16","12","4"], answer:0, explain:"4 distinct letters, use all: 4! = 24." },
+  { section:"quant", topic:"qa-pnc", diff:"stretch", q:"A bag has 3 red and 2 blue balls. P(2 red in 2 draws without replacement)?", options:["<sup>3</sup>&frasl;<sub>10</sub>","<sup>9</sup>&frasl;<sub>25</sub>","<sup>2</sup>&frasl;<sub>5</sub>","<sup>1</sup>&frasl;<sub>2</sub>"], answer:0, explain:"(3/5)&times;(2/4) = 6/20 = 3/10." },
+
+  { section:"quant", topic:"qa-work", diff:"stretch", q:"A and B together finish in 12 days; A alone in 20. B alone?", options:["30 days","8 days","32 days","15 days"], answer:0, explain:"1/B = 1/12 &minus; 1/20 = (5&minus;3)/60 = 1/30 &rarr; 30 days." },
+  { section:"quant", topic:"qa-commerce", diff:"stretch", q:"Marked &#8377;800, two successive 10% discounts. Selling price?", options:["&#8377;648","&#8377;640","&#8377;720","&#8377;700"], answer:0, explain:"0.9 &times; 0.9 &times; 800 = 648 (not a single 20% off)." },
+  { section:"quant", topic:"qa-geometry", diff:"stretch", q:"A 7&times;7&times;7 cube is painted and cut into 1&times;1&times;1 cubes. How many have exactly 1 face painted?", options:["150","98","125","343"], answer:0, explain:"Each face contributes (7&minus;2)&sup2; = 25; 6 faces &times; 25 = 150." },
+  { section:"quant", topic:"qa-numbers", diff:"stretch", q:"Smallest number that leaves remainder 1 when divided by 2, 3, 4, 5, 6?", options:["61","60","31","121"], answer:0, explain:"LCM(2..6)=60; number = 60k+1. Smallest &gt;1 is 61." },
+  { section:"quant", topic:"qa-averages", diff:"stretch", q:"Average of 10 scores is 50. Removing two scores of 40 and 60, new average?", options:["50","48","52","45"], answer:0, explain:"Total was 500; remove 100 &rarr; 400 over 8 = 50 (unchanged)." },
+  { section:"quant", topic:"qa-ratio", diff:"stretch", q:"Milk:water = 4:1. After adding 5 L water, ratio becomes 2:1. Original milk?", options:["20 L","16 L","10 L","25 L"], answer:0, explain:"Milk stays 4x; water x+5; 4x:(x+5)=2:1 &rarr; 4x = 2x+10 &rarr; x=5; milk=20." },
+
+  { section:"reasoning", topic:"lr-series", diff:"stretch", q:"Next: 2, 3, 8, 27, 112, ?", options:["565","560","450","336"], answer:0, explain:"&times;1+1, &times;2+2, &times;3+3, &times;4+4, &times;5+5: 112&times;5+5 = 565." },
+  { section:"reasoning", topic:"lr-series", diff:"stretch", q:"Odd one: 121, 144, 169, 196, 225, 256, 288", options:["288","225","196","256"], answer:0, explain:"Squares 11&sup2;&hellip;16&sup2;; 288 is not a perfect square." },
+
+  { section:"reasoning", topic:"lr-direction", diff:"stretch", q:"A walks 10 m North, 10 m East, 10 m South, 10 m West. Where relative to start?", options:["At the start","10 m East","10 m North","10 m West"], answer:0, explain:"A closed square path &mdash; back at origin." },
+  { section:"reasoning", topic:"lr-direction", diff:"stretch", q:"Facing West, turn left, walk 5 m, turn left, walk 5 m. Facing?", options:["East","West","North","South"], answer:0, explain:"West &rarr; left = South; left again = East." },
+
+  { section:"reasoning", topic:"lr-seating", diff:"stretch", q:"Eight seats in a circle facing centre. If A&rsquo;s right is B, who is to A&rsquo;s immediate left?", options:["Cannot say from this alone","B","Opposite of B","Same as B"], answer:0, explain:"Only A&rsquo;s right is fixed; left neighbour is unnamed." },
+  { section:"reasoning", topic:"lr-seating", diff:"stretch", q:"In a row of 7, C is 3rd left of D; D is 2nd right of E. If E is at 3, C is at?", options:["2","1","4","5"], answer:0, explain:"E=3 &rarr; D=5; C is 3 left of D &rarr; position 2." },
+
+  { section:"reasoning", topic:"lr-coding", diff:"stretch", q:"If in a code ROSE is 6821 and CHAIR is 73456, what is SEARCH?", options:["214673","216473","214763","241673"], answer:0, explain:"Map letters: S=2,E=1,A=4,R=6,C=7,H=3 &rarr; 214673." },
+  { section:"reasoning", topic:"lr-blood", diff:"stretch", q:"A says of a boy: &lsquo;He is the only son of my father&rsquo;s only son.&rsquo; The boy is A&rsquo;s?", options:["Son","Brother","Uncle","Cousin"], answer:0, explain:"Father&rsquo;s only son = A (male speaker). That person&rsquo;s only son = A&rsquo;s son." },
+  { section:"reasoning", topic:"lr-ineq", diff:"stretch", q:"P &gt; Q &ge; R = S &lt; T. Which is false?", options:["P &lt; S","P &gt; R","Q &ge; S","S &lt; T"], answer:0, explain:"P &gt; Q &ge; R = S forces P &gt; S, so P &lt; S is false." },
+  { section:"reasoning", topic:"lr-spatial", diff:"stretch", q:"Odd days from 1 Jan to 1 Mar in a non-leap year?", options:["3","2","1","0"], answer:0, explain:"Jan 31 + Feb 28 = 59 days; 59 mod 7 = 3 odd days." },
+  { section:"reasoning", topic:"lr-deduction", diff:"stretch", q:"Some doctors are poets. All poets are singers. Which follows?", options:["Some doctors are singers","All doctors are singers","No doctor is a singer","All singers are doctors"], answer:0, explain:"The poet-doctors are singers &rarr; some doctors are singers." },
+
+  { section:"verbal", topic:"va-grammar", diff:"stretch", q:"Spot the error: &lsquo;Neither of the girls have finished.&rsquo;", options:["have &rarr; has","Neither &rarr; None","girls &rarr; girl","No error"], answer:0, explain:"Neither is singular &rarr; has." },
+  { section:"verbal", topic:"va-grammar", diff:"stretch", q:"&lsquo;If I ___ you, I would accept.&rsquo;", options:["were","was","am","be"], answer:0, explain:"Unreal conditional: subjunctive &lsquo;were&rsquo;." },
+
+  { section:"verbal", topic:"va-completion", diff:"stretch", q:"&lsquo;The proposal was ___ by the board after a long debate.&rsquo;", options:["ratified","ratify","ratification","rating"], answer:0, explain:"Passive needs past participle: ratified." },
+  { section:"verbal", topic:"va-completion", diff:"stretch", q:"Best opener for a para-jumble about a new policy?", options:["A sentence naming the policy with no back-reference","&lsquo;This is why it failed.&rsquo;","&lsquo;Therefore officials acted.&rsquo;","&lsquo;As mentioned above&hellip;&rsquo;"], answer:0, explain:"Openers introduce; pronouns and &lsquo;therefore&rsquo; need prior context." },
+
+  { section:"verbal", topic:"va-vocab", diff:"stretch", q:"Closest meaning of &lsquo;ephemeral&rsquo;:", options:["short-lived","eternal","heavy","loud"], answer:0, explain:"Ephemeral = lasting a very short time." },
+  { section:"verbal", topic:"va-vocab", diff:"stretch", q:"Antonym of &lsquo;mitigate&rsquo;:", options:["aggravate","lessen","soften","ease"], answer:0, explain:"Mitigate = make less severe; opposite = aggravate." },
+
+  { section:"di", topic:"di-charts", diff:"stretch", q:"Production: 2018=120, 2019=150, 2020=180. % growth 2018&rarr;2020?", options:["50%","33%","60%","25%"], answer:0, explain:"(180&minus;120)/120 = 50% (use the base year, not year-on-year stack)." },
+  { section:"di", topic:"di-charts", diff:"stretch", q:"A table shows exports 40 and imports 50. Trade deficit?", options:["10","90","&minus;10","0"], answer:0, explain:"Deficit = imports &minus; exports = 10." },
+
+  { section:"di", topic:"di-ds", diff:"stretch", q:"What is x + y? (1) x + y = 10 (2) x &minus; y = 2. Sufficiency?", options:["(1) alone","(2) alone","Both needed","Either"], answer:0, explain:"(1) directly gives the sum; (2) alone does not." },
+  { section:"di", topic:"di-ds", diff:"stretch", q:"Is integer n &gt; 10? (1) n &gt; 8 (2) n is even. Together?", options:["Not sufficient","Sufficient","(1) alone","(2) alone"], answer:0, explain:"Even n&gt;8 could be 10 (not &gt;10) or 12 &mdash; still ambiguous." },
+
+  { section:"di", topic:"di-caselets", diff:"stretch", q:"Class of 40: 22 take Maths, 18 take Physics, 8 take both. Only Maths?", options:["14","22","8","10"], answer:0, explain:"Only Maths = 22 &minus; 8 = 14." },
+  { section:"foundations", topic:"fo-speed", diff:"stretch", q:"Quick: 48 &times; 25 = ?", options:["1200","1000","1250","960"], answer:0, explain:"&times;25 = &times;100 &divide; 4: 4800 &divide; 4 = 1200." },
 ];

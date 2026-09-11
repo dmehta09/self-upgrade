@@ -10,7 +10,7 @@
 
 | Guide | Score | Role today | Verdict |
 |-------|-------|------------|---------|
-| **Aptitude** | 8/10 OA | Round 0 gate | Strong warm/core; stretch bank thin |
+| **Aptitude** | 8.5/10 OA | Round 0 gate | Strong warm/core; stretch pool densified |
 | **DSA** | 8/10 mid coding | Pattern + timed drill | Strong mid primer; stretch gaps (prefix / perms / deque) filled |
 | **GenAI** | 8.5/10 conceptual + SD | Verbal / system design | Interview kit is real; avoid memorizing speculative model brand names |
 | **FastAPI** | 8/10 API screen | Backend verbal | Modern stack correct; 2 copy-paste bugs fixed in this pass |
@@ -168,11 +168,11 @@ Author commands (after this pass):
 
 ### Aptitude & Reasoning
 
-**Coverage:** quant (9) · reasoning (8) · verbal (4) · DI (3) · 125-Q bank · formula/flashcards.
+**Coverage:** quant (9) · reasoning (8) · verbal (4) · DI (3) · ~160-Q bank (~54 stretch) · formula/flashcards.
 
-**Gaps:** larger stretch pool only (nice-to-have).
+**Gaps:** ~~larger stretch pool only~~ (densified + Stretch-only drill chip).
 
-**Shipped:** [geometry](aptitude-guide/quant/geometry-and-mensuration.html); [coded inequalities](aptitude-guide/reasoning/coded-inequalities.html); multi-set DI on [caselets](aptitude-guide/di/caselets-and-mixed-sets.html); harder RC stems on [reading comprehension](aptitude-guide/verbal/reading-comprehension.html).
+**Shipped:** [geometry](aptitude-guide/quant/geometry-and-mensuration.html); [coded inequalities](aptitude-guide/reasoning/coded-inequalities.html); multi-set DI on [caselets](aptitude-guide/di/caselets-and-mixed-sets.html); harder RC stems on [reading comprehension](aptitude-guide/verbal/reading-comprehension.html); stretch densify across all topics + Stretch filter on [timed drill](aptitude-guide/practice/drill.html).
 
 ---
 
@@ -273,6 +273,7 @@ Author commands (after this pass):
 5. ~~LangStack: middleware lesson, MCP cross-link, context engineering~~ (done)
 6. ~~Densify viz captions / whiteboard~~ (done on key pages)
 7. ~~DSA stretch: prefix sums, permutations/N-Queens bridge, monotonic deque~~ (done)
+8. ~~Aptitude stretch pool densify + Stretch-only drill chip~~ (done)
 
 ### Senior wave shipped
 
