@@ -14,7 +14,7 @@
 | **DSA** | 9.5/10 mid coding | Pattern + timed drill | Blind 75 ~70/75 (+2 proxy); non-premium complete |
 | **GenAI** | 8.5/10 conceptual + SD | Verbal / system design | Interview kit is real; avoid memorizing speculative model brand names |
 | **FastAPI** | 8/10 API screen | Backend verbal | Modern stack correct; 2 copy-paste bugs fixed in this pass |
-| **LangStack** | 6.5/10 currency | Framework verbal | Pedagogy excellent; agent factory + Platform naming corrected in this pass |
+| **LangStack** | 7.5/10 currency | Framework verbal | Pedagogy excellent; Agent Server nouns + trim vs summarize now interview-ready |
 
 **Overall:** Guides are strong enough for a mixed day if you follow the study map below — engines first, prose second.
 
@@ -143,9 +143,9 @@ Author commands (after this pass):
 
 **Verified outdated (fixed this pass):** `create_react_agent` as recommended default → `create_agent` + middleware note; “LangGraph Platform” → LangSmith Deployment.
 
-**Still add later:** MCP cross-link depth, context engineering (`trim_messages`) polish, Agent Server mental model.
+**Still add later:** ~~MCP cross-link depth, context engineering (`trim_messages`) polish, Agent Server mental model~~ (shipped: middleware trim snippet + GenAI MCP handoff; Agent Server nouns diagram on advanced).
 
-**Shipped:** middleware lesson, interview gotchas bank, `create_agent` + LangSmith Deployment naming.
+**Shipped:** middleware lesson (incl. `trim_messages` before_model), interview gotchas bank, `create_agent` + LangSmith Deployment naming, Agent Server mental model.
 
 ### GenAI Field Guide
 
@@ -288,6 +288,7 @@ Author commands (after this pass):
 11. ~~DSA Blind 75 wave 2: Matrix page + Word Break / LPS / Same Tree / Missing Number / Insert Interval~~ (done)
 12. ~~DSA Blind 75 wave 3: LCS / Decode Ways / HR-II / Max Product + Subtree / Kth / Char Replacement / Reorder~~ (done)
 13. ~~DSA Blind 75 wave 4: close remaining 10 non-premium opens~~ (done)
+14. ~~Hub senior DSA + Blind 75; LangStack Agent Server + trim_messages polish~~ (done)
 
 ### Senior wave shipped
 
@@ -309,7 +310,7 @@ Skip foundations. Engines first. Checklist also on [`index.html#senior-path`](in
 | GenAI | 45m | [Attention](genai-guide/internals/attention-mechanism.html) → [workflows](genai-guide/rag/architectures-and-workflows.html) → [hybrid RAG](genai-guide/rag/hybrid-search-and-reranking.html) → [Q bank](genai-guide/interview/question-bank.html) → [RAG SD](genai-guide/interview/system-design/rag-chatbot.html) |
 | LangStack | 35m | [Gotchas](langstack/ecosystem/interview-gotchas.html) → [Middleware](langstack/langchain/middleware.html) → [HITL advanced](langstack/langgraph/advanced.html) → [evals](langstack/langsmith/evals.html) |
 | FastAPI | 40m | [Gotchas](fastapi-guide/drill/interview-gotchas.html) → [DI](fastapi-guide/fastapi/dependencies.html) → [async DB](fastapi-guide/fastapi/async-db.html) → [Auth II](fastapi-guide/fastapi/auth.html#auth-ii) → [async tests](fastapi-guide/deploy/index.html#async-tests) |
-| DSA | 50m | [Pattern map](dsa-guide/patterns/index.html) → [Python bank](dsa-guide/reference/python-coding-round.html) → [Min Window](dsa-guide/patterns/sliding-window.html#min-window) → [SW Maximum](dsa-guide/patterns/sliding-window.html#sliding-window-maximum) → [LRU](dsa-guide/patterns/design.html) → [Prefix sum K](dsa-guide/patterns/arrays-hashing.html#subarray-sum-k) → [Permutations](dsa-guide/patterns/backtracking.html#permutations) |
+| DSA | 50m | [Pattern map](dsa-guide/patterns/index.html) → [Python bank](dsa-guide/reference/python-coding-round.html) → [Blind 75](dsa-guide/reference/blind-75.html) → [Min Window](dsa-guide/patterns/sliding-window.html#min-window) → [SW Maximum](dsa-guide/patterns/sliding-window.html#sliding-window-maximum) → [LRU](dsa-guide/patterns/design.html) → [Prefix sum K](dsa-guide/patterns/arrays-hashing.html#subarray-sum-k) |
 
 ---
 

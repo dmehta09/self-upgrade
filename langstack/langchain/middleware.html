@@ -269,8 +269,37 @@ agent = create_agent(
             <h2><span class="section-num">05</span> &nbsp;Context engineering: summarize vs trim</h2>
             <p>Context windows are a budget. Agents burn it on tool transcripts, retries, and "helpful" system prompts. Two levers:</p>
             <div class="grid grid-2">
-              <div class="card"><h4 class="mt-0">Trim</h4><p class="mb-0">Drop oldest messages (or hard-cut by token count). Cheap, deterministic, lossy. Fine when early turns are scaffolding and the last N messages carry the task. Often a few lines in <code>before_model</code>.</p></div>
+              <div class="card"><h4 class="mt-0">Trim</h4><p class="mb-0">Drop oldest messages (or hard-cut by token count). Cheap, deterministic, lossy. Fine when early turns are scaffolding and the last N messages carry the task. Often a few lines in <code>before_model</code> with <code>trim_messages</code>.</p></div>
               <div class="card"><h4 class="mt-0">Summarize</h4><p class="mb-0">Compress older turns into a running synopsis via <code>SummarizationMiddleware</code>. Costs an extra model call; preserves decisions, IDs, and constraints that trimming would erase.</p></div>
+            </div>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">trim.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from langchain.agents import create_agent
+from langchain.agents.middleware import before_model
+from langchain_core.messages.utils import (
+    trim_messages,
+    count_tokens_approximately,
+)
+
+@before_model
+def keep_recent_context(state, runtime):
+    """Cheap budget control — drop early turns, keep a valid chat shape."""
+    trimmed = trim_messages(
+        state["messages"],
+        strategy="last",
+        token_counter=count_tokens_approximately,
+        max_tokens=4000,
+        start_on="human",
+        end_on=("human", "tool"),
+    )
+    return {"messages": trimmed}
+
+
+agent = create_agent(
+    model="gpt-4.1",
+    tools=[search_tool],
+    middleware=[keep_recent_context],
+)</code></pre></div>
             </div>
             <div class="diagram">
               <div class="dg-title">When the window fills up</div>
