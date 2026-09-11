@@ -27,6 +27,7 @@ window.LESSONS = [
   { id: "tu-computer", title: "Computer use & code execution", url: "tool-use/computer-use-and-code-execution.html", module: "tool-use", tool: "tool-use" },
   { id: "ve-overview", title: "Vectors — overview", url: "vectors/index.html", module: "vectors", tool: "vectors" },
   { id: "ve-models", title: "Choosing & using embeddings", url: "vectors/embedding-models.html", module: "vectors", tool: "vectors" },
+  { id: "ve-ingest", title: "Document ingest & loaders", url: "vectors/document-ingest.html", module: "vectors", tool: "vectors" },
   { id: "ve-databases", title: "Vector databases & ANN", url: "vectors/vector-databases.html", module: "vectors", tool: "vectors" },
   { id: "ve-quant", title: "Cheap vector search at scale", url: "vectors/quantization-and-scale.html", module: "vectors", tool: "vectors" },
   { id: "ve-chunking", title: "Chunking strategies", url: "vectors/chunking-strategies.html", module: "vectors", tool: "vectors" },

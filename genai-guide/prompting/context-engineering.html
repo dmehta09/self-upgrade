@@ -63,6 +63,7 @@
         <h4><span class="dot"></span>Embeddings & vectors</h4>
         <a class="nav-link" href="../vectors/index.html">Overview</a>
         <a class="nav-link" href="../vectors/embedding-models.html">Embedding models</a>
+        <a class="nav-link" href="../vectors/document-ingest.html">Document ingest</a>
         <a class="nav-link" href="../vectors/vector-databases.html">Vector databases</a>
         <a class="nav-link" href="../vectors/quantization-and-scale.html">Quantization & scale</a>
         <a class="nav-link" href="../vectors/chunking-strategies.html">Chunking strategies</a>
@@ -238,12 +239,22 @@
         </section>
 
         <section class="section reveal" id="techniques">
-          <h2><span class="section-num">04</span> &nbsp;Compaction, summarization, pruning &amp; “lost in the middle” <span class="badge gray">NEW</span></h2>
-          <p>When the window fills — a long chat, an agent 30 steps deep — you need to shrink what's resident without losing the thread. Three moves:</p>
+          <h2><span class="section-num">04</span> &nbsp;Compaction, summarization, pruning &amp; compression taxonomy <span class="badge gray">NEW</span></h2>
+          <p>When the window fills — a long chat, an agent 30 steps deep — you need to shrink what's resident without losing the thread. Frame the toolkit as <strong>lossless vs lossy compression</strong>:</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Kind</th><th>What you do</th><th>Trade-off</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Lossless (mostly)</strong></td><td>Prune irrelevant turns; drop duplicate tool dumps; move durable state to files/DB and re-fetch (files-as-memory); keep structured ids instead of full payloads</td><td>No meaning thrown away — only eviction / paging. Needs a store to page back from.</td></tr>
+                <tr><td><strong>Lossy</strong></td><td>Summarize long history; compact an agent transcript into conclusions; LLM “contextual compression” that rewrites retrieved chunks down to the query-relevant sentences</td><td>Fewer tokens, but details can vanish — validate with eval that critical facts survive.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Three everyday moves (they sit on that spectrum):</p>
           <div class="kv">
-            <dt>Summarization</dt><dd>Replace a long stretch of history with a short recap (“earlier: user is migrating a Postgres DB to v16; we ruled out option A”). Keeps the gist, drops the token bulk.</dd>
-            <dt>Compaction</dt><dd>Periodically rewrite the whole working context into a tighter form — merge redundant turns, fold tool noise into conclusions. Common in long agent runs to stop context from ballooning.</dd>
-            <dt>Pruning</dt><dd>Drop what's no longer relevant outright — stale tool dumps, superseded drafts, off-topic tangents. The “eviction” of the RAM analogy.</dd>
+            <dt>Summarization</dt><dd>Replace a long stretch of history with a short recap (“earlier: user is migrating a Postgres DB to v16; we ruled out option A”). Keeps the gist, drops the token bulk — <em>lossy</em>.</dd>
+            <dt>Compaction</dt><dd>Periodically rewrite the whole working context into a tighter form — merge redundant turns, fold tool noise into conclusions. Common in long agent runs to stop context from ballooning — usually <em>lossy</em>.</dd>
+            <dt>Pruning</dt><dd>Drop what's no longer relevant outright — stale tool dumps, superseded drafts, off-topic tangents. The “eviction” of the RAM analogy — closer to <em>lossless</em> if you can re-fetch from disk.</dd>
           </div>
           <p>Why bother, if windows are huge? Because of a real, measured effect:</p>
           <div class="callout gotcha">

@@ -63,6 +63,7 @@
         <h4><span class="dot"></span>Embeddings & vectors</h4>
         <a class="nav-link" href="../vectors/index.html">Overview</a>
         <a class="nav-link" href="../vectors/embedding-models.html">Embedding models</a>
+        <a class="nav-link" href="../vectors/document-ingest.html">Document ingest</a>
         <a class="nav-link" href="../vectors/vector-databases.html">Vector databases</a>
         <a class="nav-link" href="../vectors/quantization-and-scale.html">Quantization & scale</a>
         <a class="nav-link" href="../vectors/chunking-strategies.html">Chunking strategies</a>
@@ -332,14 +333,33 @@ fused  = rrf(dense, sparse)               # -> d1, d3, ... (agreed-on docs rise)
           </div>
         </section>
 
+        <section class="section reveal" id="named-patterns">
+          <h2><span class="section-num">06</span> &nbsp;Named patterns: MMR, self-query, RAG Fusion <span class="badge gray">NEW</span></h2>
+          <p>Interviewers often name three retrieval patterns beyond “hybrid + rerank.” Know what each optimises for:</p>
+          <div class="kv">
+            <dt>MMR (Maximal Marginal Relevance)</dt><dd>Re-rank so each next chunk is relevant <em>and</em> dissimilar to chunks already picked. Trades a bit of pure relevance for <strong>diversity</strong> — useful when top-k would otherwise return five near-duplicates of the same paragraph.</dd>
+            <dt>Self-query (NL → filters)</dt><dd>An LLM turns the user question into a <em>structured filter</em> (metadata: date, product, tenant, doc type) plus a semantic query. Search only the matching slice of the index. Wins when your corpus is tagged and users ask “Acme invoices from March.”</dd>
+            <dt>RAG Fusion</dt><dd>Generate several query variants (multi-query), retrieve for each, then <strong>fuse</strong> the ranked lists — usually with Reciprocal Rank Fusion — into one shortlist before reranking/generation. It’s multi-query + RRF as a named recipe, not a separate model.</dd>
+            <dt>Score-threshold retrievers</dt><dd>Drop candidates below a similarity/score cutoff instead of always taking top-<em>k</em>. Helps “I don’t know” behaviour when nothing is close — tune the threshold on eval, or you’ll empty the context too often.</dd>
+          </div>
+          <div class="callout tip">
+            <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span>
+            <div class="co-body">
+              <div class="co-title">How to say it out loud <span class="tag">say it</span></div>
+              <p>“MMR diversifies the top-k so I don’t paste five copies of the same chunk. Self-query extracts metadata filters from natural language when the index is tagged. RAG Fusion is multi-query plus RRF fusion. I’d still start with hybrid + a cross-encoder; these are the next knobs when eval shows redundancy, filterable corpora, or brittle single queries.”</p>
+            </div>
+          </div>
+        </section>
+
         <section class="section reveal" id="default">
-          <h2><span class="section-num">06</span> &nbsp;The default recommendation &amp; the classic question</h2>
+          <h2><span class="section-num">07</span> &nbsp;The default recommendation &amp; the classic question</h2>
           <p>Put it together and you get the answer interviewers want for <em>“your RAG retrieval is bad — what do you try first?”</em> Work cheap-to-expensive, and measure after each change:</p>
           <ol>
             <li><strong>Check the data &amp; chunking first.</strong> Is the answer even in your index? Are chunks a sane size? (Cheapest fix of all.)</li>
             <li><strong>Add hybrid search</strong> (dense + BM25, fused with RRF). Catches the exact-term misses dense search alone makes.</li>
             <li><strong>Add a reranker</strong> (cross-encoder over the top ~50). Usually the biggest single jump in answer quality.</li>
-            <li><strong>Then query-side tricks</strong> — rewriting/expansion or HyDE — if specific query types still miss.</li>
+            <li><strong>Then query-side tricks</strong> — rewriting/expansion, HyDE, or RAG Fusion — if specific query types still miss.</li>
+            <li><strong>Then specialised patterns</strong> — MMR for duplicate-heavy corpora; self-query when metadata filters are reliable.</li>
           </ol>
           <div class="callout tip">
             <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A6 6 0 0 0 12 3ZM9 18h6M10 21h4"/></svg></span>
@@ -351,13 +371,21 @@ fused  = rrf(dense, sparse)               # -> d1, d3, ... (agreed-on docs rise)
         </section>
 
         <section class="section reveal" id="check">
-          <h2><span class="section-num">07</span> &nbsp;Self-check</h2>
+          <h2><span class="section-num">08</span> &nbsp;Self-check</h2>
           <div class="quiz">
             <div class="quiz-q">Why can't you just use a cross-encoder for the whole retrieval step and skip the bi-encoder?</div>
             <button class="quiz-opt" data-correct="false"><span class="mark"></span> Cross-encoders are less accurate than bi-encoders</button>
             <button class="quiz-opt" data-correct="true"><span class="mark"></span> A cross-encoder must run on each query–doc pair at query time and can't be pre-indexed, so scoring millions of docs is far too slow and costly</button>
             <button class="quiz-opt" data-correct="false"><span class="mark"></span> Cross-encoders can't produce relevance scores</button>
             <div class="quiz-explain">Cross-encoders are <em>more</em> accurate, but they fuse query and document in one forward pass — nothing can be precomputed. That's fine for reranking ~50 candidates, ruinous for millions. So a fast bi-encoder retrieves wide, then the cross-encoder reranks the shortlist.</div>
+          </div>
+
+          <div class="quiz">
+            <div class="quiz-q">Your top-5 retrieved chunks are five near-copies of the same paragraph. Which named pattern trades a bit of pure relevance for diversity?</div>
+            <button class="quiz-opt" data-correct="false"><span class="mark"></span> HyDE</button>
+            <button class="quiz-opt" data-correct="true"><span class="mark"></span> MMR (Maximal Marginal Relevance)</button>
+            <button class="quiz-opt" data-correct="false"><span class="mark"></span> Self-query</button>
+            <div class="quiz-explain">MMR picks the next chunk for relevance <em>and</em> dissimilarity to chunks already chosen, so you don't paste five duplicates. HyDE expands the query; self-query extracts metadata filters.</div>
           </div>
 
           <div class="qa-set">

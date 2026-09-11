@@ -45,6 +45,7 @@ const MODULES = [
   { key: "vectors", label: "Embeddings & vectors", pages: [
     { slug: "index",                 title: "Vectors — overview",             nav: "Overview",            id: "ve-overview" },
     { slug: "embedding-models",      title: "Choosing & using embeddings",    nav: "Embedding models",    id: "ve-models" },
+    { slug: "document-ingest",       title: "Document ingest & loaders",      nav: "Document ingest",     id: "ve-ingest" },
     { slug: "vector-databases",      title: "Vector databases & ANN",         nav: "Vector databases",    id: "ve-databases" },
     { slug: "quantization-and-scale", title: "Cheap vector search at scale",  nav: "Quantization & scale", id: "ve-quant" },
     { slug: "chunking-strategies",   title: "Chunking strategies",            nav: "Chunking strategies", id: "ve-chunking" },
