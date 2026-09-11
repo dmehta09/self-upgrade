@@ -51,6 +51,9 @@
           <a class="nav-link" href="#same-tree">Same Tree</a>
           <a class="nav-link" href="#subtree">Subtree of Another Tree</a>
           <a class="nav-link" href="#kth-smallest">Kth Smallest Element in a BST</a>
+          <a class="nav-link" href="#max-path-sum">Binary Tree Maximum Path Sum</a>
+          <a class="nav-link" href="#serialize-tree">Serialize and Deserialize Binary Tree</a>
+          <a class="nav-link" href="#build-tree">Construct Binary Tree from Preorder and Inorder</a>
         </div>
         <a class="nav-link" href="../patterns/heap-topk.html">Heap / Top-K</a>
         <a class="nav-link" href="../patterns/backtracking.html">Backtracking</a>
@@ -1332,6 +1335,515 @@ print(kth_smallest(t2, 3))
           </section>
 
 
+
+          <!-- ===== PROBLEM 9: BINARY TREE MAXIMUM PATH SUM ===== -->
+          <section class="section problem reveal" id="max-path-sum">
+            <header class="problem-meta">
+              <h2><span class="section-num">09</span> &nbsp;Binary Tree Maximum Path Sum</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Trees · DFS</span>
+                <span class="pm-chip diff-hard">Hard</span>
+                <span class="pm-chip"><span class="dot"></span>~30 min</span>
+                <span class="pm-chip cx">O(n) time · O(h) space</span>
+              </div>
+            </header>
+            <p class="lead">A path can start and end anywhere — it may <strong>bend</strong> through a node using both children. Return the maximum path sum. Examples: <code>root = [1,2,3]</code> → <code>6</code> (2→1→3); <code>root = [-10,9,20,null,null,15,7]</code> → <code>42</code> (15→20→7).</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Hiking trails that may bend at a junction <span class="tag">analogy</span></div>
+                <p>Each node is a trail junction with a score. A path can climb one arm, pass the junction, and descend the other — that bend is allowed for the global answer. But when you report a gain <em>upward</em> to your parent, you may offer only one arm (you can't bend and still continue up).</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="DFS gain through each node while tracking a global bent path">
+              <figcaption class="viz-title">Return one-arm gain; track bent path globally</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "tree",
+                "meta": { "tree": [-10, 9, 20, null, null, 15, 7] },
+                "frames": [
+                  {"active":[9],"caption":"Leaf 9: gain = 9. Bent candidate = 9."},
+                  {"active":[15],"caption":"Leaf 15: gain = 15. Same for 7 → gain 7."},
+                  {"visited":[15,7],"active":[20],"caption":"At 20: left/right gains maxed at 0+. Bent = 15+20+7 = 42. Return upward gain = 20+max(15,7) = 35."},
+                  {"visited":[9,15,7,20],"active":[-10],"caption":"At −10: one-arm gains 9 and 35. Bent through root is weak; global best stays 42."},
+                  {"visited":[-10,9,20,15,7],"caption":"Answer 42 — the path bends at 20, not at the root."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>DFS returns the best <em>gain through this node continuing upward</em>. Separately update a global best for a path that may use both children:</p>
+            <ol>
+              <li>Base: empty node returns gain <code>0</code>.</li>
+              <li>Recurse left/right; clamp each child gain with <code>max(gain, 0)</code> (drop negative arms).</li>
+              <li>Update global: <code>best = max(best, node.val + left + right)</code> — the bend.</li>
+              <li>Return upward: <code>node.val + max(left, right)</code> — only one arm for the parent.</li>
+            </ol>
+            <p>Use the same <code>TreeNode</code> helper as the other problems on this page.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(n)</span></td><td>Each node is visited once.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(h)</span></td><td>Recursion stack equals tree height.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why does the DFS return only one child gain to its parent, not both?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because both children are always negative</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>A path continuing upward can attach to at most one arm; the bend using both is only a local candidate for the global answer</button>
+                <button class="quiz-opt"><span class="mark"></span>Because trees forbid paths with two children</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> The bent path (node + left + right) can be the answer, but it cannot continue past the node. What you hand the parent is a single chain: node plus the better arm.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Keep <code>best = -inf</code>. Helper <code>gain(node)</code>: clamp children with <code>max(..., 0)</code>; update <code>best</code> with <code>val + L + R</code>; return <code>val + max(L, R)</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">max_path_sum.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="26">
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val; self.left = left; self.right = right
+
+def max_path_sum(root):
+    best = float("-inf")
+    def gain(node):
+        nonlocal best
+        if not node:
+            return 0
+        left = max(gain(node.left), 0)
+        right = max(gain(node.right), 0)
+        best = max(best, node.val + left + right)
+        return node.val + max(left, right)
+    gain(root)
+    return best
+
+# [1,2,3]
+print(max_path_sum(TreeNode(1, TreeNode(2), TreeNode(3))))
+# [-10,9,20,null,null,15,7]
+print(max_path_sum(TreeNode(-10, TreeNode(9), TreeNode(20, TreeNode(15), TreeNode(7)))))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">6
+42</pre></div>
+                </div>
+                <p>Same <code>TreeNode</code> style as max-depth / validate-bst. Global <code>best</code> tracks bends; the return value is only the one-arm contribution.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Maximum path sum splits two jobs: return the best upward gain (one arm), and update a global best for a path that may bend through the node using both children. Clamp negative arms to zero.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[gain node] --> empty{"node is None?"}
+  empty -->|yes| zero[Return 0]
+  empty -->|no| left["L = max(gain left, 0)"]
+  left --> right["R = max(gain right, 0)"]
+  right --> bend["best = max(best, val+L+R)"]
+  bend --> up["Return val + max(L, R)"]
+  zero --> done[Done]
+  up --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>class TreeNode:</code><span>Same helper used elsewhere on this page.</span></li>
+                  <li><code>def max_path_sum(root):</code><span>Return the maximum path sum anywhere in the tree.</span></li>
+                  <li><code>best = float("-inf")</code><span>Global answer — paths may be all-negative, so start at −∞.</span></li>
+                  <li><code>def gain(node):</code><span>Post-order helper: update global, return upward gain.</span></li>
+                  <li><code>nonlocal best</code><span>Allow the nested function to mutate the outer best.</span></li>
+                  <li><code>if not node: return 0</code><span>Empty contributes nothing upward.</span></li>
+                  <li><code>left = max(gain(node.left), 0)</code><span>Best left arm, or drop it if negative.</span></li>
+                  <li><code>right = max(gain(node.right), 0)</code><span>Same for the right arm.</span></li>
+                  <li><code>best = max(best, node.val + left + right)</code><span>Candidate path that bends here.</span></li>
+                  <li><code>return node.val + max(left, right)</code><span>Offer parent only one continuing arm.</span></li>
+                  <li><code>gain(root)</code><span>Drive the DFS; side-effect fills best.</span></li>
+                  <li><code>return best</code><span>The maximum bent-or-straight path found.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) one visit per node; space O(h) for the recursion stack.</p>
+              </div>
+            </details>
+          </section>
+
+          <!-- ===== PROBLEM 10: SERIALIZE AND DESERIALIZE ===== -->
+          <section class="section problem reveal" id="serialize-tree">
+            <header class="problem-meta">
+              <h2><span class="section-num">10</span> &nbsp;Serialize and Deserialize Binary Tree</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Trees · BFS / DFS</span>
+                <span class="pm-chip diff-hard">Hard</span>
+                <span class="pm-chip"><span class="dot"></span>~30 min</span>
+                <span class="pm-chip cx">O(n) time · O(n) space</span>
+              </div>
+            </header>
+            <p class="lead">Design a codec that turns a binary tree into a string and rebuilds the exact same tree. Encode nulls so structure is recoverable. Round-trip: build → serialize → deserialize → level-order values match the original.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Packing a family tree into a postcard <span class="tag">analogy</span></div>
+                <p>Write every person left-to-right by generation, and write “empty” wherever a seat is vacant. The reader rebuilds the same seating chart from that list — nulls are the seats that keep siblings and cousins in the right places.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Level-order serialization writing values and null markers">
+              <figcaption class="viz-title">Level-order: values + nulls preserve shape</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "tree",
+                "meta": { "tree": [1, 2, 3, null, null, 4, 5] },
+                "frames": [
+                  {"active":[1],"caption":"BFS queue starts at 1. Emit \"1\"."},
+                  {"visited":[1],"active":[2,3],"caption":"Emit 2 and 3; enqueue their children (including nulls under 2)."},
+                  {"visited":[1,2,3],"active":[4,5],"caption":"Under 2: null,null. Under 3: 4,5. String: 1,2,3,null,null,4,5."},
+                  {"visited":[1,2,3,4,5],"caption":"Deserialize: read tokens in order, attach left/right from the queue — tree restored."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Level-order (BFS) codec — preorder with nulls also works:</p>
+            <ol>
+              <li><strong>serialize:</strong> BFS; append each node's value or <code>"null"</code>; enqueue children only for real nodes. Join with commas (trim trailing nulls optionally).</li>
+              <li><strong>deserialize:</strong> split tokens; build root from the first; walk a queue assigning the next two tokens as left/right children.</li>
+              <li>Wrap both methods on a <code>Codec</code> class.</li>
+            </ol>
+            <p>Use the same <code>TreeNode</code> helper as the other problems on this page.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(n)</span></td><td>Each node (and its null slots) processed a constant number of times.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(n)</span></td><td>Output string / token list and the BFS queue.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why must the encoding record null children?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Nulls make the string shorter</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Without null markers, different tree shapes can produce the same value sequence</button>
+                <button class="quiz-opt"><span class="mark"></span>Because BFS forbids skipping empty seats</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> Values alone lose structure — a left child vs a right child look identical without placeholders. Null tokens pin every seat.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Serialize with a queue; append <code>"null"</code> for missing kids. Deserialize: <code>vals = data.split(",")</code>, root from <code>vals[0]</code>, then for each dequeued node consume the next two tokens as left/right.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">serialize_tree.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="42">
+from collections import deque
+
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val; self.left = left; self.right = right
+
+class Codec:
+    def serialize(self, root):
+        if not root:
+            return "null"
+        q, out = deque([root]), []
+        while q:
+            n = q.popleft()
+            if n is None:
+                out.append("null")
+            else:
+                out.append(str(n.val))
+                q.append(n.left)
+                q.append(n.right)
+        while out and out[-1] == "null":
+            out.pop()
+        return ",".join(out)
+
+    def deserialize(self, data):
+        if not data or data == "null":
+            return None
+        vals = data.split(",")
+        root = TreeNode(int(vals[0]))
+        q = deque([root])
+        i = 1
+        while q and i < len(vals):
+            n = q.popleft()
+            if i < len(vals) and vals[i] != "null":
+                n.left = TreeNode(int(vals[i]))
+                q.append(n.left)
+            i += 1
+            if i < len(vals) and vals[i] != "null":
+                n.right = TreeNode(int(vals[i]))
+                q.append(n.right)
+            i += 1
+        return root
+
+def level_vals(root):
+    if not root:
+        return []
+    q, out = deque([root]), []
+    while q:
+        n = q.popleft()
+        if n is None:
+            out.append(None)
+        else:
+            out.append(n.val)
+            q.append(n.left)
+            q.append(n.right)
+    while out and out[-1] is None:
+        out.pop()
+    return out
+
+codec = Codec()
+orig = TreeNode(1, TreeNode(2), TreeNode(3, TreeNode(4), TreeNode(5)))
+back = codec.deserialize(codec.serialize(orig))
+print(level_vals(back))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">[1, 2, 3, None, None, 4, 5]</pre></div>
+                </div>
+                <p>Round-trip restores the same level-order shape. Same <code>TreeNode</code> helper as the rest of this page.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Serialize structure, not just values — encode nulls. Level-order BFS makes serialize and deserialize mirror each other via a queue. Preorder + null markers is an equally valid interview answer.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  ser[serialize BFS] --> tokens[Emit val or null]
+  tokens --> join[Join commas]
+  join --> de[deserialize]
+  de --> root[Build root from first token]
+  root --> assign[Queue assigns next left/right]
+  assign --> tree[Rebuilt tree]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>class Codec:</code><span>Hold serialize / deserialize as a pair.</span></li>
+                  <li><code>def serialize(self, root):</code><span>Tree → compact string with null markers.</span></li>
+                  <li><code>if not root: return "null"</code><span>Empty tree is a single token.</span></li>
+                  <li><code>q, out = deque([root]), []</code><span>BFS queue and output list.</span></li>
+                  <li><code>while q:</code><span>Drain level-order, including null seats.</span></li>
+                  <li><code>n = q.popleft()</code><span>Next seat in the postcard.</span></li>
+                  <li><code>if n is None: out.append("null")</code><span>Record an empty child slot.</span></li>
+                  <li><code>else: out.append(str(n.val))</code><span>Record a real value.</span></li>
+                  <li><code>q.append(n.left); q.append(n.right)</code><span>Enqueue both kids (may be None).</span></li>
+                  <li><code>while out and out[-1] == "null": out.pop()</code><span>Trim trailing empties — optional but tidy.</span></li>
+                  <li><code>return ",".join(out)</code><span>Final encoded string.</span></li>
+                  <li><code>def deserialize(self, data):</code><span>String → tree.</span></li>
+                  <li><code>vals = data.split(",")</code><span>Token stream in BFS order.</span></li>
+                  <li><code>root = TreeNode(int(vals[0]))</code><span>First token is the root value.</span></li>
+                  <li><code>while q and i &lt; len(vals):</code><span>Assign remaining tokens as children.</span></li>
+                  <li><code>if ... vals[i] != "null": n.left = TreeNode(...)</code><span>Build left child when present.</span></li>
+                  <li><code>if ... vals[i] != "null": n.right = TreeNode(...)</code><span>Then right child.</span></li>
+                </ol>
+                <p class="walk-why">Time and space O(n) — every node appears in the encoding and the queue.</p>
+              </div>
+            </details>
+          </section>
+
+          <!-- ===== PROBLEM 11: CONSTRUCT FROM PREORDER AND INORDER ===== -->
+          <section class="section problem reveal" id="build-tree">
+            <header class="problem-meta">
+              <h2><span class="section-num">11</span> &nbsp;Construct Binary Tree from Preorder and Inorder Traversal</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Trees · Divide &amp; Conquer</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~25 min</span>
+                <span class="pm-chip cx">O(n) time · O(n) space</span>
+              </div>
+            </header>
+            <p class="lead">Given unique-valued <code>preorder</code> and <code>inorder</code> arrays, rebuild the binary tree. Example: <code>preorder = [3,9,20,15,7]</code>, <code>inorder = [9,3,15,20,7]</code> → tree whose level-order is <code>[3,9,20,null,null,15,7]</code>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Root first, then split the crowd <span class="tag">analogy</span></div>
+                <p>Preorder announces the boss first. Inorder lines everyone up left-of-boss / right-of-boss. Find the boss in the line, recursively rebuild the left crowd and the right crowd from the matching preorder windows.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Using preorder root and inorder split to rebuild the tree">
+              <figcaption class="viz-title">Preorder picks root; inorder splits subtrees</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "tree",
+                "meta": { "tree": [3, 9, 20, null, null, 15, 7] },
+                "frames": [
+                  {"active":[3],"caption":"preorder[0]=3 is root. In inorder, 9 | 3 | 15,20,7 — left size 1."},
+                  {"visited":[3],"active":[9],"caption":"Left window: pre [9], in [9] → leaf 9."},
+                  {"visited":[3,9],"active":[20],"caption":"Right window: pre [20,15,7], in [15,20,7] → root 20."},
+                  {"visited":[3,9,20],"active":[15,7],"caption":"Under 20: left 15, right 7. Tree complete."},
+                  {"visited":[3,9,20,15,7],"caption":"Hash inorder indices so each split is O(1)."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <ol>
+              <li>Build a hash map <code>value → index</code> for inorder (O(1) splits).</li>
+              <li>Recurse on windows <code>(pre_lo, pre_hi)</code> and <code>(in_lo, in_hi)</code>.</li>
+              <li>Root = <code>preorder[pre_lo]</code>; find its inorder index <code>mid</code>; left size = <code>mid - in_lo</code>.</li>
+              <li>Left subtree uses the next <code>left_size</code> preorder values; right gets the rest.</li>
+            </ol>
+            <p>Use the same <code>TreeNode</code> helper as the other problems on this page.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(n)</span></td><td>Each node built once; hashmap makes mid O(1).</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(n)</span></td><td>Hashmap + recursion stack O(h) ≤ O(n).</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why hash the inorder indices instead of scanning for the root each time?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Hashing changes the tree shape</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Scanning for mid each call would make total time O(n²); a map keeps each split O(1)</button>
+                <button class="quiz-opt"><span class="mark"></span>Because preorder values are not unique</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> With unique values, one map pays O(n) up front so every recursive split is constant time — overall linear.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p><code>idx = {v: i for i, v in enumerate(inorder)}</code>. Recurse with window bounds; if <code>pre_lo &gt; pre_hi</code> return <code>None</code>. Left size = <code>mid - in_lo</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">build_tree.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="36">
+from collections import deque
+
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val; self.left = left; self.right = right
+
+def build_tree(preorder, inorder):
+    idx = {v: i for i, v in enumerate(inorder)}
+    def rec(plo, phi, ilo, ihi):
+        if plo > phi:
+            return None
+        root_val = preorder[plo]
+        root = TreeNode(root_val)
+        mid = idx[root_val]
+        left_size = mid - ilo
+        root.left = rec(plo + 1, plo + left_size, ilo, mid - 1)
+        root.right = rec(plo + left_size + 1, phi, mid + 1, ihi)
+        return root
+    return rec(0, len(preorder) - 1, 0, len(inorder) - 1)
+
+def level_vals(root):
+    if not root:
+        return []
+    q, out = deque([root]), []
+    while q:
+        n = q.popleft()
+        if n is None:
+            out.append(None)
+        else:
+            out.append(n.val)
+            q.append(n.left)
+            q.append(n.right)
+    while out and out[-1] is None:
+        out.pop()
+    return out
+
+root = build_tree([3, 9, 20, 15, 7], [9, 3, 15, 20, 7])
+print(level_vals(root))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">[3, 9, 20, None, None, 15, 7]</pre></div>
+                </div>
+                <p>Hash inorder once, then recurse on preorder windows. Same <code>TreeNode</code> helper as elsewhere on this page.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Preorder gives the root; inorder splits left/right. Hash inorder indices and recurse on windows — O(n) rebuild without slicing arrays each time.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[rec plo phi ilo ihi] --> empty{"plo greater than phi?"}
+  empty -->|yes| none[Return None]
+  empty -->|no| root[root = preorder plo]
+  root --> mid[mid = idx root_val]
+  mid --> left["Build left window"]
+  left --> right["Build right window"]
+  right --> ret[Return root]
+  none --> done[Done]
+  ret --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>class TreeNode:</code><span>Same helper used elsewhere on this page.</span></li>
+                  <li><code>def build_tree(preorder, inorder):</code><span>Rebuild the unique tree from the two traversals.</span></li>
+                  <li><code>idx = {v: i for i, v in enumerate(inorder)}</code><span>O(1) lookup of each root's inorder position.</span></li>
+                  <li><code>def rec(plo, phi, ilo, ihi):</code><span>Windows into preorder and inorder — no array copies.</span></li>
+                  <li><code>if plo &gt; phi: return None</code><span>Empty window → no subtree.</span></li>
+                  <li><code>root_val = preorder[plo]</code><span>First preorder value in the window is the subtree root.</span></li>
+                  <li><code>root = TreeNode(root_val)</code><span>Allocate the node.</span></li>
+                  <li><code>mid = idx[root_val]</code><span>Where this root sits in inorder.</span></li>
+                  <li><code>left_size = mid - ilo</code><span>How many nodes belong to the left subtree.</span></li>
+                  <li><code>root.left = rec(plo + 1, plo + left_size, ilo, mid - 1)</code><span>Next left_size preorder values → left.</span></li>
+                  <li><code>root.right = rec(plo + left_size + 1, phi, mid + 1, ihi)</code><span>Remainder → right.</span></li>
+                  <li><code>return root</code><span>Subtree assembled.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) with the hashmap; space O(n) for the map and O(h) recursion.</p>
+              </div>
+            </details>
+          </section>
+
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -1351,6 +1863,9 @@ print(kth_smallest(t2, 3))
           <a href="#same-tree">Same Tree</a>
           <a href="#subtree">Subtree of Another Tree</a>
           <a href="#kth-smallest">Kth Smallest Element in a BST</a>
+          <a href="#max-path-sum">Binary Tree Maximum Path Sum</a>
+          <a href="#serialize-tree">Serialize &amp; Deserialize</a>
+          <a href="#build-tree">Construct from Preorder &amp; Inorder</a>
         </aside>
       </div>
 

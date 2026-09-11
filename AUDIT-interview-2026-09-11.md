@@ -11,7 +11,7 @@
 | Guide | Score | Role today | Verdict |
 |-------|-------|------------|---------|
 | **Aptitude** | 8.5/10 OA | Round 0 gate | Strong warm/core; stretch pool densified |
-| **DSA** | 9/10 mid coding | Pattern + timed drill | Blind 75 ~60/75; waves 1–3 fill-ins shipped |
+| **DSA** | 9.5/10 mid coding | Pattern + timed drill | Blind 75 ~70/75 (+2 proxy); non-premium complete |
 | **GenAI** | 8.5/10 conceptual + SD | Verbal / system design | Interview kit is real; avoid memorizing speculative model brand names |
 | **FastAPI** | 8/10 API screen | Backend verbal | Modern stack correct; 2 copy-paste bugs fixed in this pass |
 | **LangStack** | 6.5/10 currency | Framework verbal | Pedagogy excellent; agent factory + Platform naming corrected in this pass |
@@ -159,13 +159,15 @@ Author commands (after this pass):
 
 ### DSA Field Guide
 
-**Coverage:** foundations + 16 patterns + drills + cheatsheet (~78 worked problems) · [Blind 75 tracker](dsa-guide/reference/blind-75.html) (~60/75 covered).
+**Coverage:** foundations + 17 patterns + drills + cheatsheet (~88 worked problems) · [Blind 75 tracker](dsa-guide/reference/blind-75.html) (~70/75 covered + 2 close proxies; 3 premium skip).
 
-**Gaps:** Blind-75 remainder (~10 open: tree hard set, Merge-k/Median, Reverse Bits, Pacific Atlantic, …) — see tracker.
+**Gaps:** Premium-only Blind 75 (Alien Dictionary, Meeting Rooms I, Encode/Decode Strings) unless a company asks.
 
 **Shipped (senior wave):** Min Window, Meeting Rooms II, LRU/design, Dijkstra, Unique Paths / 2D DP, Python coding bank.
 
 **Shipped (stretch):** [Subarray Sum Equals K](dsa-guide/patterns/arrays-hashing.html#subarray-sum-k), [Permutations](dsa-guide/patterns/backtracking.html#permutations) (+ N-Queens bridge note), [Sliding Window Maximum](dsa-guide/patterns/sliding-window.html#sliding-window-maximum).
+
+**Shipped (Blind 75 wave 4):** Max Path Sum, Serialize/Deserialize, Construct Pre/In, Pacific Atlantic, Merge k Lists, Median Stream, Reverse Bits, Sum of Two Integers, Combination Sum IV, Palindromic Substrings.
 
 **Shipped (Blind 75 wave 3):** LCS, Decode Ways, House Robber II, Max Product Subarray, Subtree, Kth Smallest BST, Char Replacement, Reorder List.
 
@@ -285,6 +287,7 @@ Author commands (after this pass):
 10. ~~DSA Blind 75 tracker + wave-1 fill-ins (8 problems)~~ (done)
 11. ~~DSA Blind 75 wave 2: Matrix page + Word Break / LPS / Same Tree / Missing Number / Insert Interval~~ (done)
 12. ~~DSA Blind 75 wave 3: LCS / Decode Ways / HR-II / Max Product + Subtree / Kth / Char Replacement / Reorder~~ (done)
+13. ~~DSA Blind 75 wave 4: close remaining 10 non-premium opens~~ (done)
 
 ### Senior wave shipped
 

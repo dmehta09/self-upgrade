@@ -58,6 +58,8 @@
           <a class="nav-link" href="#hamming-weight">Number of 1 Bits</a>
           <a class="nav-link" href="#counting-bits">Counting Bits</a>
           <a class="nav-link" href="#missing-number">Missing Number</a>
+          <a class="nav-link" href="#reverse-bits">Reverse Bits</a>
+          <a class="nav-link" href="#sum-two-integers">Sum of Two Integers</a>
         </div>
       </nav>
       <nav class="nav-group is-drill" aria-label="Practice">
@@ -638,6 +640,269 @@ print(missing_number([9, 6, 4, 2, 3, 5, 7, 0, 1]))
             </details>
           </section>
 
+          <!-- ===== PROBLEM 5: REVERSE BITS ===== -->
+          <section class="section problem reveal" id="reverse-bits">
+            <header class="problem-meta">
+              <h2><span class="section-num">05</span> &nbsp;Reverse Bits</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Bits · Shift</span>
+                <span class="pm-chip diff-easy">Easy</span>
+                <span class="pm-chip"><span class="dot"></span>~10 min</span>
+                <span class="pm-chip cx">O(1) time · O(1) space</span>
+              </div>
+            </header>
+            <p class="lead">Reverse the bits of a 32-bit unsigned integer and return the result as an unsigned int. For <code>n = 43261596</code> the answer is <code>964176192</code>. For <code>n = 4294967293</code> the answer is <code>3221225471</code>.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Pouring a 32-bead necklace into a new string <span class="tag">analogy</span></div>
+                <p>Imagine a necklace of 32 beads, each black or white. You build a new necklace by always taking the <em>rightmost</em> bead of the old one and placing it as the next bead of the new one — then shifting the old necklace right and the new one left. After 32 pours, the order is fully flipped.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Reversing bits by shifting into a result register">
+              <figcaption class="viz-title">32 steps: peel LSB into result, shift both</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": [0, 0, 1, 0, 1, 0, 0, 1] },
+                "frames": [
+                  {"caption":"Tiny demo (8 bits for clarity). Start res=0. Each step: res = (res<<1) | (n&1), then n >>= 1."},
+                  {"active":[7],"caption":"Peel LSB of n into res's new LSB; shift res left next round so early bits migrate toward the MSB."},
+                  {"done":[0,1,2,3,4,5,6,7],"caption":"After width steps, bit i of the input sits at bit (width-1-i) of the output. Same idea for 32 bits."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <ol>
+              <li>Start <code>res = 0</code>.</li>
+              <li>Repeat exactly 32 times: <code>res = (res &lt;&lt; 1) | (n &amp; 1)</code>, then <code>n &gt;&gt;= 1</code>.</li>
+              <li>Return <code>res</code> (already a 32-bit pattern because we looped a fixed 32 times).</li>
+            </ol>
+            <p>Don't stop early when <code>n</code> becomes 0 — trailing zeros of the input must become leading zeros of the output, which still need those left-shifts on <code>res</code>.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-great">O(1)</span></td><td>Fixed 32 iterations — constant with respect to the numeric value.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-great">O(1)</span></td><td>A single accumulator.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why must the loop run exactly 32 times even after <code>n</code> is already 0?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because XOR needs 32 rounds</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Remaining left-shifts on <code>res</code> push already-collected bits into their final high positions (padding the original trailing zeros)</button>
+                <button class="quiz-opt"><span class="mark"></span>LeetCode rejects answers that finish early for style reasons</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> Early bits of <code>res</code> need to keep sliding left until they occupy the high end of the 32-bit word.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p><code>res = 0</code>. For <code>_ in range(32): res = (res &lt;&lt; 1) | (n &amp; 1); n &gt;&gt;= 1</code>. Return <code>res</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">reverse_bits.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="14">
+def reverse_bits(n):
+    res = 0
+    for _ in range(32):
+        res = (res << 1) | (n & 1)
+        n >>= 1
+    return res
+
+print(reverse_bits(43261596))
+print(reverse_bits(4294967293))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">964176192
+3221225471</pre></div>
+                </div>
+                <p>Thirty-two peel-and-shift steps flip the word. Fixed width is the whole trick — don't treat this like stripping trailing zeros.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Build the answer bit by bit: each step takes n's LSB into res, then shifts both. Loop exactly 32 times so the word width is preserved.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["res = 0"] --> loop{"32 steps left?"}
+  loop -->|no| ret[Return res]
+  loop -->|yes| take["res = res&lt;&lt;1 | n&amp;1"]
+  take --> shr["n >>= 1"]
+  shr --> loop
+  ret --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def reverse_bits(n):</code><span>Reverse a 32-bit unsigned integer.</span></li>
+                  <li><code>res = 0</code><span>Accumulator for the flipped word.</span></li>
+                  <li><code>for _ in range(32):</code><span>Fixed width — always 32 pours.</span></li>
+                  <li><code>res = (res &lt;&lt; 1) | (n &amp; 1)</code><span>Make room on the left, then plant n's current LSB.</span></li>
+                  <li><code>n &gt;&gt;= 1</code><span>Drop the bit we just consumed.</span></li>
+                  <li><code>return res</code><span>After 32 steps, bit order is fully reversed.</span></li>
+                </ol>
+                <p class="walk-why">Time O(1) fixed 32 loops; space O(1) one accumulator.</p>
+              </div>
+            </details>
+          </section>
+
+          <!-- ===== PROBLEM 6: SUM OF TWO INTEGERS ===== -->
+          <section class="section problem reveal" id="sum-two-integers">
+            <header class="problem-meta">
+              <h2><span class="section-num">06</span> &nbsp;Sum of Two Integers</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Bits · XOR / Carry</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~15 min</span>
+                <span class="pm-chip cx">O(1) time · O(1) space</span>
+              </div>
+            </header>
+            <p class="lead">Add two integers <strong>without</strong> using <code>+</code> or <code>-</code>. Use bit ops: XOR builds the sum-without-carry; <code>(a &amp; b) &lt;&lt; 1</code> builds the carry. Tests: <code>1+2 → 3</code>, <code>2+3 → 5</code>, <code>(-1)+1 → 0</code>. In Python, mask to 32 bits so negatives behave like two's complement.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Half-adder on repeat <span class="tag">analogy</span></div>
+                <p>XOR is the sum bit when both digits can't both be 1. AND-then-shift is the carry walking one column left. Keep replacing <code>a</code> with the XOR sum and <code>b</code> with the carry until the carry is gone — you've added by chasing carries, the same way a hardware adder does.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="XOR and carry loop adding 2 and 3">
+              <figcaption class="viz-title">a ^= b for sum bits; carry = (a&amp;b)&lt;&lt;1</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": [2, 3, 5] },
+                "frames": [
+                  {"active":[0,1],"caption":"a=2 (10), b=3 (11). XOR = 01 (1); carry = (10 &amp; 11)<<1 = 100 (4)."},
+                  {"active":[0,1],"caption":"Next: a=1, b=4. XOR = 101 (5); carry = 0. Done — answer 5."},
+                  {"active":[2],"match":[2],"caption":"Same loop handles negatives once you mask to 32-bit two's complement in Python."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <ol>
+              <li>While carry is non-zero (under a 32-bit mask): save <code>carry = (a &amp; b) &lt;&lt; 1</code>, set <code>a = a ^ b</code>, then <code>b = carry</code>.</li>
+              <li>Mask <code>a</code> to 32 bits.</li>
+              <li>If the high bit is set, convert from unsigned 32-bit back to a negative Python int via <code>~(a ^ MASK)</code>; else return <code>a</code>.</li>
+            </ol>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-great">O(1)</span></td><td>At most ~32 carry iterations for 32-bit ints.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-great">O(1)</span></td><td>A few integers.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">What does <code>a ^ b</code> contribute versus <code>(a &amp; b) &lt;&lt; 1</code>?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>XOR is the carry; AND-shift is the sum</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>XOR is the sum-without-carry; AND-then-left-shift is the carry into the next bit</button>
+                <button class="quiz-opt"><span class="mark"></span>Both compute the same value; they're interchangeable</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> Together they are one full-adder step. Repeat until carry vanishes.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p><code>MASK = 0xFFFFFFFF</code>. Loop while <code>b &amp; MASK</code>: <code>carry = (a &amp; b) &lt;&lt; 1</code>; <code>a ^= b</code>; <code>b = carry</code>. Then <code>a &amp;= MASK</code>; if <code>a &gt; 0x7FFFFFFF</code> return <code>~(a ^ MASK)</code> else <code>a</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">sum_two_integers.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="18">
+def get_sum(a, b):
+    MASK = 0xFFFFFFFF
+    MAX = 0x7FFFFFFF
+    while b & MASK:
+        carry = (a & b) << 1
+        a = a ^ b
+        b = carry
+    a = a & MASK
+    return a if a <= MAX else ~(a ^ MASK)
+
+print(get_sum(1, 2))
+print(get_sum(2, 3))
+print(get_sum(-1, 1))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">3
+5
+0</pre></div>
+                </div>
+                <p>Hardware adder in a loop: XOR for sum bits, AND-shift for carry. The 32-bit mask is Python's tax for infinite ints.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Add without + by iterating XOR (sum) and left-shifted AND (carry) until carry is zero. Mask to 32 bits in Python so negatives round-trip correctly.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["a, b inputs"] --> loop{"b &amp; MASK nonzero?"}
+  loop -->|no| mask["a &amp;= MASK"]
+  loop -->|yes| carry["carry = (a&amp;b)&lt;&lt;1"]
+  carry --> xor["a = a ^ b"]
+  xor --> setb["b = carry"]
+  setb --> loop
+  mask --> sign{"a &gt; MAX?"}
+  sign -->|yes| neg["Return ~(a ^ MASK)"]
+  sign -->|no| pos[Return a]
+  neg --> done[Done]
+  pos --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def get_sum(a, b):</code><span>Return a + b using only bitwise ops.</span></li>
+                  <li><code>MASK = 0xFFFFFFFF; MAX = 0x7FFFFFFF</code><span>32-bit unsigned mask and signed max for two's complement.</span></li>
+                  <li><code>while b &amp; MASK:</code><span>Keep going while a carry still lives in the low 32 bits.</span></li>
+                  <li><code>carry = (a &amp; b) &lt;&lt; 1</code><span>Positions where both bits were 1 become carry into the next column.</span></li>
+                  <li><code>a = a ^ b</code><span>Sum bits without carry.</span></li>
+                  <li><code>b = carry</code><span>Next round adds the carry into those shifted positions.</span></li>
+                  <li><code>a = a &amp; MASK</code><span>Keep only 32 bits of the result.</span></li>
+                  <li><code>return a if a &lt;= MAX else ~(a ^ MASK)</code><span>If the sign bit is set, convert unsigned 32-bit pattern back to a negative Python int.</span></li>
+                </ol>
+                <p class="walk-why">Time O(1) bounded by word size; space O(1).</p>
+              </div>
+            </details>
+          </section>
+
 
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
@@ -654,6 +919,8 @@ print(missing_number([9, 6, 4, 2, 3, 5, 7, 0, 1]))
           <a href="#hamming-weight">Number of 1 Bits</a>
           <a href="#counting-bits">Counting Bits</a>
           <a href="#missing-number">Missing Number</a>
+          <a href="#reverse-bits">Reverse Bits</a>
+          <a href="#sum-two-integers">Sum of Two Integers</a>
         </aside>
       </div>
 

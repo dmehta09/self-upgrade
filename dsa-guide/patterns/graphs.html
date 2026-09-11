@@ -50,6 +50,7 @@
           <a class="nav-link" href="#clone-graph">Clone Graph</a>
           <a class="nav-link" href="#course-schedule">Course Schedule</a>
           <a class="nav-link" href="#dijkstra">Network Delay Time</a>
+          <a class="nav-link" href="#pacific-atlantic">Pacific Atlantic Water Flow</a>
         </div>
         <a class="nav-link" href="../patterns/dynamic-programming.html">Dynamic Programming</a>
         <a class="nav-link" href="../patterns/intervals.html">Intervals</a>
@@ -828,6 +829,163 @@ print(network_delay_time([[1, 2, 1]], 2, 2))
             </details>
           </section>
 
+
+          <!-- ===== PROBLEM 5: PACIFIC ATLANTIC WATER FLOW ===== -->
+          <section class="section problem reveal" id="pacific-atlantic">
+            <header class="problem-meta">
+              <h2><span class="section-num">05</span> &nbsp;Pacific Atlantic Water Flow</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Graphs · Multi-source DFS</span>
+                <span class="pm-chip diff-med">Medium</span>
+                <span class="pm-chip"><span class="dot"></span>~30 min</span>
+                <span class="pm-chip cx">O(m·n) time · O(m·n) space</span>
+              </div>
+            </header>
+            <p class="lead">An <code>m×n</code> island where each cell has a height. Rain can flow to a neighbor only if that neighbor is <strong>equal or taller</strong> (uphill from ocean thinking). Pacific touches the top and left edges; Atlantic the bottom and right. Return every cell from which water can reach <em>both</em> oceans. Example heights below → cells including <code>[0,4]</code>, <code>[1,3]</code>, <code>[1,4]</code>, <code>[2,2]</code>, <code>[3,0]</code>, <code>[3,1]</code>, <code>[4,0]</code> (order may vary).</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Flood inland from both coasts <span class="tag">analogy</span></div>
+                <p>Instead of asking “can this hill drain to both seas?”, reverse the flow: start at every Pacific beach and walk <em>uphill</em> inland; do the same from the Atlantic. Cells painted by both floods can reach both oceans.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Multi-source DFS from Pacific and Atlantic edges meeting inland">
+              <figcaption class="viz-title">Paint inland from each ocean; intersect</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "grid",
+                "meta": { "grid": [["1","2","2","3","5"],["3","2","3","4","4"],["2","4","5","3","1"],["6","7","1","4","5"],["5","1","1","2","4"]] },
+                "frames": [
+                  {"active":[[0,0],[0,1],[0,2],[0,3],[0,4],[1,0],[2,0],[3,0],[4,0]],"caption":"Pacific borders (top + left). Multi-source DFS walks uphill inland."},
+                  {"done":[[0,0],[0,1],[0,2],[0,3],[0,4],[1,0],[1,1],[1,2],[1,3],[1,4],[2,0],[2,1],[2,2],[3,0],[3,1],[4,0]],"caption":"Pacific-reachable set filled (simplified). Peak 5 at [2,2] is reachable."},
+                  {"active":[[4,0],[4,1],[4,2],[4,3],[4,4],[0,4],[1,4],[2,4],[3,4]],"done":[[0,0],[0,1],[0,2],[0,3],[0,4],[1,0],[2,0],[3,0],[4,0]],"caption":"Atlantic borders (bottom + right). Same uphill rule."},
+                  {"done":[[0,4],[1,3],[1,4],[2,2],[3,0],[3,1],[4,0]],"caption":"Intersection: cells reachable from both oceans — the answer set."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <ol>
+              <li>Start DFS/BFS from every Pacific-border cell into a <code>pacific</code> set; move to a neighbor only if <code>heights[nr][nc] &gt;= heights[r][c]</code>.</li>
+              <li>Repeat from every Atlantic-border cell into an <code>atlantic</code> set.</li>
+              <li>Answer = intersection of the two sets. Sort before printing if you need a stable expected output.</li>
+            </ol>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(m·n)</span></td><td>Each cell enters each ocean set at most once.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(m·n)</span></td><td>Two visited sets (and recursion/queue).</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why search inland from the oceans instead of from every cell outward?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because oceans are always taller than inland cells</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Two multi-source searches visit each cell a constant number of times; starting from every cell would redo overlapping work</button>
+                <button class="quiz-opt"><span class="mark"></span>Because DFS cannot run downhill</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> Reverse the flow: “who can the ocean reach walking uphill?” is the same as “who can drain to the ocean,” and the border seeds give a linear multi-source flood.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Seed DFS from top+left into <code>pac</code>, bottom+right into <code>atl</code>. Neighbor ok when in-bounds, unseen, and <code>heights[nr][nc] &gt;= heights[r][c]</code>. Return <code>sorted(pac &amp; atl)</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">pacific_atlantic.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="32">
+def pacific_atlantic(heights):
+    if not heights:
+        return []
+    m, n = len(heights), len(heights[0])
+    pac, atl = set(), set()
+
+    def dfs(r, c, seen):
+        seen.add((r, c))
+        for dr, dc in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+            nr, nc = r + dr, c + dc
+            if (0 <= nr < m and 0 <= nc < n
+                    and (nr, nc) not in seen
+                    and heights[nr][nc] >= heights[r][c]):
+                dfs(nr, nc, seen)
+
+    for c in range(n):
+        dfs(0, c, pac)
+        dfs(m - 1, c, atl)
+    for r in range(m):
+        dfs(r, 0, pac)
+        dfs(r, n - 1, atl)
+    return sorted(pac & atl)
+
+heights = [
+    [1, 2, 2, 3, 5],
+    [3, 2, 3, 4, 4],
+    [2, 4, 5, 3, 1],
+    [6, 7, 1, 4, 5],
+    [5, 1, 1, 2, 4],
+]
+print(pacific_atlantic(heights))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">[(0, 4), (1, 3), (1, 4), (2, 2), (3, 0), (3, 1), (4, 0)]</pre></div>
+                </div>
+                <p>Sort the intersection so the runpad expected output is stable regardless of set iteration order.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Pacific Atlantic is multi-source flood from both oceans walking uphill, then intersect. That beats launching a separate search from every cell.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Seed ocean borders] --> pac[DFS uphill into pacific]
+  pac --> atl[DFS uphill into atlantic]
+  atl --> both[Intersection]
+  both --> sort[Sort for stable output]
+  sort --> ans[Return cells]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def pacific_atlantic(heights):</code><span>Return cells that can reach both oceans.</span></li>
+                  <li><code>if not heights: return []</code><span>Empty grid guard.</span></li>
+                  <li><code>m, n = len(heights), len(heights[0])</code><span>Grid dimensions.</span></li>
+                  <li><code>pac, atl = set(), set()</code><span>Cells reachable from each ocean (reversed flow).</span></li>
+                  <li><code>def dfs(r, c, seen):</code><span>Uphill flood into one ocean's set.</span></li>
+                  <li><code>seen.add((r, c))</code><span>Mark current cell reachable from that ocean.</span></li>
+                  <li><code>for dr, dc in ((0, 1), (0, -1), (1, 0), (-1, 0)):</code><span>Four neighbors.</span></li>
+                  <li><code>nr, nc = r + dr, c + dc</code><span>Candidate neighbor.</span></li>
+                  <li><code>if (0 &lt;= nr &lt; m and 0 &lt;= nc &lt; n</code><span>Stay on the grid…</span></li>
+                  <li><code>and (nr, nc) not in seen</code><span>…skip already painted cells…</span></li>
+                  <li><code>and heights[nr][nc] &gt;= heights[r][c]):</code><span>…only walk uphill or flat.</span></li>
+                  <li><code>dfs(nr, nc, seen)</code><span>Continue the flood.</span></li>
+                  <li><code>for c in range(n): dfs(0, c, pac); dfs(m - 1, c, atl)</code><span>Seed top (Pacific) and bottom (Atlantic).</span></li>
+                  <li><code>for r in range(m): dfs(r, 0, pac); dfs(r, n - 1, atl)</code><span>Seed left (Pacific) and right (Atlantic).</span></li>
+                  <li><code>return sorted(pac &amp; atl)</code><span>Both oceans; sort for a stable print.</span></li>
+                </ol>
+                <p class="walk-why">Time O(m·n) — each cell enters each set once; space O(m·n) for the sets and DFS stack.</p>
+              </div>
+            </details>
+          </section>
+
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -843,6 +1001,7 @@ print(network_delay_time([[1, 2, 1]], 2, 2))
           <a href="#clone-graph">Clone Graph</a>
           <a href="#course-schedule">Course Schedule</a>
           <a href="#dijkstra">Network Delay Time</a>
+          <a href="#pacific-atlantic">Pacific Atlantic Water Flow</a>
         </aside>
       </div>
 

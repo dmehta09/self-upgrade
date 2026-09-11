@@ -46,6 +46,8 @@
           <a class="nav-link" href="#pattern">The idea</a>
           <a class="nav-link" href="#kth-largest">Kth Largest Element</a>
           <a class="nav-link" href="#top-k-frequent">Top K Frequent</a>
+          <a class="nav-link" href="#merge-k-lists">Merge k Sorted Lists</a>
+          <a class="nav-link" href="#median-stream">Find Median from Data Stream</a>
         </div>
         <a class="nav-link" href="../patterns/backtracking.html">Backtracking</a>
         <a class="nav-link" href="../patterns/graphs.html">Graphs</a>
@@ -415,6 +417,321 @@ print(top_k_frequent([1], 1))
 
           </section>
 
+          <!-- ===== PROBLEM 3: MERGE K SORTED LISTS ===== -->
+          <section class="section problem reveal" id="merge-k-lists">
+            <header class="problem-meta">
+              <h2><span class="section-num">03</span> &nbsp;Merge k Sorted Lists</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Heap · Merge</span>
+                <span class="pm-chip diff-hard">Hard</span>
+                <span class="pm-chip"><span class="dot"></span>~25 min</span>
+                <span class="pm-chip cx">O(N log k) time · O(k) space</span>
+              </div>
+            </header>
+            <p class="lead">You get <code>k</code> linked lists, each already sorted ascending. Merge them into one sorted list. For <code>[[1,4,5],[1,3,4],[2,6]]</code> the result is <code>1→1→2→3→4→4→5→6</code>. Prefer a min-heap of heads over pairwise merge.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">k sorted checkout lines, one conveyor <span class="tag">analogy</span></div>
+                <p>Each list is a checkout line with tickets already sorted by number. You keep only the <em>front</em> ticket of every line in a priority basket (min-heap). Always pull the smallest front ticket onto the conveyor, then push that line's next ticket into the basket. You never scan all k lines from scratch — the heap always knows whose turn is next.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Min-heap of list heads merging three sorted lists">
+              <figcaption class="viz-title">Heap of heads: always pop the smallest front</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": [1, 1, 2, 3, 4, 4, 5, 6] },
+                "frames": [
+                  {"caption":"Three sorted lists: A=1→4→5, B=1→3→4, C=2→6. Seed the heap with each head: (1,A), (1,B), (2,C)."},
+                  {"done":[0],"caption":"Pop smallest head 1 from A. Attach it. Push A's next (4) onto the heap."},
+                  {"done":[0,1],"caption":"Pop 1 from B. Attach it. Push B's next (3)."},
+                  {"done":[0,1,2],"caption":"Pop 2 from C. Attach it. Push C's next (6)."},
+                  {"done":[0,1,2,3,4,5,6,7],"caption":"Keep popping the heap's min and advancing that list until empty. Merged: 1,1,2,3,4,4,5,6."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Use <code>heapq</code> with triples <code>(val, list_index, node)</code> — the index breaks ties because <code>ListNode</code> isn't orderable:</p>
+            <ol>
+              <li>Push every non-empty list's head onto the min-heap.</li>
+              <li>Pop the smallest; append that node to a dummy-headed result.</li>
+              <li>If that node has a <code>.next</code>, push <code>(next.val, same_index, next)</code>.</li>
+              <li>Repeat until the heap is empty; return <code>dummy.next</code>.</li>
+            </ol>
+            <p>Divide-and-conquer pairwise merge also works in O(N log k); the heap story matches this page's theme and is easy to narrate.</p>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>Time</td><td><span class="bigo t-good">O(N log k)</span></td><td>N total nodes; each push/pop is O(log k) on a heap of size ≤ k.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-great">O(k)</span></td><td>The heap holds at most one live head per list (plus the output chain).</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why store <code>(val, list_index, node)</code> instead of just the node?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>Because heaps can only store integers</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>heapq</code> compares tuples; equal vals need a tie-breaker, and <code>ListNode</code> objects aren't comparable</button>
+                <button class="quiz-opt"><span class="mark"></span>So we can sort the lists by index first</button>
+              </div>
+              <div class="quiz-explain"><b>Exactly.</b> When two heads share a value, Python would try to compare the nodes and crash. The list index is a cheap, unique secondary key.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p>Seed <code>heap</code> with <code>(node.val, i, node)</code> for each non-empty list. Loop: pop, attach to <code>tail</code>, and if <code>node.next</code> push <code>(node.next.val, i, node.next)</code>. Return <code>dummy.next</code>.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">merge_k_lists.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="36">
+import heapq
+
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+def merge_k_lists(lists):
+    heap = []
+    for i, node in enumerate(lists):
+        if node:
+            heapq.heappush(heap, (node.val, i, node))
+    dummy = ListNode()
+    cur = dummy
+    while heap:
+        val, i, node = heapq.heappop(heap)
+        cur.next = node
+        cur = cur.next
+        if node.next:
+            heapq.heappush(heap, (node.next.val, i, node.next))
+    return dummy.next
+
+def build(vals):
+    dummy = ListNode(); cur = dummy
+    for v in vals:
+        cur.next = ListNode(v); cur = cur.next
+    return dummy.next
+
+def to_list(head):
+    out = []
+    while head:
+        out.append(head.val); head = head.next
+    return out
+
+lists = [build([1, 4, 5]), build([1, 3, 4]), build([2, 6])]
+print(to_list(merge_k_lists(lists)))
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">[1, 1, 2, 3, 4, 4, 5, 6]</pre></div>
+                </div>
+                <p>Same <code>ListNode</code> + <code>build</code>/<code>to_list</code> helpers as the linked-list page. The heap always exposes the global next-smallest head across k lists.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Min-heap of k heads merges in O(N log k). Always pop the smallest front and push its successor — never re-scan all lists. Mention divide-and-conquer merge as the alternate.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["Push each head val,i,node"] --> loop{"heap empty?"}
+  loop -->|yes| ret["Return dummy.next"]
+  loop -->|no| pop["heappop smallest"]
+  pop --> attach["Attach node to cur"]
+  attach --> has{"node.next?"}
+  has -->|yes| push["heappush next"]
+  has -->|no| loop
+  push --> loop
+  ret --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>import heapq</code><span>Min-heap for the current heads of all lists.</span></li>
+                  <li><code>class ListNode:</code><span>Same helper used on the linked-list page.</span></li>
+                  <li><code>def merge_k_lists(lists):</code><span>Merge k sorted lists into one sorted list.</span></li>
+                  <li><code>heap = []</code><span>Will hold triples (val, list_index, node).</span></li>
+                  <li><code>for i, node in enumerate(lists):</code><span>One slot per input list.</span></li>
+                  <li><code>if node: heapq.heappush(heap, (node.val, i, node))</code><span>Seed with each non-empty head; index breaks ties.</span></li>
+                  <li><code>dummy = ListNode(); cur = dummy</code><span>Blank starter so attaching the first real node is uniform.</span></li>
+                  <li><code>while heap:</code><span>Until every node has been drained.</span></li>
+                  <li><code>val, i, node = heapq.heappop(heap)</code><span>Global smallest remaining head.</span></li>
+                  <li><code>cur.next = node; cur = cur.next</code><span>Append it to the merged chain.</span></li>
+                  <li><code>if node.next: heapq.heappush(heap, (node.next.val, i, node.next))</code><span>That list's next ticket enters the basket.</span></li>
+                  <li><code>return dummy.next</code><span>Skip the blank starter.</span></li>
+                </ol>
+                <p class="walk-why">Time O(N log k) for N nodes; space O(k) for the heap of heads.</p>
+              </div>
+            </details>
+          </section>
+
+          <!-- ===== PROBLEM 4: FIND MEDIAN FROM DATA STREAM ===== -->
+          <section class="section problem reveal" id="median-stream">
+            <header class="problem-meta">
+              <h2><span class="section-num">04</span> &nbsp;Find Median from Data Stream</h2>
+              <div class="pm-tags">
+                <span class="pm-chip pattern">Heap · Two Heaps</span>
+                <span class="pm-chip diff-hard">Hard</span>
+                <span class="pm-chip"><span class="dot"></span>~25 min</span>
+                <span class="pm-chip cx">O(log n) add · O(1) median</span>
+              </div>
+            </header>
+            <p class="lead">Design a structure that supports <code>addNum(num)</code> and <code>findMedian()</code> on a growing stream. After adding <code>1</code> then <code>2</code>, the median is <code>1.5</code>; after adding <code>3</code>, the median is <code>2</code>. Use two heaps: a max-heap for the lower half and a min-heap for the upper half.</p>
+
+            <div class="callout analogy">
+              <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+              <div class="co-body">
+                <div class="co-title">Two piles meeting in the middle <span class="tag">analogy</span></div>
+                <p>Split every number into a <strong>lower</strong> pile (big numbers face up via a max-heap) and an <strong>upper</strong> pile (small numbers face up via a min-heap). Keep the piles balanced so they differ by at most one. The median is either the top of the larger pile, or the average of both tops when sizes match.</p>
+              </div>
+            </div>
+
+            <figure class="viz reveal" data-viz aria-label="Two heaps balancing to find the running median">
+              <figcaption class="viz-title">lo (max-heap) + hi (min-heap); tops form the median</figcaption>
+              <div class="viz-stage" aria-live="polite"><span class="viz-fallback">Turn on JavaScript to play this step-by-step animation.</span></div>
+              <div class="viz-caption"></div>
+              <div class="viz-controls" role="group" aria-label="Animation controls">
+                <button class="viz-btn viz-reset" type="button" aria-label="Reset to start">⏮</button>
+                <button class="viz-btn viz-prev" type="button" aria-label="Previous step">‹</button>
+                <button class="viz-btn viz-play" type="button" aria-label="Play">▶</button>
+                <button class="viz-btn viz-next" type="button" aria-label="Next step">›</button>
+                <div class="viz-progress"><div class="viz-progress-fill"></div></div>
+                <span class="viz-step">1 / 1</span>
+                <select class="viz-speed-sel" aria-label="Playback speed"><option value="1700">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option></select>
+              </div>
+              <script type="application/json" class="viz-config">
+              {
+                "type": "array",
+                "meta": { "values": [1, 2, 3] },
+                "frames": [
+                  {"active":[0],"caption":"addNum(1): push into lo (as −1). Rebalance into hi. lo empty-ish → move back so lo={1}. Median = 1."},
+                  {"active":[0,1],"caption":"addNum(2): push to lo, move largest of lo into hi. lo={1}, hi={2}. Equal size → median (1+2)/2 = 1.5."},
+                  {"active":[0,1,2],"match":[1],"caption":"addNum(3): after rebalance lo={2}, hi={3} (or lo larger). Median = top of lo = 2."}
+                ]
+              }
+              </script>
+            </figure>
+
+            <h3>How to solve it</h3>
+            <p>Python only has a min-heap, so simulate the max-heap <code>lo</code> by storing <em>negatives</em>:</p>
+            <ol>
+              <li><code>addNum</code>: push <code>-num</code> into <code>lo</code>, then move <code>-heappop(lo)</code> into <code>hi</code> (forces new value through the boundary).</li>
+              <li>If <code>hi</code> is now bigger than <code>lo</code>, move one from <code>hi</code> back to <code>lo</code> (as a negative). Invariant: <code>len(lo) == len(hi)</code> or <code>len(lo) == len(hi) + 1</code>.</li>
+              <li><code>findMedian</code>: if <code>lo</code> is larger, return <code>-lo[0]</code>; else return <code>(-lo[0] + hi[0]) / 2</code>.</li>
+            </ol>
+
+            <div class="table-wrap complexity">
+              <table>
+                <thead><tr><th>Measure</th><th>Cost</th><th>Why</th></tr></thead>
+                <tbody>
+                  <tr><td>addNum</td><td><span class="bigo t-good">O(log n)</span></td><td>A few heap push/pops on halves of size ≈ n/2.</td></tr>
+                  <tr><td>findMedian</td><td><span class="bigo t-great">O(1)</span></td><td>Just peek the heap tops.</td></tr>
+                  <tr><td>Space</td><td><span class="bigo t-good">O(n)</span></td><td>Every number lives in exactly one heap.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quiz" data-quiz>
+              <p class="q">Why push negatives into <code>lo</code>?</p>
+              <div class="quiz-opts">
+                <button class="quiz-opt"><span class="mark"></span>So the median is always negative</button>
+                <button class="quiz-opt" data-correct="true"><span class="mark"></span>Python's <code>heapq</code> is a min-heap; storing <code>-x</code> makes the largest real value sit at the top as the most-negative entry</button>
+                <button class="quiz-opt"><span class="mark"></span>Negatives sort faster than positives</button>
+              </div>
+              <div class="quiz-explain"><b>Right.</b> <code>-lo[0]</code> recovers the max of the lower half. Same trick as elsewhere on this page when you need a max-heap.</div>
+            </div>
+
+            <details class="deeper hint">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Stuck? Reveal a hint <span class="tag">hint</span></summary>
+              <div class="deeper-body"><p><code>lo</code> = max-heap via negatives, <code>hi</code> = min-heap. On add: push to <code>lo</code>, move top to <code>hi</code>, then if <code>len(hi) &gt; len(lo)</code> move one back. Median = <code>-lo[0]</code> if lo larger, else average of tops.</p></div>
+            </details>
+            <details class="deeper solution">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Show the solution &amp; run it <span class="tag">solution</span></summary>
+              <div class="deeper-body">
+                <div class="runpad" data-needs="">
+                  <div class="rp-head"><span class="rp-title">median_finder.py</span><div class="rp-actions"><button class="rp-reset">Reset</button><button class="rp-run">Run</button></div></div>
+                  <textarea class="rp-editor" spellcheck="false" rows="28">
+import heapq
+
+class MedianFinder:
+    def __init__(self):
+        self.lo = []   # max-heap via negatives
+        self.hi = []   # min-heap
+
+    def addNum(self, num):
+        heapq.heappush(self.lo, -num)
+        heapq.heappush(self.hi, -heapq.heappop(self.lo))
+        if len(self.hi) > len(self.lo):
+            heapq.heappush(self.lo, -heapq.heappop(self.hi))
+
+    def findMedian(self):
+        if len(self.lo) > len(self.hi):
+            return float(-self.lo[0])
+        return (-self.lo[0] + self.hi[0]) / 2.0
+
+mf = MedianFinder()
+mf.addNum(1)
+mf.addNum(2)
+print(mf.findMedian())
+mf.addNum(3)
+print(mf.findMedian())
+</textarea>
+                  <div class="rp-output"><pre class="rp-expected">1.5
+2.0</pre></div>
+                </div>
+                <p>Two heaps meeting at the middle: every add rebalances so the median is always at the boundary tops — O(log n) update, O(1) query.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Lower half max-heap + upper half min-heap keeps the median at the tops. Always rebalance so lo is equal or one larger than hi. Negatives fake a max-heap in Python.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  add["addNum num"] --> pushLo["Push -num to lo"]
+  pushLo --> moveHi["Pop lo into hi"]
+  moveHi --> bal{"len hi &gt; len lo?"}
+  bal -->|yes| back["Move hi top back to lo"]
+  bal -->|no| med
+  back --> med{"findMedian"}
+  med -->|lo larger| one["Return -lo 0"]
+  med -->|equal| avg["Return avg of tops"]
+  one --> done[Done]
+  avg --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>class MedianFinder:</code><span>Stream structure with addNum and findMedian.</span></li>
+                  <li><code>self.lo = []; self.hi = []</code><span>lo = lower half (max-heap via negatives); hi = upper half (min-heap).</span></li>
+                  <li><code>def addNum(self, num):</code><span>Insert one number and rebalance.</span></li>
+                  <li><code>heapq.heappush(self.lo, -num)</code><span>Offer the new value to the lower half first.</span></li>
+                  <li><code>heapq.heappush(self.hi, -heapq.heappop(self.lo))</code><span>Move lo's largest into hi — new value crosses the boundary correctly.</span></li>
+                  <li><code>if len(self.hi) &gt; len(self.lo):</code><span>hi got too big — restore lo ≥ hi.</span></li>
+                  <li><code>heapq.heappush(self.lo, -heapq.heappop(self.hi))</code><span>Move hi's smallest back to lo as a negative.</span></li>
+                  <li><code>def findMedian(self):</code><span>Peek tops; no heap mutation.</span></li>
+                  <li><code>if len(self.lo) &gt; len(self.hi): return float(-self.lo[0])</code><span>Odd count — median is max of lower half.</span></li>
+                  <li><code>return (-self.lo[0] + self.hi[0]) / 2.0</code><span>Even count — average the two middle values.</span></li>
+                </ol>
+                <p class="walk-why">addNum O(log n); findMedian O(1); space O(n) for both heaps.</p>
+              </div>
+            </details>
+          </section>
+
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
 
           <nav class="page-nav reveal">
@@ -428,6 +745,8 @@ print(top_k_frequent([1], 1))
           <a href="#pattern">The idea</a>
           <a href="#kth-largest">Kth Largest Element</a>
           <a href="#top-k-frequent">Top K Frequent</a>
+          <a href="#merge-k-lists">Merge k Sorted Lists</a>
+          <a href="#median-stream">Find Median from Data Stream</a>
         </aside>
       </div>
 
