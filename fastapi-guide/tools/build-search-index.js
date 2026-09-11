@@ -24,6 +24,7 @@ const FILES = [
   "deploy/index.html",
   // Practice
   "drill/index.html",
+  "drill/interview-gotchas.html",
 ];
 
 function decode(s) {

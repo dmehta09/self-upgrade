@@ -100,6 +100,7 @@ Author commands (after this pass):
 
 | Concept | Engine / page | Trap | Status |
 |---------|---------------|------|--------|
+| Verbal bank | [drill/interview-gotchas.html](fastapi-guide/drill/interview-gotchas.html) | Opening line + MissingGreenlet | ⬜ |
 | Request lifecycle | [fastapi/index.html](fastapi-guide/fastapi/index.html) `reqtrace` | Validation before handler | ⬜ |
 | DI | [fastapi/dependencies.html](fastapi-guide/fastapi/dependencies.html) | `Annotated` + yield cleanup | ⬜ |
 | Async DB | [fastapi/async-db.html](fastapi-guide/fastapi/async-db.html) | MissingGreenlet / forgotten await | ⬜ |
@@ -131,7 +132,9 @@ Author commands (after this pass):
 
 **Bugs fixed this pass:** `session.query` → `session.exec(select(...))`; `include_router` missing `)`.
 
-**Still add later:** refresh tokens/RBAC, `httpx` AsyncClient tests, compose+Postgres, return-type annotations alongside `response_model`, dedicated interview Q page.
+**Still add later:** return-type annotations alongside `response_model` polish; more production caching drills.
+
+**Shipped:** Auth II (refresh/RBAC), async tests + compose, dedicated [interview gotchas](fastapi-guide/drill/interview-gotchas.html) page.
 
 ### Lang Stack
 
@@ -249,6 +252,7 @@ Author commands (after this pass):
 - [x] LangStack `create_agent` + LangSmith Deployment naming
 - [x] DSA Python coding-round bank
 - [x] LangStack interview gotchas verbal bank
+- [x] FastAPI interview gotchas verbal bank
 
 ### Still open
 
@@ -277,8 +281,9 @@ Skip foundations. Engines first. Checklist also on [`index.html#senior-path`](in
 | Block | Time | Open |
 |-------|------|------|
 | GenAI | 45m | [Attention](genai-guide/internals/attention-mechanism.html) → [workflows](genai-guide/rag/architectures-and-workflows.html) → [hybrid RAG](genai-guide/rag/hybrid-search-and-reranking.html) → [Q bank](genai-guide/interview/question-bank.html) → [RAG SD](genai-guide/interview/system-design/rag-chatbot.html) |
-| DSA | 50m | [Pattern map](dsa-guide/patterns/index.html) → [Python bank](dsa-guide/reference/python-coding-round.html) → [Min Window](dsa-guide/patterns/sliding-window.html#min-window) → [LRU](dsa-guide/patterns/design.html) → [2D DP](dsa-guide/patterns/dynamic-programming.html#unique-paths) → [Meeting Rooms II](dsa-guide/patterns/intervals.html#meeting-rooms-ii) |
 | LangStack | 35m | [Gotchas](langstack/ecosystem/interview-gotchas.html) → [Middleware](langstack/langchain/middleware.html) → [HITL advanced](langstack/langgraph/advanced.html) → [evals](langstack/langsmith/evals.html) |
+| FastAPI | 40m | [Gotchas](fastapi-guide/drill/interview-gotchas.html) → [DI](fastapi-guide/fastapi/dependencies.html) → [async DB](fastapi-guide/fastapi/async-db.html) → [Auth II](fastapi-guide/fastapi/auth.html#auth-ii) → [async tests](fastapi-guide/deploy/index.html#async-tests) |
+| DSA | 50m | [Pattern map](dsa-guide/patterns/index.html) → [Python bank](dsa-guide/reference/python-coding-round.html) → [Min Window](dsa-guide/patterns/sliding-window.html#min-window) → [LRU](dsa-guide/patterns/design.html) → [2D DP](dsa-guide/patterns/dynamic-programming.html#unique-paths) → [Meeting Rooms II](dsa-guide/patterns/intervals.html#meeting-rooms-ii) |
 
 ---
 
