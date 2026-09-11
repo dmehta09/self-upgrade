@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Behavioral patterns | The Design Field Guide</title>
-  <meta name="description" content="Strategy, Observer, Command, State, Template Method, Iterator and Chain of Responsibility — the behavioral design patterns that organize how objects communicate and share responsibility, each with an analogy and idiomatic Python 3.13." />
+  <meta name="description" content="Strategy, Observer, Command, State, Template Method, Iterator, Chain of Responsibility, Mediator, Memento, Visitor and Interpreter — the behavioral design patterns that organize how objects communicate and share responsibility, each with an analogy and idiomatic Python 3.13." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -21,7 +21,7 @@
     <aside class="sidebar" id="sidebar">
       <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
         <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
-        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD · Advanced</span></span>
       </a>
       <nav class="nav-group" aria-label="Start here">
         <h4>Start here</h4>
@@ -97,7 +97,7 @@
           <section class="hero reveal" style="padding-top:8px;">
             <span class="eyebrow">Design patterns · behavioral</span>
             <h1>Behavioral patterns: who talks to whom.</h1>
-            <p class="lead">Behavioral patterns are about <em>how objects communicate and divide responsibility</em> — which object decides, which one acts, and how a request flows between them. Seven classics, and in Python many collapse to "just pass a function."</p>
+            <p class="lead">Behavioral patterns are about <em>how objects communicate and divide responsibility</em> — which object decides, which one acts, and how a request flows between them. Eleven classics, and in Python many collapse to "just pass a function."</p>
           </section>
 
           <!-- 1. STRATEGY -->
@@ -583,9 +583,184 @@ level 9: unhandled</div>
             <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">The Pythonic way</div><p>Skip the linked-list plumbing: keep a plain <em>list</em> of handler callables and loop until one returns a result. This is how WSGI/ASGI middleware and <code>logging</code> handlers are wired.</p></div></div>
           </section>
 
-          <!-- 8. RECAP -->
+          <!-- 8. MEDIATOR -->
+          <section class="section reveal" id="mediator">
+            <h2><span class="section-num">08</span> &nbsp;Mediator: talk through a hub, not each other</h2>
+            <p><strong>Intent:</strong> define an object that encapsulates how a set of objects interact — colleagues never call each other directly; they go through the mediator.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">An air-traffic controller <span class="tag">analogy</span></div><p>Planes don't negotiate landing slots with each other over the radio. They talk to the tower; the tower sequences everyone. Swap the tower's rules and every plane follows — without rewriting the fleet.</p></div></div>
+            <p><strong>The problem:</strong> a chat room's users must broadcast messages. Wiring every <code>User</code> to every other user is an N² mess. Put a <code>ChatRoom</code> in the middle.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">mediator.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from typing import Protocol
+
+class Mediator(Protocol):
+    def broadcast(self, sender: "User", text: str) -&gt; None: ...
+
+class ChatRoom:                              # the mediator
+    def __init__(self):
+        self._users: list[User] = []
+    def join(self, user: "User") -&gt; None:
+        self._users.append(user)
+        user.room = self
+    def broadcast(self, sender: "User", text: str) -&gt; None:
+        for u in self._users:
+            if u is not sender:
+                u.receive(sender.name, text)
+
+class User:                                  # a colleague — knows only the room
+    def __init__(self, name: str):
+        self.name = name
+        self.room: ChatRoom | None = None
+    def send(self, text: str) -&gt; None:
+        self.room.broadcast(self, text)
+    def receive(self, who: str, text: str) -&gt; None:
+        print(f"{self.name} heard {who}: {text}")
+
+room = ChatRoom()
+alice, bob = User("Alice"), User("Bob")
+room.join(alice); room.join(bob)
+alice.send("hi")                             # Bob heard Alice: hi</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>Bob heard Alice: hi</div>
+            <div class="kv">
+              <dt>Use when</dt><dd>many objects need coordinated interaction and direct links would explode into a spaghetti graph (UI widgets, chat, game pieces).</dd>
+              <dt>Avoid when</dt><dd>two objects have a simple one-way relationship — a direct call is clearer than a hub.</dd>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Don't build a god object</div><p>A mediator that knows every detail of every colleague becomes the new coupling bottleneck. Keep it thin: route events, don't own all business logic. If it grows forever, split domains or prefer Observer for one-to-many fire-and-forget.</p></div></div>
+          </section>
+
+          <!-- 9. MEMENTO -->
+          <section class="section reveal" id="memento">
+            <h2><span class="section-num">09</span> &nbsp;Memento: snapshot state for later undo</h2>
+            <p><strong>Intent:</strong> capture an object's internal state so you can restore it later — without exposing that state to the rest of the world.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A save-game slot <span class="tag">analogy</span></div><p>You don't hand the console your brain dumps mid-level. You hit Save; the cartridge stores an opaque blob. Load restores you — the UI never peeks inside the blob, and the game's private fields stay private.</p></div></div>
+            <p><strong>The problem:</strong> a text editor needs undo. Exposing <code>_text</code> to the history stack breaks encapsulation. Hand the caretaker an opaque memento instead.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">memento.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class Memento:                               # opaque snapshot
+    text: str
+
+class Editor:                                # originator
+    def __init__(self): self._text = ""
+    def type(self, chunk: str) -&gt; None:
+        self._text += chunk
+    def save(self) -&gt; Memento:
+        return Memento(self._text)
+    def restore(self, m: Memento) -&gt; None:
+        self._text = m.text
+    def show(self) -&gt; str: return self._text
+
+class History:                               # caretaker — never opens the memento
+    def __init__(self): self._stack: list[Memento] = []
+    def push(self, m: Memento) -&gt; None: self._stack.append(m)
+    def pop(self) -&gt; Memento: return self._stack.pop()
+
+ed, hist = Editor(), History()
+ed.type("Hello"); hist.push(ed.save())
+ed.type(" world")
+print(ed.show())                             # Hello world
+ed.restore(hist.pop())
+print(ed.show())                             # Hello</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>Hello world
+Hello</div>
+            <div class="kv">
+              <dt>Use when</dt><dd>you need undo/rollback and the originator alone should know how to read its own snapshot (editors, transactions, games).</dd>
+              <dt>Avoid when</dt><dd>a Command already carries enough info to reverse itself — Command undo is often simpler than full snapshots.</dd>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Snapshots cost memory</div><p>Every save clones state. For large documents, prefer incremental Command history or store diffs. Also: if the caretaker peeks inside the memento, you've broken the pattern — keep fields private or frozen and only the originator restores.</p></div></div>
+          </section>
+
+          <!-- 10. VISITOR -->
+          <section class="section reveal" id="visitor">
+            <h2><span class="section-num">10</span> &nbsp;Visitor: add an operation without changing the classes</h2>
+            <p><strong>Intent:</strong> represent an operation to be performed on elements of an object structure — new operations land in new visitor classes, not by editing every element type.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A museum docent <span class="tag">analogy</span></div><p>The paintings don't learn new talks. A docent (visitor) walks the gallery and knows how to describe a portrait vs a landscape. Hire a new docent for a new tour — the art stays on the wall unchanged.</p></div></div>
+            <p><strong>The problem:</strong> a shape tree needs <code>area()</code> today and <code>export_svg()</code> tomorrow. Editing every shape class for each new op violates OCP. Double-dispatch via <code>accept(visitor)</code>.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">visitor.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from typing import Protocol
+
+class Visitor(Protocol):
+    def visit_circle(self, c: "Circle") -&gt; None: ...
+    def visit_rect(self, r: "Rect") -&gt; None: ...
+
+class Shape(Protocol):
+    def accept(self, v: Visitor) -&gt; None: ...
+
+class Circle:
+    def __init__(self, r: float): self.r = r
+    def accept(self, v: Visitor) -&gt; None: v.visit_circle(self)
+
+class Rect:
+    def __init__(self, w: float, h: float): self.w, self.h = w, h
+    def accept(self, v: Visitor) -&gt; None: v.visit_rect(self)
+
+class AreaVisitor:                           # a new operation — no shape edits
+    def __init__(self): self.total = 0.0
+    def visit_circle(self, c: Circle) -&gt; None:
+        self.total += 3.14159 * c.r * c.r
+    def visit_rect(self, r: Rect) -&gt; None:
+        self.total += r.w * r.h
+
+shapes = [Circle(1), Rect(2, 3)]
+v = AreaVisitor()
+for s in shapes: s.accept(v)
+print(round(v.total, 2))                     # 9.14</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>9.14</div>
+            <div class="kv">
+              <dt>Use when</dt><dd>the element hierarchy is stable but you keep inventing new operations over it (compilers, AST tools, document exporters).</dd>
+              <dt>Avoid when</dt><dd>you add element types often — every new leaf forces every visitor to grow a method.</dd>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Visitor trades the wrong axis of change</div><p>It makes <em>operations</em> easy and <em>new element types</em> hard. In Python, <code>functools.singledispatch</code> or a plain <code>match</code> on type often replaces textbook Visitor with less ceremony — reach for the classic form when you need a family of related ops that travel together.</p></div></div>
+          </section>
+
+          <!-- 11. INTERPRETER -->
+          <section class="section reveal" id="interpreter">
+            <h2><span class="section-num">11</span> &nbsp;Interpreter: a grammar as objects</h2>
+            <p><strong>Intent:</strong> given a language, define a representation for its grammar along with an interpreter that uses the representation to evaluate sentences.</p>
+            <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">A pocket calculator tree <span class="tag">analogy</span></div><p>"3 + (4 × 5)" isn't one blob — it's a tree: a Plus node holding a Number and a Times, which holds two Numbers. Evaluating means each node asks its children what they mean. The grammar <em>is</em> the object graph.</p></div></div>
+            <p><strong>The problem:</strong> a tiny expression language for rules or filters. Model each grammar rule as a class with <code>interpret(context)</code>.</p>
+            <div class="codeblock">
+              <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">interpreter.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
+              <div class="code-pane active"><pre><code data-lang="python">from typing import Protocol
+
+class Expr(Protocol):
+    def interpret(self, ctx: dict[str, int]) -&gt; int: ...
+
+class Number:
+    def __init__(self, n: int): self.n = n
+    def interpret(self, ctx: dict[str, int]) -&gt; int: return self.n
+
+class Var:
+    def __init__(self, name: str): self.name = name
+    def interpret(self, ctx: dict[str, int]) -&gt; int: return ctx[self.name]
+
+class Add:
+    def __init__(self, left: Expr, right: Expr):
+        self.left, self.right = left, right
+    def interpret(self, ctx: dict[str, int]) -&gt; int:
+        return self.left.interpret(ctx) + self.right.interpret(ctx)
+
+# tree for: a + 3
+expr: Expr = Add(Var("a"), Number(3))
+print(expr.interpret({"a": 10}))             # 13</code></pre></div>
+            </div>
+            <div class="io-out"><b>Output</b>13</div>
+            <div class="kv">
+              <dt>Use when</dt><dd>you have a small, stable grammar worth modelling as objects (config DSL, simple rules, query filters).</dd>
+              <dt>Avoid when</dt><dd>the language is large — a real parser generator / AST library beats hand-rolled Interpreter classes.</dd>
+            </div>
+            <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">It's Composite with evaluate()</div><p>Interpreter is often just Composite applied to a grammar tree. Don't oversell it in interviews — say when you'd stop and reach for <code>ast</code>, Lark, or a PEG parser instead of growing expression classes forever.</p></div></div>
+          </section>
+
+          <!-- 12. RECAP -->
           <section class="section reveal" id="recap">
-            <h2><span class="section-num">08</span> &nbsp;The seven, side by side</h2>
+            <h2><span class="section-num">12</span> &nbsp;The eleven, side by side</h2>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Pattern</th><th>Intent</th><th>Pythonic shortcut</th></tr></thead>
@@ -597,6 +772,10 @@ level 9: unhandled</div>
                   <tr><td><strong>Template Method</strong></td><td>Fixed skeleton, subclasses fill steps</td><td><span class="mono">ABC</span> with abstract hooks</td></tr>
                   <tr><td><strong>Iterator</strong></td><td>Sequential access, hide the internals</td><td>Generators (<span class="mono">yield</span>) · the iterator protocol</td></tr>
                   <tr><td><strong>Chain of Responsibility</strong></td><td>Pass a request along handlers</td><td>A list of handler callables</td></tr>
+                  <tr><td><strong>Mediator</strong></td><td>Hub for colleague interactions</td><td>An event bus / central service object</td></tr>
+                  <tr><td><strong>Memento</strong></td><td>Opaque snapshots for undo</td><td>Frozen dataclass + history stack</td></tr>
+                  <tr><td><strong>Visitor</strong></td><td>New ops over a stable hierarchy</td><td><span class="mono">singledispatch</span> · <span class="mono">match</span> on type</td></tr>
+                  <tr><td><strong>Interpreter</strong></td><td>Grammar as an evaluable object tree</td><td>Composite + <span class="mono">interpret()</span> · real parsers for big langs</td></tr>
                 </tbody>
               </table>
             </div>
@@ -646,6 +825,10 @@ level 9: unhandled</div>
           <a href="#template-method">Template Method</a>
           <a href="#iterator">Iterator</a>
           <a href="#chain">Chain of Responsibility</a>
+          <a href="#mediator">Mediator</a>
+          <a href="#memento">Memento</a>
+          <a href="#visitor">Visitor</a>
+          <a href="#interpreter">Interpreter</a>
           <a href="#recap">Recap</a>
         </aside>
       </div>

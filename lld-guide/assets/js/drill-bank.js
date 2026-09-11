@@ -492,6 +492,114 @@ window.LLD_DRILLS = [
     ],
     model: "<p><b>Shape:</b> <code>Game</code> (turns, history, status) ◆ <code>Board</code> (position, is_check, apply/revert) ◆ 64 <code>Square</code>s; abstract <code>Piece.legal_moves()</code> with six leaves — sliders share one ray-walk helper, Knight enumerates offsets. <code>Move</code> records origin, target, and captured piece (Command).</p><p><b>The senior moves:</b> the do/undo trick powering validation AND undo AND future AI; pseudo-legal vs legal layering; the pawn named as the abstraction's stress test.</p>"
   },
+  {
+    id: "file-system",
+    title: "In-memory file system",
+    level: "advanced",
+    lesson: "adv-file-system",
+    prompt: "Design an in-memory file system: files and nested directories, ls, recursive size(), and absolute path() for any entry. Treat leaves and branches uniformly.",
+    phaseNotes: {
+      requirements: {
+        prompts: ["Files + directories only, or symlinks too?", "Is directory size the recursive sum of children?"],
+        hints: ["Park permissions/symlinks; pin name uniqueness within a directory."]
+      },
+      entities: {
+        prompts: ["Entry (shared), File (leaf), Directory (composite). API: add(entry), ls(), size(), path()."]
+      },
+      uml: {
+        prompts: ["Draw Composite: File and Directory realize Entry; Directory ◆── Entry*. Why no isinstance in size()?"],
+        hints: ["Uniform interface is the pattern — recursion falls out of it."]
+      },
+      code: {
+        prompts: ["Write Directory.size() as sum(child.size()…).", "Write path() by walking parent pointers to the root."]
+      },
+      wrap: {
+        prompts: ["Walk a tiny tree and show root.size() equals the sum of file bytes.", "Concurrency: what must a lock protect if two threads add under the same directory?"]
+      }
+    },
+    rubric: [
+      { phase: "requirements", text: "Pinned recursive directory size and unique names per directory before designing." },
+      { phase: "entities", text: "One Entry surface; File leaf + Directory composite; clients never type-check." },
+      { phase: "uml", text: "Named Composite with the recursive Directory→Entry composition edge drawn." },
+      { phase: "code", text: "size() recurses via child.size() with no isinstance ladder." },
+      { phase: "code", text: "path() walks parents and joins names into an absolute path." },
+      { phase: "wrap", text: "Narrated a multi-level tree where one root.size() call fans out correctly." },
+      { phase: "wrap", text: "Named a lock around Directory.add (children dict mutation) for shared trees." }
+    ],
+    model: "<p><b>Shape:</b> abstract <code>Entry</code> (name, parent, <code>size()</code>/<code>path()</code>); <code>File</code> leaf returns <code>len(content)</code>; <code>Directory</code> composite holds <code>dict[name→Entry]</code> and sums <code>child.size()</code>. <code>path()</code> walks parents to the root.</p><p><b>The senior moves:</b> Composite named with the uniform-interface rationale, recursion without type checks, and a lock around directory mutation if the tree is shared.</p>"
+  },
+  {
+    id: "pubsub-queue",
+    title: "Pub/Sub message queue",
+    level: "advanced",
+    lesson: "adv-pubsub-queue",
+    prompt: "Design an in-process pub/sub queue: named topics, many subscribers, async fan-out so a slow subscriber never blocks the publisher or its peers.",
+    phaseNotes: {
+      requirements: {
+        prompts: ["Must publish return before any handler finishes?", "Per-subscriber ordering — FIFO?"],
+        hints: ["Async delivery is the hard requirement that upgrades Observer."]
+      },
+      entities: {
+        prompts: ["Topic, Subscriber (inbox + worker), Broker/API: subscribe(topic, handler), publish(topic, msg)."]
+      },
+      uml: {
+        prompts: ["Observer for fan-out; where does each subscriber's queue.Queue sit? Why a worker thread per subscriber?"]
+      },
+      code: {
+        prompts: ["Write publish(): snapshot subscribers under a short lock, then put into each inbox outside it.", "Write the worker loop that drains a queue and calls the handler."],
+        hints: ["Snapshot-then-deliver keeps the lock off the slow path."]
+      },
+      wrap: {
+        prompts: ["Walk two subscribers where one sleeps — show the other still drains.", "What happens if a handler raises?"]
+      }
+    },
+    rubric: [
+      { phase: "requirements", text: "Stated non-blocking publish and isolation of slow consumers as first-class requirements." },
+      { phase: "entities", text: "Per-subscriber inbox + worker; Topic owns the subscriber list; clean subscribe/publish API." },
+      { phase: "uml", text: "Named Observer for fan-out and justified the async upgrade (queue + worker)." },
+      { phase: "code", text: "publish snapshots the list under a lock, then enqueues outside it." },
+      { phase: "code", text: "Each subscriber drains its own Queue on its own thread (FIFO per subscriber)." },
+      { phase: "wrap", text: "Demonstrated that a sleeping handler does not stall peers or the publisher." },
+      { phase: "wrap", text: "Handler exceptions stay local (logged/swallowed) so one bad subscriber can't kill the worker pool." }
+    ],
+    model: "<p><b>Shape:</b> a <code>Topic</code> holds subscribers; each <code>Subscriber</code> owns a thread-safe <code>queue.Queue</code> and a daemon worker that calls the handler. <code>publish</code> snapshots the list under a tiny lock, then <code>put</code>s into every inbox.</p><p><b>The senior moves:</b> Observer → async via per-subscriber queues, lock off the slow path, and failure isolation so one raiser doesn't poison the fan-out.</p>"
+  },
+  {
+    id: "ride-hailing",
+    title: "Ride-hailing matcher",
+    level: "advanced",
+    lesson: "adv-ride-hailing",
+    prompt: "Design a ride-hailing matcher: find nearby free drivers fast (geospatial index), pick one via a swappable rule, and assign atomically so two riders never claim the same driver.",
+    phaseNotes: {
+      requirements: {
+        prompts: ["Match on distance or ETA?", "Scale: hundreds of drivers or city-wide?"],
+        hints: ["Pin flat 2-D + in-memory for the interview; name distributed as the follow-up."]
+      },
+      entities: {
+        prompts: ["Driver, GridIndex, MatchStrategy, Dispatcher. API: request_ride(x, y) → Driver | None."]
+      },
+      uml: {
+        prompts: ["Strategy for choose(); why does the lock span choose AND mark-unavailable?"],
+        hints: ["Check-then-act: select outside the lock still double-books."]
+      },
+      code: {
+        prompts: ["Write GridIndex.nearby() scanning this cell + 8 neighbours.", "Write Dispatcher.request_ride: nearby → lock → choose → available=False."]
+      },
+      wrap: {
+        prompts: ["Narrate two riders racing for the same free driver.", "Extension: live position updates re-bucketing the grid (Observer)."]
+      }
+    },
+    rubric: [
+      { phase: "requirements", text: "Named fast nearby lookup and no double-assignment as the two hard invariants." },
+      { phase: "entities", text: "GridIndex, MatchStrategy, Dispatcher with a thin request_ride API." },
+      { phase: "uml", text: "Strategy for matching; critical section drawn around choose-and-claim together." },
+      { phase: "code", text: "nearby() inspects 9 cells — argued ~O(1) vs O(n) fleet scan." },
+      { phase: "code", text: "choose and available=False share one with-lock block (atomic claim)." },
+      { phase: "wrap", text: "Walked the race: both see free without the lock; with it, the loser gets None." },
+      { phase: "wrap", text: "Named a second Strategy and/or Observer re-bucket as additive extensions." }
+    ],
+    model: "<p><b>Shape:</b> <code>GridIndex</code> buckets drivers into cells for 9-cell nearby lookup; a <code>MatchStrategy.choose</code> picks among candidates; <code>Dispatcher.request_ride</code> does choose-and-claim under one <code>Lock</code>.</p><p><b>The senior moves:</b> grid for O(1)-ish spatial query, Strategy for swappable matching, and the lock spanning both selection and <code>available=False</code> so drivers are never double-assigned.</p>"
+  },
 
   /* ============ EXPERT (added in Phase 3) ============ */
   {

@@ -14,14 +14,17 @@ pure HTML, CSS, and vanilla JavaScript. It's the sibling of `../langstack` and
 **Option A — just open it.** Double-click `index.html` (or open it in your browser).
 Everything works offline.
 
-**Option B — serve it locally** (recommended if your browser is strict about `file://`):
+**Option B — serve from the repo root** (recommended — same pattern as the other field guides,
+so search and relative paths behave like production):
 
 ```bash
-cd lld-guide
+# from self-upgrade/ (the repo root)
 python3 -m http.server 8000
-# then open http://localhost:8000/
+# then open http://localhost:8000/lld-guide/
 ```
 
+You can also `cd lld-guide` and serve that folder alone if you prefer
+`http://localhost:8000/` as the guide root.
 ## What needs an internet connection?
 
 Almost nothing — the site is offline-first and has **no code runner** (all examples are
@@ -49,7 +52,7 @@ shown with their expected output inline). Only one thing reaches the network:
 - **Interactive engines** — a state-machine player (`fsm.js`), a pattern-flow sequence stepper
   (`patternflow.js`), a thread-interleaving race visualizer (`concurrency.js`), and a clickable
   UML explorer (`umlx.js`) embedded across the lessons.
-- **Machine-coding drills** — 14 timed 45-minute mock interviews (`drill/`) with phased clocks,
+- **Machine-coding drills** — 17 timed 45-minute mock interviews (`drill/`) with phased clocks,
   senior rubrics, and model answers; scores persist locally under `lld-drill`.
 - **Reference** — a glossary (now incl. FSM + concurrency terms), a "which pattern?" picker,
   a SOLID cheatsheet, and the UML legend.

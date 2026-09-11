@@ -21,7 +21,7 @@
     <aside class="sidebar" id="sidebar">
       <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
         <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
-        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD · Advanced</span></span>
       </a>
       <nav class="nav-group" aria-label="Start here">
         <h4>Start here</h4>
@@ -149,6 +149,43 @@
               </div>
               <div class="cap">The <code>HashMap</code> jumps to any node in O(1); the list lets us <em>unlink</em> and <em>re-link</em> that node in O(1) too. Two empty <strong>sentinel</strong> nodes (head/tail) mean every real node always has a <code>prev</code> and <code>next</code> — no null-checks at the ends.</div>
             </div>
+            <p>Click through the co-designed pair — the map points at the same nodes the list orders:</p>
+            <figure class="umlx" data-umlx aria-label="Interactive LRU HashMap plus doubly linked list class model">
+              <figcaption class="ux-title">LRU — HashMap for lookup, DLL for recency order</figcaption>
+              <script type="application/json" class="ux-config">
+              {
+                "idle": "Click LRUCache, then Node. The map and the list share the same Node objects — that co-design is what keeps get/put O(1).",
+                "classes": [
+                  { "id": "cache", "name": "LRUCache", "col": 0, "row": 0,
+                    "attrs": ["capacity: int", "_map: dict[key→Node]", "_head / _tail: Node"],
+                    "methods": [
+                      { "sig": "get(key) → value | None", "role": "lookup + promote to MRU" },
+                      { "sig": "put(key, value)", "role": "insert/update; evict LRU if full" },
+                      { "sig": "_remove / _push_front", "role": "O(1) pointer surgery" }
+                    ],
+                    "duty": "Owns the map and the sentinel-bounded list. Every public op is a handful of pointer swaps." },
+                  { "id": "node", "name": "Node", "col": 2, "row": 0,
+                    "attrs": ["key", "value", "prev", "next"],
+                    "methods": [],
+                    "duty": "Lives in BOTH structures. Storing key is required so eviction can delete from the map in O(1)." },
+                  { "id": "map", "name": "dict (HashMap)", "col": 0, "row": 1,
+                    "attrs": ["key → Node"],
+                    "methods": [{ "sig": "O(1) get / set / del", "role": "find the node without scanning the list" }],
+                    "duty": "Answers 'where's key K?' instantly. Alone it can't evict the oldest — no order." },
+                  { "id": "list", "name": "doubly linked list", "col": 2, "row": 1,
+                    "attrs": ["head ↔ … ↔ tail"],
+                    "methods": [{ "sig": "unlink / relink any node", "role": "needs prev+next for O(1) splice" }],
+                    "duty": "Orders by recency (MRU after head, LRU before tail). Alone it can't find a key in O(1)." }
+                ],
+                "relations": [
+                  { "from": "map",   "to": "cache", "type": "compose", "label": "_map" },
+                  { "from": "list",  "to": "cache", "type": "compose", "label": "sentinels" },
+                  { "from": "node",  "to": "map",   "type": "assoc",   "label": "map values" },
+                  { "from": "node",  "to": "list",  "type": "compose", "label": "list nodes *" }
+                ]
+              }
+              </script>
+            </figure>
           </section>
 
           <!-- 4. IMPLEMENTATION -->
@@ -331,6 +368,31 @@ class LFUCache:
           <section class="section reveal" id="threadsafe">
             <h2><span class="section-num">07</span> &nbsp;Making it thread-safe</h2>
             <p>Share one cache across threads and both <code>get</code> and <code>put</code> become dangerous — remember, <code>get</code> rewires the list, so it's a writer too. Two threads interleaving those pointer updates can corrupt the list outright. Guard every public operation with a single lock (see the <a href="../advanced/index.html#concurrency">concurrency primer</a>).</p>
+            <p>Scrub the lost-update shape (read → modify → write on shared structure) that mirrors an unlocked list splice:</p>
+            <figure class="conviz" data-conviz aria-label="Interactive race on shared LRU list length">
+              <figcaption class="cv-title">Two gets · shared list — scrub the interleaving</figcaption>
+              <script type="application/json" class="cv-config">
+              {
+                "shared": [ { "id": "n", "label": "list_ops", "init": 0 } ],
+                "threads": [
+                  { "id": "a", "label": "Thread A get", "ops": [
+                    { "op": "lock" },
+                    { "op": "read",  "var": "n", "into": "t", "text": "t = list_ops" },
+                    { "op": "calc",  "reg": "t", "add": 1, "text": "t = t + 1  # unlink+relink" },
+                    { "op": "write", "var": "n", "from": "t", "text": "list_ops = t" },
+                    { "op": "unlock" } ] },
+                  { "id": "b", "label": "Thread B get", "ops": "same" }
+                ],
+                "schedules": [
+                  { "id": "racy", "label": "⚡ Unlucky · no lock", "lock": false,
+                    "order": ["a", "b", "a", "b", "a", "b"], "expect": 2 },
+                  { "id": "locked", "label": "🔒 Same order · with Lock", "lock": true,
+                    "order": ["a", "b", "a", "b", "a", "b"], "expect": 2 }
+                ],
+                "verdictVar": "n"
+              }
+              </script>
+            </figure>
             <div class="codeblock">
               <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">safe_lru.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="clabel">Copy</span></button></div>
               <div class="code-pane active"><pre><code data-lang="python">import threading
@@ -425,5 +487,7 @@ def get(self, key, now: float):
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/umlx.js"></script>
+  <script src="../assets/js/concurrency.js"></script>
 </body>
 </html>

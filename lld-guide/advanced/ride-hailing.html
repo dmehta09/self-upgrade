@@ -21,7 +21,7 @@
     <aside class="sidebar" id="sidebar">
       <a class="brand" href="../index.html" aria-label="The Design Field Guide home">
         <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9.5h16M4 14.5h16"/></svg></span>
-        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD</span></span>
+        <span class="brand-text"><b>Design Field Guide</b><span>OOP · SOLID · Patterns · LLD · Advanced</span></span>
       </a>
       <nav class="nav-group" aria-label="Start here">
         <h4>Start here</h4>
@@ -131,6 +131,32 @@
             <p>Once the grid hands us a small list of candidate drivers, <em>which one</em> do we pick? That rule shouldn't be wired into the dispatcher — today it's "nearest available," but tomorrow the business might want rating-weighted matching, or ETA-based (account for traffic), or a surge-aware choice. So we make it a <strong>Strategy</strong>: an interface with one <code>choose(drivers, x, y)</code> method, and a <code>NearestDriver</code> implementation to start. Swapping the rule never touches the dispatcher.</p>
             <p>But picking a driver isn't the whole story — we have to <strong>claim</strong> them, and that's where concurrency bites. Two riders near the same corner can both have their requests in flight at once. Both call the grid, both see the same free driver, both pick them, and both think they won. The driver gets <em>double-assigned</em>. This is the classic check-then-act race: "find a free driver" and "mark them taken" must happen as <strong>one indivisible step</strong>. We wrap exactly those two lines in a single <code>threading.Lock</code> so only one rider can be inside the choose-and-claim section at a time (the same critical-section idea from the <a href="../advanced/index.html#concurrency">concurrency primer</a>).</p>
             <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div class="co-body"><div class="co-title">Choose and claim are one operation, not two</div><p>If you only lock the "mark taken" line but choose outside the lock, you've fixed nothing — both threads already chose the same driver before either claimed. The lock must span <em>both</em> the selection and the <code>available = False</code> write. Lock, choose, mark, release.</p></div></div>
+            <p>Don't take the paragraph's word for it — <strong>watch the gap happen</strong>. Two riders both decide the driver is free before either marks them taken. Scrub the unlucky interleaving, then replay the same schedule with the claim lock:</p>
+            <figure class="conviz" data-conviz aria-label="Interactive race: two riders claiming the same free driver">
+              <figcaption class="cv-title">Two ride requests · one driver claim — scrub the interleaving</figcaption>
+              <script type="application/json" class="cv-config">
+              {
+                "shared": [ { "id": "claims", "label": "times_assigned (D1)", "init": 0 } ],
+                "threads": [
+                  { "id": "a", "label": "Rider A", "ops": [
+                    { "op": "lock" },
+                    { "op": "read",  "var": "claims", "into": "n", "text": "n = times_assigned   # check free" },
+                    { "op": "calc",  "reg": "n", "add": 1,       "text": "n = n + 1            # claim" },
+                    { "op": "write", "var": "claims", "from": "n", "text": "times_assigned = n   # mark taken" },
+                    { "op": "unlock" } ] },
+                  { "id": "b", "label": "Rider B", "ops": "same" }
+                ],
+                "schedules": [
+                  { "id": "racy",   "label": "⚡ Unlucky interleaving · no lock", "lock": false,
+                    "order": ["a", "b", "a", "b", "a", "b"], "expect": 2 },
+                  { "id": "locked", "label": "🔒 Same arrival order · with Lock", "lock": true,
+                    "order": ["a", "b", "a", "b", "a", "b"], "expect": 2 }
+                ],
+                "verdictVar": "claims"
+              }
+              </script>
+            </figure>
+            <p>In the racy run both riders <em>read</em> <code>0</code> before either <em>writes</em> — both believe they claimed D1, and one assignment vanishes from the counter. With the lock, B blocks at <code>acquire()</code> until A's whole check-and-claim finishes. Real <code>request_ride</code> is this shape with <code>available</code> instead of a counter — which is why choose and <code>available = False</code> share one <code>with self._lock:</code> block below.</p>
           </section>
 
           <!-- 4. IMPLEMENTATION -->
@@ -206,6 +232,32 @@ class Dispatcher:
             return driver</code></pre></div>
             </div>
             <div class="callout note"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span><div class="co-body"><div class="co-title">Why the lock wraps both lines</div><p>Notice the dispatcher reads candidates from the grid <em>before</em> taking the lock — that's fine, the snapshot can be slightly stale. What must be inside the lock is <code>choose</code> <strong>and</strong> the <code>available = False</code> write together. That pair is the critical section: between selecting a driver and marking them taken, no other thread may run, so the same driver can never be handed out twice.</p></div></div>
+            <p>Scrub the race yourself — two riders, one free driver, check-then-act without a lock:</p>
+            <figure class="conviz" data-conviz aria-label="Interactive race: two riders claim one driver">
+              <figcaption class="cv-title">Two ride requests · one free driver — scrub the interleaving</figcaption>
+              <script type="application/json" class="cv-config">
+              {
+                "shared": [ { "id": "free", "label": "driver.available", "init": 1 } ],
+                "threads": [
+                  { "id": "a", "label": "Rider A", "ops": [
+                    { "op": "lock" },
+                    { "op": "read",  "var": "free", "into": "ok", "text": "ok = driver.available   # check" },
+                    { "op": "calc",  "reg": "ok", "add": 0, "text": "if ok: claim…" },
+                    { "op": "write", "var": "free", "from": "ok", "text": "driver.available = 0  # act", "set": 0 },
+                    { "op": "unlock" } ] },
+                  { "id": "b", "label": "Rider B", "ops": "same" }
+                ],
+                "schedules": [
+                  { "id": "racy",   "label": "⚡ Unlucky interleaving · no lock", "lock": false,
+                    "order": ["a", "b", "a", "b", "a", "b"], "expect": 0 },
+                  { "id": "locked", "label": "🔒 Same arrival order · with Lock", "lock": true,
+                    "order": ["a", "b", "a", "b", "a", "b"], "expect": 0 }
+                ],
+                "verdictVar": "free"
+              }
+              </script>
+            </figure>
+            <p>In the racy schedule both riders read <code>available == True</code> before either writes — double dispatch. With the lock, B blocks until A's whole check-and-claim finishes.</p>
           </section>
 
           <!-- 5. WALKTHROUGH -->
@@ -325,5 +377,6 @@ class RatingWeightedStrategy:                # same choose() contract
   <script src="../assets/js/main.js"></script>
   <script src="../assets/js/search.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/concurrency.js"></script>
 </body>
 </html>
