@@ -256,6 +256,43 @@ print(c.get(4))
                 <p>Map for “where is this key?”, list for “what's oldest?” — together they keep every operation a handful of pointer moves.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Hash map for O(1) lookup + doubly linked list for O(1) recency order — MRU at head, evict tail.prev. Sentinels kill empty-edge cases; get and put both splice to head.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[get / put] --> miss{"Key in map?"}
+  miss -->|get miss| neg[Return -1]
+  miss -->|get hit| move[Remove node; add_to_head; return val]
+  miss -->|put existing| update[Update val; move to head]
+  miss -->|put new| insert[Map + add_to_head]
+  insert --> over{"over capacity?"}
+  over -->|yes| evict["Remove tail.prev; del map"]
+  over -->|no| done[Done]
+  move --> done
+  update --> done
+  evict --> done
+  neg --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>class Node:</code><span>DLL node holding key, val, prev, next.</span></li>
+                  <li><code>self.head, self.tail = Node(), Node()</code><span>Sentinel ends — real nodes live between them.</span></li>
+                  <li><code>self.head.next, self.tail.prev = self.tail, self.head</code><span>Empty list: head ↔ tail.</span></li>
+                  <li><code>def _remove(self, node):</code><span>Unlink node from its neighbors.</span></li>
+                  <li><code>def _add_to_head(self, node):</code><span>Insert node just after head (most recently used).</span></li>
+                  <li><code>def get(self, key):</code><span>Lookup; miss → -1, hit → move to head and return val.</span></li>
+                  <li><code>self._remove(node); self._add_to_head(node)</code><span>Refresh recency on read.</span></li>
+                  <li><code>def put(self, key, value):</code><span>Insert or update; evict LRU if over capacity.</span></li>
+                  <li><code>if key in self.map:</code><span>Existing key — update value and move to head.</span></li>
+                  <li><code>self.map[key] = node; self._add_to_head(node)</code><span>New key — register and place at MRU.</span></li>
+                  <li><code>if len(self.map) &gt; self.cap:</code><span>Overflow — need an eviction.</span></li>
+                  <li><code>lru = self.tail.prev</code><span>Least recently used sits just before the tail sentinel.</span></li>
+                  <li><code>self._remove(lru); del self.map[lru.key]</code><span>Drop from list and map together.</span></li>
+                </ol>
+                <p class="walk-why">Time O(1) per get/put; space O(capacity) for the map and list nodes.</p>
+              </div>
+            </details>
+
           </section>
 
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
@@ -287,5 +324,6 @@ print(c.get(4))
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/whiteboard.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>

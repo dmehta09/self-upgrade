@@ -260,6 +260,31 @@ print(max_profit([7, 6, 4, 3, 1]))
                 <p>The window's left edge is implicitly the cheapest day so far, and its right edge is today. Each step extends the right edge by one and quietly resets the left edge whenever a new cheapest price appears — closing the loop with the analogy: buy on the cheapest day behind you, sell today for the most.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">One pass tracking the cheapest buy so far is the interview default: O(n) time, O(1) space. Checking every buy/sell pair is O(n²). You only need one transaction, so "min behind me, sell today" is enough — no DP table required.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["min_price = inf, best = 0"] --> loop[For each price p]
+  loop --> updMin[min_price = min of min_price and p]
+  updMin --> updBest[best = max of best and p - min_price]
+  updBest --> more{More prices?}
+  more -->|yes| loop
+  more -->|no| out[Return best]
+  out --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def max_profit(prices):</code><span>Define a function that returns the max profit from one buy and one later sell.</span></li>
+                  <li><code>min_price = float("inf")</code><span>Cheapest price seen so far — start at infinity so the first real price wins.</span></li>
+                  <li><code>best = 0</code><span>Best profit so far; stays 0 if prices only fall.</span></li>
+                  <li><code>for p in prices:</code><span>Treat each day as a potential sell day.</span></li>
+                  <li><code>min_price = min(min_price, p)</code><span>Update the cheapest buy day on or before today.</span></li>
+                  <li><code>best = max(best, p - min_price)</code><span>Profit if we bought at <code>min_price</code> and sold today; keep the max.</span></li>
+                  <li><code>return best</code><span>Hand back the best profit (or 0).</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) for one pass; space O(1) for two scalars.</p>
+              </div>
+            </details>
           </section>
 
           <!-- ===== PROBLEM 2: LONGEST SUBSTRING WITHOUT REPEATING CHARACTERS ===== -->
@@ -376,6 +401,37 @@ print(length_of_longest_substring("pwwkew"))
 3</pre></div>
                 </div>
                 <p>The map lets the left edge leap straight past a duplicate's old copy instead of crawling. Back to the picture: the window keeps swallowing new letters on the right, and only shrinks from the left exactly enough to stay all-different.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Sliding window + last-seen index map is the interview default: O(n) time. Nested loops checking every substring are O(n²). Jumping <code>left</code> to <code>seen[ch] + 1</code> (only when that index is still inside the window) is what keeps it one pass.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[seen empty, left = 0, best = 0] --> loop[For each right and ch]
+  loop --> dup{"ch seen and seen ch &gt;= left?"}
+  dup -->|yes| jump["left = seen ch + 1"]
+  dup -->|no| store
+  jump --> store["seen ch = right"]
+  store --> best[Update best with window length]
+  best --> more{More chars?}
+  more -->|yes| loop
+  more -->|no| out[Return best]
+  out --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def length_of_longest_substring(s):</code><span>Define a function that returns the length of the longest substring with all unique characters.</span></li>
+                  <li><code>seen = {}</code><span>Map each character to the last index where we saw it.</span></li>
+                  <li><code>left = 0</code><span>Left edge of the current repeat-free window.</span></li>
+                  <li><code>best = 0</code><span>Longest valid window length so far.</span></li>
+                  <li><code>for right, ch in enumerate(s):</code><span>Grow the right edge one character at a time.</span></li>
+                  <li><code>if ch in seen and seen[ch] &gt;= left:</code><span>Duplicate is still inside the window (not a stale index from before <code>left</code>).</span></li>
+                  <li><code>left = seen[ch] + 1</code><span>Jump left just past the old copy so the window is unique again.</span></li>
+                  <li><code>seen[ch] = right</code><span>Record this character's newest position.</span></li>
+                  <li><code>best = max(best, right - left + 1)</code><span>Window <code>[left, right]</code> is valid — update the max length.</span></li>
+                  <li><code>return best</code><span>Hand back the longest length found.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) — both edges only move forward; space O(min(n, alphabet)) for the last-seen map.</p>
               </div>
             </details>
           </section>
@@ -509,6 +565,50 @@ a
                 <p><code>missing</code> is just <code>formed</code> flipped: when it hits 0 the shopping list is covered. Shrink hard, then grow again — the classic variable window.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Need/have counters with a <code>missing</code> (or formed) tally is the interview default for minimum window: O(|s|+|t|). Restarting a fresh scan at every index is O(n·m). Grow right until valid, then shrink left while valid — that's the variable-window template.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Build need Counter, missing = distinct needs] --> grow[Expand right, update have]
+  grow --> hit{"have ch just met need ch?"}
+  hit -->|yes| dec[missing -= 1]
+  hit -->|no| valid
+  dec --> valid{missing == 0?}
+  valid -->|no| moreR{More of s?}
+  valid -->|yes| record[Maybe update best window]
+  record --> shrink[Drop s left, maybe missing += 1, left += 1]
+  shrink --> valid
+  moreR -->|yes| grow
+  moreR -->|no| out[Return best substring or empty]
+  out --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def min_window(s, t):</code><span>Define a function that returns the shortest substring of <code>s</code> covering all of <code>t</code> (needs <code>from collections import Counter</code>).</span></li>
+                  <li><code>if not t or not s:</code><span>Empty input — nothing to cover or search.</span></li>
+                  <li><code>return ""</code><span>Early exit with an empty string.</span></li>
+                  <li><code>need = Counter(t)</code><span>Required counts for each character in <code>t</code>.</span></li>
+                  <li><code>missing = len(need)</code><span>How many distinct required characters are still under-satisfied.</span></li>
+                  <li><code>have = Counter()</code><span>Counts of characters currently inside the window.</span></li>
+                  <li><code>best_len, best_l, best_r = float("inf"), 0, 0</code><span>Track the shortest valid window's length and endpoints.</span></li>
+                  <li><code>left = 0</code><span>Left edge of the sliding window.</span></li>
+                  <li><code>for right, ch in enumerate(s):</code><span>Grow the right edge one character at a time.</span></li>
+                  <li><code>have[ch] += 1</code><span>Add this character into the window counts.</span></li>
+                  <li><code>if ch in need and have[ch] == need[ch]:</code><span>This required character just hit its exact need (not every extra copy).</span></li>
+                  <li><code>missing -= 1</code><span>One fewer distinct requirement unsatisfied.</span></li>
+                  <li><code>while missing == 0:</code><span>Window covers <code>t</code> — shrink from the left while it stays valid.</span></li>
+                  <li><code>if right - left + 1 &lt; best_len:</code><span>Is this the shortest cover so far?</span></li>
+                  <li><code>best_len, best_l, best_r = right - left + 1, left, right</code><span>Remember this window's length and bounds.</span></li>
+                  <li><code>left_ch = s[left]</code><span>Character about to leave the window.</span></li>
+                  <li><code>have[left_ch] -= 1</code><span>Remove it from the window counts.</span></li>
+                  <li><code>if left_ch in need and have[left_ch] &lt; need[left_ch]:</code><span>We just broke a requirement.</span></li>
+                  <li><code>missing += 1</code><span>Window is no longer valid — stop shrinking after this step.</span></li>
+                  <li><code>left += 1</code><span>Advance the left edge.</span></li>
+                  <li><code>return "" if best_len == float("inf") else s[best_l:best_r + 1]</code><span>No cover found → empty; else slice the best window.</span></li>
+                </ol>
+                <p class="walk-why">Time O(|s| + |t|) — each index enters and leaves the window at most once; space O(alphabet) for the two counters.</p>
+              </div>
+            </details>
           </section>
 
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
@@ -542,5 +642,6 @@ a
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/whiteboard.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>

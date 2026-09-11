@@ -294,6 +294,42 @@ print(find_circle_num([[1, 1, 0], [1, 1, 0], [0, 0, 1]]))
                 <p><code>union</code> returning <code>True</code> only on a real merge is the trick that makes counting free: <code>count</code> starts at n and falls exactly once per fusion. Cities 0 and 1 shake hands (count 2), city 2 stays alone — two provinces.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Union-Find on the adjacency matrix: start with n provinces and decrement on each real merge. Path compression keeps find near O(1); union returning False on same-root makes counting free.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["count = n, parent = identity"] --> loop[For each upper-triangle edge]
+  loop --> edge{"is_connected[i][j] == 1?"}
+  edge -->|no| more
+  edge -->|yes| un[union(i, j)]
+  un --> merged{"Returned True?"}
+  merged -->|yes| dec["count -= 1"]
+  merged -->|no| more
+  dec --> more{More pairs?}
+  more -->|yes| loop
+  more -->|no| ret[Return count]
+  ret --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def find_circle_num(is_connected):</code><span>Count connected components ("provinces") in the city graph.</span></li>
+                  <li><code>parent = list(range(n))</code><span>Each city starts as its own club president.</span></li>
+                  <li><code>def find(x):</code><span>Walk to the president with path compression.</span></li>
+                  <li><code>parent[x] = parent[parent[x]]</code><span>Halve the chain as you climb.</span></li>
+                  <li><code>def union(a, b):</code><span>Merge two clubs; return whether a real merge happened.</span></li>
+                  <li><code>if ra == rb: return False</code><span>Already same president — no new province fusion.</span></li>
+                  <li><code>parent[ra] = rb</code><span>Hang one root under the other.</span></li>
+                  <li><code>return True</code><span>Signal that count should drop.</span></li>
+                  <li><code>count = n</code><span>Everyone starts alone.</span></li>
+                  <li><code>for j in range(i + 1, n):</code><span>Upper triangle only — matrix is symmetric.</span></li>
+                  <li><code>if is_connected[i][j] == 1 and union(i, j):</code><span>Friend edge that actually merges two provinces.</span></li>
+                  <li><code>count -= 1</code><span>One fewer component.</span></li>
+                  <li><code>return count</code><span>Remaining presidents = provinces.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n² · α(n)) to scan the matrix with near-constant unions; space O(n) for parent.</p>
+              </div>
+            </details>
+
           </section>
 
           <!-- ===== PROBLEM 2: REDUNDANT CONNECTION ===== -->
@@ -414,6 +450,39 @@ print(find_redundant_connection([[1, 2], [1, 3], [2, 3]]))
                 <p>One pass, one union per edge. <code>[1,2]</code> and <code>[1,3]</code> merge strangers; by the time <code>[2,3]</code> arrives, 2 and 3 already share a president, so it's returned on the spot — the bridge nobody needed.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Process edges in order with Union-Find — the first edge whose ends already share a president closes the cycle. That edge is also the "last" removable one the problem asks for, for free.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Empty parent map] --> loop[For each edge a, b]
+  loop --> finds["ra, rb = find(a), find(b)"]
+  finds --> same{"ra == rb?"}
+  same -->|yes| ret["Return [a, b]"]
+  same -->|no| merge["parent[ra] = rb"]
+  merge --> more{More edges?}
+  more -->|yes| loop
+  more -->|no| empty[Return empty]
+  ret --> done[Done]
+  empty --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def find_redundant_connection(edges):</code><span>Return the edge that creates a cycle in an almost-tree.</span></li>
+                  <li><code>parent = {}</code><span>Lazy parent map — nodes appear as edges arrive.</span></li>
+                  <li><code>def find(x):</code><span>Path-compressed find with setdefault registration.</span></li>
+                  <li><code>parent.setdefault(x, x)</code><span>New node is its own president.</span></li>
+                  <li><code>parent[x] = parent[parent[x]]</code><span>Path compression while climbing.</span></li>
+                  <li><code>for a, b in edges:</code><span>Process in input order.</span></li>
+                  <li><code>ra, rb = find(a), find(b)</code><span>Presidents of both endpoints.</span></li>
+                  <li><code>if ra == rb:</code><span>Already connected — this bridge is redundant.</span></li>
+                  <li><code>return [a, b]</code><span>Cycle-closing edge; stop immediately.</span></li>
+                  <li><code>parent[ra] = rb</code><span>Useful bridge — merge and continue.</span></li>
+                  <li><code>return []</code><span>Shouldn't happen if the input is a tree + one edge.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n · α(n)) for n edges; space O(n) for the parent map.</p>
+              </div>
+            </details>
+
           </section>
 
           <!-- ===== PROBLEM 3: ACCOUNTS MERGE ===== -->
@@ -526,6 +595,31 @@ for account in result:
                 <p>The shared <code>j2@x</code> chains the two John accounts into one human with three addresses, while Mary stays her own club. Notice nothing in the union step ever compared names — the gotcha above is solved by the <em>shape</em> of the data structure, not by extra code.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Union emails (not names): link every email in an account to the first email, bucket by find(), then format sorted lists. Names are labels only — shared emails (transitively) prove identity.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Pass 1: union emails per account] --> pass2[Pass 2: bucket by find(email)]
+  pass2 --> pass3[Pass 3: name + sorted emails]
+  pass3 --> sort[Sort groups for stable output]
+  sort --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def accounts_merge(accounts):</code><span>Merge accounts that share any email (transitively).</span></li>
+                  <li><code>parent = {}</code><span>Union-Find keyed by email strings.</span></li>
+                  <li><code>def find(x): / def union(a, b):</code><span>Standard path-compressed find and link-by-root union.</span></li>
+                  <li><code>owner[email] = name</code><span>Remember a display name for each email.</span></li>
+                  <li><code>union(email, emails[0])</code><span>Tie every email in the account to the first — one club.</span></li>
+                  <li><code>groups[find(email)].append(email)</code><span>Pass 2: bucket under the president email.</span></li>
+                  <li><code>merged = [[owner[root]] + sorted(emails) for ...]</code><span>Pass 3: name plus sorted unique emails.</span></li>
+                  <li><code>merged.sort()</code><span>Deterministic order by name then emails.</span></li>
+                  <li><code>return merged</code><span>One list per person.</span></li>
+                </ol>
+                <p class="walk-why">Time O(E · α(E) + E log E) dominated by sorting buckets; space O(E) for parent, owner, and groups.</p>
+              </div>
+            </details>
+
           </section>
 
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
@@ -558,5 +652,6 @@ for account in result:
   <script src="../assets/js/runpad.js"></script>
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>

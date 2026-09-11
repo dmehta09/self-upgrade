@@ -298,6 +298,31 @@ print(climb_stairs(5))
                 <p>The line <code>a, b = b, a + b</code> rolls the two sticky notes upward one step at a time. By the top, <code>b</code> is the count for step <code>n</code> — 8 ways for a 5-step staircase, exactly as the analogy predicted.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Classic 1-D DP / Fibonacci: ways(n) = ways(n−1) + ways(n−2). Two rolling variables beat an O(n) array; recursion without memo is exponential and not the interview default.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[climb_stairs n] --> base{n <= 2?}
+  base -->|yes| retn[Return n]
+  base -->|no| init[a=1 b=2]
+  init --> loop[For step 3..n]
+  loop --> slide[a b = b a+b]
+  slide --> loop
+  loop -->|done| retb[Return b]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def climb_stairs(n):</code><span>Number of ways to climb n steps taking 1 or 2 at a time.</span></li>
+                  <li><code>if n &lt;= 2:</code><span>Tiny staircases are their own answers (1 or 2 ways).</span></li>
+                  <li><code>return n</code><span>Base cases.</span></li>
+                  <li><code>a, b = 1, 2</code><span>ways(1) and ways(2).</span></li>
+                  <li><code>for _ in range(3, n + 1):</code><span>Roll forward to step n.</span></li>
+                  <li><code>a, b = b, a + b</code><span>New ways = previous + one-before; slide the window.</span></li>
+                  <li><code>return b</code><span>ways(n).</span></li>
+                </ol>
+                <p class="walk-why">Time O(n); space O(1) with two rolling variables.</p>
+              </div>
+            </details>
           </section>
 
           <!-- ===== PROBLEM 2: HOUSE ROBBER ===== -->
@@ -402,6 +427,27 @@ print(rob([1, 2, 3, 1]))
 4</pre></div>
                 </div>
                 <p>Each step <code>cur</code> becomes the better of "skip this house" (old <code>cur</code>) and "rob it" (<code>prev + n</code>), while <code>prev</code> slides up to the old <code>cur</code>. The two answers — 12 and 4 — are exactly the skip-or-rob choices made door by door.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">At each house: max(skip = cur, rob = prev + money). Two rolling totals give O(1) space. Greedy alternating houses fails; the DP comparison is required.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[prev=0 cur=0] --> loop{More houses?}
+  loop -->|yes| choose[cur = max skip or rob]
+  choose --> slide[prev becomes old cur]
+  slide --> loop
+  loop -->|no| ret[Return cur]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def rob(nums):</code><span>Max money without robbing adjacent houses.</span></li>
+                  <li><code>prev, cur = 0, 0</code><span>Best two houses back, and best at the last house.</span></li>
+                  <li><code>for n in nums:</code><span>Walk the street house by house.</span></li>
+                  <li><code>prev, cur = cur, max(cur, prev + n)</code><span>Skip (keep cur) vs rob (prev + n); then slide.</span></li>
+                  <li><code>return cur</code><span>Best total after the last house.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) one pass; space O(1) two scalars.</p>
               </div>
             </details>
           </section>
@@ -517,6 +563,35 @@ print(coin_change([2], 3))
 -1</pre></div>
                 </div>
                 <p>The sentinel <code>INF = amount + 1</code> is bigger than any real answer, so a box that's still <code>INF</code> at the end means "impossible". Amount 11 needs 3 coins (5 + 5 + 1); amount 3 from only 2-coins can never be made, so <code>−1</code>.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Bottom-up fewest coins: <code>dp[a] = min over coins of dp[a−c] + 1</code>. Unbounded knapsack left-to-right reuse is intentional. Greedy largest-coin-first is not always optimal.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[dp 0 = 0 rest INF] --> outer[For amount a = 1..target]
+  outer --> inner[For each coin c]
+  inner --> fit{c <= a?}
+  fit -->|yes| upd[dp a = min dp a dp a-c + 1]
+  fit -->|no| inner
+  upd --> inner
+  inner -->|done| outer
+  outer -->|done| ans{dp amount still INF?}
+  ans -->|yes| neg[Return -1]
+  ans -->|no| ret[Return dp amount]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def coin_change(coins, amount):</code><span>Fewest coins to make amount, or −1.</span></li>
+                  <li><code>INF = amount + 1</code><span>Sentinel larger than any real answer.</span></li>
+                  <li><code>dp = [0] + [INF] * amount</code><span>dp[0]=0; other amounts start impossible.</span></li>
+                  <li><code>for a in range(1, amount + 1):</code><span>Fill upward so leftovers are already solved.</span></li>
+                  <li><code>for c in coins:</code><span>Try every denomination.</span></li>
+                  <li><code>if c &lt;= a:</code><span>Coin must fit in this amount.</span></li>
+                  <li><code>dp[a] = min(dp[a], dp[a - c] + 1)</code><span>Take coin c on top of best for the leftover.</span></li>
+                  <li><code>return dp[amount] if dp[amount] != INF else -1</code><span>Unchanged sentinel means impossible.</span></li>
+                </ol>
+                <p class="walk-why">Time O(amount · |coins|); space O(amount) for the DP table.</p>
               </div>
             </details>
           </section>
@@ -640,6 +715,32 @@ print(length_of_lis([10, 9, 2, 5, 3, 7, 101, 18]))
                 <p>Every index asks each smaller earlier number for its best chain and stacks itself on top of the longest. For the full array the winner is a chain of 4 — like <code>2, 3, 7, 18</code> — and note the answer comes from <code>max(dp)</code>, not the last cell.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">O(n²) DP: <code>dp[i]</code> = longest increasing subsequence ending at i; answer is <code>max(dp)</code> not <code>dp[-1]</code>. Mention patience-sorting O(n log n) as a follow-up; code the quadratic unless asked.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[dp all 1s] --> iLoop[For each i]
+  iLoop --> jLoop[For each j < i]
+  jLoop --> lt{nums j < nums i?}
+  lt -->|yes| ext[dp i = max dp i dp j + 1]
+  lt -->|no| jLoop
+  ext --> jLoop
+  jLoop -->|done| iLoop
+  iLoop -->|done| ret[Return max dp]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def length_of_lis(nums):</code><span>Length of the longest strictly increasing subsequence.</span></li>
+                  <li><code>dp = [1] * len(nums)</code><span>Every element alone is a chain of length 1.</span></li>
+                  <li><code>for i in range(len(nums)):</code><span>Consider each ending index.</span></li>
+                  <li><code>for j in range(i):</code><span>Ask every earlier index.</span></li>
+                  <li><code>if nums[j] &lt; nums[i]:</code><span>Can we append nums[i] after a chain ending at j?</span></li>
+                  <li><code>dp[i] = max(dp[i], dp[j] + 1)</code><span>Extend the best compatible earlier chain.</span></li>
+                  <li><code>return max(dp)</code><span>Longest chain may end anywhere — take the max.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n²); space O(n) for the dp array.</p>
+              </div>
+            </details>
           </section>
 
           <!-- ===== PROBLEM 5: PARTITION EQUAL SUBSET SUM ===== -->
@@ -753,6 +854,36 @@ False</pre></div>
                 <p>The set <em>is</em> the DP table — only the sums that exist take up space, and the cap at <code>target</code> keeps it small. <code>[1, 5, 11, 5]</code> reaches 11, so <code>True</code>; <code>[1, 2, 3, 5]</code> totals 11, which is odd, so it fails at the gate with <code>False</code>.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Equal partition ⇔ subset sum to total/2. Odd total → False immediately. Set (or 0/1 knapsack) DP tracks reachable sums; each number used once.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Sum nums] --> odd{Total odd?}
+  odd -->|yes| no[Return False]
+  odd -->|no| target[target = total // 2]
+  target --> reach[reachable = 0]
+  reach --> loop[For each num]
+  loop --> grow[Union s+num if <= target]
+  grow --> loop
+  loop -->|done| hit{target in reachable?}
+  hit -->|yes| yes[Return True]
+  hit -->|no| no2[Return False]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def can_partition(nums):</code><span>Can we split into two equal-sum subsets?</span></li>
+                  <li><code>total = sum(nums)</code><span>Need the overall sum first.</span></li>
+                  <li><code>if total % 2:</code><span>Odd total can never split evenly.</span></li>
+                  <li><code>return False</code><span>Fail the gate.</span></li>
+                  <li><code>target = total // 2</code><span>Hunt for a subset that hits half.</span></li>
+                  <li><code>reachable = {0}</code><span>Sum 0 is always possible (pick nothing).</span></li>
+                  <li><code>for num in nums:</code><span>Offer each number once.</span></li>
+                  <li><code>reachable |= {s + num for s in reachable if s + num &lt;= target}</code><span>Grow every old sum by num; drop overshoots.</span></li>
+                  <li><code>return target in reachable</code><span>Half is buildable ⇔ partition exists.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n · S) where S = total/2; space O(S) for the reachable set.</p>
+              </div>
+            </details>
           </section>
 
           <!-- ===== PROBLEM: UNIQUE PATHS ===== -->
@@ -859,6 +990,27 @@ print(unique_paths(3, 7))
                 <p>Each cell reuses two smaller answers — the textbook 2-D DP table. Combinatorics fans: the closed form is <code>C(m+n-2, m-1)</code>, same number.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Grid DP: <code>dp[r][c] = above + left</code>, borders are 1. Combinatorial <code>C(m+n−2, m−1)</code> is a nice follow-up; the table is the interview default.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Fill grid with 1s] --> loops[For r=1..m-1 c=1..n-1]
+  loops --> cell[dp r c = above + left]
+  cell --> loops
+  loops -->|done| ret[Return bottom-right]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def unique_paths(m, n):</code><span>Count right/down paths on an m×n grid.</span></li>
+                  <li><code>dp = [[1] * n for _ in range(m)]</code><span>First row/col stay 1; other cells overwritten.</span></li>
+                  <li><code>for r in range(1, m):</code><span>Skip the top row (already correct).</span></li>
+                  <li><code>for c in range(1, n):</code><span>Skip the left column.</span></li>
+                  <li><code>dp[r][c] = dp[r - 1][c] + dp[r][c - 1]</code><span>Ways from above plus ways from the left.</span></li>
+                  <li><code>return dp[-1][-1]</code><span>Bottom-right path count.</span></li>
+                </ol>
+                <p class="walk-why">Time O(m · n); space O(m · n) for the table (or O(n) with a rolling row).</p>
+              </div>
+            </details>
           </section>
 
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
@@ -896,5 +1048,6 @@ print(unique_paths(3, 7))
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/progress.js"></script>
   <script src="../assets/js/recursion-tree.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>

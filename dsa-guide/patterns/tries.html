@@ -267,6 +267,47 @@ True</pre></div>
                 <p>Watch the last two lines: before <code>insert("app")</code>, the path exists but <code>search("app")</code> is <code>False</code> — then inserting "app" simply flips one flag on a node that was already there, and the same search turns <code>True</code>. The whole word/prefix distinction lives in that boolean.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">A trie is dict-of-dicts plus an end flag — insert/search/prefix are all "walk one letter at a time". Factoring _walk keeps search vs starts_with a one-liner difference; the end flag is the whole word/prefix distinction.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Start at root] --> op{Operation?}
+  op -->|insert| insLoop[For each letter: setdefault child]
+  insLoop --> flag[Set node.end = True]
+  op -->|search / starts_with| walk[_walk letter by letter]
+  walk --> miss{"Letter missing?"}
+  miss -->|yes| none[Return None / False]
+  miss -->|no| land[Land on final node]
+  land --> kind{search or prefix?}
+  kind -->|search| endCheck{"node.end?"}
+  kind -->|prefix| true[Return True]
+  endCheck -->|yes| true
+  endCheck -->|no| false[Return False]
+  flag --> done[Done]
+  none --> done
+  true --> done
+  false --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>class TrieNode:</code><span>One hallway room: outgoing doors plus an end-of-word flag.</span></li>
+                  <li><code>self.children = {}</code><span>Map letter → child TrieNode.</span></li>
+                  <li><code>self.end = False</code><span>True only if a full word checks in at this room.</span></li>
+                  <li><code>class Trie:</code><span>Public API wrapping a root node.</span></li>
+                  <li><code>self.root = TrieNode()</code><span>Empty lobby — all words hang under here.</span></li>
+                  <li><code>def insert(self, word):</code><span>Build the path for word, creating missing hallways.</span></li>
+                  <li><code>node = node.children.setdefault(ch, TrieNode())</code><span>Follow or create the door for this letter.</span></li>
+                  <li><code>node.end = True</code><span>Flag the final room: a word ends here.</span></li>
+                  <li><code>def _walk(self, s):</code><span>Shared helper: walk s or return None on a missing door.</span></li>
+                  <li><code>if ch not in node.children: return None</code><span>Dead end — path doesn't exist.</span></li>
+                  <li><code>return node</code><span>Landed on the node after consuming s.</span></li>
+                  <li><code>return node is not None and node.end</code><span>search: path exists AND end flag is set.</span></li>
+                  <li><code>return self._walk(prefix) is not None</code><span>starts_with: only the path must exist.</span></li>
+                </ol>
+                <p class="walk-why">Time O(L) per op for word length L; space O(total characters inserted) across shared prefixes.</p>
+              </div>
+            </details>
+
           </section>
 
           <!-- ===== PROBLEM 2: DESIGN ADD & SEARCH WORDS ===== -->
@@ -414,6 +455,42 @@ True</pre></div>
                 <p>The letter case and the dot case share the same shape — "go one level deeper with <code>i + 1</code>" — the dot just does it for every child instead of one. And <code>any(...)</code> short-circuits: the moment one branch says True, the rest are never explored.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Same trie insert as before; search becomes DFS where "." fans out to every child. Check node.end only when the query is fully consumed — mid-path flags must not short-circuit.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[dfs at root, i=0] --> base{"i == len(word)?"}
+  base -->|yes| endFlag[Return node.end]
+  base -->|no| ch["ch = word[i]"]
+  ch --> dot{"ch == '.'?"}
+  dot -->|yes| anyChild["any(dfs(child, i+1) for children)"]
+  dot -->|no| has{"ch in children?"}
+  has -->|no| false[Return False]
+  has -->|yes| one[dfs(child, i+1)]
+  anyChild --> done[Done]
+  one --> done
+  false --> done
+  endFlag --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>class WordDictionary:</code><span>Trie with wildcard search.</span></li>
+                  <li><code>def add_word(self, word):</code><span>Plain trie insert — identical to Implement Trie.</span></li>
+                  <li><code>node = node.children.setdefault(ch, TrieNode())</code><span>Follow or create each letter hallway.</span></li>
+                  <li><code>node.end = True</code><span>Mark the end of this word.</span></li>
+                  <li><code>def dfs(node, i):</code><span>Recursive search from current node at query index i.</span></li>
+                  <li><code>if i == len(word):</code><span>Consumed the whole query.</span></li>
+                  <li><code>return node.end</code><span>Only here do we read the end flag.</span></li>
+                  <li><code>if ch == ".":</code><span>Skeleton key — try every door.</span></li>
+                  <li><code>return any(dfs(child, i + 1) for child in node.children.values())</code><span>OR across children; any() short-circuits on True.</span></li>
+                  <li><code>if ch not in node.children: return False</code><span>Real letter with no matching hallway.</span></li>
+                  <li><code>return dfs(node.children[ch], i + 1)</code><span>Descend one level with i + 1.</span></li>
+                  <li><code>return dfs(self.root, 0)</code><span>Kick off search from the lobby.</span></li>
+                </ol>
+                <p class="walk-why">add_word O(L); search O(26^d · L) worst case when the query is all dots — usually near O(L) with few wildcards.</p>
+              </div>
+            </details>
+
           </section>
 
           <!-- ===== PROBLEM 3: WORD SEARCH II ===== -->
@@ -552,6 +629,45 @@ print(sorted(find_words(board, ["oath", "eat", "rain"])))
                 <p>Note what the DFS carries: not the word built so far, but the <em>trie node</em> — the trie remembers the path for us. "rain" never matches: from the board's only <code>r</code>, no neighbouring <code>a</code> exists, so that branch dies after one step. That instant death, multiplied across the whole board and the whole word list, is the entire speed-up.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Build one trie of all words, then DFS the board once carrying the current trie node. Missing children prune instantly; store the full word at end nodes and clear it after collecting so duplicates don't report twice.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Build trie of all words] --> cells[DFS from every cell]
+  cells --> prune{"board letter in node.children?"}
+  prune -->|no| stop[Return — prune]
+  prune -->|yes| hit{"nxt.word set?"}
+  hit -->|yes| collect[Append word; clear nxt.word]
+  hit -->|no| mark
+  collect --> mark["Mark cell #"]
+  mark --> neigh[Recurse 4 neighbors]
+  neigh --> restore[Restore letter]
+  restore --> more{More cells?}
+  more -->|yes| cells
+  more -->|no| ret[Return found]
+  stop --> more
+  ret --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>self.word = None</code><span>Store the full word at its end node (not just a boolean).</span></li>
+                  <li><code>for w in words:</code><span>Insert every target word into one shared trie.</span></li>
+                  <li><code>node.word = w</code><span>Remember the word string at the terminal node.</span></li>
+                  <li><code>def dfs(r, c, node):</code><span>Board position plus current trie node.</span></li>
+                  <li><code>nxt = node.children.get(ch)</code><span>Does any remaining word continue with this letter?</span></li>
+                  <li><code>if nxt is None: return</code><span>Trie prune — no word goes this way.</span></li>
+                  <li><code>if nxt.word is not None:</code><span>Landed on a complete word.</span></li>
+                  <li><code>found.append(nxt.word)</code><span>Collect it.</span></li>
+                  <li><code>nxt.word = None</code><span>Clear so another path won't report the same word twice.</span></li>
+                  <li><code>board[r][c] = "#"</code><span>Mark visited in place for this path.</span></li>
+                  <li><code>dfs(nr, nc, nxt)</code><span>Explore adjacent cells that aren't "#".</span></li>
+                  <li><code>board[r][c] = ch</code><span>Restore on backtrack (choose / explore / undo).</span></li>
+                  <li><code>dfs(r, c, root)</code><span>Start a fresh search from every board cell.</span></li>
+                </ol>
+                <p class="walk-why">Time roughly O(cells · 3^(L-1)) worst case with trie pruning in practice; space O(total trie chars) plus O(L) recursion.</p>
+              </div>
+            </details>
+
           </section>
 
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
@@ -584,5 +700,6 @@ print(sorted(find_words(board, ["oath", "eat", "rain"])))
   <script src="../assets/js/runpad.js"></script>
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>

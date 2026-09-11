@@ -264,6 +264,39 @@ print(binary_search([-1, 0, 3, 5, 9, 12], 2))
                 <p>The <code>lo &lt;= hi</code> loop keeps a shrinking window; each comparison discards the half that can't hold the target. Back to the dictionary: every peek at <code>mid</code> lets us slam shut one half of the book.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Classic binary search is the interview default on a sorted array: each comparison halves the window, so you get O(log n) instead of a linear scan. The only trick is the loop condition <code>lo &lt;= hi</code> and moving past mid — miss either and you loop forever or skip the answer.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["Start: lo = 0, hi = n-1"] --> loop{"lo &lt;= hi?"}
+  loop -->|no| miss[Return -1]
+  loop -->|yes| mid["mid = (lo + hi) // 2"]
+  mid --> cmp{"nums[mid] vs target"}
+  cmp -->|equal| hit[Return mid]
+  cmp -->|too small| right["lo = mid + 1"]
+  cmp -->|too big| left["hi = mid - 1"]
+  right --> loop
+  left --> loop
+  hit --> done[Done]
+  miss --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def binary_search(nums, target):</code><span>Define a function that searches a sorted list for <code>target</code> and returns its index (or <code>-1</code>).</span></li>
+                  <li><code>lo, hi = 0, len(nums) - 1</code><span>Put two walls around the whole array: leftmost and rightmost indices still in play.</span></li>
+                  <li><code>while lo &lt;= hi:</code><span>Keep going while the window still has at least one cell — when <code>lo</code> passes <code>hi</code>, nothing is left.</span></li>
+                  <li><code>mid = (lo + hi) // 2</code><span>Peek at the middle index (integer division floors if the span is odd).</span></li>
+                  <li><code>if nums[mid] == target:</code><span>Found it — this is the happy exit.</span></li>
+                  <li><code>return mid</code><span>Hand back the index of the match.</span></li>
+                  <li><code>elif nums[mid] &lt; target:</code><span>Mid is too small, so the target (if present) lives strictly to the right.</span></li>
+                  <li><code>lo = mid + 1</code><span>Slam the left wall past mid — discard the left half including mid.</span></li>
+                  <li><code>else: hi = mid - 1</code><span>Mid is too big — slam the right wall left of mid.</span></li>
+                  <li><code>return -1</code><span>The window emptied with no match: target isn't in the array.</span></li>
+                </ol>
+                <p class="walk-why">Time O(log n) because the window halves each step; space O(1) for the two indices.</p>
+              </div>
+            </details>
+
           </section>
 
           <!-- ===== PROBLEM 2: SEARCH IN ROTATED SORTED ARRAY ===== -->
@@ -373,6 +406,50 @@ print(search([4, 5, 6, 7, 0, 1, 2], 3))
                 <p>Each loop first finds the sorted half (<code>nums[lo] &lt;= nums[mid]</code>), then keeps the half that could contain the target. Back to the cut deck: we always reason about the tidy, in-order pile and ignore the messy one — and still halve the search every step.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">A rotated sorted array still has one fully sorted half at every mid — find that half, then ask whether the target sits inside its value range. That keeps the O(log n) binary-search skeleton instead of a linear scan or an explicit "find pivot then search" two-pass.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["Start: lo, hi"] --> loop{"lo &lt;= hi?"}
+  loop -->|no| miss[Return -1]
+  loop -->|yes| mid["Compute mid"]
+  mid --> eq{"nums[mid] == target?"}
+  eq -->|yes| hit[Return mid]
+  eq -->|no| which{"Left half sorted? nums[lo] &lt;= nums[mid]"}
+  which -->|yes| inL{"target in [nums[lo], nums[mid])?"}
+  inL -->|yes| goL["hi = mid - 1"]
+  inL -->|no| goR1["lo = mid + 1"]
+  which -->|no| inR{"target in (nums[mid], nums[hi]]?"}
+  inR -->|yes| goR2["lo = mid + 1"]
+  inR -->|no| goL2["hi = mid - 1"]
+  goL --> loop
+  goR1 --> loop
+  goR2 --> loop
+  goL2 --> loop
+  hit --> done[Done]
+  miss --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def search(nums, target):</code><span>Search a rotated sorted array for <code>target</code>; return its index or <code>-1</code>.</span></li>
+                  <li><code>lo, hi = 0, len(nums) - 1</code><span>Same shrinking window as plain binary search.</span></li>
+                  <li><code>while lo &lt;= hi:</code><span>Continue while at least one index remains.</span></li>
+                  <li><code>mid = (lo + hi) // 2</code><span>Sample the middle of the current window.</span></li>
+                  <li><code>if nums[mid] == target: return mid</code><span>Direct hit — done.</span></li>
+                  <li><code>if nums[lo] &lt;= nums[mid]:</code><span>The left side from <code>lo</code> to <code>mid</code> is contiguous and sorted (no wrap inside it).</span></li>
+                  <li><code>if nums[lo] &lt;= target &lt; nums[mid]:</code><span>Target falls inside that sorted left band — keep only the left.</span></li>
+                  <li><code>hi = mid - 1</code><span>Shrink to the left half (excluding mid, already checked).</span></li>
+                  <li><code>else: lo = mid + 1</code><span>Target isn't in the tidy left — it must be in the right (possibly wrapping) half.</span></li>
+                  <li><code>else:</code><span>Left wasn't sorted, so the right half from mid to hi is the sorted one.</span></li>
+                  <li><code>if nums[mid] &lt; target &lt;= nums[hi]:</code><span>Target sits in the sorted right band — search there.</span></li>
+                  <li><code>lo = mid + 1</code><span>Move into the right half.</span></li>
+                  <li><code>else: hi = mid - 1</code><span>Otherwise discard the right and keep the left.</span></li>
+                  <li><code>return -1</code><span>Window empty — target absent.</span></li>
+                </ol>
+                <p class="walk-why">Time O(log n) with one comparison per halving; space O(1).</p>
+              </div>
+            </details>
+
           </section>
 
           <!-- ===== TECHNIQUE: BINARY SEARCH ON THE ANSWER ===== -->
@@ -514,6 +591,37 @@ print(min_speed([30, 11, 23, 4, 20], 5))
                 <p>The loop never touches the piles' order — it halves the <em>speed range</em>, calling <code>hours(mid)</code> to ask "feasible?" at each step. Back to the bookshelf: each test read tells you whether to try a slower pace (it might still work) or admit you must go faster.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Binary search on the answer: speeds form a NO→YES frontier ("can speed k finish in h hours?"), so you search the speed range instead of the piles. Trying every k from 1 to max(pile) is O(m·n); binary search cuts that to O(n log m).</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["lo = 1, hi = max piles"] --> loop{"lo &lt; hi?"}
+  loop -->|no| ans[Return lo]
+  loop -->|yes| mid["mid = (lo + hi) // 2"]
+  mid --> chk{"hours(mid) &lt;= h?"}
+  chk -->|yes| keep["hi = mid  feasible, try slower"]
+  chk -->|no| faster["lo = mid + 1  too slow"]
+  keep --> loop
+  faster --> loop
+  ans --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def min_speed(piles, h):</code><span>Find the smallest eating speed that finishes all piles within <code>h</code> hours.</span></li>
+                  <li><code>def hours(k):</code><span>Helper: how many hours does speed <code>k</code> need?</span></li>
+                  <li><code>return sum((p + k - 1) // k for p in piles)</code><span>Ceil-divide each pile by <code>k</code> (one pile per hour) and total the hours.</span></li>
+                  <li><code>lo, hi = 1, max(piles)</code><span>Slowest useful speed is 1; fastest needed is the biggest pile (one hour per that pile).</span></li>
+                  <li><code>while lo &lt; hi:</code><span>Shrink until <code>lo</code> and <code>hi</code> meet on the first feasible speed.</span></li>
+                  <li><code>mid = (lo + hi) // 2</code><span>Probe a candidate speed in the middle of the range.</span></li>
+                  <li><code>if hours(mid) &lt;= h:</code><span>Feasible — mid works, but a slower speed might too.</span></li>
+                  <li><code>hi = mid</code><span>Keep mid in the range (don't exclude a working answer).</span></li>
+                  <li><code>else: lo = mid + 1</code><span>Infeasible — mid is too slow; search only faster speeds.</span></li>
+                  <li><code>return lo</code><span>When the loop ends, <code>lo == hi</code> is the minimum feasible k.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n log m) for O(log m) probes each costing O(n) over the piles; space O(1).</p>
+              </div>
+            </details>
+
 
             <div class="callout note">
               <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg></span>
@@ -552,5 +660,6 @@ print(min_speed([30, 11, 23, 4, 20], 5))
   <script src="../assets/js/runpad.js"></script>
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>

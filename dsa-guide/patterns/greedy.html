@@ -243,6 +243,40 @@ False</pre></div>
                 <p>One loop, one variable. The greedy choice "remember only the best horizon" is safe because reach is pure upside — and the early <code>True</code> means we often don't even finish the pass.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Track one number — farthest reachable index — instead of BFS/DP over every jump. If you ever stand past that horizon you're stuck; if the horizon covers the last index you're done. O(n) greedy beats O(n²) graph search.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Start: reach = 0] --> loop[For each index i]
+  loop --> stuck{"i past reach?"}
+  stuck -->|yes| fail[Return False]
+  stuck -->|no| extend["reach = max(reach, i + nums[i])"]
+  extend --> win{"reach covers last?"}
+  win -->|yes| ok[Return True]
+  win -->|no| more{More indices?}
+  more -->|yes| loop
+  more -->|no| ok2[Return True]
+  fail --> done[Done]
+  ok --> done
+  ok2 --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def can_jump(nums):</code><span>Ask whether index 0 can reach the last index given max jump lengths.</span></li>
+                  <li><code>reach = 0</code><span>Farthest index the prefix so far can still land on.</span></li>
+                  <li><code>last = len(nums) - 1</code><span>Cache the far-bank index.</span></li>
+                  <li><code>for i in range(len(nums)):</code><span>Walk left to right; only standing on reachable stones.</span></li>
+                  <li><code>if i &gt; reach:</code><span>This stone was never reachable — trapped.</span></li>
+                  <li><code>return False</code><span>Cannot finish the course.</span></li>
+                  <li><code>reach = max(reach, i + nums[i])</code><span>Standing here may push the horizon farther.</span></li>
+                  <li><code>if reach &gt;= last:</code><span>Far bank is already inside the horizon.</span></li>
+                  <li><code>return True</code><span>Early success — no need to finish the loop.</span></li>
+                  <li><code>return True</code><span>Finished the pass without getting stuck.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) one pass; space O(1) — just reach and last.</p>
+              </div>
+            </details>
+
           </section>
 
           <!-- ===== PROBLEM 2: GAS STATION ===== -->
@@ -355,6 +389,43 @@ print(can_complete_circuit([1, 2, 3, 4, 5], [3, 4, 5, 1, 2]))
                 <p>Two sums, one pass. <code>total</code> answers "is the loop possible at all?"; <code>tank</code> plus the restart rule finds the unique survivor. The greedy restart is safe precisely because of the exchange argument in the quiz — no skipped station could ever have done better.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">One pass with two sums: total asks if the loop is possible at all; tank plus restart finds the unique viable start. When the tank dies, skip every station from the old start through here — the exchange argument makes retries wasteful.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Start: total=0, tank=0, start=0] --> loop[For each station i]
+  loop --> net["net = gas[i] - cost[i]"]
+  net --> add["total += net; tank += net"]
+  add --> neg{"tank negative?"}
+  neg -->|yes| reset["start = i+1; tank = 0"]
+  neg -->|no| more
+  reset --> more{More stations?}
+  more -->|yes| loop
+  more -->|no| check{"total nonnegative?"}
+  check -->|yes| retStart[Return start]
+  check -->|no| retNeg[Return -1]
+  retStart --> done[Done]
+  retNeg --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def can_complete_circuit(gas, cost):</code><span>Find a start index that completes the circular route, or -1.</span></li>
+                  <li><code>total = 0</code><span>Net fuel over the whole loop — feasibility check.</span></li>
+                  <li><code>tank = 0</code><span>Fuel for the current attempt from start.</span></li>
+                  <li><code>start = 0</code><span>Candidate starting station.</span></li>
+                  <li><code>for i in range(len(gas)):</code><span>One clockwise sweep.</span></li>
+                  <li><code>net = gas[i] - cost[i]</code><span>Gain minus cost to reach the next station.</span></li>
+                  <li><code>total += net</code><span>Accumulate global feasibility.</span></li>
+                  <li><code>tank += net</code><span>Accumulate this attempt's tank.</span></li>
+                  <li><code>if tank &lt; 0:</code><span>Attempt died here — and so did every start from old start..i.</span></li>
+                  <li><code>start = i + 1</code><span>Restart just past the breakdown.</span></li>
+                  <li><code>tank = 0</code><span>Fresh empty tank for the new attempt.</span></li>
+                  <li><code>return start if total &gt;= 0 else -1</code><span>If the loop has enough fuel overall, start is the unique answer.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) one pass; space O(1) for total, tank, and start.</p>
+              </div>
+            </details>
+
           </section>
 
           <!-- ===== PROBLEM 3: NON-OVERLAPPING INTERVALS ===== -->
@@ -467,6 +538,38 @@ print(erase_overlap_intervals([[1, 2], [2, 3], [3, 4], [1, 3]]))
                 <p>Sort, sweep, count. The only state is <code>prev_end</code>, and the only decision is "does this interval start at or after it?". The booking-calendar analogy is the whole proof: keeping the earliest finisher can never cost you a meeting.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Minimizing removals equals maximizing kept meetings — keep the earliest finisher. Sort by end, sweep with prev_end; touching endpoints are allowed. Sorting by start fails (a long early starter crowds out two short ones).</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Start: sort by end time] --> init["removed=0, prev_end=-inf"]
+  init --> loop[For each start, end]
+  loop --> fit{"start at or after prev_end?"}
+  fit -->|yes| keep["prev_end = end"]
+  fit -->|no| drop["removed += 1"]
+  keep --> more{More intervals?}
+  drop --> more
+  more -->|yes| loop
+  more -->|no| ret[Return removed]
+  ret --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def erase_overlap_intervals(intervals):</code><span>Return the minimum number of intervals to remove so none overlap.</span></li>
+                  <li><code>intervals.sort(key=lambda iv: iv[1])</code><span>Sort by END — earliest finisher is the greedy winner.</span></li>
+                  <li><code>removed = 0</code><span>Count overlaps we reject.</span></li>
+                  <li><code>prev_end = float("-inf")</code><span>End of the last kept interval (start with -∞ so the first always fits).</span></li>
+                  <li><code>for start, end in intervals:</code><span>Sweep in end order.</span></li>
+                  <li><code>if start &gt;= prev_end:</code><span>Fits after (or touching) the last kept one.</span></li>
+                  <li><code>prev_end = end</code><span>Keep it; advance the calendar.</span></li>
+                  <li><code>else:</code><span>Overlaps the early finisher.</span></li>
+                  <li><code>removed += 1</code><span>Evict this one; keep prev_end unchanged.</span></li>
+                  <li><code>return removed</code><span>Fewest removals = n minus maximum non-overlapping set.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n log n) from the sort; space O(1) beyond sorting in place.</p>
+              </div>
+            </details>
+
           </section>
 
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
@@ -499,5 +602,6 @@ print(erase_overlap_intervals([[1, 2], [2, 3], [3, 4], [1, 3]]))
   <script src="../assets/js/runpad.js"></script>
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>

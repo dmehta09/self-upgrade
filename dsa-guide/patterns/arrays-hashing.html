@@ -227,6 +227,35 @@ print(two_sum([3, 2, 4], 6))
                 <p>The dict <code>seen</code> is our wall of sticky notes. We look up the complement before filing the current number, so we never pair a number with itself and we finish in a single pass.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">A hash map of value → index is the interview default: one pass, O(n) time. Nested loops are O(n²) and sorting then two-pointers only works if the problem allows returning values (not indices) or you track indices carefully — the map is simpler and optimal.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Start: empty seen dict] --> loop[For each index i and value n]
+  loop --> need["need = target - n"]
+  need --> check{Is need already in seen?}
+  check -->|yes| ret["Return seen need and i"]
+  check -->|no| store["Store seen n = i"]
+  store --> more{More numbers?}
+  more -->|yes| loop
+  more -->|no| empty[Return empty list]
+  ret --> done[Done]
+  empty --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def two_sum(nums, target):</code><span>Define a function that takes the list of numbers and the target sum we want.</span></li>
+                  <li><code>seen = {}</code><span>Start an empty dictionary — our sticky-note wall mapping each number we've seen to its index.</span></li>
+                  <li><code>for i, n in enumerate(nums):</code><span>Walk the list once; <code>i</code> is the position and <code>n</code> is the value at that position.</span></li>
+                  <li><code>need = target - n</code><span>Compute the partner number that would make <code>n + need</code> equal the target.</span></li>
+                  <li><code>if need in seen:</code><span>Ask: did we already pass that partner earlier? A dict lookup is O(1).</span></li>
+                  <li><code>return [seen[need], i]</code><span>Yes — return the earlier index and the current index. We're done.</span></li>
+                  <li><code>seen[n] = i</code><span>No partner yet — file this number's index so a later number can find it.</span></li>
+                  <li><code>return []</code><span>If the loop finishes with no pair, return an empty list (no solution).</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) for one pass; space O(n) for the dictionary in the worst case.</p>
+              </div>
+            </details>
           </section>
 
           <!-- ===== PROBLEM 2: GROUP ANAGRAMS ===== -->
@@ -333,6 +362,30 @@ print(group_anagrams(["eat", "tea", "tan", "ate", "nat", "bat"]))
                   <div class="rp-output"><pre class="rp-expected">[['eat', 'tea', 'ate'], ['tan', 'nat'], ['bat']]</pre></div>
                 </div>
                 <p>Each word's sorted letters are its drawer label; <code>defaultdict(list)</code> opens a fresh drawer the first time a label appears. The values of the map are the anagram groups, in the order the labels were first seen.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Sort-letters-as-key is the interview default: one map, one pass over the words. Pairwise comparing every word is O(n²·k). A 26-count fingerprint is a common follow-up for lowercase a–z (O(n·k) time); sorted keys are simpler to write under pressure and still optimal enough.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Start: empty groups map] --> loop[For each word s]
+  loop --> key["key = sorted letters of s"]
+  key --> append["Append s to groups key"]
+  append --> more{More words?}
+  more -->|yes| loop
+  more -->|no| out[Return list of group values]
+  out --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def group_anagrams(strs):</code><span>Define a function that takes the list of words to group.</span></li>
+                  <li><code>groups = defaultdict(list)</code><span>Filing cabinet: each fingerprint key auto-gets an empty list on first use (needs <code>from collections import defaultdict</code>).</span></li>
+                  <li><code>for s in strs:</code><span>Visit every word once.</span></li>
+                  <li><code>key = "".join(sorted(s))</code><span>Sort the letters and glue them into a fingerprint string — anagrams share this key.</span></li>
+                  <li><code>groups[key].append(s)</code><span>Drop the original word into that drawer's list.</span></li>
+                  <li><code>return list(groups.values())</code><span>Hand back the drawer contents (the anagram groups), ignoring the keys.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n·k log k) to sort each of n words of length k; space O(n·k) to store every word and its key.</p>
               </div>
             </details>
           </section>
@@ -453,6 +506,39 @@ print(product_except_self([1, 2, 3, 4]))
                 <p>The first loop fills each slot with the product of everything to its left; the second folds in everything to its right. Two passes, no division, and nothing stored beyond two running numbers.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Prefix × suffix in the output array is the interview default: O(n) time, O(1) extra space, no division. Building full prefix/suffix arrays also works but uses O(n) extra space. Division by the total product fails on zeros and is usually banned.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Start: res all ones] --> pref[Forward pass: write left products]
+  pref --> writeL["res i = prefix, then prefix *= nums i"]
+  writeL --> moreL{More left?}
+  moreL -->|yes| writeL
+  moreL -->|no| suf[Backward pass: multiply right products]
+  suf --> writeR["res i *= suffix, then suffix *= nums i"]
+  writeR --> moreR{More right?}
+  moreR -->|yes| writeR
+  moreR -->|no| out[Return res]
+  out --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def product_except_self(nums):</code><span>Define a function that returns, for each index, the product of every other element.</span></li>
+                  <li><code>n = len(nums)</code><span>Cache the length so both loops know how far to go.</span></li>
+                  <li><code>res = [1] * n</code><span>Output array — starts as all ones so multiplying into it is safe.</span></li>
+                  <li><code>prefix = 1</code><span>Running product of everything strictly to the left of the current index.</span></li>
+                  <li><code>for i in range(n):</code><span>Left-to-right sweep.</span></li>
+                  <li><code>res[i] = prefix</code><span>Write the left-product <em>before</em> including <code>nums[i]</code> — that's how we leave ourselves out.</span></li>
+                  <li><code>prefix *= nums[i]</code><span>Fold this value into the running left product for the next index.</span></li>
+                  <li><code>suffix = 1</code><span>Running product of everything strictly to the right.</span></li>
+                  <li><code>for i in range(n - 1, -1, -1):</code><span>Right-to-left sweep.</span></li>
+                  <li><code>res[i] *= suffix</code><span>Multiply in the right-product so <code>res[i]</code> becomes left × right.</span></li>
+                  <li><code>suffix *= nums[i]</code><span>Fold this value into the running right product for the previous index.</span></li>
+                  <li><code>return res</code><span>Hand back the filled product array.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) for two linear passes; extra space O(1) beyond the output array (two running scalars).</p>
+              </div>
+            </details>
           </section>
 
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
@@ -485,5 +571,6 @@ print(product_except_self([1, 2, 3, 4]))
   <script src="../assets/js/runpad.js"></script>
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>

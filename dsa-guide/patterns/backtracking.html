@@ -319,6 +319,35 @@ print(subsets([1, 2, 3]))
                 <p>Each call records the bag as it stands, then tries adding every later number in turn — undoing after each. The <code>append</code>/<code>pop()</code> pair is the choose/undo of the maze, and <code>i + 1</code> stops us from revisiting an earlier fork.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Record every path as you go, then choose/undo later numbers with <code>i + 1</code> so each subset appears once. Generating permutations of every length would overcount; this start-index DFS is the interview default.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Start: empty path] --> record[Append path copy to res]
+  record --> loop{More indices from start?}
+  loop -->|yes| choose[Append nums i]
+  choose --> recurse[backtrack i+1]
+  recurse --> undo[path.pop]
+  undo --> loop
+  loop -->|no| ret[Return res]
+  recurse --> record
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def subsets(nums):</code><span>Entry point: return every subset of the input list.</span></li>
+                  <li><code>res = []</code><span>Collector for all subsets we discover.</span></li>
+                  <li><code>def backtrack(start, path):</code><span>DFS helper: <code>start</code> is the next index we may choose; <code>path</code> is the current subset.</span></li>
+                  <li><code>res.append(path[:])</code><span>Snapshot the current bag — every node of the decision tree is a valid subset (including empty).</span></li>
+                  <li><code>for i in range(start, len(nums)):</code><span>Try each unused later element once, in order.</span></li>
+                  <li><code>path.append(nums[i])</code><span>Choose nums[i] — add it to the bag.</span></li>
+                  <li><code>backtrack(i + 1, path)</code><span>Recurse with <code>i + 1</code> so we never reuse this index or revisit earlier ones.</span></li>
+                  <li><code>path.pop()</code><span>Undo the choice so the next sibling branch starts from the same path.</span></li>
+                  <li><code>backtrack(0, [])</code><span>Kick off DFS from index 0 with an empty path.</span></li>
+                  <li><code>return res</code><span>Hand back every recorded subset.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n · 2ⁿ) to build all subsets; space O(n) for the recursion depth (plus O(n · 2ⁿ) for the output).</p>
+              </div>
+            </details>
           </section>
 
           <!-- ===== PROBLEM 2: COMBINATION SUM ===== -->
@@ -434,7 +463,7 @@ def combination_sum(candidates, target):
             return
         for i in range(start, len(candidates)):
             path.append(candidates[i])
-            backtrack(i, path, remain - candidates[i])  # i, not i+1 -> reuse allowed
+            backtrack(i, path, remain - candidates[i])
             path.pop()
     backtrack(0, [], target)
     return res
@@ -444,6 +473,42 @@ print(combination_sum([2, 3, 6, 7], 7))
                   <div class="rp-output"><pre class="rp-expected">[[2, 2, 3], [7]]</pre></div>
                 </div>
                 <p>The two base cases prune: an exact pile is saved, an overshoot is abandoned. Recursing from <code>i</code> keeps each coin reusable while the <code>start</code> index fixes the order — so the coin-tray rule "same value again, but never reorder" holds, and each combination is found once.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Same choose/undo skeleton as Subsets, but track <code>remain</code> and recurse with <code>i</code> (not <code>i + 1</code>) so a coin can be reused. Sorting is optional; the start index alone prevents duplicate orderings.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Start remain = target] --> check{remain?}
+  check -->|zero| save[Append path copy]
+  check -->|negative| dead[Return prune]
+  check -->|positive| loop{Try candidates from start}
+  loop -->|pick i| choose[Append candidates i]
+  choose --> rec[backtrack i remain - coin]
+  rec --> undo[path.pop]
+  undo --> loop
+  loop -->|done| ret[Return res]
+  save --> ret
+  dead --> ret
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def combination_sum(candidates, target):</code><span>Find every multiset of candidates that sums to target.</span></li>
+                  <li><code>res = []</code><span>Collector for valid combinations.</span></li>
+                  <li><code>def backtrack(start, path, remain):</code><span>DFS with remaining sum still owed and the earliest coin index we may pick.</span></li>
+                  <li><code>if remain == 0:</code><span>Exact change — this path is a solution.</span></li>
+                  <li><code>res.append(path[:])</code><span>Freeze a copy of the current combination.</span></li>
+                  <li><code>return</code><span>Stop this branch; nothing left to add.</span></li>
+                  <li><code>if remain &lt; 0:</code><span>Overshot the target — prune.</span></li>
+                  <li><code>return</code><span>Dead end; unwind.</span></li>
+                  <li><code>for i in range(start, len(candidates)):</code><span>Try each coin from <code>start</code> onward (keeps non-decreasing order).</span></li>
+                  <li><code>path.append(candidates[i])</code><span>Choose this coin value.</span></li>
+                  <li><code>backtrack(i, path, remain - candidates[i])</code><span>Recurse with <code>i</code> (reuse allowed) and subtract the coin from remain.</span></li>
+                  <li><code>path.pop()</code><span>Undo so the next coin can be tried from the same path.</span></li>
+                  <li><code>backtrack(0, [], target)</code><span>Start with empty pile and full target.</span></li>
+                  <li><code>return res</code><span>All combinations found.</span></li>
+                </ol>
+                <p class="walk-why">Time exponential in the search tree size; space O(target / min(coin)) for recursion depth.</p>
               </div>
             </details>
           </section>
@@ -478,5 +543,6 @@ print(combination_sum([2, 3, 6, 7], 7))
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/progress.js"></script>
   <script src="../assets/js/recursion-tree.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>

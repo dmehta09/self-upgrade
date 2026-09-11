@@ -269,6 +269,39 @@ False</pre></div>
                 <p>The two inner <code>while</code> loops jump over punctuation and spaces; the outer loop compares the next real characters and bails out the instant they disagree. Connecting back to the picture: the two readers skip commas, and stop the moment their letters don't match.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Two pointers from the ends is the interview default: O(n) time, O(1) space, no extra cleaned string. Building a filtered lowercase copy then checking it is fine but uses O(n) space — interviewers usually prefer in-place skipping with <code>.isalnum()</code>.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Start: left and right at ends] --> loop{left &lt; right?}
+  loop -->|no| ok[Return True]
+  loop -->|yes| skipL[Skip non-alnum from left]
+  skipL --> skipR[Skip non-alnum from right]
+  skipR --> cmp{Chars match ignoring case?}
+  cmp -->|no| fail[Return False]
+  cmp -->|yes| move[Move left in and right in]
+  move --> loop
+  ok --> done[Done]
+  fail --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def is_palindrome(s: str) -&gt; bool:</code><span>Define a function that returns whether <code>s</code> reads the same forward and back (letters/digits only, case-insensitive).</span></li>
+                  <li><code>left, right = 0, len(s) - 1</code><span>Plant one finger at each end of the string.</span></li>
+                  <li><code>while left &lt; right:</code><span>Keep going while the fingers haven't crossed.</span></li>
+                  <li><code>while left &lt; right and not s[left].isalnum():</code><span>If the left finger sits on punctuation or space, keep sliding it right.</span></li>
+                  <li><code>left += 1</code><span>Advance left past that non-alphanumeric character.</span></li>
+                  <li><code>while left &lt; right and not s[right].isalnum():</code><span>Same idea from the right end — skip junk.</span></li>
+                  <li><code>right -= 1</code><span>Pull right inward past that non-alphanumeric character.</span></li>
+                  <li><code>if s[left].lower() != s[right].lower():</code><span>Compare the next real characters, ignoring case.</span></li>
+                  <li><code>return False</code><span>Mismatch — not a palindrome.</span></li>
+                  <li><code>left += 1</code><span>They matched — step left inward for the next pair.</span></li>
+                  <li><code>right -= 1</code><span>Step right inward too.</span></li>
+                  <li><code>return True</code><span>Fingers met with no mismatches — it is a palindrome.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) — each index is visited at most a constant number of times; space O(1) beyond the input string.</p>
+              </div>
+            </details>
           </section>
 
           <!-- ===== PROBLEM 2: 3SUM ===== -->
@@ -395,6 +428,54 @@ print(three_sum([-1, 0, 1, 2, -1, -4]))
                 <p>The outer loop picks the fixed number; the inner two-pointer loop finds matching pairs in one sweep. The two duplicate-skips are what make the triples <em>unique</em> — without them you'd print <code>[-1, 0, 1]</code> twice.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Sort, then fix one index and two-pointer the rest: interview default at O(n²). Triple nested loops are O(n³). A hash-set of pairs also works but duplicate handling and memory get messier — sorting makes "too small / too big" and duplicate skips natural.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Sort nums] --> fix[For each fixed index i]
+  fix --> skipI{Duplicate of nums i-1?}
+  skipI -->|yes| fix
+  skipI -->|no| ptrs[left = i+1, right = end]
+  ptrs --> sum{total vs 0}
+  sum -->|"&lt; 0"| L[left += 1]
+  sum -->|"&gt; 0"| R[right -= 1]
+  sum -->|"= 0"| hit[Record triple, move both, skip dups]
+  L --> more{left &lt; right?}
+  R --> more
+  hit --> more
+  more -->|yes| sum
+  more -->|no| nextI{More i?}
+  nextI -->|yes| fix
+  nextI -->|no| out[Return res]
+  out --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def three_sum(nums):</code><span>Define a function that returns every unique triple summing to 0.</span></li>
+                  <li><code>nums.sort()</code><span>Sort in place so two-pointer moves have a clear direction and duplicates sit together.</span></li>
+                  <li><code>res = []</code><span>Collector for the unique triples we find.</span></li>
+                  <li><code>n = len(nums)</code><span>Cache length for the loops.</span></li>
+                  <li><code>for i in range(n - 2):</code><span>Fix one number; leave at least two slots for the pair.</span></li>
+                  <li><code>if i &gt; 0 and nums[i] == nums[i - 1]:</code><span>Same fixed value as last time — skip to avoid duplicate triples.</span></li>
+                  <li><code>continue</code><span>Jump to the next <code>i</code>.</span></li>
+                  <li><code>left, right = i + 1, n - 1</code><span>Two pointers on the remaining sorted slice.</span></li>
+                  <li><code>while left &lt; right:</code><span>Search for a pair that cancels <code>nums[i]</code>.</span></li>
+                  <li><code>total = nums[i] + nums[left] + nums[right]</code><span>Current three-sum.</span></li>
+                  <li><code>if total &lt; 0:</code><span>Too small — need a larger middle value.</span></li>
+                  <li><code>left += 1</code><span>Move left rightward to grow the sum.</span></li>
+                  <li><code>elif total &gt; 0:</code><span>Too big — need a smaller right value.</span></li>
+                  <li><code>right -= 1</code><span>Move right leftward to shrink the sum.</span></li>
+                  <li><code>else:</code><span>Exactly zero — a valid triple.</span></li>
+                  <li><code>res.append([nums[i], nums[left], nums[right]])</code><span>Record it.</span></li>
+                  <li><code>left += 1</code><span>Advance left to hunt for more pairs with this fixed <code>i</code>.</span></li>
+                  <li><code>right -= 1</code><span>Pull right in as well.</span></li>
+                  <li><code>while left &lt; right and nums[left] == nums[left - 1]:</code><span>Skip duplicate left values so we don't re-record the same triple.</span></li>
+                  <li><code>left += 1</code><span>Keep skipping while the left value repeats.</span></li>
+                  <li><code>return res</code><span>Hand back all unique triples.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n²) after O(n log n) sort; extra space O(1) beyond the output (in-place sort).</p>
+              </div>
+            </details>
           </section>
 
           <!-- ===== PROBLEM 3: CONTAINER WITH MOST WATER ===== -->
@@ -499,6 +580,37 @@ print(max_area([1, 8, 6, 2, 5, 4, 8, 3, 7]))
                 <p>One pass, two indices, one running maximum. The whole cleverness is the single line that decides which pointer to move — and the analogy (water spills over the short wall) is exactly why that line is correct.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Start wide and always move the shorter wall: O(n) interview default. Checking every pair is O(n²). Moving the taller wall can never improve the area while the short wall still caps height — so the greedy move is safe and optimal.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[left and right at ends, best = 0] --> loop{left &lt; right?}
+  loop -->|no| out[Return best]
+  loop -->|yes| area[Update best with min height times width]
+  area --> which{Which wall is shorter?}
+  which -->|left| moveL[left += 1]
+  which -->|right or tie| moveR[right -= 1]
+  moveL --> loop
+  moveR --> loop
+  out --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def max_area(height):</code><span>Define a function that returns the maximum water area between two walls.</span></li>
+                  <li><code>left, right = 0, len(height) - 1</code><span>Start at the widest possible pair of walls.</span></li>
+                  <li><code>best = 0</code><span>Track the largest area seen so far.</span></li>
+                  <li><code>while left &lt; right:</code><span>Shrink until the pointers meet.</span></li>
+                  <li><code>width = right - left</code><span>Horizontal distance between the two walls.</span></li>
+                  <li><code>best = max(best, min(height[left], height[right]) * width)</code><span>Area is capped by the shorter wall; keep the max.</span></li>
+                  <li><code>if height[left] &lt; height[right]:</code><span>Left wall is the short one — only moving it can help.</span></li>
+                  <li><code>left += 1</code><span>Step the short wall inward hoping for a taller one.</span></li>
+                  <li><code>else:</code><span>Right is shorter or they tie — move right (either side is fine on a tie).</span></li>
+                  <li><code>right -= 1</code><span>Step the right wall inward.</span></li>
+                  <li><code>return best</code><span>Hand back the maximum area found.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) for one inward pass; space O(1) for two indices and a running best.</p>
+              </div>
+            </details>
           </section>
 
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
@@ -531,5 +643,6 @@ print(max_area([1, 8, 6, 2, 5, 4, 8, 3, 7]))
   <script src="../assets/js/runpad.js"></script>
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>

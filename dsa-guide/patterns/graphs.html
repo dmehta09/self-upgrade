@@ -284,6 +284,43 @@ print(num_islands(grid))
                 <p>The double loop finds each fresh island; <code>sink</code> floods it so it's counted exactly once. Here the two top-left blocks merge into one island, plus two single-cell islands — three in all.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Scan the grid; each fresh <code>"1"</code> is a new island — flood-fill (DFS/BFS) to sink the whole component so it is counted once. A separate visited matrix works too; mutating to water is the common interview shortcut.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Scan every cell] --> land{Cell is 1?}
+  land -->|yes| bump[count += 1]
+  bump --> sink[DFS sink four dirs]
+  sink --> mark[Mark cell as 0]
+  mark --> neigh[Recurse neighbors]
+  land -->|no| next[Next cell]
+  neigh --> next
+  next --> more{More cells?}
+  more -->|yes| land
+  more -->|no| ret[Return count]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def num_islands(grid):</code><span>Count connected components of land in the grid.</span></li>
+                  <li><code>if not grid:</code><span>Empty input → zero islands.</span></li>
+                  <li><code>return 0</code><span>Bail out early.</span></li>
+                  <li><code>rows, cols = len(grid), len(grid[0])</code><span>Cache dimensions for bounds checks.</span></li>
+                  <li><code>count = 0</code><span>Running island total.</span></li>
+                  <li><code>def sink(r, c):</code><span>Flood-fill helper: drown this land cell and its connected land.</span></li>
+                  <li><code>if r &lt; 0 or c &lt; 0 or r &gt;= rows or c &gt;= cols or grid[r][c] != "1":</code><span>Off-grid or already water — stop.</span></li>
+                  <li><code>return</code><span>Nothing to sink here.</span></li>
+                  <li><code>grid[r][c] = "0"</code><span>Mark visited by turning land into water.</span></li>
+                  <li><code>sink(r + 1, c); sink(r - 1, c); sink(r, c + 1); sink(r, c - 1)</code><span>Recurse on the four orthogonal neighbors.</span></li>
+                  <li><code>for r in range(rows):</code><span>Walk every row.</span></li>
+                  <li><code>for c in range(cols):</code><span>Walk every column.</span></li>
+                  <li><code>if grid[r][c] == "1":</code><span>Unvisited land starts a new island.</span></li>
+                  <li><code>count += 1</code><span>Tally it.</span></li>
+                  <li><code>sink(r, c)</code><span>Drown the whole island so we never recount it.</span></li>
+                  <li><code>return count</code><span>Final number of islands.</span></li>
+                </ol>
+                <p class="walk-why">Time O(rows · cols) — each cell visited a constant number of times; space O(rows · cols) worst-case recursion depth.</p>
+              </div>
+            </details>
           </section>
 
           <!-- ===== PROBLEM 2: CLONE GRAPH ===== -->
@@ -417,6 +454,45 @@ print(cl.val, sorted(n.val for n in cl.neighbors), cl is not a)
                 <p>The check <code>n in clones</code> closes every cycle, and storing the copy <em>before</em> recursing means neighbours link back to the right object. The output confirms the clone has value 1, neighbours 2 and 3, and is a different object than the original (<code>True</code>).</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">DFS/BFS with a map old→new: create each node once, store it before wiring neighbors, and reuse the map on cycles. Cloning without the map infinite-loops on undirected edges.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[clone_graph node] --> empty{node is None?}
+  empty -->|yes| none[Return None]
+  empty -->|no| dfs[dfs n]
+  dfs --> seen{n already in clones?}
+  seen -->|yes| reuse[Return clones n]
+  seen -->|no| make[Create Node n.val]
+  make --> store[clones n = copy]
+  store --> loop[For each neighbor]
+  loop --> link[Append dfs nei]
+  link --> loop
+  loop -->|done| ret[Return copy]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>class Node:</code><span>Graph node with a value and neighbor list.</span></li>
+                  <li><code>def __init__(self, val=0, neighbors=None):</code><span>Constructor.</span></li>
+                  <li><code>self.val = val</code><span>Store the node value.</span></li>
+                  <li><code>self.neighbors = neighbors or []</code><span>Neighbor list (avoid a shared mutable default).</span></li>
+                  <li><code>def clone_graph(node):</code><span>Deep-copy the connected component reachable from node.</span></li>
+                  <li><code>if not node:</code><span>Null graph → null clone.</span></li>
+                  <li><code>return None</code><span>Nothing to copy.</span></li>
+                  <li><code>clones = {}</code><span>Notebook mapping original node → fresh copy.</span></li>
+                  <li><code>def dfs(n):</code><span>Return the clone of n, building it if needed.</span></li>
+                  <li><code>if n in clones:</code><span>Already photocopied — reuse it (breaks cycles).</span></li>
+                  <li><code>return clones[n]</code><span>Hand back the existing copy.</span></li>
+                  <li><code>copy = Node(n.val)</code><span>Make a brand-new node with the same value.</span></li>
+                  <li><code>clones[n] = copy</code><span>Record it before recursing so back-edges find it.</span></li>
+                  <li><code>for nei in n.neighbors:</code><span>Wire each original neighbor.</span></li>
+                  <li><code>copy.neighbors.append(dfs(nei))</code><span>Append the neighbor's clone (built or reused).</span></li>
+                  <li><code>return copy</code><span>Fully wired clone of n.</span></li>
+                  <li><code>return dfs(node)</code><span>Start DFS from the given root.</span></li>
+                </ol>
+                <p class="walk-why">Time O(V + E) to visit every node and edge once; space O(V) for the clone map and recursion stack.</p>
+              </div>
+            </details>
           </section>
 
           <!-- ===== PROBLEM 3: COURSE SCHEDULE ===== -->
@@ -529,6 +605,46 @@ print(can_finish(2, [[1, 0], [0, 1]]))
 False</pre></div>
                 </div>
                 <p>The first case is "take 0, then 1" — a clean chain, so <code>True</code>. The second wants 0 before 1 <em>and</em> 1 before 0 — an impossible loop, so neither ever reaches indegree 0 and the answer is <code>False</code>.</p>
+              </div>
+            </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Kahn's algorithm: process indegree-0 courses, peel edges, repeat. If you finish fewer than <code>num_courses</code>, a cycle remains. DFS coloring also works; Kahn is the clearest interview story for "can finish?"</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Build graph and indegrees] --> seed[Enqueue indegree 0]
+  seed --> loop{Queue empty?}
+  loop -->|no| pop[Pop course]
+  pop --> done[done += 1]
+  done --> dec[Decrement neighbors]
+  dec --> zero{Indegree hit 0?}
+  zero -->|yes| enq[Enqueue neighbor]
+  zero -->|no| loop
+  enq --> loop
+  loop -->|yes| cmp{done == num_courses?}
+  cmp -->|yes| ok[Return True]
+  cmp -->|no| bad[Return False]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>from collections import defaultdict, deque</code><span>Graph as defaultdict; BFS queue as deque.</span></li>
+                  <li><code>def can_finish(num_courses, prerequisites):</code><span>Return whether all courses can be completed.</span></li>
+                  <li><code>graph = defaultdict(list)</code><span>Adjacency: prereq → list of courses that need it.</span></li>
+                  <li><code>indegree = [0] * num_courses</code><span>How many prereqs each course still owes.</span></li>
+                  <li><code>for course, prereq in prerequisites:</code><span>Each pair is [course, prereq] = take prereq first.</span></li>
+                  <li><code>graph[prereq].append(course)</code><span>Edge prereq → course.</span></li>
+                  <li><code>indegree[course] += 1</code><span>Course gains one outstanding prereq.</span></li>
+                  <li><code>q = deque([c for c in range(num_courses) if indegree[c] == 0])</code><span>Seed with courses that need nothing.</span></li>
+                  <li><code>done = 0</code><span>How many courses we have taken.</span></li>
+                  <li><code>while q:</code><span>Keep taking free courses.</span></li>
+                  <li><code>node = q.popleft()</code><span>Take the next available course.</span></li>
+                  <li><code>done += 1</code><span>Count it finished.</span></li>
+                  <li><code>for nxt in graph[node]:</code><span>Unlock dependents.</span></li>
+                  <li><code>indegree[nxt] -= 1</code><span>One fewer prereq remaining.</span></li>
+                  <li><code>if indegree[nxt] == 0:</code><span>Now free to take.</span></li>
+                  <li><code>q.append(nxt)</code><span>Enqueue it.</span></li>
+                  <li><code>return done == num_courses</code><span>True iff nothing was stuck in a cycle.</span></li>
+                </ol>
+                <p class="walk-why">Time O(V + E); space O(V + E) for the graph, indegrees, and queue.</p>
               </div>
             </details>
           </section>
@@ -663,6 +779,51 @@ print(network_delay_time([[1, 2, 1]], 2, 2))
                 <p>Classic Dijkstra with lazy stale entries in the heap. The third case starts at 2 with no outgoing path to 1 — unreachable → <code>-1</code>.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Weighted single-source shortest paths with non-negative edges → Dijkstra via a min-heap of (dist, node). The network delay is <code>max(dist)</code>, or −1 if any node stays unreachable. Plain BFS is wrong when weights differ.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Build graph dist heap] --> loop{Heap empty?}
+  loop -->|no| pop[Pop d u]
+  pop --> stale{d greater than dist u?}
+  stale -->|yes| loop
+  stale -->|no| edges[For each neighbor v w]
+  edges --> better{d + w better?}
+  better -->|yes| upd[Update dist push heap]
+  better -->|no| edges
+  upd --> edges
+  edges -->|done| loop
+  loop -->|yes| ans[max dist]
+  ans --> fin{Any inf?}
+  fin -->|yes| neg[Return -1]
+  fin -->|no| ret[Return ans]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>import heapq</code><span>Min-heap for Dijkstra.</span></li>
+                  <li><code>from collections import defaultdict</code><span>Adjacency list builder.</span></li>
+                  <li><code>def network_delay_time(times, n, k):</code><span>Time for signal from k to reach all n nodes.</span></li>
+                  <li><code>graph = defaultdict(list)</code><span>u → list of (v, weight).</span></li>
+                  <li><code>for u, v, w in times:</code><span>Ingest each directed edge.</span></li>
+                  <li><code>graph[u].append((v, w))</code><span>Store neighbor and travel time.</span></li>
+                  <li><code>dist = {i: float("inf") for i in range(1, n + 1)}</code><span>All nodes start unreachable.</span></li>
+                  <li><code>dist[k] = 0</code><span>Source is distance 0.</span></li>
+                  <li><code>heap = [(0, k)]</code><span>Min-heap of (distance, node).</span></li>
+                  <li><code>while heap:</code><span>Expand closest unsettled distances first.</span></li>
+                  <li><code>d, u = heapq.heappop(heap)</code><span>Pop the currently nearest candidate.</span></li>
+                  <li><code>if d &gt; dist[u]:</code><span>Stale heap entry — we already found a better path.</span></li>
+                  <li><code>continue</code><span>Skip it.</span></li>
+                  <li><code>for v, w in graph[u]:</code><span>Relax outgoing edges.</span></li>
+                  <li><code>nd = d + w</code><span>Candidate distance through u.</span></li>
+                  <li><code>if nd &lt; dist[v]:</code><span>Improvement found.</span></li>
+                  <li><code>dist[v] = nd</code><span>Record the better distance.</span></li>
+                  <li><code>heapq.heappush(heap, (nd, v))</code><span>Push lazy entry (duplicates OK).</span></li>
+                  <li><code>ans = max(dist.values())</code><span>Last node to hear the signal.</span></li>
+                  <li><code>return -1 if ans == float("inf") else ans</code><span>Unreachable node → −1; else the delay.</span></li>
+                </ol>
+                <p class="walk-why">Time O((V + E) log V) with a binary heap; space O(V + E) for the graph, distances, and heap.</p>
+              </div>
+            </details>
           </section>
 
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
@@ -696,5 +857,6 @@ print(network_delay_time([[1, 2, 1]], 2, 2))
   <script src="../assets/js/runpad.js"></script>
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>

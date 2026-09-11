@@ -225,6 +225,36 @@ print(merge([[1, 4], [4, 5]]))
                 <p>Sorting first means every overlap is with the last block, so the single <code>if</code> handles it: stretch the end with <code>max</code>, or start a fresh block. The second example shows why <code>&lt;=</code> matters — touching ranges <code>[1,4]</code> and <code>[4,5]</code> merge into <code>[1,5]</code>.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Sort by start, then merge only against the last block — every overlap is local after sorting. Building a new list of intervals is O(n log n) from the sort and beats nested-overlap scans.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Start: sort by start time] --> loop[For each start, end]
+  loop --> check{"merged nonempty and start at or before last end?"}
+  check -->|yes| stretch["Stretch last end = max(last end, end)"]
+  check -->|no| append["Append fresh [start, end]"]
+  stretch --> more{More intervals?}
+  append --> more
+  more -->|yes| loop
+  more -->|no| ret[Return merged]
+  ret --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def merge(intervals):</code><span>Take a list of [start, end] ranges and return the merged non-overlapping list.</span></li>
+                  <li><code>intervals.sort(key=lambda x: x[0])</code><span>Sort by start so any overlap can only touch the previous merged block.</span></li>
+                  <li><code>merged = []</code><span>Build the answer list of merged intervals.</span></li>
+                  <li><code>for start, end in intervals:</code><span>Walk each interval once in start order.</span></li>
+                  <li><code>if merged and start &lt;= merged[-1][1]:</code><span>If this start lands at or before the last block's end, they overlap (or touch).</span></li>
+                  <li><code>merged[-1][1] = max(merged[-1][1], end)</code><span>Extend the last block's end — nested ranges keep the farther end.</span></li>
+                  <li><code>else:</code><span>No overlap with the last block.</span></li>
+                  <li><code>merged.append([start, end])</code><span>Start a new merged block.</span></li>
+                  <li><code>return merged</code><span>Hand back the compacted list.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n log n) from the sort; space O(n) for the merged list (or O(1) extra if you overwrite in place after sorting).</p>
+              </div>
+            </details>
+
           </section>
 
           <!-- ===== PROBLEM 2: MEETING ROOMS II ===== -->
@@ -340,6 +370,42 @@ print(min_meeting_rooms([[7, 10], [2, 4]]))
                 <p>Sort + min-heap is the FAANG staple for “how many resources at once?” Closing the sticky-note picture: peel when free, otherwise add a note — peak notes = rooms.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Sort by start and keep a min-heap of busy end times — the earliest free room is the only one worth checking. Peak heap size is the room count; this is the interview default for "how many resources at once?"</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[Start: empty heap, best = 0] --> sort[Sort meetings by start]
+  sort --> loop[For each start, end]
+  loop --> free{"heap nonempty and start at or after earliest end?"}
+  free -->|yes| pop[heappop: reuse that room]
+  free -->|no| push
+  pop --> push[heappush this end]
+  push --> peak["best = max(best, heap size)"]
+  peak --> more{More meetings?}
+  more -->|yes| loop
+  more -->|no| ret[Return best]
+  ret --> done[Done]
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>import heapq</code><span>Need a min-heap of end times for busy rooms.</span></li>
+                  <li><code>def min_meeting_rooms(intervals):</code><span>Return the minimum rooms so no two overlapping meetings share one.</span></li>
+                  <li><code>if not intervals:</code><span>Empty input needs zero rooms.</span></li>
+                  <li><code>return 0</code><span>Bail out early.</span></li>
+                  <li><code>intervals.sort(key=lambda x: x[0])</code><span>Process meetings in start order.</span></li>
+                  <li><code>heap = []</code><span>Min-heap of end times for rooms currently occupied.</span></li>
+                  <li><code>best = 0</code><span>Track peak concurrency (= rooms needed).</span></li>
+                  <li><code>for start, end in intervals:</code><span>Handle one meeting at a time.</span></li>
+                  <li><code>if heap and start &gt;= heap[0]:</code><span>Earliest room frees at or before this start — reuse it.</span></li>
+                  <li><code>heapq.heappop(heap)</code><span>Peel that sticky note: room is free.</span></li>
+                  <li><code>heapq.heappush(heap, end)</code><span>Occupy a room until this meeting's end.</span></li>
+                  <li><code>best = max(best, len(heap))</code><span>Update the high-water mark of rooms in use.</span></li>
+                  <li><code>return best</code><span>Peak heap size is the answer.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n log n) for sort plus heap ops; space O(n) for the heap in the worst case.</p>
+              </div>
+            </details>
+
           </section>
 
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
@@ -371,5 +437,6 @@ print(min_meeting_rooms([[7, 10], [2, 4]]))
   <script src="../assets/js/runpad.js"></script>
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>

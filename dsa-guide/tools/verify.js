@@ -102,6 +102,35 @@ for (const f of files) {
       if (!html.includes("assets/js/" + js)) problems.push(`${rel(f)}: missing <script> ${js}`);
   }
 
+  // ---- walkthrough / mermaid wiring ----
+  if (html.includes("deeper walkthrough") || html.includes('class="mermaid"') || html.includes("mermaid-wrap")) {
+    if (!html.includes("assets/js/mermaid-init.js"))
+      problems.push(`${rel(f)}: has walkthrough/mermaid but missing <script> mermaid-init.js`);
+  }
+
+  // ---- every curated pattern problem must ship a full walkthrough ----
+  if (/[/\\]patterns[/\\]/.test(f) && path.basename(f) !== "index.html") {
+    const sections = html.split(/(?=<section\s+class="section problem)/);
+    for (let i = 1; i < sections.length; i++) {
+      const sec = sections[i];
+      const idm = sec.match(/\bid="([^"]+)"/);
+      const pid = idm ? idm[1] : `section-${i}`;
+      const nWalk = (sec.match(/deeper walkthrough/g) || []).length;
+      if (nWalk === 0)
+        problems.push(`${rel(f)}#${pid}: pattern problem missing <details class="deeper walkthrough">`);
+      else if (nWalk > 1)
+        problems.push(`${rel(f)}#${pid}: duplicate walkthrough blocks (${nWalk})`);
+      if (nWalk === 1) {
+        if (!/mermaid-wrap/.test(sec) || !/<pre\s+class="mermaid">/.test(sec))
+          problems.push(`${rel(f)}#${pid}: walkthrough missing Mermaid flowchart`);
+        if (!/code-walk/.test(sec))
+          problems.push(`${rel(f)}#${pid}: walkthrough missing <ol class="code-walk">`);
+        if (!/deeper solution/.test(sec))
+          problems.push(`${rel(f)}#${pid}: walkthrough present but no <details class="deeper solution">`);
+      }
+    }
+  }
+
   // ---- engine wiring (an embed without its script renders as a dead box) ----
   const ENGINES = [
     ["data-drill", ["drill-bank.js", "drill.js"]],

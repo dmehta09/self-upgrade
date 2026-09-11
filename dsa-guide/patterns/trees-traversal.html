@@ -256,6 +256,28 @@ print(max_depth(root))
                 <p>Three lines do everything: stop at empty, ask both children, return the deeper one plus one. The recursion mirrors the analogy exactly — each node trusts its kids to report their own depth.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Recursive DFS is the interview default for tree depth: empty is 0, otherwise 1 + the deeper child. An iterative BFS level-count also works; recursion mirrors the definition and stays short.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start[max_depth root] --> empty{"root is None?"}
+  empty -->|yes| zero[Return 0]
+  empty -->|no| left["dL = max_depth left"]
+  left --> right["dR = max_depth right"]
+  right --> ans["Return 1 + max(dL, dR)"]
+  zero --> done[Done]
+  ans --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def max_depth(root):</code><span>Return the height of the tree rooted at <code>root</code> (edges+1 in node-count form).</span></li>
+                  <li><code>if not root: return 0</code><span>Base case: no node means depth zero.</span></li>
+                  <li><code>return 1 + max(max_depth(root.left), max_depth(root.right))</code><span>This node contributes 1; take the taller subtree below it.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n) visiting every node once; space O(h) recursion stack for tree height h.</p>
+              </div>
+            </details>
+
           </section>
 
           <!-- ===== PROBLEM 2: LEVEL-ORDER (BFS) ===== -->
@@ -379,6 +401,42 @@ print(level_order(root))
                 <p>The inner <code>for _ in range(len(q))</code> is the level fence — it pops exactly today's floor while tomorrow's children queue up behind. That's the breadth-first sweep, one room-floor at a time.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">BFS with a queue is the standard level-order pattern: freeze <code>len(q)</code> as the level size so children enqueue behind today's fence. DFS can collect by depth index, but BFS is the natural "one floor at a time" story.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["q = deque root"] --> empty{"root missing?"}
+  empty -->|yes| none[Return empty list]
+  empty -->|no| loop{"q non-empty?"}
+  loop -->|no| ret[Return res]
+  loop -->|yes| fence["Freeze level size = len(q)"]
+  fence --> drain["Pop that many nodes into level"]
+  drain --> kids["Enqueue each node's children"]
+  kids --> save["Append level to res"]
+  save --> loop
+  none --> done[Done]
+  ret --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>from collections import deque</code><span>Need an efficient FIFO queue for BFS.</span></li>
+                  <li><code>def level_order(root):</code><span>Return a list of levels, each level a list of values left-to-right.</span></li>
+                  <li><code>if not root: return []</code><span>Empty tree → empty answer.</span></li>
+                  <li><code>res, q = [], deque([root])</code><span>Result accumulator; queue starts with the root alone.</span></li>
+                  <li><code>while q:</code><span>Each outer pass builds one level.</span></li>
+                  <li><code>level = []</code><span>Values for the current floor.</span></li>
+                  <li><code>for _ in range(len(q)):</code><span>Freeze today's queue length — that many nodes are this level.</span></li>
+                  <li><code>node = q.popleft()</code><span>Take the next node from the front of the line.</span></li>
+                  <li><code>level.append(node.val)</code><span>Record its value for this floor's list.</span></li>
+                  <li><code>if node.left: q.append(node.left)</code><span>Children wait behind the fence for the next level.</span></li>
+                  <li><code>if node.right: q.append(node.right)</code><span>Same for the right child.</span></li>
+                  <li><code>res.append(level)</code><span>Floor finished — store it and loop for the next.</span></li>
+                  <li><code>return res</code><span>Queue drained — every level collected.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n); space O(n) for the queue in the widest level.</p>
+              </div>
+            </details>
+
           </section>
 
           <!-- ===== PROBLEM 3: VALIDATE BST ===== -->
@@ -496,6 +554,33 @@ False</pre></div>
                 <p>The <code>(low, high)</code> band travels down with the recursion, tightening at each step. The second tree fails because <code>3</code> sits on <code>5</code>'s right side, where only values above <code>5</code> are allowed.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">Carry a <code>(low, high)</code> band down the tree — checking only parent vs child misses deep violations. In-order and "must be strictly increasing" also works; bounds DFS is the usual one-liner interview answer.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["ok root with -inf, +inf"] --> empty{"node is None?"}
+  empty -->|yes| ok[Return True]
+  empty -->|no| band{"low &lt; val &lt; high?"}
+  band -->|no| bad[Return False]
+  band -->|yes| left["ok left with high = val"]
+  left --> right["ok right with low = val"]
+  right --> both{"both True?"}
+  both -->|yes| ok
+  both -->|no| bad
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def is_valid_bst(root):</code><span>Decide whether the tree is a valid BST.</span></li>
+                  <li><code>def ok(node, low, high):</code><span>Helper: is this subtree valid inside the open interval <code>(low, high)</code>?</span></li>
+                  <li><code>if not node: return True</code><span>Empty subtree is always valid.</span></li>
+                  <li><code>if not (low &lt; node.val &lt; high): return False</code><span>Value must sit strictly inside the ancestor-imposed band.</span></li>
+                  <li><code>return ok(node.left, low, node.val) and ok(node.right, node.val, high)</code><span>Left kids must be &lt; this value; right kids must be &gt; it — tighten the band and recurse.</span></li>
+                  <li><code>return ok(root, float("-inf"), float("inf"))</code><span>Kick off with unbounded limits at the root.</span></li>
+                </ol>
+                <p class="walk-why">Time O(n); space O(h) for the recursion depth.</p>
+              </div>
+            </details>
+
           </section>
 
           <!-- ===== PROBLEM 4: LOWEST COMMON ANCESTOR ===== -->
@@ -618,6 +703,38 @@ print(lowest_common_ancestor(root, 2, 4))
                 <p>The loop turns the same direction both targets point, and stops the instant they disagree. For <code>2</code> and <code>8</code> they split at the root <code>6</code>; for <code>2</code> and <code>4</code> the node <code>2</code> is itself one of the targets, so it's the fork.</p>
               </div>
             </details>
+            <details class="deeper walkthrough">
+              <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg> Line-by-line walkthrough + flow <span class="tag">walkthrough</span></summary>
+              <div class="deeper-body">
+                <p class="takeaway">In a BST, walk from the root: if both targets are left go left, if both right go right, else this node is the split — the LCA. No need to build parent maps or recurse both sides like a general binary tree.</p>
+                <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["cur = root"] --> loop{"cur exists?"}
+  loop -->|no| none[Return None]
+  loop -->|yes| bothL{"p and q both &lt; cur?"}
+  bothL -->|yes| goL["cur = cur.left"]
+  bothL -->|no| bothR{"p and q both &gt; cur?"}
+  bothR -->|yes| goR["cur = cur.right"]
+  bothR -->|no| split["Return cur.val"]
+  goL --> loop
+  goR --> loop
+  none --> done[Done]
+  split --> done
+</pre></div>
+                <ol class="code-walk">
+                  <li><code>def lowest_common_ancestor(root, p, q):</code><span>Find the LCA of values <code>p</code> and <code>q</code> in a BST (here passed as ints).</span></li>
+                  <li><code>cur = root</code><span>Start at the root and walk down — no recursion needed.</span></li>
+                  <li><code>while cur:</code><span>Keep going until we find the split or fall off.</span></li>
+                  <li><code>if p &lt; cur.val and q &lt; cur.val:</code><span>Both targets live in the left subtree.</span></li>
+                  <li><code>cur = cur.left</code><span>Descend left — the LCA is deeper.</span></li>
+                  <li><code>elif p &gt; cur.val and q &gt; cur.val:</code><span>Both targets live in the right subtree.</span></li>
+                  <li><code>cur = cur.right</code><span>Descend right.</span></li>
+                  <li><code>else: return cur.val</code><span>Targets split here (or one equals <code>cur</code>) — this node is the LCA.</span></li>
+                  <li><code>return None</code><span>Defensive: empty tree / shouldn't hit if p and q exist.</span></li>
+                </ol>
+                <p class="walk-why">Time O(h) along one root-to-leaf path; space O(1).</p>
+              </div>
+            </details>
+
           </section>
 
           <button class="lesson-complete" type="button"><span class="lc-box">✓</span><span class="lc-text"></span></button>
@@ -651,5 +768,6 @@ print(lowest_common_ancestor(root, 2, 4))
   <script src="../assets/js/runpad.js"></script>
   <script src="../assets/js/visualizer.js"></script>
   <script src="../assets/js/progress.js"></script>
+  <script src="../assets/js/mermaid-init.js"></script>
 </body>
 </html>
