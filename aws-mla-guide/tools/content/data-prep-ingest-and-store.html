@@ -1,0 +1,140 @@
+<section class="hero reveal">
+  <span class="eyebrow">Data preparation · ingest &amp; store</span>
+  <h1>Land ML data in the right place — lake, catalog, stream.</h1>
+  <p class="lead">Domain 1 starts here: <b>S3</b> as the default lake, <b>Glue Data Catalog</b> for discoverable metadata, <b>Kinesis / Firehose</b> for streaming ingest. Pick Athena vs Processing based on whether you need one-off SQL or repeatable heavy transforms.</p>
+</section>
+
+<section class="section reveal" id="lake">
+  <h2><span class="section-num">01</span> S3 lake + Glue Catalog</h2>
+  <p class="takeaway">Raw ML data lives in <b>S3 prefixes</b> with lifecycle and encryption. Glue Crawlers and the Data Catalog make tables visible to Athena, Glue ETL, and SageMaker — without copying data into a proprietary warehouse first.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>S3 is the warehouse floor where pallets arrive. Glue Catalog is the inventory system on a clipboard — it doesn't hold the boxes, but everyone knows which aisle has what schema.</p></div></div>
+
+  <dl class="kv">
+    <dt>S3 prefixes</dt><dd><code>raw/</code>, <code>curated/</code>, <code>features/</code> — partition by date/tenant for cost and query speed.</dd>
+    <dt>Glue Data Catalog</dt><dd>Central metadata: databases, tables, schemas, partitions — shared by Athena, Glue jobs, EMR, SageMaker.</dd>
+    <dt>Lake Formation</dt><dd>Column/row-level permissions on cataloged data — exam cue for multi-team governance.</dd>
+    <dt>Encryption</dt><dd>SSE-S3 or SSE-KMS; bucket policies block public access; VPC endpoints for private ingest.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="chooser">
+  <h2><span class="section-num">02</span> Batch vs streaming ingest</h2>
+  <p class="takeaway">Nightly EHR dumps → S3 batch upload or DataSync. Live card swipes → Kinesis Data Streams or Firehose into S3/OpenSearch. Match velocity to the fraud or clinical use case.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  src["Data source"] --> vel{"Velocity?"}
+  vel -->|batch files| s3["S3 + Crawler"]
+  vel -->|streaming events| kin{"Need transforms?"}
+  kin -->|minimal| fh["Kinesis Firehose → S3"]
+  kin -->|custom / ML prep| ks["Kinesis Data Streams → Lambda / Flink"]
+  s3 --> cat["Glue Data Catalog"]
+  fh --> cat
+  ks --> cat
+</pre></div>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Ledger Bank · card events to the lake</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "Ledger streaming ingest",
+      "nodes": [
+        { "id": "pos", "label": "POS / API", "type": "client", "col": 0, "row": 1 },
+        { "id": "kin", "label": "Kinesis stream", "type": "edge", "col": 1, "row": 1 },
+        { "id": "fh", "label": "Firehose", "type": "balancer", "col": 2, "row": 1 },
+        { "id": "s3", "label": "S3 raw/", "type": "storage", "col": 3, "row": 1 },
+        { "id": "glue", "label": "Glue Catalog", "type": "database", "col": 4, "row": 1 }
+      ],
+      "edges": [
+        { "from": "pos", "to": "kin", "label": "events" },
+        { "from": "kin", "to": "fh", "label": "fan-out" },
+        { "from": "fh", "to": "s3", "label": "Parquet" },
+        { "from": "s3", "to": "glue", "label": "crawl" }
+      ],
+      "steps": [
+        { "node": "pos", "caption": "Each card authorization emits a JSON event — millisecond velocity." },
+        { "edge": ["pos","kin"], "caption": "Producers put records on a Kinesis Data Stream for buffering." },
+        { "edge": ["kin","fh"], "caption": "Firehose batches, optionally converts to Parquet, lands in S3." },
+        { "edge": ["fh","s3"], "caption": "Partitioned by date/hour under s3://ledger-ml/raw/transactions/." },
+        { "edge": ["s3","glue"], "caption": "Glue Crawler registers schema — Athena and SageMaker Processing can query.", "status": "hit" }
+      ] }
+    </script>
+    <p class="viz-fallback">POS → Kinesis → Firehose → S3 Parquet → Glue Catalog.</p>
+  </figure>
+</section>
+
+<section class="section reveal" id="athena">
+  <h2><span class="section-num">03</span> Athena vs SageMaker Processing</h2>
+  <p class="takeaway"><b>Athena</b> = ad hoc SQL over cataloged S3 (explore, filter, aggregate). <b>SageMaker Processing</b> = repeatable, heavy transforms with custom code/containers feeding training. Glue ETL sits between for scheduled Spark jobs.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Athena</div>
+      <ul>
+        <li>Serverless SQL on S3 via Glue Catalog</li>
+        <li>Quick exploration, feature prototyping</li>
+        <li>Pay per data scanned — partition to save cost</li>
+        <li>Not the answer for complex Python feature pipelines</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">SageMaker Processing</div>
+      <ul>
+        <li>Managed compute for sklearn/Pandas/custom scripts</li>
+        <li>Input/output S3 paths wired to Training jobs</li>
+        <li>Repeatable in Pipelines — prod feature prep</li>
+        <li>Exam pick when stem says "same transform every night"</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Athena for nightly 2 TB sklearn feature engineering.</b> Athena is SQL exploration. Complex row-level ML prep → Glue ETL or SageMaker Processing. Acme's de-identification joins are a Glue/Processing job, not a one-off SELECT.</p></div></div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Acme lands nightly 500 GB FHIR bundles in S3. Data scientists need to explore row counts by ward before building features. First tool?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Athena over Glue-cataloged tables (partitioned by date).</button>
+      <button class="quiz-opt"><span class="mark"></span>SageMaker Training job immediately.</button>
+      <button class="quiz-opt"><span class="mark"></span>Export everything to a local laptop.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Exploration/SQL → Athena. Training comes after curated features exist.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="rapid">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Default store for ML raw data on AWS?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>S3 data lake with governed prefixes, encryption, and Glue Data Catalog metadata. Streaming sources feed in via Kinesis/Firehose.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"S3 lake + Glue Catalog — stream in with Kinesis or Firehose when events are live."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Firehose vs Kinesis Data Streams?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>Firehose</b> = fully managed delivery to S3/Redshift/OpenSearch with optional format conversion — least ops for "stream to lake." <b>Data Streams</b> = lower-level shards for custom consumers, real-time analytics, or multiple parallel apps.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Firehose to land streams in S3; Data Streams when I need custom real-time consumers."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When Athena vs Processing for feature prep?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Athena for SQL exploration and simple aggregations on cataloged S3. SageMaker Processing (or Glue ETL) for repeatable, code-heavy transforms that must run on a schedule and feed Training jobs with identical logic every time.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Athena to explore; Processing or Glue to productionize transforms."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

@@ -1,0 +1,119 @@
+<section class="hero reveal">
+  <span class="eyebrow">Deploy · inference options</span>
+  <h1>Real-time, serverless, async, or batch — pick the invoke pattern.</h1>
+  <p class="lead">MLA-C02 loves the <b>latency vs cost vs payload</b> triangle. SageMaker offers four primary invoke paths; Bedrock is its own managed FM layer. As of September 2026, match the stem’s SLA before you name an instance type.</p>
+</section>
+
+<section class="section reveal" id="chooser">
+  <h2><span class="section-num">01</span> Four SageMaker invoke patterns</h2>
+  <p class="takeaway">Ask: <b>Does the caller wait?</b> <b>How big is the payload?</b> <b>How steady is traffic?</b> Wrong pattern = idle GPU bills or timeout failures.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["Need predictions?"] --> wait{"Caller waits?"}
+  wait -->|yes · ms SLA| rt{"Traffic steady?"}
+  rt -->|yes · always on| real["Real-time endpoint"]
+  rt -->|spiky · scale to zero OK| si["Serverless Inference"]
+  wait -->|no · large payload| async["Async inference"]
+  wait -->|offline bulk| batch["Batch Transform"]
+</pre></div>
+
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "Inference pattern trade-off",
+      "axisLabel": "Slide to compare invoke modes",
+      "stops": [
+        { "label": "Real-time endpoint", "dims": { "Latency": 95, "Idle cost": 25, "Payload size": 40, "Ops simplicity": 70 },
+          "note": "Always-on instances behind HTTPS. Best for steady low-latency APIs (Acme readmission scores). You pay 24/7 even at 3 a.m." },
+        { "label": "Serverless Inference", "dims": { "Latency": 75, "Idle cost": 90, "Payload size": 45, "Ops simplicity": 85 },
+          "note": "Scales to zero between bursts. Cold start on wake-up. Great for Ledger Bank fraud checks that spike at market open — not for sub-10 ms always-hot SLAs." },
+        { "label": "Async inference", "dims": { "Latency": 30, "Idle cost": 60, "Payload size": 95, "Ops simplicity": 65 },
+          "note": "Upload payload to S3, poll or SNS callback when done. Handles GB-scale inputs (whole imaging studies) without holding HTTP open." },
+        { "label": "Batch Transform", "dims": { "Latency": 15, "Idle cost": 85, "Payload size": 90, "Ops simplicity": 80 },
+          "note": "Offline scoring of entire S3 datasets — nightly Acme cohort runs. No endpoint to patch; job completes and stops billing." }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="patterns">
+  <h2><span class="section-num">02</span> Pattern cheat sheet</h2>
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Real-time endpoint</div>
+      <ul>
+        <li>HTTPS invoke, ms–low-sec latency</li>
+        <li>Multi-variant / multi-model endpoints for A/B</li>
+        <li>Auto scaling on invocations &amp; GPU util</li>
+        <li>Exam: “API must respond in real time, steady load”</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Serverless Inference</div>
+      <ul>
+        <li>Managed concurrency, scale-to-zero</li>
+        <li>Cold-start penalty after idle</li>
+        <li>No instance type picking — memory cap</li>
+        <li>Exam: “intermittent traffic, minimize idle cost”</li>
+      </ul>
+    </div>
+  </div>
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Async inference</div>
+      <ul>
+        <li>Client POST → S3 in/out, SNS on completion</li>
+        <li>15-minute default timeout window (extendable)</li>
+        <li>Large payloads, long GPU runs</li>
+        <li>Exam: “payload too big for sync HTTP”</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Batch Transform</div>
+      <ul>
+        <li>Input/output S3, no persistent endpoint</li>
+        <li>Split large files, aggregate results</li>
+        <li>Cheapest for scheduled bulk scoring</li>
+        <li>Exam: “score millions of rows overnight”</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="acme">
+  <h2><span class="section-num">03</span> Acme Health — readmission API vs nightly cohort</h2>
+  <p class="takeaway">Acme serves <b>real-time risk scores</b> at discharge (endpoint) and runs a <b>nightly batch</b> over the whole census (Batch Transform). Same model artifact — two invoke modes.</p>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Don’t put a <b>real-time endpoint</b> on a “run once per night over 2M rows” stem — Batch Transform wins. Don’t pick Batch when the ER dashboard needs scores in seconds.</p></div></div>
+
+  <dl class="kv">
+    <dt>Discharge desk</dt><dd>Real-time endpoint behind internal ALB; auto scaling min=2 for HA.</dd>
+    <dt>Nightly population score</dt><dd>Batch Transform on Parquet in S3; results to analytics bucket.</dd>
+    <dt>Whole-slide pathology (future)</dt><dd>Async inference — multi-GB input, callback via SNS.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="bedrock">
+  <h2><span class="section-num">04</span> Bedrock vs SageMaker endpoint</h2>
+  <p class="takeaway">Bedrock = managed FM APIs (invoke, streaming, KB RAG). SageMaker endpoint = <b>your</b> custom container or built-in algorithm. Stem mentions “foundation model” or “Claude/Llama on AWS” → Bedrock first.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Bedrock</div>
+      <ul><li>FM inference + KB + Agents</li><li>Token pricing, no GPU ops</li><li>Guardrails at invoke</li></ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">SageMaker endpoint</div>
+      <ul><li>Custom sklearn/XGBoost/PyTorch</li><li>You own instance type &amp; scaling</li><li>Bring your own container</li></ul>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Ledger Bank fraud model: traffic spikes 9–10 a.m., quiet overnight. Minimize idle cost, 200 ms p99 OK after warm-up.</span><span class="domain-chip">Deploy</span></summary>
+      <div class="qa-body"><h5>Answer</h5><p><b>Serverless Inference</b> — scale to zero; real-time endpoint wastes GPU overnight.</p></div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Score 500 GB of loan applications this weekend; no online API.</span><span class="domain-chip">Deploy</span></summary>
+      <div class="qa-body"><h5>Answer</h5><p><b>Batch Transform</b> — offline S3 job, no endpoint.</p></div>
+    </details>
+  </div>
+</section>

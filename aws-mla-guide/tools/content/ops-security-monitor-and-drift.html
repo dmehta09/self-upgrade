@@ -1,0 +1,81 @@
+<section class="hero reveal">
+  <span class="eyebrow">Operate · monitor &amp; drift</span>
+  <h1>Catch data drift, quality decay, and endpoint failures early.</h1>
+  <p class="lead">Model Monitor schedules baseline comparisons on live endpoint traffic. CloudWatch tracks latency, errors, and custom metrics. MLA-C02 ties “model degraded in production” to <b>Monitor + alarms + retrain pipeline</b> — not manual eyeballing.</p>
+</section>
+
+<section class="section reveal" id="monitor">
+  <h2><span class="section-num">01</span> SageMaker Model Monitor</h2>
+  <p class="takeaway">Enable <b>data capture</b> on the endpoint → Monitor builds baselines from training data → scheduled jobs compare live distributions and optional model quality (labels required).</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  ep["Endpoint"] --> cap["Data capture"]
+  cap --> s3["S3 monitoring folder"]
+  s3 --> job["Monitoring schedule"]
+  job --> drift{"Drift?"}
+  drift -->|yes| cw["CloudWatch alarm"]
+  cw --> act["EventBridge → retrain"]
+</pre></div>
+
+  <dl class="kv">
+    <dt>Data quality</dt><dd>Missing values, type violations vs schema baseline.</dd>
+    <dt>Data drift</dt><dd>Feature distribution shift (PSI, KL, etc.) vs training baseline.</dd>
+    <dt>Model quality</dt><dd>Prediction drift vs ground truth when labels arrive later.</dd>
+    <dt>Model bias</dt><dd>Post-deploy bias drift (with Clarify integration).</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="cloudwatch">
+  <h2><span class="section-num">02</span> CloudWatch for endpoints</h2>
+  <p class="takeaway">Built-in metrics: <code>Invocations</code>, <code>ModelLatency</code>, <code>4XX/5XX</code>, <code>CPUUtilization</code>, <code>GPUUtilization</code>. Set alarms on latency spikes and error rates — distinct from statistical drift.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">CloudWatch</div>
+      <ul>
+        <li>Ops health: down, slow, throttling</li>
+        <li>Auto scaling triggers</li>
+        <li>Logs via CloudWatch Logs</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Model Monitor</div>
+      <ul>
+        <li>ML-specific drift &amp; quality</li>
+        <li>Needs baselines &amp; capture</li>
+        <li>Feeds retrain decisions</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Low latency + zero 5xx does <b>not</b> mean the model is still accurate. COVID-era readmission features drifted while endpoints looked “healthy.”</p></div></div>
+</section>
+
+<section class="section reveal" id="acme">
+  <h2><span class="section-num">03</span> Acme Health — readmission drift</h2>
+  <p class="takeaway">After a new EHR field rollout, <code>length_of_stay</code> distribution shifts. Model Monitor flags data drift; Acme’s EventBridge rule starts the retrain pipeline before AUC collapses.</p>
+
+  <div class="steps">
+    <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Baseline</h4><p>Create baseline from training manifest at deploy time.</p></div></div>
+    <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Capture</h4><p>Endpoint captures request/response samples to S3 (watch PII — mask first).</p></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Schedule</h4><p>Hourly monitoring job compares live vs baseline.</p></div></div>
+    <div class="step"><span class="step-num">4</span><div class="step-body"><h4>Act</h4><p>CloudWatch alarm → SNS + EventBridge → SageMaker Pipeline.</p></div></div>
+  </div>
+</section>
+
+<section class="section reveal" id="genai">
+  <h2><span class="section-num">04</span> GenAI monitoring cues</h2>
+  <p class="takeaway">Bedrock: enable <b>model invocation logging</b> to S3/CloudWatch; use <b>Guardrails</b> for blocked prompts/responses; track token usage via CloudWatch. RAG quality often needs custom eval (human or LLM-as-judge) — not classic Monitor baselines.</p>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Feature distributions changed; predictions still within SLA latency.</span><span class="domain-chip">Operate</span></summary>
+      <div class="qa-body"><h5>Answer</h5><p><b>Model Monitor data drift</b> job — not CloudWatch latency alone.</p></div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Endpoint returns 503 under load. First check?</span><span class="domain-chip">Operate</span></summary>
+      <div class="qa-body"><h5>Answer</h5><p><b>CloudWatch</b> invocations/errors + auto scaling policy / instance capacity.</p></div>
+    </details>
+  </div>
+</section>

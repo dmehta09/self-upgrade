@@ -1,0 +1,105 @@
+<section class="hero reveal">
+  <span class="eyebrow">Data preparation · integrity · bias · leakage</span>
+  <h1>Clean data beats a fancier algorithm.</h1>
+  <p class="lead">Domain 1 heavy hitters: <b>leakage</b> (future info in training), <b>label quality</b>, and <b>bias</b> in datasets. SageMaker Clarify catches many issues pre-training — but only if your splits and features are designed correctly first.</p>
+</section>
+
+<section class="section reveal" id="leakage">
+  <h2><span class="section-num">01</span> Leakage — the silent killer</h2>
+  <p class="takeaway">Leakage means the model sees information at train time that won't exist at predict time. Metrics look amazing; production fails. Underline any feature derived from <b>after the prediction moment</b>.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Leakage is studying for a spelling test using the answer key. You ace practice and fail the real exam because you never learned — you cheated with future information.</p></div></div>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  feat["Candidate feature"] --> ask{"Available at predict time?"}
+  ask -->|no| leak["LEAKAGE · drop feature"]
+  ask -->|yes| target{"Derived from label?"}
+  target -->|yes| leak
+  target -->|no| keep["Keep · validate in Processing"]
+</pre></div>
+
+  <dl class="kv">
+    <dt>Target leakage</dt><dd>Feature encodes the label (e.g., "readmitted=yes" column in readmission model).</dd>
+    <dt>Temporal leakage</dt><dd>Future hospital visits, future transactions included in aggregates.</dd>
+    <dt>Preprocessing leakage</dt><dd>Fit scaler/encoder on full dataset including test — fit on train only.</dd>
+    <dt>Duplicate patients / cards</dt><dd>Same entity in train and test via random split — use group splits.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="acme-story">
+  <h2><span class="section-num">02</span> Acme Health leakage story</h2>
+  <p class="takeaway">Acme's first readmission model scored 0.98 AUC in Studio — then failed in the ward. Root cause: <b>"days_until_followup"</b> was computed from post-discharge appointments, unavailable at admission scoring time.</p>
+
+  <div class="steps">
+    <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Symptom</h4><p>Training metrics too good; live scores barely beat random.</p></div></div>
+    <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Diagnosis</h4><p>Feature timeline audit — map each column to "available at admission?"</p></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Fix</h4><p>Drop leaky columns; rebuild Processing job with point-in-time joins only.</p></div></div>
+    <div class="step"><span class="step-num">4</span><div class="step-body"><h4>Prevent</h4><p>Time-based split + Clarify + Model Monitor on feature distributions in prod.</p></div></div>
+  </div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Fix leakage with more HPO.</b> No amount of tuning saves a feature that smuggles the answer. Exam: drop or redesign features before retraining.</p></div></div>
+</section>
+
+<section class="section reveal" id="labels-bias">
+  <h2><span class="section-num">03</span> Label quality &amp; Clarify bias cues</h2>
+  <p class="takeaway">Garbage labels → garbage model. Clarify measures <b>pre-training bias</b> (dataset representation) and <b>post-training bias</b> (prediction disparities). Run both before Registry approval.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Label issues</div>
+      <ul>
+        <li>Delayed fraud confirmations (Ledger)</li>
+        <li>Mis-coded discharge statuses (Acme)</li>
+        <li>Class imbalance — 0.1% fraud</li>
+        <li>Fix: relabel pipeline, weights, sampling</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Clarify bias metrics</div>
+      <ul>
+        <li>CI (Class Imbalance) — label ratio by group</li>
+        <li>DPL (Difference in Positive Labels)</li>
+        <li>DI (Disparate Impact) — exam favorite</li>
+        <li>Runs in Processing or training step</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Stem: "Model shows high approval for one zip code segment vs others on the same income band. Check dataset before retraining." First step?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>SageMaker Clarify pre-training bias report on the training set.</button>
+      <button class="quiz-opt"><span class="mark"></span>Bedrock Guardrails on the credit endpoint.</button>
+      <button class="quiz-opt"><span class="mark"></span>Increase instance size for training.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Dataset disparity → Clarify pre-training bias. Guardrails are GenAI text filters; bigger instances don't fix label imbalance.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="rapid">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is data leakage in one sentence?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Training features contain information that would not be available at inference time (or that directly encodes the label), inflating offline metrics.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Leakage is future or label info sneaking into training features."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Acme's 0.98 AUC drops to 0.62 live. First suspicion?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Feature leakage or train/serve skew. Audit feature timestamps — Acme's classic mistake is post-discharge fields in an admission-time model. Then check Processing parity with the endpoint.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Too-good offline, bad live → leakage or train/serve mismatch first."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Pre-training vs post-training Clarify?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>Pre-training</b> bias metrics analyze the dataset (label distribution across facets). <b>Post-training</b> analyzes model predictions vs labels for disparate impact. Both gate promotion — pre catches bad data; post catches bad model behavior.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Clarify pre on the dataset, post on predictions — both before prod."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

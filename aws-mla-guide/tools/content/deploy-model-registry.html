@@ -1,0 +1,83 @@
+<section class="hero reveal">
+  <span class="eyebrow">Deploy · Model Registry</span>
+  <h1>Version, approve, promote — govern what reaches production.</h1>
+  <p class="lead">Model Registry is SageMaker’s <b>system of record</b> for model packages: lineage from training job, approval gates, and promotion to endpoints. MLA-C02 stems about “only approved models in prod” or “rollback to last good version” land here.</p>
+</section>
+
+<section class="section reveal" id="concepts">
+  <h2><span class="section-num">01</span> Registry building blocks</h2>
+  <p class="takeaway">A <b>model group</b> holds versions. Each <b>model package</b> points at an approved artifact (S3 model.tar.gz or image). Status flows: <b>PendingManualApproval → Approved / Rejected</b>.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  train["Training job"] --> pkg["Model package vN"]
+  pkg --> reg["Model Registry group"]
+  reg --> appr{"Approved?"}
+  appr -->|yes| prod["Prod endpoint / Pipeline"]
+  appr -->|no| block["Blocked deploy"]
+  reg --> rollback["Rollback to vN-1"]
+</pre></div>
+
+  <dl class="kv">
+    <dt>Model group</dt><dd>Logical name (e.g. <code>acme-readmission-xgb</code>) — all versions live here.</dd>
+    <dt>Model package</dt><dd>Immutable version with inference spec, metrics metadata, approval status.</dd>
+    <dt>Approval</dt><dd>Manual or automated via Pipeline step / Lambda on metric thresholds.</dd>
+    <dt>Lineage</dt><dd>Links back to training job, processing job, dataset — audit trail for compliance.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="promotion">
+  <h2><span class="section-num">02</span> Promotion workflow</h2>
+  <p class="takeaway">Production deploy should <b>never</b> pull arbitrary S3 paths. CI/CD reads the latest <b>Approved</b> package in the group — or a pinned version for canary.</p>
+
+  <div class="steps">
+    <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Register</h4><p>Training job completes → register model package (PendingManualApproval).</p></div></div>
+    <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Evaluate</h4><p>Offline metrics + Clarify bias report attached; MLOps reviews in Studio.</p></div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Approve</h4><p>Status → Approved; rejected versions stay out of prod pipelines.</p></div></div>
+    <div class="step"><span class="step-num">4</span><div class="step-body"><h4>Deploy</h4><p>Pipeline deploy step creates/updates endpoint from approved package; blue/green optional.</p></div></div>
+  </div>
+
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Exam cue <span class="tag">tip</span></div><p>“Compliance requires human sign-off before prod” → Registry approval step in SageMaker Pipelines, not a shared S3 folder.</p></div></div>
+</section>
+
+<section class="section reveal" id="ledger">
+  <h2><span class="section-num">03</span> Ledger Bank — fraud model governance</h2>
+  <p class="takeaway">Ledger runs three fraud model versions in Registry. Only <b>Approved</b> packages feed the payment endpoint. When drift triggers retrain, v47 registers pending until the risk committee approves — v46 stays live.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">With Registry</div>
+      <ul>
+        <li>Clear version history &amp; rollback</li>
+        <li>Approval gate before prod deploy</li>
+        <li>Lineage to training data snapshot</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Without Registry (trap)</div>
+      <ul>
+        <li>Engineers overwrite <code>s3://models/latest/</code></li>
+        <li>No audit of who promoted what</li>
+        <li>Rollback = guess which tarball worked</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="multi">
+  <h2><span class="section-num">04</span> Multi-model &amp; A/B endpoints</h2>
+  <p class="takeaway">Multi-model endpoints host several approved packages on shared instances. <b>Production variants</b> split traffic (80/20) for champion/challenger — still sourced from Registry versions.</p>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Model Registry ≠ Model Monitor. Registry governs <b>which artifact</b> deploys; Monitor watches <b>runtime behavior</b> of what’s already live.</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">05</span> Rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">New model fails offline AUC gate. What happens to prod?</span><span class="domain-chip">Deploy</span></summary>
+      <div class="qa-body"><h5>Answer</h5><p>Package stays <b>Rejected</b> or pending; pipeline does not update endpoint. Previous Approved version continues serving.</p></div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Auditors need “which training job produced prod model on March 3?”</span><span class="domain-chip">Deploy</span></summary>
+      <div class="qa-body"><h5>Answer</h5><p>Model Registry lineage + SageMaker Lineage tracking link package → training job → dataset.</p></div>
+    </details>
+  </div>
+</section>

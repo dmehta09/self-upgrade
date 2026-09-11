@@ -1,0 +1,94 @@
+<section class="hero reveal">
+  <span class="eyebrow">Model development · HPO</span>
+  <h1>HPO when it pays — skip when it doesn’t.</h1>
+  <p class="lead">SageMaker Automatic Model Tuning runs parallel training jobs over hyperparameter ranges. MLA stems test whether you know when Bayesian search beats grid search in your head — and when tuning is waste.</p>
+</section>
+
+<section class="section reveal" id="amt">
+  <h2><span class="section-num">01</span> SageMaker Automatic Model Tuning</h2>
+  <p class="takeaway">Define an <b>objective metric</b> (validation AUC, loss), <b>hyperparameter ranges</b>, and <b>max jobs / parallel jobs</b>. SageMaker launches Training Jobs, tracks results, and suggests the next points — typically Bayesian for efficiency.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  cfg["Hyperparameter ranges"] --> jobs["Parallel training jobs"]
+  jobs --> metric["Validation metric"]
+  metric --> tuner["Tuner picks next"]
+  tuner --> jobs
+  metric --> best["Best job → model artifact"]
+</pre></div>
+
+  <dl class="kv">
+    <dt>Objective metric</dt><dd>Must come from the training script or built-in algo report — e.g. <code>validation:auc</code>.</dd>
+    <dt>Early stopping</dt><dd>Stop underperforming jobs to save spend when stems mention budget caps.</dd>
+    <dt>Acme Health</dt><dd>Tune XGBoost <code>max_depth</code>, <code>eta</code>, <code>subsample</code> before locking readmission model for production.</dd>
+    <dt>Ledger Bank</dt><dd>Tune deep fraud model learning rate and batch size on a validation slice — not on live fraud labels leaking future chargebacks.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="warm-start">
+  <h2><span class="section-num">02</span> Warm start &amp; when NOT to HPO</h2>
+  <p class="takeaway"><b>Warm start</b> seeds a new tuning job with results from a previous job — use when data drifted slightly or you narrowed ranges. <b>Skip HPO</b> when a baseline is enough, data is tiny, or the stem wants fast time-to-production.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Use HPO when…</div>
+      <ul>
+        <li>Multiple hyperparameters materially affect metric</li>
+        <li>Manual grid would take days of engineer time</li>
+        <li>You have budget for N parallel training jobs</li>
+        <li>Production SLA needs every point of AUC/F1</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Skip HPO when…</div>
+      <ul>
+        <li>JumpStart or Bedrock FM already strong enough</li>
+        <li>Tiny dataset — tuning overfits validation</li>
+        <li>Stem says “quick POC” or “least ops”</li>
+        <li>Only one knob matters (fix others to defaults)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Tuning on the test set.</b> HPO optimizes validation metric from training pipeline — never point the tuner at holdout test data or you leak optimism into exam “production accuracy” claims.</p></div></div>
+</section>
+
+<section class="section reveal" id="quiz">
+  <h2><span class="section-num">03</span> Exam quiz</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Team re-runs tuning monthly after retraining on refreshed data, reusing last month’s best hyperparameters as starting points. Which SageMaker feature?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Warm start — new tuning job inherits prior job results.</button>
+      <button class="quiz-opt"><span class="mark"></span>Hyperparameter tuning only works on first train ever.</button>
+      <button class="quiz-opt"><span class="mark"></span>Must use Bedrock instead of SageMaker for re-tuning.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Warm start accelerates recurring tuning. There is no “one-shot only” limit; Bedrock is unrelated to classical HPO stems.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What three things define an Automatic Model Tuning job?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Objective metric to maximize/minimize, hyperparameter ranges, and resource limits (max jobs / parallel jobs). Optional: early stopping and warm start.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Metric, ranges, job budget — that's an AMT job."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Stem: “Two-week POC, good-enough accuracy.” HPO?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>No — ship defaults or one manual pass. HPO burns time and compute when “good enough” and speed are the constraints.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"POC + good enough → skip HPO; tune only when marginal accuracy is worth the job spend."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How does parallel tuning affect cost?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>More parallel jobs finish sooner but bill more simultaneously — trade wall-clock vs budget. Early stopping and smaller ranges reduce total training spend.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Parallelism buys speed, not free accuracy — cap max jobs when cost is the constraint."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

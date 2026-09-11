@@ -1,0 +1,99 @@
+<section class="hero reveal">
+  <span class="eyebrow">Deploy · Pipelines &amp; CI/CD</span>
+  <h1>Automate retrain, evaluate, approve, deploy.</h1>
+  <p class="lead">SageMaker Pipelines is the native ML workflow engine. Pair it with CodePipeline/CodeBuild for Git-triggered CI, or EventBridge for scheduled retraining. MLA-C02 rewards <b>repeatable pipelines</b> over one-off notebook deploys.</p>
+</section>
+
+<section class="section reveal" id="pipeline">
+  <h2><span class="section-num">01</span> SageMaker Pipelines anatomy</h2>
+  <p class="takeaway">A pipeline is a DAG of <b>steps</b>: Processing, Training, Evaluation, Condition, RegisterModel, CreateModel, Transform. Parameters make runs reusable; caching skips unchanged steps.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  proc["Processing"] --> train["Training"]
+  train --> eval["Evaluation"]
+  eval --> cond{"Metrics OK?"}
+  cond -->|yes| reg["RegisterModel"]
+  reg --> dep["Deploy / Batch"]
+  cond -->|no| fail["Fail pipeline"]
+</pre></div>
+
+  <dl class="kv">
+    <dt>ProcessingStep</dt><dd>Feature prep, data validation, bias pre-checks.</dd>
+    <dt>TrainingStep</dt><dd>Managed training job with hyperparameters from pipeline params.</dd>
+    <dt>ConditionStep</dt><dd>Branch on metric thresholds (e.g. AUC &gt; 0.85).</dd>
+    <dt>RegisterModel</dt><dd>Creates model package in Registry (often PendingApproval).</dd>
+    <dt>CreateModel / Endpoint</dt><dd>Deploy approved artifact — or invoke Batch Transform step.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="cicd">
+  <h2><span class="section-num">02</span> CI/CD integration cues</h2>
+  <p class="takeaway">Typical pattern: <b>CodeCommit/GitHub → CodePipeline → CodeBuild</b> (lint/test) → <b>StartPipelineExecution</b> on SageMaker Pipelines. Infrastructure as Code via CloudFormation or CDK for roles and buckets.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Ledger Bank · retrain on drift</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "Drift-triggered retrain",
+      "nodes": [
+        { "id": "mon", "label": "Model Monitor", "type": "database", "col": 0, "row": 1 },
+        { "id": "eb", "label": "EventBridge", "type": "compute", "col": 1, "row": 1 },
+        { "id": "pipe", "label": "SM Pipeline", "type": "compute", "col": 2, "row": 1 },
+        { "id": "reg", "label": "Registry", "type": "storage", "col": 3, "row": 1 },
+        { "id": "ep", "label": "Endpoint", "type": "edge", "col": 4, "row": 1 }
+      ],
+      "edges": [
+        { "from": "mon", "to": "eb", "label": "alarm" },
+        { "from": "eb", "to": "pipe", "label": "start" },
+        { "from": "pipe", "to": "reg", "label": "register" },
+        { "from": "reg", "to": "ep", "label": "deploy if approved" }
+      ],
+      "steps": [
+        { "node": "mon", "caption": "Model Monitor detects data drift on fraud features — CloudWatch alarm fires." },
+        { "edge": ["mon","eb"], "caption": "EventBridge rule matches alarm → triggers pipeline execution." },
+        { "edge": ["eb","pipe"], "caption": "Pipeline retrains on latest labeled data, evaluates, registers package." },
+        { "edge": ["pipe","reg"], "caption": "New version PendingApproval until risk team approves in Registry." },
+        { "edge": ["reg","ep"], "caption": "Approved package updates endpoint via pipeline deploy step.", "status": "hit" }
+      ] }
+    </script>
+    <p class="viz-fallback">Monitor → EventBridge → Pipeline → Registry → Endpoint.</p>
+  </figure>
+</section>
+
+<section class="section reveal" id="triggers">
+  <h2><span class="section-num">03</span> Automated retraining triggers</h2>
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Schedule</div>
+      <ul><li>EventBridge cron — weekly retrain</li><li>Good for stable domains</li><li>May waste compute if no drift</li></ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Event-driven</div>
+      <ul><li>Model Monitor / CloudWatch alarm</li><li>New labeled data in S3 (EventBridge)</li><li>Retrain only when needed</li></ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>“Automate ML workflow” → <b>SageMaker Pipelines</b>, not Step Functions alone (Step Functions orchestrates AWS services including starting a pipeline, but the ML DAG lives in Pipelines).</p></div></div>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">04</span> Rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Skip retrain if validation AUC drops below champion. Which step?</span><span class="domain-chip">Deploy</span></summary>
+      <div class="qa-body"><h5>Answer</h5><p><b>ConditionStep</b> gates RegisterModel — failed branch stops deploy.</p></div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Git push should kick off full ML pipeline. Minimal add-on?</span><span class="domain-chip">Deploy</span></summary>
+      <div class="qa-body"><h5>Answer</h5><p><b>CodePipeline</b> on repo change → CodeBuild tests → Lambda/start pipeline execution.</p></div>
+    </details>
+  </div>
+</section>

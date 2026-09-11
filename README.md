@@ -20,6 +20,7 @@ A personal workspace of hands-on learning projects. **Each project lives in its 
 | **[Frontend Field Guide](./frontend-guide/index.html)** | **Modern pro frontend** for interviews — React 19, Next.js App Router, Tailwind v4, shadcn/ui, plus data/state, performance, testing & shipping — analogy-first, with step-through visualizers (render tree, hydration, RSC boundary) | ✅ Complete · Jun 2026 | [`frontend-guide/index.html`](./frontend-guide/index.html) |
 | **[Observability Field Guide](./observability-guide/index.html)** | **Logs · metrics · traces** for interviews — the three pillars, OpenTelemetry, Prometheus & Grafana, and SLOs/error budgets — with a trace waterfall, a metrics lab, and burn-rate visualizers | ✅ Complete · Jun 2026 | [`observability-guide/index.html`](./observability-guide/index.html) |
 | **[DevOps Field Guide](./devops-guide/index.html)** | The **modern DevOps engineer** journey for interviews — CI/CD, Docker, Kubernetes, Terraform, AWS, zero-downtime deploys & GitOps, reliability & DevSecOps — AWS-first, analogy-first, with animated pipeline/deploy/sizing engines | ✅ Complete · Jun 2026 | [`devops-guide/index.html`](./devops-guide/index.html) |
+| **[AWS MLA Field Guide](./aws-mla-guide/index.html)** | **AWS Machine Learning Engineer Associate (MLA-C02)** — classic MLOps + Bedrock/RAG/agents, Mermaid decision flows, scenario bank & timed mocks | ✅ Complete · Sep 2026 | [`aws-mla-guide/index.html`](./aws-mla-guide/index.html) |
 | **[AWS SAA Field Guide](./aws-saa-guide/index.html)** | **AWS Solutions Architect Associate (SAA-C03)** exam guide — zero-AWS foundations through Well-Architected domains, Mermaid decision flows, scenario bank & timed mocks | ✅ Complete · Sep 2026 | [`aws-saa-guide/index.html`](./aws-saa-guide/index.html) |
 | **[Aptitude & Reasoning Field Guide](./aptitude-guide/index.html)** | **Aptitude & reasoning** for tech-placement online assessments — quantitative aptitude, logical reasoning, verbal ability & data interpretation, shortcut-first with inline diagrams and a **timed drill engine** that scores you and explains every answer | ✅ Complete · Jun 2026 | [`aptitude-guide/index.html`](./aptitude-guide/index.html) |
 
@@ -43,6 +44,7 @@ self-upgrade/
 ├── frontend-guide/            ← Modern frontend (React · Next.js · Tailwind)
 ├── observability-guide/       ← Observability (logs · metrics · traces · OTel)
 ├── devops-guide/              ← DevOps (CI/CD · containers · Kubernetes · IaC · AWS)
+├── aws-mla-guide/             ← AWS MLA-C02 exam (MLOps · Bedrock · scenarios · mocks)
 ├── aws-saa-guide/             ← AWS SAA-C03 exam (Well-Architected · scenarios · mocks)
 └── aptitude-guide/            ← Aptitude & reasoning (quant · reasoning · verbal · DI)
 ```

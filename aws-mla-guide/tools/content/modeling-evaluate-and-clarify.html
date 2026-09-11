@@ -1,0 +1,89 @@
+<section class="hero reveal">
+  <span class="eyebrow">Model development · evaluate &amp; Clarify</span>
+  <h1>Pick the metric that matches the mistake cost.</h1>
+  <p class="lead">MLA-C02 ties problem type to metrics — accuracy alone is rarely right. SageMaker Clarify adds bias and explainability when stems mention fairness, regulators, or “why was this denied?”</p>
+</section>
+
+<section class="section reveal" id="metrics">
+  <h2><span class="section-num">01</span> Metrics by problem type</h2>
+  <p class="takeaway">Classification with class imbalance → <b>precision/recall/F1</b>, <b>PR-AUC</b>, or cost-weighted metrics — not raw accuracy. Regression → <b>RMSE/MAE</b>. Ranking → <b>MAP/NDCG</b>. Multiclass → macro vs weighted F1 depending on whether rare classes matter equally.</p>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>Problem</th><th>Metric cue</th><th>Story</th></tr></thead>
+    <tbody>
+      <tr><td>Imbalanced fraud</td><td>Precision at fixed recall, PR-AUC</td><td>Ledger Bank: false alerts anger merchants</td></tr>
+      <tr><td>Medical screening</td><td>Recall (sensitivity) at acceptable FP rate</td><td>Acme Health: missing readmission is costly</td></tr>
+      <tr><td>Regression forecast</td><td>RMSE if large errors hurt more</td><td>Bed occupancy prediction</td></tr>
+      <tr><td>Ranking search</td><td>NDCG@k</td><td>Clinical trial document retrieval</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  p["Problem type?"] --> cls["Classification"]
+  p --> reg["Regression"]
+  p --> rank["Ranking"]
+  cls --> imb{"Imbalanced?"}
+  imb -->|yes| pr["PR-AUC / F1 / recall@k"]
+  imb -->|no| acc["Accuracy OK if balanced"]
+</pre></div>
+</section>
+
+<section class="section reveal" id="clarify">
+  <h2><span class="section-num">02</span> SageMaker Clarify: bias &amp; explainability</h2>
+  <p class="takeaway">Run Clarify on training data or endpoint predictions for <b>pre-training bias</b>, <b>post-training bias</b>, and <b>SHAP feature importance</b>. Use when stems cite protected attributes, disparate impact, or explainability to clinicians/customers.</p>
+
+  <dl class="kv">
+    <dt>Pre-training bias</dt><dd>Class imbalance or label bias before model exists — e.g. historical denial rates by zip code.</dd>
+    <dt>Post-training bias</dt><dd>Compare metrics across facets (gender, age band) on holdout or live shadow traffic.</dd>
+    <dt>Explainability</dt><dd>SHAP values for tabular models — which features pushed this patient’s score up.</dd>
+    <dt>Acme Health</dt><dd>Clarify facet on age/sex for readmission model before hospital board review.</dd>
+    <dt>Ledger Bank</dt><dd>SHAP on fraud decline to satisfy “reason code” regulations without exposing full model weights.</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Accuracy on 99% legitimate transactions.</b> A dumb “never fraud” model scores 99% accuracy but catches zero fraud — exam stems with imbalance want precision/recall trade-offs, not accuracy.</p></div></div>
+</section>
+
+<section class="section reveal" id="holdout">
+  <h2><span class="section-num">03</span> Holdout vs cross-validation</h2>
+  <p class="takeaway"><b>Holdout test set</b> — untouched until final sign-off; reports production-realistic performance. <b>Cross-validation</b> — for model selection and HPO on limited data. Exam rule: tune on train/val (or CV folds), report once on holdout.</p>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Team used the test set to pick hyperparameters, then quoted test AUC in the board deck. What went wrong?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Test set leakage — hyperparameters were tuned on it; metrics are optimistically biased.</button>
+      <button class="quiz-opt"><span class="mark"></span>Nothing — test set is for tuning.</button>
+      <button class="quiz-opt"><span class="mark"></span>Should have used training accuracy instead.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Holdout is for final evaluation only. Tuning belongs on validation or CV; training accuracy is in-sample and useless for generalization claims.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Fraud detection metric — accuracy or something else?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Precision/recall trade-off, PR-AUC, or precision at a fixed recall — because negatives dominate and false positives have operational cost.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Imbalanced classification → PR-AUC or precision/recall, never headline accuracy."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When do you reach for Clarify?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Bias across facets (pre/post training) or local/global explainability (SHAP) — especially regulated or customer-facing denial decisions.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Fairness facets or SHAP why → SageMaker Clarify."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Holdout vs k-fold — exam one-liner?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>K-fold for model selection on small data; single holdout for unbiased final metric after all tuning stops.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"CV to choose; holdout to report — never tune on holdout."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

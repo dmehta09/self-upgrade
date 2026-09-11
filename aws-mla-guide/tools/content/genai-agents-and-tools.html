@@ -1,0 +1,96 @@
+<section class="hero reveal">
+  <span class="eyebrow">GenAI · Agents &amp; tools</span>
+  <h1>Agents when the model must act, not just talk.</h1>
+  <p class="lead">Amazon Bedrock Agents orchestrate FM reasoning with action groups (OpenAPI → Lambda) and optional Knowledge Bases. MLA-C02: use Agents for multi-step tool use; plain InvokeModel when a single FM call plus RAG is enough.</p>
+</section>
+
+<section class="section reveal" id="architecture">
+  <h2><span class="section-num">01</span> Agents, action groups &amp; Lambda tools</h2>
+  <p class="takeaway">An <b>Agent</b> plans steps, calls <b>action groups</b> backed by Lambda (book appointment, check balance), and can attach a <b>Knowledge Base</b> for retrieval — all with guardrails and session memory within the agent runtime.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  user["User"] --> agent["Bedrock Agent"]
+  agent --> kb["Knowledge Base"]
+  agent --> lambda["Lambda tools"]
+  lambda --> api["Backend APIs"]
+  agent --> fm["Foundation model"]
+  fm --> agent
+  agent --> user
+</pre></div>
+
+  <dl class="kv">
+    <dt>Action group</dt><dd>OpenAPI schema defines parameters; Agent invokes matching Lambda with structured args — exam pattern for “call internal API safely.”</dd>
+    <dt>Knowledge Base attach</dt><dd>Agent retrieves policy docs before answering or before choosing a tool.</dd>
+    <dt>Acme Health</dt><dd>Agent: retrieve formulary KB → if controlled substance, Lambda checks EHR slot availability → confirms booking.</dd>
+    <dt>Ledger Bank</dt><dd>Agent: RAG on cardholder agreement → Lambda fetches live balance → FM summarizes — not one InvokeModel call.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="when">
+  <h2><span class="section-num">02</span> Agent vs plain InvokeModel</h2>
+  <p class="takeaway"><b>InvokeModel</b> (+ optional Retrieve API) when one-shot Q&amp;A or summarization. <b>Agent</b> when the stem needs sequential tool calls, parameter extraction from natural language, or orchestration across KB + APIs with minimal custom code.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">InvokeModel enough</div>
+      <ul>
+        <li>Single-turn FAQ with RAG context</li>
+        <li>Batch summarization pipeline</li>
+        <li>You orchestrate steps in Step Functions yourself</li>
+        <li>No live API side effects</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Use an Agent</div>
+      <ul>
+        <li>“Book, cancel, or reschedule” from chat</li>
+        <li>Multi-step: lookup → validate → execute</li>
+        <li>Least custom orchestration code</li>
+        <li>FM chooses which tool when user intent varies</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Agent for read-only FAQ.</b> Extra latency, cost, and IAM surface for no tool use — Knowledge Base + InvokeModel wins “policy chatbot, no transactions.”</p></div></div>
+</section>
+
+<section class="section reveal" id="quiz">
+  <h2><span class="section-num">03</span> Exam quiz</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Customer chatbot must quote payoff amount from core banking API after explaining terms from PDFs. Minimal custom orchestration?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Bedrock Agent with Knowledge Base + action group Lambda calling the banking API.</button>
+      <button class="quiz-opt"><span class="mark"></span>InvokeModel only — FM guesses balance from training data.</button>
+      <button class="quiz-opt"><span class="mark"></span>Train XGBoost on account balances.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> KB for terms + Lambda tool for live balance + Agent orchestration. InvokeModel can’t call APIs; XGBoost isn’t GenAI orchestration.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What connects an Agent to your backend?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Action groups defined with OpenAPI schemas targeting Lambda functions that call internal APIs with IAM-scoped permissions.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"OpenAPI action group → Lambda → internal API — that's the Agent tool chain."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Can an Agent use a Knowledge Base and tools in one session?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Yes — retrieve grounded context from KB, then invoke action groups when the plan requires live data or side effects.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"KB for docs, Lambda for live actions — Agent ties both together."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Acme: read-only HR handbook Q&amp;A — Agent?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>No — Knowledge Base + RetrieveAndGenerate or InvokeModel with retrieved context. No tools, no multi-step plan needed.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Read-only RAG → no Agent; Agents when something must be executed."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

@@ -1,0 +1,67 @@
+<section class="hero reveal">
+  <span class="eyebrow">Operate · encryption &amp; lineage</span>
+  <h1>Encrypt artifacts in flight and at rest; prove where models came from.</h1>
+  <p class="lead">KMS wraps S3 model artifacts, EBS volumes on training instances, and optional endpoint encryption in transit. SageMaker Lineage and <b>Model Cards</b> document intent, metrics, and risks for auditors. MLA-C02 merges security with responsible ML governance.</p>
+</section>
+
+<section class="section reveal" id="kms">
+  <h2><span class="section-num">01</span> KMS for ML data paths</h2>
+  <p class="takeaway">Default SSE-S3 works for many labs; production stems ask for <b>SSE-KMS</b> with customer managed keys (CMKs), separate keys per env, and least-privilege key policies for training vs endpoint roles.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  data["S3 datasets SSE-KMS"] --> train["Training job"]
+  train --> art["Model artifact SSE-KMS"]
+  art --> ep["Endpoint TLS + decrypt"]
+  ep --> cap["Capture to encrypted S3"]
+</pre></div>
+
+  <dl class="kv">
+    <dt>S3</dt><dd>SSE-S3 (AWS managed) vs SSE-KMS (CMK audit via CloudTrail).</dd>
+    <dt>EBS</dt><dd>Encrypted volumes on training/processing instances — same CMK or dedicated.</dd>
+    <dt>In transit</dt><dd>HTTPS for invoke; VPC mode endpoints keep traffic private.</dd>
+    <dt>Secrets</dt><dd>Secrets Manager for DB/API creds in processing — not in code.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="lineage">
+  <h2><span class="section-num">02</span> Lineage &amp; Model Cards</h2>
+  <p class="takeaway"><b>Lineage</b> tracks entities: data source → processing job → training job → model package → endpoint. <b>Model Cards</b> (often with Clarify) capture intended use, limitations, bias eval, and contact — the human-readable audit doc.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Lineage graph</div>
+      <ul>
+        <li>Automatic from Pipelines</li>
+        <li>Query “what data trained v12?”</li>
+        <li>Compliance traceability</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Model Card</div>
+      <ul>
+        <li>Business &amp; ethical context</li>
+        <li>Metric summaries, caveats</li>
+        <li>Regulatory-facing narrative</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Ledger Bank <span class="tag">tip</span></div><p>Every Approved fraud model package links to a Model Card noting protected attributes tested with Clarify and the training snapshot date — auditors skip manual spreadsheet hunts.</p></div></div>
+</section>
+
+<section class="section reveal" id="clarify">
+  <h2><span class="section-num">03</span> Clarify in the governance story</h2>
+  <p class="takeaway">Clarify runs pre-training (data bias), post-training (model bias, SHAP explainability), and can integrate with Monitor for post-deploy bias drift. Lineage stores clarify job outputs as artifacts.</p>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">04</span> Rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Endpoint cannot download model — AccessDenied on KMS Decrypt.</span><span class="domain-chip">Operate</span></summary>
+      <div class="qa-body"><h5>Answer</h5><p>Add <b>endpoint execution role</b> to KMS key policy with <code>kms:Decrypt</code>.</p></div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Prove which S3 dataset version trained production model 9.</span><span class="domain-chip">Operate</span></summary>
+      <div class="qa-body"><h5>Answer</h5><p><b>SageMaker Lineage</b> from model package back to dataset artifact — plus Registry metadata.</p></div>
+    </details>
+  </div>
+</section>

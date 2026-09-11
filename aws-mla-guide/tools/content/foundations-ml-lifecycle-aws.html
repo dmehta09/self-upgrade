@@ -1,0 +1,133 @@
+<section class="hero reveal">
+  <span class="eyebrow">Foundations · ML lifecycle</span>
+  <h1>The ML lifecycle on AWS — from raw data to monitored production.</h1>
+  <p class="lead">MLA-C02 treats AWS as a <b>pipeline of decisions</b>: ingest → prepare → train → deploy → monitor. SageMaker is the training and classical-ML home; Bedrock sits at the GenAI layer for foundation models. As of September 2026, know where each phase lives before you pick a service name.</p>
+</section>
+
+<section class="section reveal" id="phases">
+  <h2><span class="section-num">01</span> Five phases, one mental map</h2>
+  <p class="takeaway">Every exam scenario is a lifecycle question in disguise. Ask: <b>which phase is broken?</b> Fix that phase with the smallest managed AWS tool — not the flashiest one.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Think of ML like running a hospital lab. <b>Ingest</b> is receiving samples. <b>Prep</b> is cleaning and labeling slides. <b>Train</b> is teaching residents on past cases. <b>Deploy</b> is opening the diagnostic desk. <b>Monitor</b> is checking whether today's results still match what residents learned.</p></div></div>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  ingest["Ingest"] --> prep["Prepare"]
+  prep --> train["Train"]
+  train --> deploy["Deploy"]
+  deploy --> monitor["Monitor"]
+  monitor -->|"drift / retrain"| prep
+</pre></div>
+
+  <dl class="kv">
+    <dt>Ingest</dt><dd>S3 data lake, Kinesis/Firehose streaming, Glue Data Catalog metadata.</dd>
+    <dt>Prepare</dt><dd>Glue ETL, SageMaker Processing, Data Wrangler, Feature Store.</dd>
+    <dt>Train</dt><dd>SageMaker Training jobs, Studio notebooks, JumpStart, HPO.</dd>
+    <dt>Deploy</dt><dd>Real-time endpoints, batch transform, Bedrock invoke, Model Registry.</dd>
+    <dt>Monitor</dt><dd>Model Monitor, Clarify, CloudWatch, drift alarms, Guardrails for GenAI.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="acme">
+  <h2><span class="section-num">02</span> Acme Health — clinical readmission model</h2>
+  <p class="takeaway">Acme Health predicts 30-day readmission risk from EHR extracts. The lifecycle maps cleanly to SageMaker — until they add a clinician Q&amp;A chatbot, which pulls Bedrock into the deploy/monitor story.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Acme Health · batch ML lifecycle</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "Acme readmission pipeline",
+      "nodes": [
+        { "id": "ehr", "label": "EHR exports", "type": "client", "col": 0, "row": 1 },
+        { "id": "s3", "label": "S3 lake", "type": "storage", "col": 1, "row": 1 },
+        { "id": "glue", "label": "Glue ETL", "type": "compute", "col": 2, "row": 1 },
+        { "id": "train", "label": "SageMaker train", "type": "compute", "col": 3, "row": 1 },
+        { "id": "ep", "label": "Endpoint", "type": "edge", "col": 4, "row": 1 },
+        { "id": "mon", "label": "Model Monitor", "type": "database", "col": 5, "row": 1 }
+      ],
+      "edges": [
+        { "from": "ehr", "to": "s3", "label": "nightly" },
+        { "from": "s3", "to": "glue", "label": "catalog" },
+        { "from": "glue", "to": "train", "label": "features" },
+        { "from": "train", "to": "ep", "label": "register" },
+        { "from": "ep", "to": "mon", "label": "capture" }
+      ],
+      "steps": [
+        { "node": "ehr", "caption": "Nightly HL7/FHIR exports land in a governed S3 prefix — ingest phase." },
+        { "edge": ["ehr","s3"], "caption": "S3 is the lake; Glue Data Catalog tracks schemas and PII tags." },
+        { "edge": ["s3","glue"], "caption": "Glue ETL de-identifies, joins labs, writes train-ready Parquet." },
+        { "edge": ["glue","train"], "caption": "SageMaker Training job fits an XGBoost model on the prepared features." },
+        { "edge": ["train","ep"], "caption": "Approved artifact moves through Model Registry to a real-time endpoint." },
+        { "edge": ["ep","mon"], "caption": "Model Monitor watches score drift; Clarify already checked bias at train time.", "status": "hit" }
+      ] }
+    </script>
+    <p class="viz-fallback">EHR → S3 → Glue → SageMaker train → endpoint → Model Monitor.</p>
+  </figure>
+
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Where Bedrock fits <span class="tag">tip</span></div><p>When Acme adds a <b>clinician chatbot</b> over policy PDFs, Bedrock handles FM inference, Knowledge Bases handle RAG retrieval, and Guardrails handle safety — still under deploy + monitor, but not SageMaker Training.</p></div></div>
+</section>
+
+<section class="section reveal" id="studio">
+  <h2><span class="section-num">03</span> SageMaker Studio as the training home</h2>
+  <p class="takeaway">SageMaker Studio is the IDE; <b>Training jobs</b>, <b>Processing jobs</b>, and <b>Pipelines</b> are the production-grade workers. Notebooks explore — jobs scale.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Studio / notebook</div>
+      <ul>
+        <li>Explore data, prototype features</li>
+        <li>Data Wrangler visual flows</li>
+        <li>Human-in-the-loop experiments</li>
+        <li>Not the exam answer for repeatable prod</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Jobs &amp; Pipelines</div>
+      <ul>
+        <li>Training jobs on managed instances</li>
+        <li>Processing for batch transform prep</li>
+        <li>Pipelines wire steps with lineage</li>
+        <li>Exam picks these for CI/CD ML</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>"Run training on a Studio notebook forever."</b> Exam stems asking for reproducible, schedulable training want <b>Training jobs</b> or <b>Pipelines</b> — not an always-on notebook instance doing ad hoc fit().</p></div></div>
+</section>
+
+<section class="section reveal" id="rapid">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Name the five ML lifecycle phases in order.</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Ingest → prepare → train → deploy → monitor. Monitoring feeds back into prep or retrain when drift or policy changes appear.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Ingest, prep, train, deploy, monitor — and monitor closes the loop."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Where does Bedrock sit vs SageMaker Training?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>SageMaker Training builds or fine-tunes <b>your</b> classical or custom models. Bedrock provides managed <b>foundation model inference</b> (and optional customization) for GenAI — invoke, RAG via Knowledge Bases, agents — without you operating training clusters for the base FM.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"SageMaker trains custom models; Bedrock serves foundation models and GenAI patterns."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">A team needs repeatable nightly retraining from S3. Notebook or job?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>SageMaker Pipeline</b> (or at minimum a scheduled Training job) triggered after Glue/Processing writes fresh features. Notebooks are for exploration, not the production retrain path the exam wants.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Scheduled Pipeline or Training job — notebooks don't scale to nightly prod retrains."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

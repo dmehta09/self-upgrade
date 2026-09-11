@@ -1,0 +1,139 @@
+<section class="hero reveal">
+  <span class="eyebrow">Data preparation · embeddings for RAG</span>
+  <h1>Chunk, embed, index — the data path behind Knowledge Bases.</h1>
+  <p class="lead">RAG quality is mostly <b>data prep</b>: split documents into chunks, embed with a Bedrock embedding model, store vectors in OpenSearch Serverless (or another supported vector store). Bedrock Knowledge Bases automates ingest → embed → retrieve for GenAI exams.</p>
+</section>
+
+<section class="section reveal" id="path">
+  <h2><span class="section-num">01</span> RAG data path</h2>
+  <p class="takeaway">At query time the FM doesn't memorize your PDFs — it retrieves similar <b>chunks</b> and grounds the answer. Bad chunking = wrong citations and hallucinations dressed as policy.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  docs["S3 docs / PDFs"] --> chunk["Chunk · split"]
+  chunk --> embed["Bedrock embed model"]
+  embed --> vec["Vector store · OpenSearch"]
+  query["User query"] --> qembed["Embed query"]
+  qembed --> vec
+  vec --> topk["Top-K chunks"]
+  topk --> llm["Bedrock FM + prompt"]
+</pre></div>
+
+  <dl class="kv">
+    <dt>Chunking</dt><dd>Split by page, heading, or fixed token windows with overlap — balance context vs precision.</dd>
+    <dt>Embedding model</dt><dd>Bedrock Titan Embeddings, Cohere Embed, etc. — same model family for ingest and query.</dd>
+    <dt>Vector store</dt><dd>OpenSearch Serverless vector collection — default exam pairing with Knowledge Bases.</dd>
+    <dt>Knowledge Bases</dt><dd>Managed sync from S3 → chunk → embed → index; wires retrieval into Bedrock invoke.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="chunking">
+  <h2><span class="section-num">02</span> Chunking decisions</h2>
+  <p class="takeaway">Smaller chunks = precise retrieval, less context per hit. Larger chunks = more context, muddier matches. Clinical protocols (Acme) often chunk by section header; regulatory PDFs (Ledger) by article number.</p>
+
+  <div class="versus-grid">
+    <div class="versus-card">
+      <div class="vc-h">Small chunks (~256 tokens)</div>
+      <ul>
+        <li>Better precision for narrow questions</li>
+        <li>More index rows — higher storage cost</li>
+        <li>May miss cross-paragraph reasoning</li>
+      </ul>
+    </div>
+    <div class="versus-card">
+      <div class="vc-h">Large chunks (~512–1024 tokens)</div>
+      <ul>
+        <li>Richer context per retrieval</li>
+        <li>Risk of irrelevant filler in prompt</li>
+        <li>Good for narrative clinical guidelines</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Overlap matters <span class="tag">tip</span></div><p>Use <b>10–20% token overlap</b> between chunks so sentences split across boundaries still appear whole in at least one chunk. Acme's discharge checklist spans pages — overlap prevents half-steps from vanishing.</p></div></div>
+</section>
+
+<section class="section reveal" id="acme-kb">
+  <h2><span class="section-num">03</span> Acme Health Knowledge Base setup</h2>
+  <p class="takeaway">Acme stores clinical guidelines in S3. A Knowledge Base syncs nightly, embeds with Titan Text Embeddings, indexes in OpenSearch Serverless. Clinicians query via Bedrock — citations point to source chunks.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Acme · S3 docs to grounded answer</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "Acme RAG ingest",
+      "nodes": [
+        { "id": "s3", "label": "S3 guidelines", "type": "storage", "col": 0, "row": 1 },
+        { "id": "kb", "label": "Knowledge Base", "type": "compute", "col": 1, "row": 1 },
+        { "id": "emb", "label": "Embed model", "type": "edge", "col": 2, "row": 1 },
+        { "id": "aos", "label": "OpenSearch", "type": "database", "col": 3, "row": 1 },
+        { "id": "fm", "label": "Claude FM", "type": "client", "col": 4, "row": 1 }
+      ],
+      "edges": [
+        { "from": "s3", "to": "kb", "label": "sync" },
+        { "from": "kb", "to": "emb", "label": "chunk" },
+        { "from": "emb", "to": "aos", "label": "vectors" },
+        { "from": "aos", "to": "fm", "label": "retrieve" }
+      ],
+      "steps": [
+        { "node": "s3", "caption": "PDF protocols and order sets live in a private S3 prefix." },
+        { "edge": ["s3","kb"], "caption": "Knowledge Base ingestion job chunks documents on sync schedule." },
+        { "edge": ["kb","emb"], "caption": "Each chunk is embedded via Bedrock Titan Embeddings." },
+        { "edge": ["emb","aos"], "caption": "Vectors + metadata land in OpenSearch Serverless collection." },
+        { "edge": ["aos","fm"], "caption": "Clinician question retrieves top-K chunks, FM answers with citations.", "status": "hit" }
+      ] }
+    </script>
+    <p class="viz-fallback">S3 → Knowledge Base → Bedrock embeddings → OpenSearch → FM with retrieval.</p>
+  </figure>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Fine-tune the FM to memorize PDFs.</b> Exam stems about internal document Q&amp;A with fresh doc updates → RAG (Knowledge Base + embeddings), not full fine-tune. Fine-tune when behavior/style must change, not for weekly policy PDF drops.</p></div></div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Acme adds new sepsis guidelines weekly. They need cited answers without retraining Claude each time. Data architecture?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>S3 + Bedrock Knowledge Base + OpenSearch Serverless vectors.</button>
+      <button class="quiz-opt"><span class="mark"></span>SageMaker Feature Store offline/online.</button>
+      <button class="quiz-opt"><span class="mark"></span>Train a custom LLM from scratch on SageMaker.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Frequently updated unstructured docs + citations → RAG stack. Feature Store is tabular; scratch LLM training violates least-ops.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="rapid">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What are the three RAG data prep steps?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Chunk documents, embed chunks with a Bedrock embedding model, store vectors in a vector database (OpenSearch Serverless with Knowledge Bases). At query time embed the question and retrieve top-K similar chunks.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Chunk, embed, index — then retrieve at query time."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why OpenSearch Serverless in AWS RAG answers?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Bedrock Knowledge Bases natively integrates with OpenSearch Serverless as a vector store — managed sync, metadata filtering, and retrieval API without building a custom vector DB on EC2.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Knowledge Bases + OpenSearch Serverless is the managed RAG vector path."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">New docs land daily. Re-embed everything or incremental sync?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Knowledge Base <b>incremental sync</b> from S3 — new/changed objects are chunked and embedded without rebuilding the entire index manually. Exam "least ops" prefers managed KB sync over DIY Lambda re-embed scripts unless custom logic is required.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Daily doc drops → Knowledge Base sync from S3, not full manual re-embed."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

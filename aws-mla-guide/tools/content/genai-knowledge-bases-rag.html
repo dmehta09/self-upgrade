@@ -1,0 +1,108 @@
+<section class="hero reveal">
+  <span class="eyebrow">GenAI · Knowledge Bases &amp; RAG</span>
+  <h1>Design RAG that survives the exam.</h1>
+  <p class="lead">Bedrock Knowledge Bases ingest S3 (and connectors), chunk, embed, and retrieve at query time. MLA stems test chunking, metadata filters, vector store choice, and when hybrid search beats pure vectors.</p>
+</section>
+
+<section class="section reveal" id="flow">
+  <h2><span class="section-num">01</span> Knowledge Base RAG path</h2>
+  <p class="takeaway">Documents → <b>chunk</b> → <b>embed</b> → vector store → at query time retrieve top-k → FM generates grounded answer. Bedrock manages sync, embedding model, and Retrieve API for custom orchestration.</p>
+
+  <figure class="reqflow" data-reqflow>
+    <figcaption class="rf-title">Bedrock KB retrieve-and-generate</figcaption>
+    <div class="rf-stage"></div>
+    <div class="rf-caption" aria-live="polite"></div>
+    <div class="rf-controls">
+      <button class="rf-btn rf-reset" type="button" aria-label="Restart">⏮</button>
+      <button class="rf-btn rf-prev" type="button" aria-label="Previous step">‹</button>
+      <button class="rf-btn rf-play" type="button" aria-label="Play">▶</button>
+      <button class="rf-btn rf-next" type="button" aria-label="Next step">›</button>
+      <div class="rf-progress"><div class="rf-progress-fill"></div></div>
+      <span class="rf-step">1 / 1</span>
+      <select class="rf-speed-sel" aria-label="Speed"><option value="1700">0.5×</option><option value="1100" selected>1×</option><option value="600">2×</option></select>
+    </div>
+    <script type="application/json" class="rf-config">
+    { "title": "KB RAG query",
+      "nodes": [
+        { "id": "user", "label": "User question", "type": "client", "col": 0, "row": 1 },
+        { "id": "kb", "label": "Knowledge Base", "type": "compute", "col": 1, "row": 1 },
+        { "id": "vec", "label": "Vector store", "type": "storage", "col": 2, "row": 0 },
+        { "id": "fm", "label": "Bedrock FM", "type": "compute", "col": 2, "row": 2 },
+        { "id": "ans", "label": "Grounded answer", "type": "client", "col": 3, "row": 1 }
+      ],
+      "edges": [
+        { "from": "user", "to": "kb", "label": "query" },
+        { "from": "kb", "to": "vec", "label": "embed + search" },
+        { "from": "vec", "to": "kb", "label": "top-k chunks" },
+        { "from": "kb", "to": "fm", "label": "context + prompt" },
+        { "from": "fm", "to": "ans", "label": "generate" }
+      ],
+      "steps": [
+        { "node": "user", "caption": "Clinician asks about a drug policy clause — answer must come from internal PDFs, not FM memory." },
+        { "edge": ["user","kb"], "caption": "Knowledge Base receives the question and runs retrieval.", "status": "hit" },
+        { "edge": ["kb","vec"], "caption": "Query embedding searches the vector index (optionally filtered by metadata).", "status": "hit" },
+        { "edge": ["vec","kb"], "caption": "Top-k relevant chunks return — chunk size and overlap matter for recall.", "status": "hit" },
+        { "edge": ["kb","fm"], "caption": "Retrieved text is injected into the FM prompt for grounded generation.", "status": "hit" },
+        { "edge": ["fm","ans"], "caption": "Answer cites policy sections; sync job refreshes index when S3 docs update.", "status": "hit" }
+      ] }
+    </script>
+    <p class="viz-fallback">User → KB retrieve → vector search → FM with context → grounded answer.</p>
+  </figure>
+</section>
+
+<section class="section reveal" id="design">
+  <h2><span class="section-num">02</span> Chunking, metadata &amp; vector store</h2>
+  <p class="takeaway"><b>Chunk size</b> — smaller for precise FAQ; larger for narrative policy sections. Use <b>metadata filters</b> (department, doc version, effective date) so nurses only see Acme formulary, not research drafts. <b>Vector store</b> — OpenSearch Serverless, Aurora pgvector, Pinecone, etc.; pick managed + ops fit; exam often accepts “Bedrock-managed OpenSearch” for least ops.</p>
+
+  <dl class="kv">
+    <dt>Hybrid search</dt><dd>Keyword + semantic — wins when stems mention exact SKU codes, ICD-10 codes, or legal citation numbers vectors miss alone.</dd>
+    <dt>Acme Health</dt><dd>Metadata <code>department=nursing</code>, <code>status=approved</code> on formulary chunks; nightly S3 sync.</dd>
+    <dt>Ledger Bank</dt><dd>Hybrid for loan product IDs in memos; filter by <code>region=EMEA</code> for GDPR residency splits.</dd>
+    <dt>Chunk overlap</dt><dd>Prevents sentences split across boundaries from losing context — tune when answers truncate mid-clause.</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Giant chunks “for more context.”</b> Huge chunks dilute retrieval — the FM gets irrelevant paragraphs and hallucinates bridges. Match chunk size to retrieval precision the stem asks for.</p></div></div>
+</section>
+
+<section class="section reveal" id="quiz">
+  <h2><span class="section-num">03</span> Exam quiz</h2>
+  <div class="quiz" data-quiz>
+    <p class="q">Users must only query approved 2026 policies, not archived drafts in the same bucket. Best KB feature?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Metadata filters on ingest (e.g. <code>year=2026</code>, <code>approved=true</code>) at retrieve time.</button>
+      <button class="quiz-opt"><span class="mark"></span>Delete drafts from S3 permanently before every question.</button>
+      <button class="quiz-opt"><span class="mark"></span>Rely on the FM to ignore old docs without retrieval filters.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Metadata filters scope retrieval. Manual deletes are fragile; FMs don’t reliably ignore bad chunks in context.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When hybrid search over pure vector?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>When queries include exact identifiers, SKUs, legal cites, or rare tokens semantic search alone misses — combine keyword BM25 with embeddings.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Exact codes or IDs in the question → hybrid search, not vectors alone."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What does Bedrock KB sync do?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Ingests new/changed S3 objects, chunks, embeds, and updates the vector index so RAG reflects fresh documents without manual re-embedding scripts.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"KB sync keeps the index aligned with S3 — chunk, embed, index automatically."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Vector store chooser — exam heuristic?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Pick a store Bedrock Knowledge Bases supports in your Region; prefer managed OpenSearch Serverless or Aurora pgvector when stem wants least ops and existing AWS footprint.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Supported + managed + matches existing DB/search stack — don't roll DIY FAISS on EC2 for MLA stems."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

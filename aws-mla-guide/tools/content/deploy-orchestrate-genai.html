@@ -1,0 +1,86 @@
+<section class="hero reveal">
+  <span class="eyebrow">Deploy · orchestrate GenAI</span>
+  <h1>Agents, Step Functions, and multi-step FM workflows.</h1>
+  <p class="lead">GenAI deploy is more than <code>InvokeModel</code>. Bedrock Agents orchestrate tool use; Step Functions coordinate long flows with retries, parallelism, and cost caps. MLA-C02 tests <b>when to compose services</b> vs call Bedrock once.</p>
+</section>
+
+<section class="section reveal" id="agents">
+  <h2><span class="section-num">01</span> Bedrock Agents &amp; action groups</h2>
+  <p class="takeaway">An <b>Agent</b> plans multi-turn tasks: FM reasons → calls <b>action groups</b> (OpenAPI → Lambda) → returns grounded answers. Knowledge Bases supply RAG retrieval without you wiring vector DB manually.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  user["User query"] --> agent["Bedrock Agent"]
+  agent --> kb["Knowledge Base RAG"]
+  agent --> tools["Action groups · Lambda"]
+  tools --> api["Internal APIs"]
+  agent --> guard["Guardrails"]
+  guard --> reply["Response"]
+</pre></div>
+
+  <dl class="kv">
+    <dt>Agent</dt><dd>FM + instructions + memory (session) + orchestration loop.</dd>
+    <dt>Action group</dt><dd>OpenAPI schema mapped to Lambda — “check claim status,” “book appointment.”</dd>
+    <dt>Knowledge Base</dt><dd>Managed RAG: chunk, embed, retrieve from S3/OpenSearch/etc.</dd>
+    <dt>Guardrails</dt><dd>Content filters, denied topics, PII — applied at invoke.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="stepfn">
+  <h2><span class="section-num">02</span> Step Functions + Bedrock</h2>
+  <p class="takeaway">Use Step Functions when you need <b>explicit control</b>: parallel doc summarization, human approval, exponential backoff, or mixing Bedrock with SageMaker endpoints and DynamoDB.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  start["Start"] --> split["Parallel map"]
+  split --> b1["Bedrock summarize doc 1"]
+  split --> b2["Bedrock summarize doc 2"]
+  b1 --> merge["Aggregate"]
+  b2 --> merge
+  merge --> human{"Human review?"}
+  human -->|yes| wait["Task token wait"]
+  human -->|no| publish["Publish result"]
+</pre></div>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">Bedrock Agent</div>
+      <ul>
+        <li>FM decides which tools to call</li>
+        <li>Less boilerplate for chat UX</li>
+        <li>Harder to audit exact step order</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Step Functions</div>
+      <ul>
+        <li>Deterministic DAG you define</li>
+        <li>Built-in retry, catch, parallel</li>
+        <li>Better for regulated workflows</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="cost">
+  <h2><span class="section-num">03</span> Concurrency &amp; cost cues</h2>
+  <p class="takeaway">Bedrock bills per token; unbounded parallel invokes explode cost. Cap concurrency with Step Functions <b>Map state MaxConcurrency</b>, SQS throttling, or reserved throughput where offered.</p>
+
+  <div class="callout tip"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Acme clinician assistant <span class="tag">tip</span></div><p>Acme caps Agent loops at 5 tool calls per session and routes high-volume batch summarization through Step Functions Map (MaxConcurrency=10) instead of 500 parallel Lambda→Bedrock invocations.</p></div></div>
+
+  <dl class="kv">
+    <dt>Streaming</dt><dd>InvokeModelWithResponseStream — better UX, same token cost.</dd>
+    <dt>Provisioned throughput</dt><dd>Reserved FM capacity when steady high QPS — exam “SLA + predictable latency.”</dd>
+    <dt>On-demand</dt><dd>Default; throttling under burst — add backoff in Step Functions.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="check">
+  <h2><span class="section-num">04</span> Rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Chatbot must call HR API and search policy PDFs — least custom orchestration code.</span><span class="domain-chip">Deploy</span></summary>
+      <div class="qa-body"><h5>Answer</h5><p><b>Bedrock Agent</b> with Knowledge Base + action group Lambda for HR API.</p></div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Summarize 10k loan files nightly with human sign-off on exceptions only.</span><span class="domain-chip">Deploy</span></summary>
+      <div class="qa-body"><h5>Answer</h5><p><b>Step Functions</b> Map + Bedrock invoke + Task Token wait for human review branch.</p></div>
+    </details>
+  </div>
+</section>
