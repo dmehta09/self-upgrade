@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RED & USE methods | Observability Field Guide</title>
-  <meta name="description" content="Observability Field Guide — RED &amp; USE methods. A sharp, visual guide to observability — logs, metrics, traces, OpenTelemetry, Prometheus, Grafana &amp; SLOs — for interviews — June 2026." />
+  <title>Continuous profiling & Pyroscope | Observability Field Guide</title>
+  <meta name="description" content="Observability Field Guide — Continuous profiling &amp; Pyroscope. A sharp, visual guide to observability — logs, metrics, traces, OpenTelemetry, Prometheus, Grafana &amp; SLOs — for interviews — June 2026." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="../assets/css/observability.css" />
   <script>window.SITE_BASE = "../";</script>
 </head>
-<body data-tool="metrics" data-page="metrics-red-use" data-lesson="me-red-use">
+<body data-tool="profiles" data-page="profiles-continuous-profiling" data-lesson="pf-continuous">
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="scroll-progress"></div>
   <div class="app">
@@ -110,7 +110,7 @@
         <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">RED &amp; USE methods</span></nav>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">Continuous profiling &amp; Pyroscope</span></nav>
         <div class="topbar-spacer"></div>
         <button class="search-trigger" aria-label="Search (press / )">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -125,201 +125,156 @@
       <div class="content has-toc" id="main">
         <div class="prose">
 <section class="hero reveal">
-  <span class="eyebrow">Metrics · RED &amp; USE</span>
-  <h1>RED &amp; USE methods.</h1>
-  <p class="lead">Two complementary checklists tell you exactly <em>which</em> metrics to look at first. RED watches your services from the user's perspective; USE watches your infrastructure from the inside. Together they map to Google's Four Golden Signals.</p>
+  <span class="eyebrow">Profiles &middot; continuous profiling</span>
+  <h1>Continuous profiling &amp; Pyroscope.</h1>
+  <p class="lead">Always-on, low-overhead sampling turns &ldquo;attach a profiler during the outage&rdquo; into &ldquo;query the flame graph for the minute the alert fired.&rdquo; Pyroscope is the usual OSS backend; OTel Profiles is the emerging wire format.</p>
 </section>
 
 <section class="section reveal" id="idea">
-  <h2><span class="section-num">01</span> The mental model</h2>
-  <p class="takeaway"><b>RED</b> = "is the service doing its job?" &nbsp; <b>USE</b> = "is the resource holding up?"</p>
-  <p>Neither framework replaces the other. A database can be saturated (USE) before any user-facing error appears (RED). Conversely, high error rates in RED rarely show up in CPU utilisation.</p>
+  <h2><span class="section-num">01</span> Always-on sampling</h2>
+  <p class="takeaway"><b>Continuous profiling</b> runs a sampler in every process (or via eBPF on the host) and stores time-indexed profiles so you can diff &ldquo;before deploy&rdquo; vs &ldquo;after deploy&rdquo; without replaying the incident.</p>
+  <p>Typical cadence: sample stacks tens of times per second, aggregate into short windows (e.g. 10s&ndash;1m), ship via OTLP or the Pyroscope ingest API. You trade a small fixed CPU tax for the ability to answer performance questions after the fact.</p>
 
   <div class="callout analogy">
     <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
     <div class="co-body">
       <div class="co-title">In plain English <span class="tag">analogy</span></div>
-      <p><b>RED</b> = the front-of-house: are diners being seated quickly, are they getting the right food, how long is the wait? <b>USE</b> = the kitchen equipment: is the oven at 100% capacity, is the fridge queue backing up, are appliances throwing errors?</p>
+      <p>Dashcams vs pulling over to set up a tripod. The dashcam footage is already there when the crash happens. Continuous profiling is the dashcam for CPU and allocations.</p>
     </div>
-  </div>
-</section>
-
-<section class="section reveal" id="red">
-  <h2><span class="section-num">02</span> RED — for request-driven services</h2>
-  <p>Coined by Tom Wilkie (Grafana Labs). Apply it to every microservice or API endpoint.</p>
-
-  <div class="diagram">
-    <div class="dg-title">RED checklist</div>
-    <div class="flow">
-      <div class="flow-node">
-        <div class="fn-k">R</div>
-        <div class="fn-t">Rate</div>
-        <div class="fn-d">Requests/sec arriving at this service</div>
-      </div>
-      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
-      <div class="flow-node">
-        <div class="fn-k">E</div>
-        <div class="fn-t">Errors</div>
-        <div class="fn-d">Fraction of requests returning an error</div>
-      </div>
-      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
-      <div class="flow-node">
-        <div class="fn-k">D</div>
-        <div class="fn-t">Duration</div>
-        <div class="fn-d">Latency distribution (p50 / p95 / p99)</div>
-      </div>
-    </div>
-    <div class="cap">Start here for every service alert or incident triage.</div>
   </div>
 
   <dl class="kv">
-    <dt>Rate</dt><dd><code>rate(http_requests_total[5m])</code> — tells you load and whether a drop means traffic fell or the service is rejecting requests.</dd>
-    <dt>Errors</dt><dd><code>rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])</code> — the fraction that failed.</dd>
-    <dt>Duration</dt><dd><code>histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))</code> — the felt latency.</dd>
+    <dt>Pyroscope</dt><dd>Grafana&rsquo;s continuous profiling backend (OSS + Grafana Cloud). Stores profiles cheaply; UI integrates with Tempo/Loki/Prometheus.</dd>
+    <dt>FlameQL</dt><dd>Pyroscope&rsquo;s query language &mdash; select by service/labels and time range, then render or diff flames.</dd>
+    <dt>eBPF agent</dt><dd>Kernel-level sampler (Elastic-donated path into OTel) that profiles without language-specific SDKs. Low overhead; great for polyglot fleets.</dd>
+    <dt>Language SDKs</dt><dd>In-process agents (Go, Java, Python, &hellip;) when you need runtime-aware frames the eBPF view can&rsquo;t symbolize as cleanly.</dd>
   </dl>
 </section>
 
-<section class="section reveal" id="use">
-  <h2><span class="section-num">03</span> USE — for resource health</h2>
-  <p>Coined by Brendan Gregg. Apply it to every resource: CPU, memory, disk I/O, network, connection pools, queues.</p>
+<section class="section reveal" id="stack">
+  <h2><span class="section-num">02</span> How the pieces fit</h2>
+  <p>Same mental model as the rest of the 2026 stack: instrument once, ship OTLP, store in a specialized backend, visualize in Grafana.</p>
 
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Letter</th>
-          <th>Meaning</th>
-          <th>Example metric</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><b>U</b>tilization</td>
-          <td>% of time the resource is busy (0–100%)</td>
-          <td>CPU usage %, disk busy %</td>
-        </tr>
-        <tr>
-          <td><b>S</b>aturation</td>
-          <td>Extra work queued that the resource can't serve yet</td>
-          <td>CPU run-queue depth, disk I/O wait, thread pool queue length</td>
-        </tr>
-        <tr>
-          <td><b>E</b>rrors</td>
-          <td>Error events from the resource itself</td>
-          <td>Network packet drops, disk I/O errors, OOM kills</td>
-        </tr>
-      </tbody>
-    </table>
+  <div class="diagram">
+    <div class="dg-title">Continuous profiling path</div>
+    <div class="flow">
+      <div class="flow-node">
+        <div class="fn-k">agent</div>
+        <div class="fn-t">eBPF / SDK</div>
+        <div class="fn-d">sample stacks<br>~1&ndash;5% overhead</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">pipeline</div>
+        <div class="fn-t">OTLP / Alloy</div>
+        <div class="fn-d">Collector routes<br>Profiles signal</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">store</div>
+        <div class="fn-t">Pyroscope</div>
+        <div class="fn-d">FlameQL query<br>diff windows</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">UI</div>
+        <div class="fn-t">Grafana</div>
+        <div class="fn-d">link from Tempo<br>span &rarr; flame</div>
+      </div>
+    </div>
+    <div class="cap">OTel Profiles (public alpha Mar 2026) standardizes the wire format so the agent and backend can swap without rewriting instrumentation.</div>
   </div>
 
-  <p>Saturation is the leading signal — a resource can hit 100% utilisation and still serve requests, but once the queue grows, latency degrades and the service is on borrowed time.</p>
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">flameql-examples.txt</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="text"># CPU profile for one service in the last hour
+{service_name="orders-svc"}
+
+# Compare two deploys (diff in the UI)
+{service_name="orders-svc", deployment_id="v142"}
+{service_name="orders-svc", deployment_id="v143"}</code></pre>
+  </div>
 </section>
 
-<section class="section reveal" id="golden-signals">
-  <h2><span class="section-num">04</span> Four Golden Signals — the overlap</h2>
-  <p>Google's SRE book defined four signals: <b>Latency</b>, <b>Traffic</b>, <b>Errors</b>, <b>Saturation</b>. They overlap heavily with RED and USE.</p>
+<section class="section reveal" id="when">
+  <h2><span class="section-num">03</span> When to use it &mdash; and the cost</h2>
+  <p class="takeaway">Turn continuous profiling on for services where CPU, allocation, or latency regressions are plausible after every deploy. Skip it on tiny sidecars that never show up in RED burn.</p>
 
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Golden Signal</th>
-          <th>Maps to RED</th>
-          <th>Maps to USE</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Latency</td>
-          <td>Duration (D)</td>
-          <td>—</td>
-        </tr>
-        <tr>
-          <td>Traffic</td>
-          <td>Rate (R)</td>
-          <td>Utilization (U)</td>
-        </tr>
-        <tr>
-          <td>Errors</td>
-          <td>Errors (E)</td>
-          <td>Errors (E)</td>
-        </tr>
-        <tr>
-          <td>Saturation</td>
-          <td>—</td>
-          <td>Saturation (S)</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <p>In practice: use <b>RED</b> to build service dashboards and alerts; use <b>USE</b> for infra runbooks and capacity planning; treat the Four Golden Signals as the vocabulary when talking to SREs.</p>
+  <dl class="kv">
+    <dt>Use when</dt><dd>Frequent deploys; Go/Java/Python services with real CPU budgets; post-incident &ldquo;what changed?&rdquo; reviews; capacity planning.</dd>
+    <dt>Skip / defer when</dt><dd>Trivial cron jobs; already CPU-starved edge devices; you have zero Grafana/Tempo correlation yet (fix metrics+traces first).</dd>
+    <dt>CPU overhead</dt><dd>Target low single-digit percent with eBPF. If you see double-digit tax, lower sample rate or exclude noisy namespaces.</dd>
+    <dt>Storage cost</dt><dd>Profiles are cheaper than raw traces but not free &mdash; retain days&ndash;weeks of high-res, downsample or drop idle services for longer retention.</dd>
+  </dl>
 
   <div class="callout gotcha">
     <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
     <div class="co-body">
       <div class="co-title">Common trap <span class="tag">gotcha</span></div>
-      <p>Alerting on <b>causes</b> (CPU 80%) instead of <b>symptoms</b> (latency &gt; SLO, error rate &gt; threshold). A CPU alert fires at 2 AM for batch jobs nobody cares about. A latency alert fires when users are actually hurting. Alert on user-facing symptoms; use resource metrics for diagnosis after the alert fires.</p>
+      <p>Enabling continuous profiling without symbolization. A flame full of <code>0x7f8a&hellip;</code> addresses is useless in an interview and in an incident. Ship debug symbols (or build IDs + a symbol server) with the same care you ship container images.</p>
     </div>
   </div>
-</section>
 
-<section class="section reveal" id="quiz-red-use">
-  <h2><span class="section-num">05</span> Check yourself</h2>
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Practical tip <span class="tag">tip</span></div>
+      <p>Diff profiles across the deploy boundary first. Interviewers love &ldquo;v142 vs v143 FlameQL diff showed <code>json.Marshal</code> double in width&rdquo; &mdash; that is a concrete root cause, not a vibe.</p>
+    </div>
+  </div>
 
   <div class="quiz" data-quiz>
-    <p class="q">Your checkout service returns 500s for 3% of requests. Which letter in RED does this map to?</p>
+    <p class="q">Why prefer an eBPF profiling agent in a polyglot Kubernetes cluster?</p>
     <div class="quiz-opts">
-      <button class="quiz-opt" data-correct="true"><span class="mark"></span>E — Errors: the fraction of requests that failed.</button>
-      <button class="quiz-opt"><span class="mark"></span>D — Duration: high error rates slow things down.</button>
-      <button class="quiz-opt"><span class="mark"></span>Both R and E — rate includes errors.</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>One host-level agent covers many languages with low overhead &mdash; no per-language SDK required to start.</button>
+      <button class="quiz-opt"><span class="mark"></span>eBPF replaces Prometheus entirely for RED metrics.</button>
+      <button class="quiz-opt"><span class="mark"></span>eBPF profiles only work for Go and must be compiled into each binary.</button>
     </div>
-    <div class="quiz-explain"><b>Right.</b> Errors in RED is specifically the error ratio. Rate is volume; Duration is latency. They can correlate, but each is a distinct signal.</div>
+    <div class="quiz-explain"><b>Right.</b> eBPF samples from the kernel&rsquo;s view of stacks. You still may add language SDKs later for richer frames, but you can cover the fleet quickly.</div>
   </div>
 </section>
 
 <section class="section reveal" id="interview">
-  <h2><span class="section-num">06</span> Interview rapid-fire</h2>
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
   <div class="qa-set">
     <details class="qa">
-      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Explain RED and USE and when you'd use each.</span><span class="pm-chip diff-core">core</span></summary>
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is continuous profiling and how is it different from <code>pprof</code> on demand?</span><span class="pm-chip diff-warm">warm</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p>RED (Rate, Errors, Duration) applies to every request-driven microservice — it tells you how well the service is serving users. USE (Utilization, Saturation, Errors) applies to every underlying resource — CPU, memory, queues — and tells you whether the resource is healthy. In an incident I reach for RED first to confirm there's a user-facing symptom, then use USE to identify which resource is the root cause.</p>
-        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"RED = front-of-house — are users being served? USE = kitchen — is the equipment holding up? I triage with RED and diagnose with USE."</p></div></div>
+        <p>Continuous profiling samples stacks (or allocations) all the time at low overhead and stores them as a time series. On-demand <code>pprof</code> is a session you start after you already suspect a process. Continuous lets you query the exact minute of an alert; on-demand is for deeper one-process investigation.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Always-on sampling so the flame graph exists before the page fires &mdash; not after I SSH in.&rdquo;</p></div></div>
       </div>
     </details>
     <details class="qa">
-      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why should you alert on symptoms rather than causes?</span><span class="pm-chip diff-core">core</span></summary>
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Name the backend and query language you&rsquo;d reach for in a Grafana stack.</span><span class="pm-chip diff-core">core</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p>Cause-based alerts (CPU &gt; 80%) fire constantly for workloads that never hurt users, causing alert fatigue. Symptom-based alerts (latency &gt; SLO, error rate &gt; threshold) fire only when users are impacted, making every alert actionable. Resource metrics are invaluable for post-alert diagnosis, not for the alert predicate itself.</p>
-        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Alert on user pain — latency and errors. Use CPU and queue depth to explain why after you've been paged, not as the page itself."</p></div></div>
+        <p>Pyroscope stores the profiles; FlameQL selects by labels and time. Grafana links those flames next to Tempo traces and Prometheus metrics so the cascade stays in one UI.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Pyroscope + FlameQL, wired into Grafana beside Tempo.&rdquo;</p></div></div>
       </div>
     </details>
     <details class="qa">
-      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do RED and USE relate to Google's Four Golden Signals?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What cost knobs would you mention for running this in production?</span><span class="pm-chip diff-stretch">stretch</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p>The Four Golden Signals (Latency, Traffic, Errors, Saturation) span both frameworks. Latency maps to RED's Duration; Traffic maps to RED's Rate and USE's Utilization; Errors appear in both; Saturation maps to USE's Saturation. They're the same ideas under two lenses — service-centric (RED) and resource-centric (USE).</p>
-        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Golden Signals is Google's vocabulary; RED and USE are Brendan Gregg and Tom Wilkie's implementations. They largely cover the same ground — I use whatever vocabulary the team already speaks."</p></div></div>
+        <p>Sample rate / agent overhead (~1&ndash;5% target), retention vs resolution, which services are profiled, and symbolization pipeline cost. Also call out that Profiles are still public alpha in OTel &mdash; expect API churn while the eBPF agent path matures.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;I&rsquo;d budget a few percent CPU, short high-res retention, and symbols &mdash; and note OTel Profiles is still alpha.&rdquo;</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>How do you diff two deploys in FlameQL?</li><li>When is language SDK profiling better than eBPF?</li></ul></div>
       </div>
     </details>
   </div>
 </section>
           <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
           <nav class="page-nav reveal">
-            <a href="../metrics/metric-types.html"><span class="pn-k">Previous</span><span class="pn-t">The four metric types</span></a>
-            <a class="next" href="../metrics/histograms-percentiles.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Histograms &amp; percentiles</span></a>
+            <a href="../profiles/index.html"><span class="pn-k">Previous</span><span class="pn-t">Profiles — the 4th signal</span></a>
+            <a class="next" href="../promstack/index.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Prometheus &amp; Grafana</span></a>
           </nav>
         </div>
         <nav class="toc">
           <h5>On this page</h5>
-          <a href="#idea">The mental model</a>
-          <a href="#red">RED — for request-driven services</a>
-          <a href="#use">USE — for resource health</a>
-          <a href="#golden-signals">Four Golden Signals — the overlap</a>
-          <a href="#quiz-red-use">Check yourself</a>
+          <a href="#idea">Always-on sampling</a>
+          <a href="#stack">How the pieces fit</a>
+          <a href="#when">When to use it and the cost</a>
           <a href="#interview">Interview rapid-fire</a>
         </nav>
       </div>

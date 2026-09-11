@@ -33,6 +33,7 @@ const MODULES = [
     { slug: "metric-types",           title: "The four metric types",       nav: "Metric types",            id: "me-types",      widgets: ["series-lab.js"] },
     { slug: "red-use",                title: "RED & USE methods",           nav: "RED & USE",               id: "me-red-use" },
     { slug: "histograms-percentiles", title: "Histograms & percentiles",    nav: "Histograms & percentiles", id: "me-histograms", widgets: ["series-lab.js"] },
+    { slug: "exemplars-and-linking",  title: "Exemplars & cross-signal linking", nav: "Exemplars & linking", id: "me-exemplars" },
   ]},
   { key: "traces", label: "Traces & distributed tracing", pages: [
     { slug: "index",             title: "Traces — the causal signal",            nav: "Overview",       id: "tr-overview" },
@@ -45,6 +46,11 @@ const MODULES = [
     { slug: "api-sdk-collector",     title: "API, SDK & Collector",              nav: "API · SDK · Collector", id: "ot-architecture" },
     { slug: "instrumentation",       title: "Auto vs manual instrumentation",    nav: "Instrumentation",     id: "ot-instrumentation" },
     { slug: "semantic-conventions",  title: "Semantic conventions",              nav: "Semantic conventions", id: "ot-semconv" },
+    { slug: "genai-observability",   title: "GenAI observability (gen_ai semconv)", nav: "GenAI observability", id: "ot-genai" },
+  ]},
+  { key: "profiles", label: "Profiles", pages: [
+    { slug: "index",                   title: "Profiles — the 4th signal",      nav: "Overview",              id: "pf-overview" },
+    { slug: "continuous-profiling",    title: "Continuous profiling & Pyroscope", nav: "Continuous profiling", id: "pf-continuous" },
   ]},
   { key: "promstack", label: "Prometheus & Grafana", pages: [
     { slug: "index",            title: "Prometheus & Grafana",          nav: "Overview",          id: "pr-overview" },

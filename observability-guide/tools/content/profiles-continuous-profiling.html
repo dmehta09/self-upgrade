@@ -1,0 +1,140 @@
+<section class="hero reveal">
+  <span class="eyebrow">Profiles &middot; continuous profiling</span>
+  <h1>Continuous profiling &amp; Pyroscope.</h1>
+  <p class="lead">Always-on, low-overhead sampling turns &ldquo;attach a profiler during the outage&rdquo; into &ldquo;query the flame graph for the minute the alert fired.&rdquo; Pyroscope is the usual OSS backend; OTel Profiles is the emerging wire format.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> Always-on sampling</h2>
+  <p class="takeaway"><b>Continuous profiling</b> runs a sampler in every process (or via eBPF on the host) and stores time-indexed profiles so you can diff &ldquo;before deploy&rdquo; vs &ldquo;after deploy&rdquo; without replaying the incident.</p>
+  <p>Typical cadence: sample stacks tens of times per second, aggregate into short windows (e.g. 10s&ndash;1m), ship via OTLP or the Pyroscope ingest API. You trade a small fixed CPU tax for the ability to answer performance questions after the fact.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Dashcams vs pulling over to set up a tripod. The dashcam footage is already there when the crash happens. Continuous profiling is the dashcam for CPU and allocations.</p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>Pyroscope</dt><dd>Grafana&rsquo;s continuous profiling backend (OSS + Grafana Cloud). Stores profiles cheaply; UI integrates with Tempo/Loki/Prometheus.</dd>
+    <dt>FlameQL</dt><dd>Pyroscope&rsquo;s query language &mdash; select by service/labels and time range, then render or diff flames.</dd>
+    <dt>eBPF agent</dt><dd>Kernel-level sampler (Elastic-donated path into OTel) that profiles without language-specific SDKs. Low overhead; great for polyglot fleets.</dd>
+    <dt>Language SDKs</dt><dd>In-process agents (Go, Java, Python, &hellip;) when you need runtime-aware frames the eBPF view can&rsquo;t symbolize as cleanly.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="stack">
+  <h2><span class="section-num">02</span> How the pieces fit</h2>
+  <p>Same mental model as the rest of the 2026 stack: instrument once, ship OTLP, store in a specialized backend, visualize in Grafana.</p>
+
+  <div class="diagram">
+    <div class="dg-title">Continuous profiling path</div>
+    <div class="flow">
+      <div class="flow-node">
+        <div class="fn-k">agent</div>
+        <div class="fn-t">eBPF / SDK</div>
+        <div class="fn-d">sample stacks<br>~1&ndash;5% overhead</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">pipeline</div>
+        <div class="fn-t">OTLP / Alloy</div>
+        <div class="fn-d">Collector routes<br>Profiles signal</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">store</div>
+        <div class="fn-t">Pyroscope</div>
+        <div class="fn-d">FlameQL query<br>diff windows</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">UI</div>
+        <div class="fn-t">Grafana</div>
+        <div class="fn-d">link from Tempo<br>span &rarr; flame</div>
+      </div>
+    </div>
+    <div class="cap">OTel Profiles (public alpha Mar 2026) standardizes the wire format so the agent and backend can swap without rewriting instrumentation.</div>
+  </div>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">flameql-examples.txt</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="text"># CPU profile for one service in the last hour
+{service_name="orders-svc"}
+
+# Compare two deploys (diff in the UI)
+{service_name="orders-svc", deployment_id="v142"}
+{service_name="orders-svc", deployment_id="v143"}</code></pre>
+  </div>
+</section>
+
+<section class="section reveal" id="when">
+  <h2><span class="section-num">03</span> When to use it &mdash; and the cost</h2>
+  <p class="takeaway">Turn continuous profiling on for services where CPU, allocation, or latency regressions are plausible after every deploy. Skip it on tiny sidecars that never show up in RED burn.</p>
+
+  <dl class="kv">
+    <dt>Use when</dt><dd>Frequent deploys; Go/Java/Python services with real CPU budgets; post-incident &ldquo;what changed?&rdquo; reviews; capacity planning.</dd>
+    <dt>Skip / defer when</dt><dd>Trivial cron jobs; already CPU-starved edge devices; you have zero Grafana/Tempo correlation yet (fix metrics+traces first).</dd>
+    <dt>CPU overhead</dt><dd>Target low single-digit percent with eBPF. If you see double-digit tax, lower sample rate or exclude noisy namespaces.</dd>
+    <dt>Storage cost</dt><dd>Profiles are cheaper than raw traces but not free &mdash; retain days&ndash;weeks of high-res, downsample or drop idle services for longer retention.</dd>
+  </dl>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+      <p>Enabling continuous profiling without symbolization. A flame full of <code>0x7f8a&hellip;</code> addresses is useless in an interview and in an incident. Ship debug symbols (or build IDs + a symbol server) with the same care you ship container images.</p>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Practical tip <span class="tag">tip</span></div>
+      <p>Diff profiles across the deploy boundary first. Interviewers love &ldquo;v142 vs v143 FlameQL diff showed <code>json.Marshal</code> double in width&rdquo; &mdash; that is a concrete root cause, not a vibe.</p>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Why prefer an eBPF profiling agent in a polyglot Kubernetes cluster?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>One host-level agent covers many languages with low overhead &mdash; no per-language SDK required to start.</button>
+      <button class="quiz-opt"><span class="mark"></span>eBPF replaces Prometheus entirely for RED metrics.</button>
+      <button class="quiz-opt"><span class="mark"></span>eBPF profiles only work for Go and must be compiled into each binary.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> eBPF samples from the kernel&rsquo;s view of stacks. You still may add language SDKs later for richer frames, but you can cover the fleet quickly.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is continuous profiling and how is it different from <code>pprof</code> on demand?</span><span class="pm-chip diff-warm">warm</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Continuous profiling samples stacks (or allocations) all the time at low overhead and stores them as a time series. On-demand <code>pprof</code> is a session you start after you already suspect a process. Continuous lets you query the exact minute of an alert; on-demand is for deeper one-process investigation.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Always-on sampling so the flame graph exists before the page fires &mdash; not after I SSH in.&rdquo;</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Name the backend and query language you&rsquo;d reach for in a Grafana stack.</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Pyroscope stores the profiles; FlameQL selects by labels and time. Grafana links those flames next to Tempo traces and Prometheus metrics so the cascade stays in one UI.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Pyroscope + FlameQL, wired into Grafana beside Tempo.&rdquo;</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What cost knobs would you mention for running this in production?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Sample rate / agent overhead (~1&ndash;5% target), retention vs resolution, which services are profiled, and symbolization pipeline cost. Also call out that Profiles are still public alpha in OTel &mdash; expect API churn while the eBPF agent path matures.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;I&rsquo;d budget a few percent CPU, short high-res retention, and symbols &mdash; and note OTel Profiles is still alpha.&rdquo;</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>How do you diff two deploys in FlameQL?</li><li>When is language SDK profiling better than eBPF?</li></ul></div>
+      </div>
+    </details>
+  </div>
+</section>

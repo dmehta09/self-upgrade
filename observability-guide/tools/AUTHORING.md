@@ -196,7 +196,7 @@ Three self-contained modes:
 - **Grafana 12 → 12.3:** Observability-as-Code (**Git Sync** — dashboards as code with PRs in-UI), **dynamic dashboards** (auto-grid), **Drilldown** GA, Grafana-managed alerts/recording rules, redesigned logs panel.
 - **Tracing backends:** **Jaeger v2** is rebuilt **on the OTel Collector** and speaks OTLP end-to-end (v1 hit EOL Dec 31 2025). **Grafana Tempo** = object-storage-only backend with **TraceQL** + Traces Drilldown.
 - **Loki** = log backend: a small **label index** + highly compressed chunks (cheap); query with **LogQL**; ship logs via **Grafana Alloy** (the OTel-collector distro). Native correlation: from a span, jump to **Loki logs** (filtered by `trace_id`) and to **metrics via exemplars**.
-- **Profiling:** continuous profiling via **Pyroscope** / OTel Profiles (the emerging 4th pillar) — mention briefly, it is not a module.
+- **Profiles:** first-class module — the **4th OTel signal** (public alpha Mar 2026). Cover continuous profiling via **Pyroscope** / FlameQL, the low-overhead eBPF agent (Elastic-donated), and correlation of profiles to traces. Treat it as a peer of Logs / Metrics / Traces, not a sidebar mention.
 - **Commercial context** (name + one line, don't deep-dive): **Datadog** (all-in-one SaaS, agent + APM), **New Relic** (all-in-one, usage pricing), **Honeycomb** (high-cardinality events, "observability 2.0 / wide events"), **Splunk** (logs/SIEM heritage), **Grafana Cloud** (managed Prometheus/Loki/Tempo/Pyroscope). The OSS trend in 2026: **OTel for instrumentation + a backend of choice**, and "wide structured events" as an emerging model.
 
 ---

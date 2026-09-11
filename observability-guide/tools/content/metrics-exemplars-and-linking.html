@@ -1,0 +1,137 @@
+<section class="hero reveal">
+  <span class="eyebrow">Metrics &middot; exemplars &amp; linking</span>
+  <h1>Exemplars &amp; cross-signal linking.</h1>
+  <p class="lead">A metric spike without a request is a rumor. An exemplar pins a real <code>trace_id</code> to a histogram bucket so Grafana can jump from &ldquo;p99 is high&rdquo; to the exact slow trace &mdash; then to the logs for that same id.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> What an exemplar is</h2>
+  <p class="takeaway">An <b>exemplar</b> is a sample attached to a metric data point (usually a histogram bucket) that carries a <code>trace_id</code> (and often <code>span_id</code>) from a real request observed in that bucket.</p>
+  <p>OpenMetrics and Prometheus 3.x carry exemplars natively; Remote-Write 2.0 preserves them on the way to Mimir/Thanos. OTel SDKs can attach the active span context when recording histogram measurements.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>A bar chart of wait times with sticky notes on a few bars: &ldquo;ticket #4821 waited 12 minutes.&rdquo; The bar (metric) shows the distribution; the sticky note (exemplar) is your passport into the full case file (trace + logs).</p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>OpenMetrics exemplars</dt><dd>Standard way to attach trace references to metric samples. Prometheus scrapes and stores them with the series.</dd>
+    <dt>Histogram + exemplars</dt><dd>Best pairing: latency/error histograms keep exemplars in the buckets that hurt (the p99 tail).</dd>
+    <dt>Grafana click-to-trace</dt><dd>Exemplar dots on a panel; click opens Tempo/Jaeger for that <code>trace_id</code>.</dd>
+    <dt>Not a high-card label</dt><dd>The <code>trace_id</code> lives on the exemplar, <em>not</em> as a Prometheus label &mdash; so you do not explode cardinality.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="cascade">
+  <h2><span class="section-num">02</span> Metric &harr; trace &harr; log</h2>
+  <p class="takeaway">Exemplars close the metrics&rarr;traces gap. Shared <code>trace_id</code> in structured logs closes traces&rarr;logs. Together they are the standard incident cascade.</p>
+
+  <div class="diagram">
+    <div class="dg-title">One request, three backends</div>
+    <div class="flow">
+      <div class="flow-node">
+        <div class="fn-k">Prometheus</div>
+        <div class="fn-t">Histogram</div>
+        <div class="fn-d">bucket le="2.5"<br>exemplar trace_id</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">Tempo</div>
+        <div class="fn-t">Waterfall</div>
+        <div class="fn-d">open by trace_id<br>find slow span</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">Loki</div>
+        <div class="fn-t">Log lines</div>
+        <div class="fn-d">LogQL filter<br>trace_id=…</div>
+      </div>
+    </div>
+    <div class="cap">Grafana&rsquo;s Explore / Drilldown views wire these jumps when data sources share the same id fields. Profiles (Pyroscope) can be a fourth hop for the hot functions.</div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Link</th><th>Mechanism</th><th>User action</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Metric &rarr; Trace</td><td>Exemplar on histogram / counter</td><td>Click exemplar dot in Grafana</td></tr>
+        <tr><td>Trace &rarr; Logs</td><td><code>trace_id</code> in log records</td><td>&ldquo;Logs for this span&rdquo; / LogQL</td></tr>
+        <tr><td>Logs &rarr; Trace</td><td>Same <code>trace_id</code> field</td><td>Click derived link in log line</td></tr>
+        <tr><td>Trace &rarr; Profile</td><td>Service + time window (span link when available)</td><td>Open Pyroscope for that service</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section reveal" id="cardinality">
+  <h2><span class="section-num">03</span> Cardinality: why exemplars beat labels</h2>
+  <p>Putting <code>trace_id</code> or <code>user_id</code> on a metric label creates one series per value &mdash; a classic cardinality bomb. Exemplars store the id beside the sample without multiplying series.</p>
+
+  <dl class="kv">
+    <dt>Do</dt><dd>Low-cardinality metric labels (<code>service</code>, <code>route</code>, <code>status_class</code>) + exemplars for per-request proof.</dd>
+    <dt>Don&rsquo;t</dt><dd><code>trace_id</code>, <code>request_id</code>, raw <code>user_id</code>, or full URLs as metric labels.</dd>
+    <dt>Detail store</dt><dd>High-cardinality context belongs in spans and structured logs; metrics stay cheap aggregations.</dd>
+  </dl>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+      <p>Enabling exemplars in the SDK but forgetting Grafana data-source exemplar configuration (trace data source mapping). You see the metric spike and no dots &mdash; the link was never wired in the UI.</p>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Practical tip <span class="tag">tip</span></div>
+      <p>Prefer exemplars on the latency histogram you alert on. When burn-rate fires, the same panel that pages you should offer a one-click path into Tempo.</p>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">You need to jump from a p99 spike to a slow request. What should you attach to the latency histogram?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Exemplars carrying <code>trace_id</code> (OpenMetrics / Prometheus), not <code>trace_id</code> as a label.</button>
+      <button class="quiz-opt"><span class="mark"></span>A metric label for every <code>trace_id</code> observed.</button>
+      <button class="quiz-opt"><span class="mark"></span>Nothing — copy timestamps and grep logs by hand.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Exemplars give click-to-trace without the cardinality explosion of per-trace labels.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is a trace exemplar?</span><span class="pm-chip diff-warm">warm</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>A sample on a metric data point &mdash; typically a histogram bucket &mdash; that includes a <code>trace_id</code> from a real request. In Grafana you click the exemplar and open the correlated trace in Tempo. It is part of OpenMetrics and supported in Prometheus 3.x / Remote-Write 2.0.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;A trace_id glued to a histogram point so I can click from p99 straight into Tempo.&rdquo;</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you link metrics, traces, and logs without blowing cardinality?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Keep metric labels low-cardinality. Attach exemplars for metric&rarr;trace. Put <code>trace_id</code> (and <code>span_id</code>) on structured logs for trace&harr;log. Never promote unbounded ids to Prometheus labels.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Exemplars for metrics-to-traces; trace_id in logs; ids never become metric labels.&rdquo;</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Walk the cascade for a sudden error-rate surge.</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>RED dashboard shows error rate up &rarr; click an error exemplar &rarr; Tempo waterfall shows the failing span &rarr; jump to Loki with that <code>trace_id</code> for the exception payload &rarr; optionally open Pyroscope if the failure is actually a timeout from CPU saturation. Fix is informed by code + logs, not by the aggregate alone.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;RED &rarr; exemplar &rarr; Tempo &rarr; Loki on the same trace_id &mdash; that&rsquo;s the cascade.&rdquo;</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>Where do exemplars live in OpenMetrics?</li><li>Why is Remote-Write 2.0 relevant here?</li></ul></div>
+      </div>
+    </details>
+  </div>
+</section>

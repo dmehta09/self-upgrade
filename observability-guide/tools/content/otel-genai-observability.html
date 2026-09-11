@@ -1,0 +1,136 @@
+<section class="hero reveal">
+  <span class="eyebrow">OpenTelemetry &middot; GenAI</span>
+  <h1>GenAI observability.</h1>
+  <p class="lead">LLM calls are just another remote dependency &mdash; until you forget to record model, tokens, and cost. The experimental <code>gen_ai</code> semantic conventions give those spans a shared vocabulary so latency, errors, and spend show up next to the rest of your stack.</p>
+</section>
+
+<section class="section reveal" id="idea">
+  <h2><span class="section-num">01</span> Why LLM calls need spans</h2>
+  <p class="takeaway">A chat completion is an RPC with variable latency, non-deterministic output, and a <b>per-token bill</b>. If it is not a span with stable attributes, you cannot SLO it, alert on it, or explain a cost spike.</p>
+  <p>Treat the model provider like Postgres or Stripe: wrap each call in a client span, propagate context into tool/agent child spans, and export via OTLP. Product-level GenAI patterns live in the companion <a href="../../genai-guide/index.html">GenAI guide</a>; this page is the telemetry contract.</p>
+
+  <div class="callout analogy">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">In plain English <span class="tag">analogy</span></div>
+      <p>Shipping packages without tracking numbers, carrier names, or weight. You know &ldquo;something left the warehouse,&rdquo; but you cannot explain delays or the freight bill. <code>gen_ai</code> attributes are the shipping label for every model call.</p>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Heads up <span class="tag">experimental</span></div>
+      <p>The <code>gen_ai.*</code> semantic conventions are <strong>experimental</strong> as of ~v1.41. Names can still shift. Prefer official instrumentations and pin versions; expect migration notes when the group goes stable.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="attrs">
+  <h2><span class="section-num">02</span> Core <code>gen_ai</code> attributes</h2>
+  <p class="takeaway">At minimum record <b>system</b> (provider), <b>model</b>, and <b>token usage</b>. Those three unlock latency dashboards, error rates by model, and cost rollups.</p>
+
+  <dl class="kv">
+    <dt><code>gen_ai.system</code></dt><dd>Provider / product: <code>openai</code>, <code>anthropic</code>, <code>azure.ai.openai</code>, &hellip;</dd>
+    <dt><code>gen_ai.request.model</code></dt><dd>Requested model id: <code>gpt-4.1</code>, <code>claude-sonnet-4</code>.</dd>
+    <dt><code>gen_ai.response.model</code></dt><dd>Model that actually served (may differ under routing).</dd>
+    <dt><code>gen_ai.operation.name</code></dt><dd>Operation kind: <code>chat</code>, <code>embeddings</code>, <code>execute_tool</code>.</dd>
+    <dt><code>gen_ai.usage.input_tokens</code></dt><dd>Prompt / input token count.</dd>
+    <dt><code>gen_ai.usage.output_tokens</code></dt><dd>Completion / output token count.</dd>
+  </dl>
+
+  <div class="codeblock">
+    <div class="code-head"><div class="code-dots"><i></i><i></i><i></i></div><span class="code-file">llm_span_attrs.py</span><button class="code-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="clabel">Copy</span></button></div>
+    <pre><code data-lang="python"># Illustrative — prefer official gen_ai instrumentations
+span.set_attributes({
+    "gen_ai.system": "openai",
+    "gen_ai.operation.name": "chat",
+    "gen_ai.request.model": "gpt-4.1-mini",
+    "gen_ai.usage.input_tokens": usage.prompt_tokens,
+    "gen_ai.usage.output_tokens": usage.completion_tokens,
+})</code></pre>
+  </div>
+</section>
+
+<section class="section reveal" id="signals">
+  <h2><span class="section-num">03</span> Latency, cost, and errors</h2>
+  <p>Instrument once; derive the three questions every interview (and every CFO) asks.</p>
+
+  <div class="diagram">
+    <div class="dg-title">What each signal answers for LLM calls</div>
+    <div class="flow">
+      <div class="flow-node">
+        <div class="fn-k">latency</div>
+        <div class="fn-t">Span duration</div>
+        <div class="fn-d">TTFT + total<br>p95 by model</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">cost</div>
+        <div class="fn-t">Token attrs</div>
+        <div class="fn-d">input &times; price<br>+ output &times; price</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">errors</div>
+        <div class="fn-t">Span status</div>
+        <div class="fn-d">timeouts, 429s<br>content filters</div>
+      </div>
+    </div>
+    <div class="cap">Export histograms on duration and counters on errors; keep raw token counts on the span (or as metrics with low-cardinality labels: model, system, operation).</div>
+  </div>
+
+  <dl class="kv">
+    <dt>Latency</dt><dd>Use span duration; optionally record time-to-first-token as an event or child span for streaming.</dd>
+    <dt>Cost</dt><dd>Derive from <code>input_tokens</code> / <code>output_tokens</code> &times; your price table. Never put raw prompts in metric labels.</dd>
+    <dt>Errors</dt><dd>Set span status + record exception. Distinguish provider 5xx, rate limits, and application validation failures.</dd>
+  </dl>
+
+  <div class="callout gotcha">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Common trap <span class="tag">gotcha</span></div>
+      <p>Putting full prompts, completions, or user PII into span attributes or log labels. That creates a privacy incident and a cardinality bomb. Keep content in a redacted store or sampling pipeline; keep <code>gen_ai</code> attrs operational (model, tokens, status).</p>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Finance asks why LLM spend doubled overnight. Which attributes do you need on every chat span?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span><code>gen_ai.system</code>, request/response model, and input/output token usage.</button>
+      <button class="quiz-opt"><span class="mark"></span>Only <code>http.response.status_code</code> on the gateway span.</button>
+      <button class="quiz-opt"><span class="mark"></span>The full prompt text as a Prometheus label.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Provider + model + tokens let you attribute cost. Prompt text as a label is both a privacy risk and a cardinality disaster.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What are <code>gen_ai</code> semantic conventions?</span><span class="pm-chip diff-warm">warm</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>An OpenTelemetry attribute group for generative-AI operations &mdash; provider, model, operation name, token usage, and related fields. They are still experimental (~v1.41), but they are the portable way to make LLM spans queryable across languages and backends.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Standard names for LLM spans &mdash; system, model, tokens &mdash; still experimental, but that&rsquo;s the contract.&rdquo;</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How would you observe latency and cost for an agent that chains three model calls?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>One parent span for the agent turn; one child span per model/tool call with <code>gen_ai.*</code> attrs. Sum child durations for critical-path latency; sum token attrs (or derived cost metrics) for spend. Propagate the same <code>trace_id</code> so logs and eval traces stay joined.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Parent agent span, child spans per LLM call with token attrs &mdash; latency from the waterfall, cost from the tokens.&rdquo;</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Where does deeper GenAI product guidance live relative to this guide?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Telemetry conventions and OTel wiring stay here. Agents, RAG, evals, and product patterns belong in the sibling <a href="../../genai-guide/index.html">GenAI guide</a>. Cross-link rather than duplicating curriculum.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;I&rsquo;d keep <code>gen_ai</code> spans in the obs guide and send product/agent design to the GenAI guide.&rdquo;</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Monitoring vs observability | Observability Field Guide</title>
-  <meta name="description" content="Observability Field Guide — Monitoring vs observability. A sharp, visual guide to observability — logs, metrics, traces, OpenTelemetry, Prometheus, Grafana &amp; SLOs — for interviews — June 2026." />
+  <title>Exemplars & cross-signal linking | Observability Field Guide</title>
+  <meta name="description" content="Observability Field Guide — Exemplars &amp; cross-signal linking. A sharp, visual guide to observability — logs, metrics, traces, OpenTelemetry, Prometheus, Grafana &amp; SLOs — for interviews — June 2026." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400&family=Hanken+Grotesk:wght@300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="../assets/css/observability.css" />
   <script>window.SITE_BASE = "../";</script>
 </head>
-<body data-tool="foundations" data-page="foundations-what-is-observability" data-lesson="fo-what">
+<body data-tool="metrics" data-page="metrics-exemplars-and-linking" data-lesson="me-exemplars">
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="scroll-progress"></div>
   <div class="app">
@@ -110,7 +110,7 @@
         <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">Monitoring vs observability</span></nav>
+        <nav class="breadcrumb"><a href="../index.html">Home</a> <span class="sep">/</span> <span class="current">Exemplars &amp; cross-signal linking</span></nav>
         <div class="topbar-spacer"></div>
         <button class="search-trigger" aria-label="Search (press / )">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -125,72 +125,109 @@
       <div class="content has-toc" id="main">
         <div class="prose">
 <section class="hero reveal">
-  <span class="eyebrow">Foundations · what is observability</span>
-  <h1>Monitoring vs observability.</h1>
-  <p class="lead">Monitoring watches known dashboards for known failure modes. Observability lets you ask brand-new questions of a running system — from its outputs alone — to explain behavior you've never seen before, without shipping new code.</p>
+  <span class="eyebrow">Metrics &middot; exemplars &amp; linking</span>
+  <h1>Exemplars &amp; cross-signal linking.</h1>
+  <p class="lead">A metric spike without a request is a rumor. An exemplar pins a real <code>trace_id</code> to a histogram bucket so Grafana can jump from &ldquo;p99 is high&rdquo; to the exact slow trace &mdash; then to the logs for that same id.</p>
 </section>
 
 <section class="section reveal" id="idea">
-  <h2><span class="section-num">01</span> The core distinction</h2>
-  <p class="takeaway"><b>Monitoring</b> = alerting on known-unknowns. <b>Observability</b> = the ability to answer unknown-unknowns from output data alone.</p>
-  <p>The term comes from control theory: a system is "observable" if you can fully infer its internal state from its external outputs. Applied to software: if your system is observable, you can explain any novel failure from telemetry — no code change needed.</p>
+  <h2><span class="section-num">01</span> What an exemplar is</h2>
+  <p class="takeaway">An <b>exemplar</b> is a sample attached to a metric data point (usually a histogram bucket) that carries a <code>trace_id</code> (and often <code>span_id</code>) from a real request observed in that bucket.</p>
+  <p>OpenMetrics and Prometheus 3.x carry exemplars natively; Remote-Write 2.0 preserves them on the way to Mimir/Thanos. OTel SDKs can attach the active span context when recording histogram measurements.</p>
 
   <div class="callout analogy">
     <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span>
     <div class="co-body">
       <div class="co-title">In plain English <span class="tag">analogy</span></div>
-      <p>A car's dashboard shows speed, fuel, and temperature — fixed gauges for known problems. That's <strong>monitoring</strong>. The mechanic's OBD-II diagnostic port lets you query <em>any</em> sensor in real time and ask "why is cylinder 3 misfiring?" That's <strong>observability</strong>.</p>
+      <p>A bar chart of wait times with sticky notes on a few bars: &ldquo;ticket #4821 waited 12 minutes.&rdquo; The bar (metric) shows the distribution; the sticky note (exemplar) is your passport into the full case file (trace + logs).</p>
     </div>
   </div>
-
-  <div class="diagram"><div class="dg-title">Monitoring vs Observability</div>
-    <div class="flow">
-      <div class="flow-node"><div class="fn-k">Monitoring</div><div class="fn-t">Known dashboards</div><div class="fn-d">Pre-defined alerts for pre-defined failure modes. Good for known-unknowns.</div></div>
-      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
-      <div class="flow-node"><div class="fn-k">Observability</div><div class="fn-t">Any question, any time</div><div class="fn-d">Rich, linked telemetry. Ask novel questions. Explore unknown-unknowns without deploying.</div></div>
-    </div>
-    <div class="cap">Monitoring is a subset. Observability is the superset that includes it.</div>
-  </div>
-</section>
-
-<section class="section reveal" id="the-test">
-  <h2><span class="section-num">02</span> The "can you debug it?" test</h2>
-  <p class="takeaway">The sharpest test: <b>can you debug a brand-new production problem without deploying new code or logging?</b></p>
-  <p>If you have to add a log line, redeploy, and wait — your system is not observable. Observability means the telemetry you already ship is rich enough to answer questions you haven't thought of yet.</p>
 
   <dl class="kv">
-    <dt>Known-unknown</dt><dd>CPU spike on host A — you have a CPU alert. Monitoring handles this.</dd>
-    <dt>Unknown-unknown</dt><dd>Checkout latency spikes for users with &gt;50 items in cart, only in the EU region, only after 18:00. No alert covers this. Observability lets you discover it from trace data.</dd>
-    <dt>The key property</dt><dd>Telemetry carries enough context (high-cardinality attributes) that you can <em>slice any dimension</em> after the fact.</dd>
+    <dt>OpenMetrics exemplars</dt><dd>Standard way to attach trace references to metric samples. Prometheus scrapes and stores them with the series.</dd>
+    <dt>Histogram + exemplars</dt><dd>Best pairing: latency/error histograms keep exemplars in the buckets that hurt (the p99 tail).</dd>
+    <dt>Grafana click-to-trace</dt><dd>Exemplar dots on a panel; click opens Tempo/Jaeger for that <code>trace_id</code>.</dd>
+    <dt>Not a high-card label</dt><dd>The <code>trace_id</code> lives on the exemplar, <em>not</em> as a Prometheus label &mdash; so you do not explode cardinality.</dd>
   </dl>
 </section>
 
-<section class="section reveal" id="how-it-works">
-  <h2><span class="section-num">03</span> How systems become observable</h2>
-  <p>Observability comes from the richness of your telemetry, not the number of dashboards. Three properties matter: <strong>structured</strong> (machine-parseable), <strong>correlated</strong> (logs linked to traces, traces to metrics), and <strong>high-cardinality</strong> (enough attributes to slice by any dimension).</p>
+<section class="section reveal" id="cascade">
+  <h2><span class="section-num">02</span> Metric &harr; trace &harr; log</h2>
+  <p class="takeaway">Exemplars close the metrics&rarr;traces gap. Shared <code>trace_id</code> in structured logs closes traces&rarr;logs. Together they are the standard incident cascade.</p>
 
-  <div class="steps">
-    <div class="step"><span class="step-num">1</span><div class="step-body"><h4>Instrument</h4><p>Emit structured events: logs with context, spans, metrics with labels. OTel is the standard.</p></div></div>
-    <div class="step"><span class="step-num">2</span><div class="step-body"><h4>Correlate</h4><p>Attach a <code>trace_id</code> to logs and metrics so you can jump from a slow span to its logs instantly.</p></div></div>
-    <div class="step"><span class="step-num">3</span><div class="step-body"><h4>Explore</h4><p>Query <em>after</em> an incident with a question you didn't know you'd need to ask. No redeploy.</p></div></div>
+  <div class="diagram">
+    <div class="dg-title">One request, three backends</div>
+    <div class="flow">
+      <div class="flow-node">
+        <div class="fn-k">Prometheus</div>
+        <div class="fn-t">Histogram</div>
+        <div class="fn-d">bucket le="2.5"<br>exemplar trace_id</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">Tempo</div>
+        <div class="fn-t">Waterfall</div>
+        <div class="fn-d">open by trace_id<br>find slow span</div>
+      </div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node">
+        <div class="fn-k">Loki</div>
+        <div class="fn-t">Log lines</div>
+        <div class="fn-d">LogQL filter<br>trace_id=…</div>
+      </div>
+    </div>
+    <div class="cap">Grafana&rsquo;s Explore / Drilldown views wire these jumps when data sources share the same id fields. Profiles (Pyroscope) can be a fourth hop for the hot functions.</div>
   </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Link</th><th>Mechanism</th><th>User action</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Metric &rarr; Trace</td><td>Exemplar on histogram / counter</td><td>Click exemplar dot in Grafana</td></tr>
+        <tr><td>Trace &rarr; Logs</td><td><code>trace_id</code> in log records</td><td>&ldquo;Logs for this span&rdquo; / LogQL</td></tr>
+        <tr><td>Logs &rarr; Trace</td><td>Same <code>trace_id</code> field</td><td>Click derived link in log line</td></tr>
+        <tr><td>Trace &rarr; Profile</td><td>Service + time window (span link when available)</td><td>Open Pyroscope for that service</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section reveal" id="cardinality">
+  <h2><span class="section-num">03</span> Cardinality: why exemplars beat labels</h2>
+  <p>Putting <code>trace_id</code> or <code>user_id</code> on a metric label creates one series per value &mdash; a classic cardinality bomb. Exemplars store the id beside the sample without multiplying series.</p>
+
+  <dl class="kv">
+    <dt>Do</dt><dd>Low-cardinality metric labels (<code>service</code>, <code>route</code>, <code>status_class</code>) + exemplars for per-request proof.</dd>
+    <dt>Don&rsquo;t</dt><dd><code>trace_id</code>, <code>request_id</code>, raw <code>user_id</code>, or full URLs as metric labels.</dd>
+    <dt>Detail store</dt><dd>High-cardinality context belongs in spans and structured logs; metrics stay cheap aggregations.</dd>
+  </dl>
 
   <div class="callout gotcha">
     <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
     <div class="co-body">
       <div class="co-title">Common trap <span class="tag">gotcha</span></div>
-      <p>More dashboards ≠ observability. Fifty static dashboards still only answer the fifty questions you thought to ask when you built them. Observability is about <em>arbitrary exploration</em>, not more pre-built views.</p>
+      <p>Enabling exemplars in the SDK but forgetting Grafana data-source exemplar configuration (trace data source mapping). You see the metric spike and no dots &mdash; the link was never wired in the UI.</p>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg></span>
+    <div class="co-body">
+      <div class="co-title">Practical tip <span class="tag">tip</span></div>
+      <p>Prefer exemplars on the latency histogram you alert on. When burn-rate fires, the same panel that pages you should offer a one-click path into Tempo.</p>
     </div>
   </div>
 
   <div class="quiz" data-quiz>
-    <p class="q">Your CPU-spike alert fires. A colleague says "we have full observability — we have 30 dashboards." Is that correct?</p>
+    <p class="q">You need to jump from a p99 spike to a slow request. What should you attach to the latency histogram?</p>
     <div class="quiz-opts">
-      <button class="quiz-opt"><span class="mark"></span>Yes — 30 dashboards means comprehensive coverage.</button>
-      <button class="quiz-opt" data-correct="true"><span class="mark"></span>No — dashboards only cover known failure modes; observability requires the ability to ask novel questions.</button>
-      <button class="quiz-opt"><span class="mark"></span>Only if the dashboards include logs.</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Exemplars carrying <code>trace_id</code> (OpenMetrics / Prometheus), not <code>trace_id</code> as a label.</button>
+      <button class="quiz-opt"><span class="mark"></span>A metric label for every <code>trace_id</code> observed.</button>
+      <button class="quiz-opt"><span class="mark"></span>Nothing — copy timestamps and grep logs by hand.</button>
     </div>
-    <div class="quiz-explain"><b>Right.</b> Dashboards are monitoring artifacts. Observability is the property of being able to explore <em>unknown-unknowns</em> from raw telemetry — dashboards are output, not the property itself.</div>
+    <div class="quiz-explain"><b>Right.</b> Exemplars give click-to-trace without the cardinality explosion of per-trace labels.</div>
   </div>
 </section>
 
@@ -198,43 +235,43 @@
   <h2><span class="section-num">04</span> Interview rapid-fire</h2>
   <div class="qa-set">
     <details class="qa">
-      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What's the difference between monitoring and observability?</span><span class="pm-chip diff-core">core</span></summary>
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What is a trace exemplar?</span><span class="pm-chip diff-warm">warm</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p>Monitoring alerts on known failure modes — you define the condition upfront. Observability is a property of the system: the ability to infer internal state from external outputs and answer novel questions without shipping new code. Monitoring handles known-unknowns; observability handles unknown-unknowns.</p>
-        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Monitoring watches for things you already knew could go wrong. Observability means you can debug surprises — novel failures you've never seen — without touching the codebase."</p></div></div>
-        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>Can you have monitoring without observability? (Yes — legacy dashboards.)</li><li>What makes telemetry "observable"? (Structured, correlated, high-cardinality.)</li></ul></div>
+        <p>A sample on a metric data point &mdash; typically a histogram bucket &mdash; that includes a <code>trace_id</code> from a real request. In Grafana you click the exemplar and open the correlated trace in Tempo. It is part of OpenMetrics and supported in Prometheus 3.x / Remote-Write 2.0.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;A trace_id glued to a histogram point so I can click from p99 straight into Tempo.&rdquo;</p></div></div>
       </div>
     </details>
     <details class="qa">
-      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Where does the term "observability" come from?</span><span class="pm-chip diff-warm">warm</span></summary>
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you link metrics, traces, and logs without blowing cardinality?</span><span class="pm-chip diff-core">core</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p>Control theory. Rudolf Kalman (1960) defined observability as the ability to infer a system's complete internal state from its external outputs over time. Software engineers borrowed it: if your logs, metrics, and traces are rich enough, you can reconstruct what happened inside — without attaching a debugger.</p>
-        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"It's from control theory — a system is observable if you can reconstruct its internal state purely from outputs. We apply that to software: rich telemetry lets you infer what happened without redeploying."</p></div></div>
+        <p>Keep metric labels low-cardinality. Attach exemplars for metric&rarr;trace. Put <code>trace_id</code> (and <code>span_id</code>) on structured logs for trace&harr;log. Never promote unbounded ids to Prometheus labels.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;Exemplars for metrics-to-traces; trace_id in logs; ids never become metric labels.&rdquo;</p></div></div>
       </div>
     </details>
     <details class="qa">
-      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">What practical test tells you if a system is observable?</span><span class="pm-chip diff-core">core</span></summary>
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Walk the cascade for a sudden error-rate surge.</span><span class="pm-chip diff-stretch">stretch</span></summary>
       <div class="qa-body">
         <h5>Model answer</h5>
-        <p>Ask: "Can I debug a brand-new production problem I've never seen before, using only existing telemetry, without redeploying?" If you need to add a log line and redeploy to answer the question, the system is not fully observable for that failure class.</p>
-        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"The test is: can I debug a novel failure right now, from telemetry I already have? If I have to redeploy to get the answer, that's a gap in observability."</p></div></div>
+        <p>RED dashboard shows error rate up &rarr; click an error exemplar &rarr; Tempo waterfall shows the failing span &rarr; jump to Loki with that <code>trace_id</code> for the exception payload &rarr; optionally open Pyroscope if the failure is actually a timeout from CPU saturation. Fix is informed by code + logs, not by the aggregate alone.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>&ldquo;RED &rarr; exemplar &rarr; Tempo &rarr; Loki on the same trace_id &mdash; that&rsquo;s the cascade.&rdquo;</p></div></div>
+        <div class="qa-followups"><h5>Follow-ups to expect</h5><ul><li>Where do exemplars live in OpenMetrics?</li><li>Why is Remote-Write 2.0 relevant here?</li></ul></div>
       </div>
     </details>
   </div>
 </section>
           <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
           <nav class="page-nav reveal">
-            <a href="../foundations/index.html"><span class="pn-k">Previous</span><span class="pn-t">Foundations — see your systems</span></a>
-            <a class="next" href="../foundations/three-pillars.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">The three pillars + signals</span></a>
+            <a href="../metrics/histograms-percentiles.html"><span class="pn-k">Previous</span><span class="pn-t">Histograms &amp; percentiles</span></a>
+            <a class="next" href="../traces/index.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">Traces — the causal signal</span></a>
           </nav>
         </div>
         <nav class="toc">
           <h5>On this page</h5>
-          <a href="#idea">The core distinction</a>
-          <a href="#the-test">The "can you debug it?" test</a>
-          <a href="#how-it-works">How systems become observable</a>
+          <a href="#idea">What an exemplar is</a>
+          <a href="#cascade">Metric trace log</a>
+          <a href="#cardinality">Cardinality: why exemplars beat labels</a>
           <a href="#interview">Interview rapid-fire</a>
         </nav>
       </div>
