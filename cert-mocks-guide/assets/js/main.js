@@ -142,16 +142,30 @@
       });
     });
 
-    /* reveal on scroll */
+    /* reveal on scroll
+       threshold must stay 0: full mock sections are taller than the viewport, so a
+       fractional threshold (e.g. 0.08) can never fire and content stays opacity:0. */
     var reveals = document.querySelectorAll(".reveal");
+    function revealEl(el) { el.classList.add("in"); }
     if ("IntersectionObserver" in window && reveals.length) {
       var ro = new IntersectionObserver(function (entries) {
-        entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add("in"); ro.unobserve(en.target); } });
-      }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+        entries.forEach(function (en) {
+          if (en.isIntersecting) { revealEl(en.target); ro.unobserve(en.target); }
+        });
+      }, { rootMargin: "0px 0px -40px 0px", threshold: 0 });
       reveals.forEach(function (el) { ro.observe(el); });
+      requestAnimationFrame(function () {
+        reveals.forEach(function (el) {
+          var r = el.getBoundingClientRect();
+          if (r.top < window.innerHeight * 0.92) revealEl(el);
+        });
+      });
     } else {
-      reveals.forEach(function (el) { el.classList.add("in"); });
+      reveals.forEach(revealEl);
     }
+    setTimeout(function () {
+      document.querySelectorAll(".reveal:not(.in)").forEach(revealEl);
+    }, 600);
 
     /* scrollspy for .toc and in-page sidebar anchors */
     var spyLinks = [].slice.call(document.querySelectorAll('.toc a[href^="#"], .nav-sub a[href^="#"]'));

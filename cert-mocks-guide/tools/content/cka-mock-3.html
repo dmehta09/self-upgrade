@@ -1,249 +1,288 @@
 <section class="hero reveal">
-  <span class="eyebrow">CKA v1.35 · Mock 3</span>
-  <span class="domain-chip">18 tasks · 120 min · ≥66%</span>
+  <span class="eyebrow">CKA · Mock 3</span>
+  <span class="domain-chip">120 min · 18 tasks · pass ≥66%</span>
   <h1>CKA Mock 3 · full exam.</h1>
-  <p class="lead">Timed performance simulation. Mark done only after verify on your cluster. Reveal solutions when finished.</p>
+  <p class="lead">Timed performance session on your lab cluster. Domain mix: Troubleshooting 6 · Cluster 4 · Networking 4 · Workloads 2 · Storage 2. Mark done only after verify passes.</p>
+  <p><a class="btn" href="#mock">Jump to timed mock ↓</a></p>
 </section>
 
-<section class="section reveal" id="mock">
-  <h2><span class="section-num">01</span> Timed mock</h2>
-  <div data-task-mock></div>
+<section class="section reveal" id="instructions">
+  <h2><span class="section-num">01</span> Instructions</h2>
+  <ul>
+    <li>Budget ~6–7 minutes per task; skip sinkholes and return.</li>
+    <li>Use docs/patterns you would have on exam day (kubernetes.io).</li>
+    <li>Prefer <code>--dry-run=client -o yaml</code> scaffolds; confirm with get/describe.</li>
+    <li>Remediate weak domains in <a href="../../cka-guide/index.html">cka-guide</a>.</li>
+  </ul>
+  <div class="callout warn"><div class="co-body"><div class="co-title">Honesty</div><p>Self-check score only counts if verify commands actually passed on a cluster.</p></div></div>
+</section>
+
+<section class="section reveal in" id="mock">
+  <h2><span class="section-num">02</span> Mock session</h2>
+  <div data-task-mock>
   <script type="application/json" id="mockBank">
 {
   "minutes": 120,
   "label": "CKA v1.35 · Mock 3",
+  "passHint": "Practice bar ≥66% on honest self-check after verify commands.",
   "tasks": [
     {
       "domain": "Troubleshooting",
       "weight": 30,
-      "stem": "Pod web in ns market is CrashLoopBackOff. Find the failing container exit reason and fix the ConfigMap key APP_MODE to production so the Pod becomes Ready.",
+      "stem": "Deployment cart in namespace shop is progressing but Pods fail readiness and stay 0/1 Ready. Fix the readiness probe path or port so traffic can flow.",
       "solutionSteps": [
-        "kubectl -n market get pods",
-        "kubectl -n market describe pod -l app=web",
-        "kubectl -n market logs -l app=web --previous",
-        "kubectl -n market edit cm web-config",
-        "kubectl -n market rollout restart deploy/web"
+        "kubectl -n shop get pods -l app=cart",
+        "kubectl -n shop describe pod {cart-pod} | grep -A15 Readiness",
+        "kubectl -n shop edit deploy/cart",
+        "kubectl -n shop get pods -l app=cart"
       ],
-      "verify": "kubectl -n market get pods -l app=web shows Ready 1/1",
-      "why": "CrashLoop: describe + previous logs before editing config.",
+      "verify": "cart Pods Ready 1/1; Service Endpoints include them.",
+      "why": "Not Ready often means probe mismatch, not CrashLoop.",
       "lesson": "../../cka-guide/troubleshooting/pods-apps.html"
     },
     {
       "domain": "Troubleshooting",
       "weight": 30,
-      "stem": "Node node-c is NotReady. Identify the condition, check kubelet/runtime health indicators from the API, and cordon the node for maintenance without draining yet.",
+      "stem": "Node staging-w2 is Ready but SchedulingDisabled from a forgotten cordon. Confirm no maintenance is needed, uncordon, and schedule a test Pod onto it.",
       "solutionSteps": [
-        "kubectl get nodes -o wide",
-        "kubectl describe node node-c",
-        "kubectl cordon node-c"
+        "kubectl get nodes",
+        "kubectl describe node staging-w2 | grep Taints",
+        "kubectl uncordon staging-w2",
+        "kubectl -n staging run land --image=busybox:1.36 --restart=Never --overrides='{nodeName staging-w2}' -- sleep 30"
       ],
-      "verify": "node-c SchedulingDisabled and NotReady condition documented",
-      "why": "Cordon first; drain only when ready to evict.",
+      "verify": "staging-w2 schedulable; test Pod lands on that node.",
+      "why": "Cordon left behind is a common ops footgun on node troubleshooting.",
       "lesson": "../../cka-guide/troubleshooting/nodes.html"
     },
     {
       "domain": "Troubleshooting",
       "weight": 30,
-      "stem": "Service api-svc in ns ledger has no Endpoints. Fix the selector mismatch so EndpointSlices list the api Pods.",
+      "stem": "kubectl get cs or componentstatuses is stale; instead verify etcd, apiserver, and scheduler via static Pods and local healthz. Restore any missing static Pod manifest (do not perform etcd snapshot restore).",
       "solutionSteps": [
-        "kubectl -n ledger get svc api-svc -o yaml",
-        "kubectl -n ledger get pods --show-labels",
-        "kubectl -n ledger edit svc api-svc"
+        "kubectl get pods -n kube-system -o wide | grep -E 'etcd|apiserver|scheduler'",
+        "ls /etc/kubernetes/manifests",
+        "curl -k https://127.0.0.1:6443/healthz || true",
+        "fix missing manifests; avoid etcdctl snapshot as the primary task"
       ],
-      "verify": "kubectl -n ledger get endpoints api-svc shows Pod IPs",
-      "why": "Empty endpoints = selector or readiness.",
+      "verify": "All control-plane static Pods Running; API healthz ok.",
+      "why": "Modern CKA stresses component health and manifests — not deep etcd backup drills.",
+      "lesson": "../../cka-guide/troubleshooting/control-plane.html"
+    },
+    {
+      "domain": "Troubleshooting",
+      "weight": 30,
+      "stem": "NetworkPolicy lock-shop in namespace shop accidentally blocks CoreDNS egress. Adjust policies so Pods can resolve cluster DNS while keeping default-deny for other egress.",
+      "solutionSteps": [
+        "kubectl -n shop get networkpolicy",
+        "kubectl -n shop describe networkpolicy lock-shop",
+        "apply egress allow to namespace kube-system (or podSelector k8s-app=kube-dns) ports 53",
+        "kubectl -n shop run ns --rm -it --restart=Never --image=busybox:1.36 -- nslookup kubernetes.default"
+      ],
+      "verify": "DNS works; non-DNS egress still denied by policy.",
+      "why": "NP troubleshooting is often DNS collateral damage after default-deny egress.",
       "lesson": "../../cka-guide/troubleshooting/services-dns-np.html"
     },
     {
       "domain": "Troubleshooting",
       "weight": 30,
-      "stem": "DNS lookup for db.ledger.svc.cluster.local fails from a debug Pod. Confirm CoreDNS is Ready and fix the kube-dns Service selector if broken.",
+      "stem": "On a failing Pod payments in namespace shop, collect current logs, previous logs, and Events. Use kubectl debug to confirm the process listen port matches the Service targetPort.",
       "solutionSteps": [
-        "kubectl -n kube-system get pods -l k8s-app=kube-dns",
-        "kubectl -n kube-system get svc kube-dns -o yaml",
-        "kubectl -n kube-system get cm coredns -o yaml"
+        "kubectl -n shop logs payments --tail=100",
+        "kubectl -n shop logs payments --previous --tail=50 || true",
+        "kubectl -n shop describe pod payments",
+        "kubectl -n shop debug -it payments --image=busybox:1.36 --target=app -- sh"
       ],
-      "verify": "nslookup db.ledger.svc.cluster.local from a test Pod succeeds",
-      "why": "CoreDNS + kube-dns Service are the DNS path.",
-      "lesson": "../../cka-guide/networking/coredns.html"
-    },
-    {
-      "domain": "Troubleshooting",
-      "weight": 30,
-      "stem": "A NetworkPolicy named deny-all in ns web blocks legitimate traffic from ns back. Add an allow rule for Pods labeled role=api from namespace back.",
-      "solutionSteps": [
-        "kubectl -n web get netpol deny-all -o yaml",
-        "kubectl -n web apply -f allow-from-back.yaml"
-      ],
-      "verify": "curl from a back/api Pod to web Service succeeds",
-      "why": "Default deny needs explicit allow selectors.",
-      "lesson": "../../cka-guide/networking/network-policies.html"
-    },
-    {
-      "domain": "Troubleshooting",
-      "weight": 30,
-      "stem": "Use kubectl debug to attach an ephemeral busybox container to Pod stock in ns warehouse and confirm /data is mounted.",
-      "solutionSteps": [
-        "kubectl -n depot debug -it stock --image=busybox:1.36 --target=app -- sh",
-        "ls /data"
-      ],
-      "verify": "/data visible inside ephemeral container",
-      "why": "Ephemeral containers when app image has no shell.",
+      "verify": "You have log+Event evidence and confirmed listen port vs Service targetPort.",
+      "why": "Structured log/Event/debug triage beats random restarts.",
       "lesson": "../../cka-guide/troubleshooting/logs-debug.html"
+    },
+    {
+      "domain": "Troubleshooting",
+      "weight": 30,
+      "stem": "Identify the top three memory consumers cluster-wide with kubectl top, then annotate why one Deployment should set memory requests/limits.",
+      "solutionSteps": [
+        "kubectl top pods -A --sort-by=memory | head -n 20",
+        "kubectl -n {ns} get deploy {noisy} -o yaml | grep -A10 resources || true",
+        "kubectl -n {ns} set resources deploy/{noisy} --requests=memory=128Mi --limits=memory=256Mi"
+      ],
+      "verify": "Top consumers listed; at least one Deployment has memory requests/limits set.",
+      "why": "Monitoring tasks close the loop into resource hygiene.",
+      "lesson": "../../cka-guide/troubleshooting/resource-monitoring.html"
     },
     {
       "domain": "Cluster Architecture",
       "weight": 25,
-      "stem": "Create ServiceAccount runner in ns build, Role with get/list/watch on pods, and RoleBinding. Prove with auth can-i.",
+      "stem": "Create Role secret-reader in namespace prod allowing get/list on secrets. Bind to group shop-admins via RoleBinding prod-secret-readers. Prove with --as and --as-group.",
       "solutionSteps": [
-        "kubectl -n devops create sa runner",
-        "kubectl -n devops create role pod-reader --verb=get,list,watch --resource=pods",
-        "kubectl -n devops create rolebinding runner-pods --role=pod-reader --serviceaccount=devops:runner",
-        "kubectl auth can-i list pods -n devops --as=system:serviceaccount:devops:runner"
+        "kubectl -n prod create role secret-reader --verb=get,list --resource=secrets",
+        "kubectl -n prod create rolebinding prod-secret-readers --role=secret-reader --group=shop-admins",
+        "kubectl auth can-i get secrets -n prod --as=jane --as-group=shop-admins",
+        "kubectl auth can-i get secrets -n prod --as=jane"
       ],
-      "verify": "can-i returns yes",
-      "why": "RBAC: Role + RoleBinding + SA triad.",
+      "verify": "can-i yes with group shop-admins; no without the group.",
+      "why": "RBAC subjects include users, groups, and service accounts.",
       "lesson": "../../cka-guide/cluster/rbac.html"
     },
     {
       "domain": "Cluster Architecture",
       "weight": 25,
-      "stem": "On a kubeadm control-plane node, list static Pod manifests under /etc/kubernetes/manifests and identify which file defines kube-apiserver.",
+      "stem": "Helm: upgrade existing release cart-web in namespace shop setting service.type=ClusterIP and image.tag=1.27.0. Show helm history and current values.",
       "solutionSteps": [
-        "ls /etc/kubernetes/manifests",
-        "grep -l apiserver /etc/kubernetes/manifests/*"
+        "helm -n shop upgrade cart-web bitnami/nginx --set service.type=ClusterIP --set image.tag=1.27.0",
+        "helm -n shop history cart-web",
+        "helm -n shop get values cart-web"
       ],
-      "verify": "kube-apiserver.yaml (or similar) identified",
-      "why": "Static Pods are kubelet-watched manifests.",
-      "lesson": "../../cka-guide/cluster/control-plane-nodes.html"
-    },
-    {
-      "domain": "Cluster Architecture",
-      "weight": 25,
-      "stem": "Install a sample chart with Helm into ns monitoring named metrics-demo (any local/chart or bitnami repo allowed in your lab). Show the release.",
-      "solutionSteps": [
-        "helm repo add bitnami https://charts.bitnami.com/bitnami || true",
-        "helm install chart-demo bitnami/nginx -n metrics --create-namespace",
-        "helm -n metrics list"
-      ],
-      "verify": "helm list shows metrics-demo deployed",
-      "why": "CKA expects Helm to install cluster components.",
+      "verify": "Release revised; values show ClusterIP and tag 1.27.0.",
+      "why": "Helm upgrade/history is day-2 cluster packaging work.",
       "lesson": "../../cka-guide/cluster/helm-kustomize.html"
     },
     {
       "domain": "Cluster Architecture",
       "weight": 25,
-      "stem": "Explain CRI vs CNI vs CSI in one kubectl/crictl observation: show container runtime on a node and that Pods have IPs.",
+      "stem": "Compare control-plane node roles and taints with worker nodes. Add NoSchedule taint workload=reserved:NoSchedule to staging-w3 and show a toleration-capable Pod can still schedule there.",
       "solutionSteps": [
-        "kubectl get nodes -o wide",
-        "kubectl get pods -A -o wide | head"
+        "kubectl get nodes -o custom-columns=NAME:.metadata.name,ROLES:.metadata.labels.node-role\\.kubernetes\\.io/control-plane,TAINTS:.spec.taints",
+        "kubectl taint nodes staging-w3 workload=reserved:NoSchedule",
+        "kubectl -n staging apply -f {pod-with-toleration}",
+        "kubectl -n staging get pod -o wide"
       ],
-      "verify": "Runtime noted; Pods have cluster IPs",
-      "why": "Extension interfaces: runtime / net / storage.",
+      "verify": "Control-plane taints visible; reserved Pod runs on staging-w3; untolerated Pods do not.",
+      "why": "Control-plane vs worker roles and taints are Cluster Architecture basics.",
+      "lesson": "../../cka-guide/cluster/control-plane-nodes.html"
+    },
+    {
+      "domain": "Cluster Architecture",
+      "weight": 25,
+      "stem": "List CSI drivers and storage-related DaemonSets/Deployments. Confirm at least one CSI Pod is Running and that a StorageClass references a known provisioner.",
+      "solutionSteps": [
+        "kubectl get csidrivers",
+        "kubectl get pods -A | grep -i csi",
+        "kubectl get sc -o custom-columns=NAME:.metadata.name,PROVISIONER:.provisioner"
+      ],
+      "verify": "CSI driver listed; CSI Pod Running; SC provisioner identified.",
+      "why": "CSI is the storage plugin plane parallel to CRI/CNI.",
       "lesson": "../../cka-guide/cluster/cri-cni-csi.html"
     },
     {
       "domain": "Services & Networking",
       "weight": 20,
-      "stem": "Create Deployment probe with 2 replicas and a ClusterIP Service on port 80 targeting container port 8080 in ns netprod.",
+      "stem": "In namespace shop, fix Service checkout whose targetPort does not match the container port. Confirm Endpoints and a successful curl from a client Pod.",
       "solutionSteps": [
-        "kubectl -n netprod create deploy probe --image=hashicorp/http-probe --replicas=2",
-        "kubectl -n netprod expose deploy probe --port=80 --target-port=8080 --name=probe-svc"
+        "kubectl -n shop get deploy checkout -o yaml | grep -A5 ports",
+        "kubectl -n shop get svc checkout -o yaml",
+        "kubectl -n shop patch svc checkout --type merge -p '{\"spec\":{\"ports\":[{\"port\":80,\"targetPort\":8080}]}}'",
+        "kubectl -n shop run curl --rm -it --restart=Never --image=busybox:1.36 -- wget -qO- http://checkout:80/"
       ],
-      "verify": "Endpoints populated; curl via cluster IP works",
-      "why": "Service port vs targetPort mismatch is a classic miss.",
+      "verify": "Endpoints healthy; wget/curl to checkout Service succeeds.",
+      "why": "Wrong targetPort yields Endpoints without working data path.",
       "lesson": "../../cka-guide/networking/services-endpoints.html"
     },
     {
       "domain": "Services & Networking",
       "weight": 20,
-      "stem": "Create an HTTPRoute (or Ingress if Gateway API CRDs absent) that routes host market.example.com / to Service store in ns edge.",
+      "stem": "Create GatewayClass-backed HTTPRoute payments-route in namespace shop for PathPrefix /pay to Service payments:8080, attaching parent Gateway shop-gw.",
       "solutionSteps": [
-        "kubectl -n border apply -f httproute-market.yaml"
+        "kubectl -n shop apply -f {payments-httproute}",
+        "kubectl -n shop get httproute payments-route -o yaml",
+        "kubectl -n shop describe httproute payments-route"
       ],
-      "verify": "Route Accepted/Attached or Ingress address present",
-      "why": "Gateway API is the modern CKA ingress path.",
+      "verify": "HTTPRoute bound to shop-gw; backendRef payments:8080.",
+      "why": "Gateway API routes are preferred modern L7 config on CKA v1.35.",
       "lesson": "../../cka-guide/networking/gateway-api.html"
     },
     {
       "domain": "Services & Networking",
       "weight": 20,
-      "stem": "Apply a NetworkPolicy in ns db that allows ingress TCP 5432 only from Pods labeled app=api in the same namespace.",
+      "stem": "Author NetworkPolicy db-allow in namespace shop selecting app=db, allowing Ingress TCP 5432 only from Pods app=api. Verify with a forbidden client and an allowed client (debug Pods).",
       "solutionSteps": [
-        "kubectl -n pgsql apply -f np-postgres.yaml"
+        "kubectl -n shop apply -f {db-allow-np}",
+        "kubectl -n shop run bad --rm -it --restart=Never --image=busybox:1.36 --labels=app=web -- wget -T2 -qO- http://db:5432 || true",
+        "kubectl -n shop run good --rm -it --restart=Never --image=busybox:1.36 --labels=app=api -- nc -zv db 5432"
       ],
-      "verify": "Only api Pods can connect; others time out",
-      "why": "podSelector + ports is core NetworkPolicy.",
+      "verify": "api-labeled client connects; other labels time out / fail.",
+      "why": "Always test NetworkPolicy with positive and negative clients.",
       "lesson": "../../cka-guide/networking/network-policies.html"
     },
     {
       "domain": "Services & Networking",
       "weight": 20,
-      "stem": "Create a NodePort Service for Deployment web in ns public on port 30080 (nodePort).",
+      "stem": "CoreDNS ConfigMap has a broken forward plugin. Restore a working Corefile (kubernetes + forward to /etc/resolv.conf or lab upstream) and confirm cluster DNS lookups.",
       "solutionSteps": [
-        "kubectl -n exposed expose deploy web --type=NodePort --port=80 --name=web-np",
-        "kubectl -n exposed patch svc web-np -p '{\"spec\":{\"ports\":[{\"port\":80,\"nodePort\":30080}]}}'"
+        "kubectl -n kube-system get cm coredns -o yaml",
+        "kubectl -n kube-system edit cm coredns",
+        "kubectl -n kube-system rollout restart deploy/coredns",
+        "kubectl -n shop run dns --rm -it --restart=Never --image=busybox:1.36 -- nslookup kubernetes.default"
       ],
-      "verify": "svc shows 30080; curl nodeIP:30080 works",
-      "why": "NodePort still tested among Service types.",
-      "lesson": "../../cka-guide/networking/services-endpoints.html"
+      "verify": "coredns Ready; kubernetes.default resolves.",
+      "why": "Corefile mistakes take down all Service DNS — high-yield networking fix.",
+      "lesson": "../../cka-guide/networking/coredns.html"
     },
     {
       "domain": "Workloads & Scheduling",
       "weight": 15,
-      "stem": "Scale Deployment basket in ns market to 5 and wait for rollout. Then undo to previous revision.",
+      "stem": "In namespace staging, create ConfigMap app-config with key MESSAGE=hello and Secret app-secret with key TOKEN=s3cr3t. Mount both into Deployment cfg-demo as envFrom / optional volume; confirm env inside the Pod.",
       "solutionSteps": [
-        "kubectl -n market flex deploy/basket --replicas=5",
-        "kubectl -n market rollout status deploy/basket",
-        "kubectl -n market rollout undo deploy/basket"
+        "kubectl -n staging create configmap app-config --from-literal=MESSAGE=hello",
+        "kubectl -n staging create secret generic app-secret --from-literal=TOKEN=s3cr3t",
+        "kubectl -n staging apply -f {cfg-demo-deploy}",
+        "kubectl -n staging exec deploy/cfg-demo -- printenv MESSAGE TOKEN"
       ],
-      "verify": "rollout history shows undo; desired replicas restored as required",
-      "why": "scale + undo are bread-and-butter.",
-      "lesson": "../../cka-guide/workloads/deployments-rollouts.html"
+      "verify": "Pod prints hello and s3cr3t from ConfigMap/Secret.",
+      "why": "ConfigMaps and Secrets are core Workloads configuration tasks.",
+      "lesson": "../../cka-guide/workloads/configmaps-secrets.html"
     },
     {
       "domain": "Workloads & Scheduling",
       "weight": 15,
-      "stem": "Create an HPA for Deployment api in ns scale targeting 70% CPU, min 2 max 6. Ensure requests are set on the Pod template.",
+      "stem": "Create Deployment scale-me in namespace staging with requests cpu=100m, then HPA scale-me-hpa CPU 50% min=1 max=5. Confirm HPA can see metrics (targets not unknown).",
       "solutionSteps": [
-        "kubectl -n flex set resources deploy/api --requests=cpu=100m",
-        "kubectl -n flex autoscale deploy/api --cpu-percent=70 --min=2 --max=6"
+        "kubectl -n staging create deploy scale-me --image=nginx:1.27",
+        "kubectl -n staging set resources deploy/scale-me --requests=cpu=100m",
+        "kubectl -n staging autoscale deploy/scale-me --name=scale-me-hpa --cpu-percent=50 --min=1 --max=5",
+        "kubectl -n staging get hpa scale-me-hpa"
       ],
-      "verify": "kubectl -n scale get hpa shows targets",
-      "why": "HPA needs Metrics Server + requests.",
+      "verify": "HPA shows a numeric target (not unknown) once metrics-server works.",
+      "why": "HPA needs resource requests + metrics API to function.",
       "lesson": "../../cka-guide/workloads/resources-hpa.html"
     },
     {
       "domain": "Storage",
       "weight": 10,
-      "stem": "Create a PVC vol-claim 2Gi RWO using the default StorageClass and a Pod that mounts it at /data.",
+      "stem": "In namespace prod, create StorageClass retain-disk with reclaimPolicy Retain and WaitForFirstConsumer. Create PVC audit-logs 3Gi RWO using that class; confirm Pending until a consumer Pod mounts it, then Bound.",
       "solutionSteps": [
-        "kubectl apply -f pvc.yaml",
-        "kubectl apply -f pod-mount.yaml",
-        "kubectl get pvc vol-claim"
+        "kubectl apply -f {retain-disk-sc}",
+        "kubectl -n prod apply -f {audit-logs-pvc}",
+        "kubectl -n prod get pvc audit-logs",
+        "kubectl -n prod apply -f {consumer-pod}",
+        "kubectl -n prod get pvc audit-logs"
       ],
-      "verify": "PVC Bound; Pod Running with mount",
-      "why": "PVC → Pod claimName, not PV name.",
-      "lesson": "../../cka-guide/storage/pv-pvc.html"
+      "verify": "PVC Pending before Pod; Bound after consumer scheduled (WaitForFirstConsumer).",
+      "why": "Binding mode changes when PVCs become Bound — classic StorageClass exam point.",
+      "lesson": "../../cka-guide/storage/storageclass.html"
     },
     {
       "domain": "Storage",
       "weight": 10,
-      "stem": "Create a StorageClass perf-ssd with WaitForFirstConsumer binding mode (use a provisioner available in your lab).",
+      "stem": "Create PVC media-pvc in namespace prod for 4Gi ReadWriteOnce. Launch Pod media-writer that writes /data/ok.txt and a second Pod media-reader (after delete writer if RWO single-node) that reads the file.",
       "solutionSteps": [
-        "kubectl apply -f sc-fast.yaml",
-        "kubectl get sc perf-ssd"
+        "kubectl -n prod apply -f {media-pvc}",
+        "kubectl -n prod apply -f {media-writer}",
+        "kubectl -n prod exec media-writer -- sh -c 'echo ok > /data/ok.txt'",
+        "kubectl -n prod delete pod media-writer",
+        "kubectl -n prod apply -f {media-reader}",
+        "kubectl -n prod exec media-reader -- cat /data/ok.txt"
       ],
-      "verify": "StorageClass exists with volumeBindingMode WaitForFirstConsumer",
-      "why": "Binding mode affects scheduling with volumes.",
-      "lesson": "../../cka-guide/storage/storageclass.html"
+      "verify": "File persists across Pod recreate via PVC; content is ok.",
+      "why": "PVC durability across Pod lifetime is the point of PV/PVC.",
+      "lesson": "../../cka-guide/storage/pv-pvc.html"
     }
   ]
 }
   </script>
+  </div>
 </section>
 
 <section class="section reveal" id="check">
-  <h2><span class="section-num">02</span> After you finish</h2>
-  <p>Target ≥66% honest self-check with time remaining. Remediate in <a href="../../cka-guide/index.html">cka-guide</a>, then sit the next mock on another day.</p>
+  <h2><span class="section-num">03</span> Afterward</h2>
+  <p>Review solutions, then <a href="warmup.html">next mock</a> or revisit <a href="mock-2.html">Mock 2</a>. Scoring notes: <a href="../reference/scoring.html">reference</a>.</p>
 </section>

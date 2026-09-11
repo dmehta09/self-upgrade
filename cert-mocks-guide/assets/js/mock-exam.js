@@ -8,8 +8,8 @@
   }
 
   function mount(root) {
-    var bankEl = $("#mockBank", root);
-    if (!bankEl) return;
+    var bankEl = $("#mockBank", root) || (root.parentElement && $("#mockBank", root.parentElement)) || $("#mockBank");
+    if (!bankEl) { root.innerHTML = "<p>Mock bank missing.</p>"; return; }
     var bank;
     try { bank = JSON.parse(bankEl.textContent); } catch (e) { root.innerHTML = "<p>Invalid mock bank JSON.</p>"; return; }
     var qs = bank.questions || [];

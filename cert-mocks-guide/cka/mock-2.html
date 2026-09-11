@@ -78,256 +78,291 @@
         </button>
       </header>
 
-      <div class="content" id="main">
+      <div class="content has-toc" id="main">
         <div class="prose">
 <section class="hero reveal">
-  <span class="eyebrow">CKA v1.35 · Mock 2</span>
-  <span class="domain-chip">18 tasks · 120 min · ≥66%</span>
+  <span class="eyebrow">CKA · Mock 2</span>
+  <span class="domain-chip">120 min · 18 tasks · pass ≥66%</span>
   <h1>CKA Mock 2 · full exam.</h1>
-  <p class="lead">Timed performance simulation. Mark done only after verify on your cluster. Reveal solutions when finished.</p>
+  <p class="lead">Timed performance session on your lab cluster. Domain mix: Troubleshooting 6 · Cluster 4 · Networking 4 · Workloads 2 · Storage 2. Mark done only after verify passes.</p>
+  <p><a class="btn" href="#mock">Jump to timed mock ↓</a></p>
 </section>
 
-<section class="section reveal" id="mock">
-  <h2><span class="section-num">01</span> Timed mock</h2>
-  <div data-task-mock></div>
+<section class="section reveal" id="instructions">
+  <h2><span class="section-num">01</span> Instructions</h2>
+  <ul>
+    <li>Budget ~6–7 minutes per task; skip sinkholes and return.</li>
+    <li>Use docs/patterns you would have on exam day (kubernetes.io).</li>
+    <li>Prefer <code>--dry-run=client -o yaml</code> scaffolds; confirm with get/describe.</li>
+    <li>Remediate weak domains in <a href="../../cka-guide/index.html">cka-guide</a>.</li>
+  </ul>
+  <div class="callout warn"><div class="co-body"><div class="co-title">Honesty</div><p>Self-check score only counts if verify commands actually passed on a cluster.</p></div></div>
+</section>
+
+<section class="section reveal in" id="mock">
+  <h2><span class="section-num">02</span> Mock session</h2>
+  <div data-task-mock>
   <script type="application/json" id="mockBank">
 {
   "minutes": 120,
   "label": "CKA v1.35 · Mock 2",
+  "passHint": "Practice bar ≥66% on honest self-check after verify commands.",
   "tasks": [
     {
       "domain": "Troubleshooting",
       "weight": 30,
-      "stem": "Pod web in ns store is CrashLoopBackOff. Find the failing container exit reason and fix the ConfigMap key APP_MODE to production so the Pod becomes Ready.",
+      "stem": "Pod invoice in namespace billing is ImagePullBackOff. Fix the image reference on Deployment invoice so Pods become Ready.",
       "solutionSteps": [
-        "kubectl -n store get pods",
-        "kubectl -n store describe pod -l app=web",
-        "kubectl -n store logs -l app=web --previous",
-        "kubectl -n store edit cm web-config",
-        "kubectl -n store rollout restart deploy/web"
+        "kubectl -n billing get pods -l app=invoice",
+        "kubectl -n billing describe pod {invoice-pod} | grep -A5 Events",
+        "kubectl -n billing set image deploy/invoice invoice=nginx:1.27",
+        "kubectl -n billing rollout status deploy/invoice"
       ],
-      "verify": "kubectl -n store get pods -l app=web shows Ready 1/1",
-      "why": "CrashLoop: describe + previous logs before editing config.",
+      "verify": "invoice Pods Ready; Events no longer show ErrImagePull/ImagePullBackOff.",
+      "why": "ImagePullBackOff is registry/tag/secret — read Events before rewriting YAML blindly.",
       "lesson": "../../cka-guide/troubleshooting/pods-apps.html"
     },
     {
       "domain": "Troubleshooting",
       "weight": 30,
-      "stem": "Node node-b is NotReady. Identify the condition, check kubelet/runtime health indicators from the API, and cordon the node for maintenance without draining yet.",
+      "stem": "Node lab-worker-1 shows MemoryPressure and pods are being evicted. Identify pressure condition, free or cordon appropriately, and restore a healthy Ready state.",
       "solutionSteps": [
-        "kubectl get nodes -o wide",
-        "kubectl describe node node-b",
-        "kubectl cordon node-b"
+        "kubectl describe node lab-worker-1 | grep -A20 Conditions",
+        "kubectl get pods -A --field-selector spec.nodeName=lab-worker-1",
+        "address disk/memory pressure on the host; restart kubelet if needed",
+        "kubectl get node lab-worker-1"
       ],
-      "verify": "node-b SchedulingDisabled and NotReady condition documented",
-      "why": "Cordon first; drain only when ready to evict.",
+      "verify": "lab-worker-1 Ready without MemoryPressure; evictions stop.",
+      "why": "Node conditions drive kubelet eviction; treat the host resource plane.",
       "lesson": "../../cka-guide/troubleshooting/nodes.html"
     },
     {
       "domain": "Troubleshooting",
       "weight": 30,
-      "stem": "Service api-svc in ns billing has no Endpoints. Fix the selector mismatch so EndpointSlices list the api Pods.",
+      "stem": "Static Pod kube-controller-manager is missing from kube-system. Restore its manifest and confirm leader election / Running state.",
       "solutionSteps": [
-        "kubectl -n billing get svc api-svc -o yaml",
-        "kubectl -n billing get pods --show-labels",
-        "kubectl -n billing edit svc api-svc"
+        "kubectl get pods -n kube-system | grep controller-manager",
+        "ls /etc/kubernetes/manifests",
+        "restore kube-controller-manager.yaml; crictl ps | grep controller",
+        "kubectl -n kube-system logs {cm-pod} --tail=50"
       ],
-      "verify": "kubectl -n billing get endpoints api-svc shows Pod IPs",
-      "why": "Empty endpoints = selector or readiness.",
+      "verify": "kube-controller-manager Running; controllers reconcile (e.g. Deployments progress).",
+      "why": "Control-plane static Pods live under manifests/; kubelet is the supervisor.",
+      "lesson": "../../cka-guide/troubleshooting/control-plane.html"
+    },
+    {
+      "domain": "Troubleshooting",
+      "weight": 30,
+      "stem": "Clients in namespace apps cannot reach Service api via DNS name api.apps.svc. ClusterIP ping works from a Pod on the same node network. Fix CoreDNS or the Service DNS path.",
+      "solutionSteps": [
+        "kubectl -n apps get svc api; kubectl -n apps get endpoints api",
+        "kubectl -n apps run dig --rm -it --restart=Never --image=busybox:1.36 -- nslookup api.apps.svc",
+        "kubectl -n kube-system get pods -l k8s-app=kube-dns; kubectl -n kube-system logs -l k8s-app=kube-dns",
+        "fix Corefile / coredns Deployment as needed"
+      ],
+      "verify": "nslookup api.apps.svc succeeds; curl http://api.apps.svc works from a client Pod.",
+      "why": "Distinguish Service Endpoints health from cluster DNS resolution failures.",
       "lesson": "../../cka-guide/troubleshooting/services-dns-np.html"
     },
     {
       "domain": "Troubleshooting",
       "weight": 30,
-      "stem": "DNS lookup for db.billing.svc.cluster.local fails from a debug Pod. Confirm CoreDNS is Ready and fix the kube-dns Service selector if broken.",
+      "stem": "Application Pod ledger in namespace apps is Running but you need filesystem contents without changing the image. Use kubectl debug --copy-to or ephemeral container to ls /var/log/app and capture findings.",
       "solutionSteps": [
-        "kubectl -n kube-system get pods -l k8s-app=kube-dns",
-        "kubectl -n kube-system get svc kube-dns -o yaml",
-        "kubectl -n kube-system get cm coredns -o yaml"
+        "kubectl -n apps debug ledger -it --image=busybox:1.36 --target=ledger -- sh",
+        "ls -la /var/log/app || ls -la /",
+        "kubectl -n apps logs ledger --tail=100"
       ],
-      "verify": "nslookup db.billing.svc.cluster.local from a test Pod succeeds",
-      "why": "CoreDNS + kube-dns Service are the DNS path.",
-      "lesson": "../../cka-guide/networking/coredns.html"
-    },
-    {
-      "domain": "Troubleshooting",
-      "weight": 30,
-      "stem": "A NetworkPolicy named deny-all in ns edge blocks legitimate traffic from ns back. Add an allow rule for Pods labeled role=api from namespace back.",
-      "solutionSteps": [
-        "kubectl -n gw get netpol deny-all -o yaml",
-        "kubectl -n gw apply -f allow-from-back.yaml"
-      ],
-      "verify": "curl from a back/api Pod to edge Service succeeds",
-      "why": "Default deny needs explicit allow selectors.",
-      "lesson": "../../cka-guide/networking/network-policies.html"
-    },
-    {
-      "domain": "Troubleshooting",
-      "weight": 30,
-      "stem": "Use kubectl debug to attach an ephemeral busybox container to Pod catalog in ns warehouse and confirm /data is mounted.",
-      "solutionSteps": [
-        "kubectl -n fulfillment debug -it catalog --image=busybox:1.36 --target=app -- sh",
-        "ls /data"
-      ],
-      "verify": "/data visible inside ephemeral container",
-      "why": "Ephemeral containers when app image has no shell.",
+      "verify": "You inspected the container filesystem/logs via debug; note path that held the evidence.",
+      "why": "kubectl debug is the modern CKA path for distroless and sealed images.",
       "lesson": "../../cka-guide/troubleshooting/logs-debug.html"
+    },
+    {
+      "domain": "Troubleshooting",
+      "weight": 30,
+      "stem": "metrics-server arguments reject insecure kubelet TLS and top is empty. Adjust the Deployment args appropriately for your lab, restart, and show kubectl top nodes working.",
+      "solutionSteps": [
+        "kubectl -n kube-system get deploy metrics-server -o yaml",
+        "kubectl -n kube-system edit deploy metrics-server",
+        "kubectl -n kube-system rollout status deploy/metrics-server",
+        "kubectl top nodes; kubectl top pods -A | head"
+      ],
+      "verify": "kubectl top nodes returns CPU/memory; metrics-server Pods Ready.",
+      "why": "Resource monitoring on CKA often means repairing metrics-server flags, not Prometheus.",
+      "lesson": "../../cka-guide/troubleshooting/resource-monitoring.html"
     },
     {
       "domain": "Cluster Architecture",
       "weight": 25,
-      "stem": "Create ServiceAccount pipeline in ns build, Role with get/list/watch on pods, and RoleBinding. Prove with auth can-i.",
+      "stem": "Create ClusterRole pod-reader allowing get/list/watch on pods cluster-wide. Bind it to ServiceAccount auditor in namespace platform via ClusterRoleBinding auditor-pods. Prove can-i in another namespace.",
       "solutionSteps": [
-        "kubectl -n ci create sa pipeline",
-        "kubectl -n ci create role pod-reader --verb=get,list,watch --resource=pods",
-        "kubectl -n ci create rolebinding pipeline-pods --role=pod-reader --serviceaccount=ci:pipeline",
-        "kubectl auth can-i list pods -n ci --as=system:serviceaccount:ci:pipeline"
+        "kubectl -n platform create sa auditor",
+        "kubectl create clusterrole pod-reader --verb=get,list,watch --resource=pods",
+        "kubectl create clusterrolebinding auditor-pods --clusterrole=pod-reader --serviceaccount=platform:auditor",
+        "kubectl auth can-i list pods -n kube-system --as=system:serviceaccount:platform:auditor"
       ],
-      "verify": "can-i returns yes",
-      "why": "RBAC: Role + RoleBinding + SA triad.",
+      "verify": "can-i list pods is yes in kube-system for the auditor SA.",
+      "why": "ClusterRoleBinding extends RBAC beyond a single namespace.",
       "lesson": "../../cka-guide/cluster/rbac.html"
     },
     {
       "domain": "Cluster Architecture",
       "weight": 25,
-      "stem": "On a kubeadm control-plane node, list static Pod manifests under /etc/kubernetes/manifests and identify which file defines kube-apiserver.",
+      "stem": "In directory /tmp/kustomize-lab with a base Deployment, use Kustomize to set replicas to 4 and name prefix lab-, then apply to namespace lab.",
       "solutionSteps": [
-        "ls /etc/kubernetes/manifests",
-        "grep -l apiserver /etc/kubernetes/manifests/*"
+        "mkdir -p /tmp/kustomize-lab && cd /tmp/kustomize-lab",
+        "write kustomization.yaml with resources, namePrefix: lab-, replicas",
+        "kubectl apply -k /tmp/kustomize-lab -n lab",
+        "kubectl -n lab get deploy"
       ],
-      "verify": "kube-apiserver.yaml (or similar) identified",
-      "why": "Static Pods are kubelet-watched manifests.",
-      "lesson": "../../cka-guide/cluster/control-plane-nodes.html"
-    },
-    {
-      "domain": "Cluster Architecture",
-      "weight": 25,
-      "stem": "Install a sample chart with Helm into ns monitoring named metrics-demo (any local/chart or bitnami repo allowed in your lab). Show the release.",
-      "solutionSteps": [
-        "helm repo add bitnami https://charts.bitnami.com/bitnami || true",
-        "helm install web-demo bitnami/nginx -n observability --create-namespace",
-        "helm -n observability list"
-      ],
-      "verify": "helm list shows metrics-demo deployed",
-      "why": "CKA expects Helm to install cluster components.",
+      "verify": "Namespaced Deployment lab-* shows 4 replicas from kubectl apply -k.",
+      "why": "Kustomize (kubectl -k) is first-class alongside Helm on modern CKA.",
       "lesson": "../../cka-guide/cluster/helm-kustomize.html"
     },
     {
       "domain": "Cluster Architecture",
       "weight": 25,
-      "stem": "Explain CRI vs CNI vs CSI in one kubectl/crictl observation: show container runtime on a node and that Pods have IPs.",
+      "stem": "Using kubeadm, show the current cluster version and plan an upgrade of the control plane to the next patch (dry-run / plan only). Do not leave the cluster mid-upgrade.",
       "solutionSteps": [
-        "kubectl get nodes -o wide",
-        "kubectl get pods -A -o wide | head"
+        "kubectl version --short || kubectl version",
+        "kubeadm version",
+        "kubeadm upgrade plan",
+        "document the chosen target version from plan output"
       ],
-      "verify": "Runtime noted; Pods have cluster IPs",
-      "why": "Extension interfaces: runtime / net / storage.",
-      "lesson": "../../cka-guide/cluster/cri-cni-csi.html"
+      "verify": "kubeadm upgrade plan succeeds and shows a clear target version; cluster still healthy.",
+      "why": "kubeadm upgrade plan is the safe CKA skill; full upgrade needs careful sequencing.",
+      "lesson": "../../cka-guide/cluster/kubeadm-install.html"
+    },
+    {
+      "domain": "Cluster Architecture",
+      "weight": 25,
+      "stem": "Install a sample CRD widgets.demo.example.com (namespaced, v1, status subresource optional). Create one Widget named sample in namespace lab and show it with kubectl get.",
+      "solutionSteps": [
+        "kubectl apply -f {crd-yaml}",
+        "kubectl get crd widgets.demo.example.com",
+        "kubectl -n lab apply -f {widget-cr-yaml}",
+        "kubectl -n lab get widgets sample -o yaml"
+      ],
+      "verify": "CRD Established; Widget sample exists in lab.",
+      "why": "CRDs extend the API; CKA expects apply/get, not writing operators from scratch.",
+      "lesson": "../../cka-guide/cluster/crds-operators.html"
     },
     {
       "domain": "Services & Networking",
       "weight": 20,
-      "stem": "Create Deployment ping with 2 replicas and a ClusterIP Service on port 80 targeting container port 8080 in ns netqa.",
+      "stem": "In namespace apps, create Ingress api-ing (or Gateway equivalent if IngressClass missing) routing host api.lab.local PathPrefix /v1 to Service api:80.",
       "solutionSteps": [
-        "kubectl -n netqa create deploy ping --image=hashicorp/http-ping --replicas=2",
-        "kubectl -n netqa expose deploy ping --port=80 --target-port=8080 --name=ping-svc"
+        "kubectl -n apps create ingress api-ing --class=nginx --rule='api.lab.local/v1*=api:80'",
+        "kubectl -n apps get ingress api-ing -o yaml",
+        "kubectl -n apps describe ingress api-ing"
       ],
-      "verify": "Endpoints populated; curl via cluster IP works",
-      "why": "Service port vs targetPort mismatch is a classic miss.",
-      "lesson": "../../cka-guide/networking/services-endpoints.html"
+      "verify": "Ingress rules show host/path → api:80; address or Accepted as your controller allows.",
+      "why": "Ingress remains valid; prefer Gateway API when the lab provides it.",
+      "lesson": "../../cka-guide/networking/ingress.html"
     },
     {
       "domain": "Services & Networking",
       "weight": 20,
-      "stem": "Create an HTTPRoute (or Ingress if Gateway API CRDs absent) that routes host store.example.com / to Service store in ns edge.",
+      "stem": "Create NetworkPolicy default-deny-apps in namespace apps that selects all Pods and denies all Ingress and Egress. Then add allow-dns egress for UDP/TCP 53 to kube-system.",
       "solutionSteps": [
-        "kubectl -n gw apply -f httproute-store.yaml"
+        "kubectl -n apps apply -f {default-deny-policy}",
+        "kubectl -n apps apply -f {allow-dns-egress-policy}",
+        "kubectl -n apps get networkpolicy"
       ],
-      "verify": "Route Accepted/Attached or Ingress address present",
-      "why": "Gateway API is the modern CKA ingress path.",
-      "lesson": "../../cka-guide/networking/gateway-api.html"
-    },
-    {
-      "domain": "Services & Networking",
-      "weight": 20,
-      "stem": "Apply a NetworkPolicy in ns db that allows ingress TCP 5432 only from Pods labeled app=api in the same namespace.",
-      "solutionSteps": [
-        "kubectl -n data apply -f np-postgres.yaml"
-      ],
-      "verify": "Only api Pods can connect; others time out",
-      "why": "podSelector + ports is core NetworkPolicy.",
+      "verify": "Both policies exist; Pods cannot reach arbitrary nets but DNS to kube-system:53 works.",
+      "why": "Default-deny plus explicit DNS egress is a classic NetworkPolicy exam pattern.",
       "lesson": "../../cka-guide/networking/network-policies.html"
     },
     {
       "domain": "Services & Networking",
       "weight": 20,
-      "stem": "Create a NodePort Service for Deployment web in ns public on port 30080 (nodePort).",
+      "stem": "Document the CNI plugin in use and show that Pods on different nodes have distinct PodCIDRs/routes. Create two debug Pods on different nodes if possible and confirm cross-Pod connectivity.",
       "solutionSteps": [
-        "kubectl -n ingress-ns expose deploy web --type=NodePort --port=80 --name=web-np",
-        "kubectl -n ingress-ns patch svc web-np -p '{\"spec\":{\"ports\":[{\"port\":80,\"nodePort\":30080}]}}'"
+        "kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{\" \"}{.spec.podCIDR}{\"\\n\"}{end}'",
+        "ls /etc/cni/net.d; kubectl get pods -n kube-system | grep -iE 'calico|cilium|flannel|weave'",
+        "kubectl -n lab run a --image=busybox:1.36 --restart=Never -- sleep 3600",
+        "kubectl -n lab run b --image=busybox:1.36 --restart=Never -- sleep 3600",
+        "kubectl -n lab exec a -- ping -c1 {b-pod-ip}"
       ],
-      "verify": "svc shows 30080; curl nodeIP:30080 works",
-      "why": "NodePort still tested among Service types.",
-      "lesson": "../../cka-guide/networking/services-endpoints.html"
+      "verify": "You named the CNI; Pod-to-Pod ping across nodes works (or you explained the block).",
+      "why": "Pod networking is CNI + routes; Services sit on top.",
+      "lesson": "../../cka-guide/networking/pod-networking.html"
+    },
+    {
+      "domain": "Services & Networking",
+      "weight": 20,
+      "stem": "In namespace edge2, create Gateway public-gw (GatewayClass as provided in lab) listening HTTP :80, then HTTPRoute root-route PathPrefix / to Service homepage:8080.",
+      "solutionSteps": [
+        "kubectl -n edge2 apply -f {gateway-yaml}",
+        "kubectl -n edge2 apply -f {httproute-yaml}",
+        "kubectl -n edge2 get gateway,httproute"
+      ],
+      "verify": "Gateway Programmed/Accepted; HTTPRoute parentRef binds; backend homepage:8080.",
+      "why": "Gateway + HTTPRoute is the v1.35 networking default for L7 routing tasks.",
+      "lesson": "../../cka-guide/networking/gateway-api.html"
     },
     {
       "domain": "Workloads & Scheduling",
       "weight": 15,
-      "stem": "Scale Deployment cart in ns store to 5 and wait for rollout. Then undo to previous revision.",
+      "stem": "In namespace platform, create Pod probe-demo with nginx:1.27, readinessProbe httpGet / on 80 (initialDelaySeconds 5), and livenessProbe httpGet / on 80 (periodSeconds 10). Confirm Ready.",
       "solutionSteps": [
-        "kubectl -n store autos deploy/cart --replicas=5",
-        "kubectl -n store rollout status deploy/cart",
-        "kubectl -n store rollout undo deploy/cart"
+        "kubectl -n platform apply -f {probe-demo-pod-yaml}",
+        "kubectl -n platform describe pod probe-demo | grep -A20 Probes",
+        "kubectl -n platform get pod probe-demo -w"
       ],
-      "verify": "rollout history shows undo; desired replicas restored as required",
-      "why": "scale + undo are bread-and-butter.",
-      "lesson": "../../cka-guide/workloads/deployments-rollouts.html"
+      "verify": "Pod Ready 1/1; describe shows both probes configured.",
+      "why": "Probes drive Ready and restarts — self-healing without custom controllers.",
+      "lesson": "../../cka-guide/workloads/probes-self-healing.html"
     },
     {
       "domain": "Workloads & Scheduling",
       "weight": 15,
-      "stem": "Create an HPA for Deployment api in ns scale targeting 70% CPU, min 2 max 6. Ensure requests are set on the Pod template.",
+      "stem": "Schedule Pod pinned-hw in namespace lab onto a node labeled disk=ssd using nodeSelector. Label a node if needed, create the Pod, confirm nodeName.",
       "solutionSteps": [
-        "kubectl -n autos set resources deploy/api --requests=cpu=100m",
-        "kubectl -n autos autoscale deploy/api --cpu-percent=70 --min=2 --max=6"
+        "kubectl label node {node} disk=ssd --overwrite",
+        "kubectl -n lab run pinned-hw --image=nginx:1.27 --overrides='{nodeSelector disk=ssd}' --restart=Never",
+        "kubectl -n lab get pod pinned-hw -o wide"
       ],
-      "verify": "kubectl -n scale get hpa shows targets",
-      "why": "HPA needs Metrics Server + requests.",
-      "lesson": "../../cka-guide/workloads/resources-hpa.html"
+      "verify": "Pod Running on the labeled node only.",
+      "why": "Scheduling constraints (nodeSelector/affinity/taints) are Workloads & Scheduling territory.",
+      "lesson": "../../cka-guide/workloads/scheduling.html"
     },
     {
       "domain": "Storage",
       "weight": 10,
-      "stem": "Create a PVC app-data 2Gi RWO using the default StorageClass and a Pod that mounts it at /data.",
+      "stem": "In namespace persist, create Pod vol-modes with an emptyDir volume at /cache and a PVC data-pvc (1Gi RWO) at /data. Confirm both mounts with df/mount.",
       "solutionSteps": [
-        "kubectl apply -f pvc.yaml",
-        "kubectl apply -f pod-mount.yaml",
-        "kubectl get pvc app-data"
+        "kubectl -n persist apply -f {data-pvc-yaml}",
+        "kubectl -n persist apply -f {vol-modes-pod-yaml}",
+        "kubectl -n persist exec vol-modes -- df -h /cache /data"
       ],
-      "verify": "PVC Bound; Pod Running with mount",
-      "why": "PVC → Pod claimName, not PV name.",
+      "verify": "Both paths mounted; PVC Bound; emptyDir present.",
+      "why": "Know access modes and volume types — emptyDir vs PVC is a common contrast.",
+      "lesson": "../../cka-guide/storage/volumes-access-modes.html"
+    },
+    {
+      "domain": "Storage",
+      "weight": 10,
+      "stem": "Create PV static-pv 5Gi ReadWriteOnce hostPath /mnt/data, reclaim Retain, and PVC static-pvc that binds to it by volumeName or matching size/access. Mount on Pod static-pod in namespace persist.",
+      "solutionSteps": [
+        "kubectl apply -f {static-pv-yaml}",
+        "kubectl -n persist apply -f {static-pvc-yaml}",
+        "kubectl -n persist apply -f {static-pod-yaml}",
+        "kubectl get pv,pvc -A | grep static"
+      ],
+      "verify": "PVC Bound to static-pv; Pod Running with volume mounted.",
+      "why": "Static PV + PVC binding still appears; prefer StorageClass dynamics when available.",
       "lesson": "../../cka-guide/storage/pv-pvc.html"
-    },
-    {
-      "domain": "Storage",
-      "weight": 10,
-      "stem": "Create a StorageClass fast-nvme with WaitForFirstConsumer binding mode (use a provisioner available in your lab).",
-      "solutionSteps": [
-        "kubectl apply -f sc-fast.yaml",
-        "kubectl get sc fast-nvme"
-      ],
-      "verify": "StorageClass exists with volumeBindingMode WaitForFirstConsumer",
-      "why": "Binding mode affects scheduling with volumes.",
-      "lesson": "../../cka-guide/storage/storageclass.html"
     }
   ]
 }
   </script>
+  </div>
 </section>
 
 <section class="section reveal" id="check">
-  <h2><span class="section-num">02</span> After you finish</h2>
-  <p>Target ≥66% honest self-check with time remaining. Remediate in <a href="../../cka-guide/index.html">cka-guide</a>, then sit the next mock on another day.</p>
+  <h2><span class="section-num">03</span> Afterward</h2>
+  <p>Review solutions, then <a href="mock-3.html">next mock</a> or revisit <a href="mock-1.html">Mock 1</a>. Scoring notes: <a href="../reference/scoring.html">reference</a>.</p>
 </section>
           <button class="lesson-complete" type="button"><span class="lc-box">&#10003;</span><span class="lc-text"></span></button>
           <nav class="page-nav reveal">
@@ -335,6 +370,12 @@
             <a class="next" href="../cka/mock-3.html"><span class="pn-k">Next &rsaquo;</span><span class="pn-t">CKA Mock 3 · full exam</span></a>
           </nav>
         </div>
+        <nav class="toc">
+          <h5>On this page</h5>
+          <a href="#instructions">Instructions</a>
+          <a href="#mock">Mock session</a>
+          <a href="#check">Afterward</a>
+        </nav>
       </div>
 
       <footer class="footer">
