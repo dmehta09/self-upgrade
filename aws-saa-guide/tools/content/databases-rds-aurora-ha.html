@@ -1,0 +1,105 @@
+<section class="hero reveal">
+  <span class="domain-chip">Domain 2 · Resilient</span>
+  <span class="eyebrow">Databases · relational</span>
+  <h1>RDS &amp; Aurora high availability.</h1>
+  <p class="lead">Managed relational engines with Multi-AZ failover, read replicas, and Aurora's shared storage. As of 2026, for spiky or unpredictable relational load, prefer <b>Aurora Serverless v2</b> (ACUs) over older Serverless v1 thinking.</p>
+</section>
+
+<section class="section reveal" id="rds-vs-aurora">
+  <h2><span class="section-num">01</span> RDS vs Aurora</h2>
+  <p class="takeaway"><b>RDS</b> runs engines (Postgres, MySQL, SQL Server, …) on managed instances with automated backups. <b>Aurora</b> is AWS's cloud-native MySQL/Postgres-compatible engine with storage that auto-grows and replicates across AZs.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p><b>RDS Multi-AZ</b> is a primary cashier with a trained backup at another register — if the primary leaves, the standby takes the drawer (failover). <b>Aurora</b> is one shared digital ledger in the building's basement (storage across AZs) with several cashiers reading it; Serverless v2 is cashiers that clock in/out by the minute as the line grows.</p></div></div>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">RDS</div>
+      <ul>
+        <li>Familiar engines + licensing options</li>
+        <li>Multi-AZ standby (sync)</li>
+        <li>Read replicas (async) for scale-out reads</li>
+        <li>Storage autoscaling on many engines</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Aurora</div>
+      <ul>
+        <li>6-copy storage across 3 AZs</li>
+        <li>Faster failover / crash recovery</li>
+        <li>Up to 15 Aurora replicas</li>
+        <li><b>Serverless v2</b> scales ACUs fine-grained</li>
+      </ul>
+    </div>
+  </div>
+
+  <p>Secrets/rotation patterns: <a href="../../devops-guide/aws/iam-storage-data.html">DevOps · IAM, storage &amp; data</a>.</p>
+</section>
+
+<section class="section reveal" id="ha">
+  <h2><span class="section-num">02</span> HA patterns</h2>
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  app[AppTier] --> writer[WriterEndpoint]
+  writer --> primary[PrimaryInstance]
+  primary -->|syncMultiAZ| standby[StandbyAZ]
+  primary -->|async| replica[ReadReplica]
+  app --> reader[ReaderEndpoint]
+  reader --> replica
+</pre></div>
+
+  <dl class="kv">
+    <dt>Multi-AZ</dt><dd>Synchronous standby in another AZ. Failover on host/AZ failure — <b>not</b> for read scaling (standby doesn't serve reads on classic RDS).</dd>
+    <dt>Read replicas</dt><dd>Async copies for read scale / cross-Region DR. Promote for disaster recovery.</dd>
+    <dt>Aurora Global Database</dt><dd>Low-RPO cross-Region secondary clusters for DR / local reads.</dd>
+    <dt>Proxy</dt><dd>RDS Proxy pools connections for Lambda/spiky apps.</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Don't confuse <b>Multi-AZ</b> (HA) with <b>read replicas</b> (scale/DR). A stem that says “scale reads” wants replicas (or Aurora readers). A stem that says “survive AZ failure with automatic failover” wants Multi-AZ / Aurora.</p></div></div>
+</section>
+
+<section class="section reveal" id="serverless-v2">
+  <h2><span class="section-num">03</span> Aurora Serverless v2 (2026 default)</h2>
+  <p class="takeaway">Serverless v2 scales <b>Aurora Capacity Units (ACUs)</b> up and down in fine increments, can mix with provisioned instances in the same cluster, and fits variable / unpredictable relational workloads without the coarse pauses of older Serverless v1.</p>
+  <ul>
+    <li>Set min/max ACUs to bound cost and headroom.</li>
+    <li>Use for dev/test, spiky SaaS tenants, or variable reporting — still transactional relational.</li>
+    <li>For steady 24/7 high load, provisioned (or mixed) may be cheaper — cost domain tradeoff.</li>
+  </ul>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Variable traffic Postgres app needs AZ resilience and fine-grained scale. Best fit?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Aurora PostgreSQL with Serverless v2 (and Multi-AZ / Aurora storage resilience).</button>
+      <button class="quiz-opt"><span class="mark"></span>Single-AZ RDS with a nightly AMI backup only.</button>
+      <button class="quiz-opt"><span class="mark"></span>DynamoDB — because all variable apps must be NoSQL.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Relational + variable load → Aurora Serverless v2. Single-AZ fails the resilience ask. DynamoDB is for key-value access patterns, not “we need Postgres SQL.”</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">RDS Multi-AZ vs read replica?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>Multi-AZ</b> is a sync standby for automatic failover — HA, not read traffic. <b>Read replicas</b> are async copies that serve reads and can be promoted; use them for scale-out and cross-Region DR.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Multi-AZ keeps me alive; replicas scale reads and help with DR."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why Aurora Serverless v2 in 2026?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>It scales capacity in fine-grained <b>ACUs</b> for unpredictable relational load, coexists with provisioned instances, and avoids the old Serverless v1 cold-start / coarse scaling story. Default recommendation when the stem says variable traffic + SQL.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Variable SQL load → Aurora Serverless v2 ACUs, not a fixed oversized instance."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How does Aurora storage change the HA story?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Aurora storage is shared and replicated across three AZs (six copies). Compute nodes are separate — failover attaches a new writer to the same storage volume, so recovery is typically faster than classic RDS storage failover.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Aurora keeps the data volume across AZs; instances are replaceable readers and writers on top."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

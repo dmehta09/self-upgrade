@@ -1,0 +1,135 @@
+<section class="hero reveal">
+  <span class="eyebrow">Resilience &amp; DR · RPO &amp; RTO</span>
+  <span class="domain-chip">Domain 2 · Resilient</span>
+  <h1>DR is a budget, not a checkbox.</h1>
+  <p class="lead"><b>RPO</b> is how much data you can lose. <b>RTO</b> is how long you can be down. Every DR strategy on SAA-C03 is really "how warm is the standby?" — and warmer always costs more.</p>
+</section>
+
+<section class="section reveal" id="objectives">
+  <h2><span class="section-num">01</span> RPO vs RTO</h2>
+  <p class="takeaway">Business sets the targets; architecture spends money to meet them. Lower numbers → continuous replication, warm/hot standbys, multi-Region.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>RPO is how far back your undo button goes (last backup vs live mirror). RTO is how long until the store reopens after a fire — empty lot vs fully staffed second store across town.</p></div></div>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">RPO — data</div>
+      <ul>
+        <li>"Lose at most 5 minutes of writes"</li>
+        <li>Drives backup / replication frequency</li>
+        <li>Near-zero → sync or continuous replication</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">RTO — time</div>
+      <ul>
+        <li>"Be serving again within 1 hour"</li>
+        <li>Drives standby warmth + runbooks</li>
+        <li>Near-zero → hot / active-active</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="strategies">
+  <h2><span class="section-num">02</span> The four DR strategies</h2>
+  <p>From cheapest/slowest to most expensive/fastest. Match the stem's RPO/RTO language to a tier.</p>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  backup[Backup_and_Restore] --> pilot[Pilot_Light]
+  pilot --> warm[Warm_Standby]
+  warm --> multi[Multi_Site_Active]
+</pre></div>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>Strategy</th><th>What you run</th><th>Typical RTO/RPO feel</th></tr></thead>
+    <tbody>
+      <tr><td>Backup &amp; restore</td><td>Snapshots / AMIs / S3; rebuild on demand</td><td>Hours+ / hours (cheap)</td></tr>
+      <tr><td>Pilot light</td><td>Minimal core always on (DB replica); scale compute at failover</td><td>Tens of min / minutes</td></tr>
+      <tr><td>Warm standby</td><td>Scaled-down full stack always running; scale out at failover</td><td>Minutes / minutes</td></tr>
+      <tr><td>Multi-site active/active</td><td>Full capacity in ≥2 Regions serving traffic</td><td>Near-zero / near-zero ($$)</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="tradeoff" data-tradeoff>
+    <script type="application/json" class="tr-config">
+    {
+      "title": "DR warmth vs cost",
+      "axisLabel": "How quickly must we recover, and how much data can we lose?",
+      "stops": [
+        {
+          "label": "Backup restore",
+          "dims": { "RTO speed": 20, "RPO tightness": 25, "Cost": 90, "Ops simplicity": 85 },
+          "note": "Periodic snapshots and rebuild. Fine when hours of downtime and data loss are acceptable — lowest ongoing spend."
+        },
+        {
+          "label": "Pilot light",
+          "dims": { "RTO speed": 55, "RPO tightness": 70, "Cost": 65, "Ops simplicity": 60 },
+          "note": "Keep data replication hot and a tiny core running. At failover, promote DB and scale compute. Classic exam middle ground."
+        },
+        {
+          "label": "Warm standby",
+          "dims": { "RTO speed": 75, "RPO tightness": 80, "Cost": 40, "Ops simplicity": 45 },
+          "note": "A smaller but complete environment is always up. Failover is mostly DNS/scale-out — better RTO than pilot light, higher idle cost."
+        },
+        {
+          "label": "Active active",
+          "dims": { "RTO speed": 95, "RPO tightness": 95, "Cost": 15, "Ops simplicity": 20 },
+          "note": "Serve from multiple Regions continuously. Near-zero RTO/RPO when healthy, but you pay for dual capacity and data conflict design."
+        }
+      ]
+    }
+    </script>
+  </div>
+</section>
+
+<section class="section reveal" id="aws-building">
+  <h2><span class="section-num">03</span> AWS building blocks</h2>
+  <dl class="kv">
+    <dt>AWS Backup</dt><dd>Central policies across EBS, RDS, DynamoDB, EFS, etc. Still restore-test.</dd>
+    <dt>RDS / Aurora</dt><dd>Automated backups + PITR (RPO); Multi-AZ (RTO in-Region); cross-Region replica / Aurora Global (Region DR).</dd>
+    <dt>S3</dt><dd>Versioning + CRR; Object Lock for immutability when ransomware is in scope.</dd>
+    <dt>Route 53</dt><dd>Failover / health-check routing to the DR stack.</dd>
+    <dt>AMI / Launch templates</dt><dd>Pilot light / warm standby need known-good images ready to scale.</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>An untested backup is not a DR plan. Stems that emphasize <b>meeting a stated RTO</b> want warm/hot capacity — not "we'll restore from snapshot someday." Also don't confuse Multi-AZ HA with Region DR.</p></div></div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Requirement: RTO under 15 minutes, RPO under 5 minutes, tolerate Region failure, minimize idle cost. Best fit?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt"><span class="mark"></span>Backup and restore from daily snapshots only.</button>
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Pilot light or warm standby in a second Region with continuous data replication.</button>
+      <button class="quiz-opt"><span class="mark"></span>Single-AZ EC2 with local disks.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Tight RTO/RPO across Regions needs replicated data plus some always-on capacity — not cold daily backups, and not full active-active unless cost is no object.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Define RPO and RTO in one breath.</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>RPO</b> = maximum acceptable data loss (time). <b>RTO</b> = maximum acceptable downtime. Architecture and spend follow those two numbers.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"RPO is data; RTO is clocks. Tighter either way costs more."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Pilot light vs warm standby?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>Pilot light</b> keeps the data plane (and tiny core) on; you launch/scale most compute at failover. <b>Warm standby</b> runs a scaled-down but complete stack always — faster RTO, higher idle cost.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Pilot light is a spark; warm standby is a dimmed full house. Both beat cold restore when minutes matter."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When is active-active justified?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>When RTO/RPO are near-zero <em>and</em> the business accepts ~2× capacity plus multi-Region data design (Global Tables, Aurora Global, conflict rules). Don't pick it just because "HA" appears in the stem.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Active-active is the luxury tier — buy it for zero-downtime Region failure, not for routine AZ loss."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

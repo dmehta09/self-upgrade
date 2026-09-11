@@ -1,0 +1,103 @@
+<section class="hero reveal">
+  <span class="eyebrow">Resilience &amp; DR · Decouple &amp; scale</span>
+  <span class="domain-chip">Domain 2 · Resilient · Domain 3 · High-performing</span>
+  <h1>Queues absorb shock. Autoscaling absorbs load.</h1>
+  <p class="lead">Tight coupling turns one slow dependency into a site-wide outage. <b>SQS / SNS / EventBridge</b> and <b>ASG / Lambda concurrency</b> let producers and consumers fail and scale independently — a constant SAA theme.</p>
+</section>
+
+<section class="section reveal" id="why-decouple">
+  <h2><span class="section-num">01</span> Why decoupling wins</h2>
+  <p class="takeaway">If service A calls B synchronously and B is down, A is down. A queue or topic makes the failure <b>temporary backlog</b> instead of user-facing errors.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>A restaurant ticket rail is a queue: the kitchen can spike without the host crashing. A megaphone to all cooks is pub/sub (SNS). The reservation system reacting to "table freed" events is EventBridge.</p></div></div>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  api[API_tier] --> sqs[SQS_queue]
+  sqs --> workers[Worker_ASG]
+  api --> sns[SNS_topic]
+  sns --> email[Email_sub]
+  sns --> lambda[Lambda_sub]
+  sns --> sqs2[SQS_sub]
+</pre></div>
+
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Tight coupling</div>
+      <ul>
+        <li>Sync HTTP between every hop</li>
+        <li>One slow service stalls callers</li>
+        <li>Scale both sides in lockstep</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Decoupled</div>
+      <ul>
+        <li>SQS buffer / SNS fan-out</li>
+        <li>Consumers retry independently</li>
+        <li>Scale producers ≠ consumers</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section reveal" id="messaging">
+  <h2><span class="section-num">02</span> Pick the right messaging tool</h2>
+  <dl class="kv">
+    <dt>SQS</dt><dd>Pull queue between producers and workers. Standard = at-least-once + best-effort order. FIFO = exactly-once processing + order per message group.</dd>
+    <dt>SNS</dt><dd>Push pub/sub fan-out to many subscribers (Lambda, SQS, HTTP, email). Use SNS→SQS for durable fan-out.</dd>
+    <dt>EventBridge</dt><dd>Event bus with content filtering, SaaS partners, schedule rules — "when X happens, do Y."</dd>
+    <dt>DLQ</dt><dd>Dead-letter queue after max receives — poison messages don't block the main queue forever.</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Long polling and visibility timeout matter: too-short visibility → duplicate processing; no DLQ → endless poison retries. FIFO is not free — use it when order/dedup is required, not by default.</p></div></div>
+</section>
+
+<section class="section reveal" id="scaling">
+  <h2><span class="section-num">03</span> Scaling patterns</h2>
+  <ul>
+    <li><b>ASG</b> on CPU, ALB request count, or <b>SQS ApproximateNumberOfMessages</b> — classic worker farm.</li>
+    <li><b>Target tracking</b> policies over manual step thresholds when the stem wants "automatically maintain."</li>
+    <li><b>Lambda</b> scales with concurrency; use reserved concurrency to protect downstream.</li>
+    <li><b>DynamoDB</b> on-demand vs provisioned + auto scaling; Aurora Serverless v2 for spiky relational.</li>
+    <li><b>Read replicas / ElastiCache</b> for read-heavy paths without oversizing the primary.</li>
+  </ul>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Upload spikes overwhelm image processors. Users must get a fast API response; processing can finish later. Best change?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>API enqueues work to SQS; an ASG/Lambda consumes and scales on queue depth.</button>
+      <button class="quiz-opt"><span class="mark"></span>Increase the API instance size and process images inline.</button>
+      <button class="quiz-opt"><span class="mark"></span>Replace the API with a single EC2 cron job.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Decouple with a queue so the API acknowledges quickly and workers scale independently on backlog.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">SQS vs SNS vs EventBridge — when?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>SQS</b> = buffer work for consumers. <b>SNS</b> = fan-out the same message to many endpoints. <b>EventBridge</b> = route events with rules/filters across apps and AWS services. Combine SNS→SQS for durable multi-consumer.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Queue to absorb, topic to fan out, event bus to route by content."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you scale workers on SQS?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Put workers in an ASG (or Lambda event source mapping) and scale on <b>queue depth</b> / age of oldest message so backlog shrinks without over-provisioning idle capacity.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Scale on the backlog, not on a guess — queue depth is the signal."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why visibility timeout + DLQ?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Visibility timeout hides an in-flight message so others don't steal it; if the worker dies, it reappears. After N failed receives, a <b>DLQ</b> isolates poison messages for debugging instead of infinite retries.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Hide while working, resurface if we crash, quarantine if we keep failing."</p></div></div>
+      </div>
+    </details>
+  </div>
+  <p class="takeaway" style="margin-top:1rem">More messaging detail: <a href="../integration/sqs-sns-eventbridge.html">SQS, SNS &amp; EventBridge</a>.</p>
+</section>

@@ -20,6 +20,8 @@
 
 **DevOps:** Out of the five-guide audit scope. Use existing [`devops-guide/`](devops-guide/index.html) if a round turns DevOps — no new project needed.
 
+**AWS SAA exam:** New sibling [`aws-saa-guide/`](aws-saa-guide/index.html) (SAA-C03, Sep 2026) — not interview-day mix unless the round is Solutions Architect cert prep.
+
 ---
 
 ## 0. Hub path (15 min)

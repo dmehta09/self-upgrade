@@ -1,0 +1,99 @@
+<section class="hero reveal">
+  <span class="domain-chip">Domain 1 · Secure Architectures</span>
+  <span class="eyebrow">Identity &amp; Security · detect</span>
+  <h1>Detective controls.</h1>
+  <p class="lead">Preventive IAM is not enough. SAA expects you to wire <b>CloudTrail</b>, <b>Config</b>, <b>GuardDuty</b>, <b>Security Hub</b>, and <b>CloudWatch</b> so misconfigs and threats surface fast — centrally in multi-account orgs.</p>
+</section>
+
+<section class="section reveal" id="trail-config">
+  <h2><span class="section-num">01</span> CloudTrail &amp; Config</h2>
+  <p class="takeaway"><b>CloudTrail</b> answers “who did what, when?” <b>Config</b> answers “what does my inventory look like, and is it compliant?”</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>CloudTrail is the building’s <b>CCTV + badge log</b> — every door open is recorded. Config is the <b>nightly inventory clipboard</b>: “are all fire extinguishers still mounted and tagged?” GuardDuty is the guard watching the feeds for suspicious patterns.</p></div></div>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  apis[AWS_API_calls] --> trail[CloudTrail]
+  trail --> s3log[S3_log_archive]
+  trail --> cwlogs[CloudWatch_Logs]
+  resources[Resource_state] --> config[AWS_Config]
+  config --> rules[Config_Rules]
+  rules --> hub[Security_Hub]
+  trail --> gd[GuardDuty]
+  gd --> hub
+</pre></div>
+
+  <dl class="kv">
+    <dt>Org trail</dt><dd>One trail in the management / delegated admin account covering all members; logs to a locked log-archive bucket.</dd>
+    <dt>Management vs data events</dt><dd>Management events = control plane (default). Data events = S3 object-level / Lambda invoke — costlier, enable when needed.</dd>
+    <dt>Config rules</dt><dd>Managed rules (encrypted volumes, public buckets) + custom; remediate with SSM Automation.</dd>
+    <dt>Config aggregator</dt><dd>Multi-account / multi-Region compliance view.</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>CloudTrail is <b>not</b> a real-time IDS by itself. Pair with <b>GuardDuty</b> (threat intel on CloudTrail/VPC Flow/DNS) and alarms on metric filters for break-glass events. Also: never leave the trail bucket writable by everyone — that destroys evidence integrity.</p></div></div>
+</section>
+
+<section class="section reveal" id="threat">
+  <h2><span class="section-num">02</span> GuardDuty, Security Hub &amp; Inspector</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Service</th><th>Detects</th><th>Exam cue</th></tr></thead>
+    <tbody>
+      <tr><td><b>GuardDuty</b></td><td>Suspicious API use, crypto mining, C2, unusual geolocation</td><td>Enable org-wide; findings to EventBridge</td></tr>
+      <tr><td><b>Security Hub</b></td><td>Aggregates findings + CIS / FSBP standards</td><td>“Single pane” multi-account posture</td></tr>
+      <tr><td><b>Inspector</b></td><td>CVE / network reachability on EC2, ECR, Lambda</td><td>Vulnerability management, not IAM drift</td></tr>
+      <tr><td><b>Macie</b></td><td>Sensitive data in S3</td><td>PII discovery in buckets</td></tr>
+      <tr><td><b>Detective</b></td><td>Investigation graphs from findings</td><td>Post-alert root-cause exploration</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>Wire findings → <b>EventBridge</b> → SNS / Lambda / Ticket system. For identity hygiene, still prefer roles over keys — see <a href="../../devops-guide/aws/iam-storage-data.html">IAM, storage &amp; data</a>.</p>
+</section>
+
+<section class="section reveal" id="ops-signals">
+  <h2><span class="section-num">03</span> CloudWatch as a detective signal</h2>
+  <dl class="kv">
+    <dt>Metrics &amp; alarms</dt><dd>5xx on ALB, ASG InService count, Lambda errors/throttles.</dd>
+    <dt>Logs Insights</dt><dd>Query app and VPC Flow Logs when GuardDuty points at an ENI.</dd>
+    <dt>Metric filters</dt><dd>Alert on CloudTrail events: root login, auth failures, SG changes.</dd>
+    <dt>PrivateLink mindset</dt><dd>Prefer interface endpoints so logging agents and API calls don’t require broad NAT egress just to “phone home.”</dd>
+  </dl>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Leadership wants continuous compliance checks that S3 buckets aren’t public, across 20 accounts. Best primary tool?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>AWS Config rules (and aggregator) + Security Hub standards; optional auto-remediation.</button>
+      <button class="quiz-opt"><span class="mark"></span>Shield Advanced only.</button>
+      <button class="quiz-opt"><span class="mark"></span>Manual weekly console screenshots.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Config continuously evaluates resource posture; Security Hub rolls up. Shield is DDoS, not config compliance.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">CloudTrail vs Config vs GuardDuty?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>CloudTrail</b> records API activity. <b>Config</b> records resource configuration and evaluates rules. <b>GuardDuty</b> analyzes CloudTrail, VPC Flow, and DNS logs for threat findings. Use all three in a mature account baseline.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Trail is the audit log, Config is inventory and compliance, GuardDuty is the threat detector watching those signals."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you centralize findings in Organizations?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Delegated administrator for GuardDuty / Security Hub / Config; org CloudTrail into a log-archive account with tight bucket policies; aggregate Config; Security Hub as the consolidation layer. SCPs prevent members from disabling logging.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Org trail to log-archive, delegated GuardDuty and Security Hub, Config aggregator — SCPs so nobody turns the cameras off."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When do you enable CloudTrail data events?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>When you need object-level S3 or Lambda invoke auditing — forensics, sensitive buckets, regulated workloads. They cost more and generate volume, so scope to critical resources rather than everything by default.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Management events by default; data events when I must know which object or which Lambda invoke happened — scoped, because they’re pricey."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

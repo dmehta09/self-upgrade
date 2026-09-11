@@ -1,0 +1,95 @@
+<section class="hero reveal">
+  <span class="eyebrow">Foundations · shared responsibility</span>
+  <span class="domain-chip">Domain 1 · Secure</span>
+  <h1>AWS secures the cloud; you secure in it.</h1>
+  <p class="lead">Shared Responsibility is the security framing behind IAM, encryption, patching, and network isolation questions. The line moves with the service model — more managed means AWS owns more of the stack, but never your data classification or identity choices.</p>
+</section>
+
+<section class="section reveal" id="line">
+  <h2><span class="section-num">01</span> Where the line sits</h2>
+  <p class="takeaway"><b>AWS</b> is responsible for security <em>of</em> the cloud (facilities, hardware, virtualization, global network). <b>You</b> are responsible for security <em>in</em> the cloud (OS/apps where applicable, data, identity, network config, encryption choices).</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>AWS is the landlord of a secured apartment building: locks on the lobby, cameras in the halls, fire systems. You still lock your own door, decide who gets keys, and don’t leave passports on the kitchen table. Renting a furnished suite (Lambda) doesn’t mean strangers can read your mail — you still own the contents.</p></div></div>
+
+  <div class="diagram"><div class="dg-title">Responsibility shifts by abstraction</div>
+    <div class="flow">
+      <div class="flow-node"><div class="fn-k">EC2</div><div class="fn-t">You patch OS</div><div class="fn-d">SG, IAM, data</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">RDS / Fargate</div><div class="fn-t">AWS patches more</div><div class="fn-d">You: data, IAM, net</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">Lambda / S3</div><div class="fn-t">AWS runs platform</div><div class="fn-d">You: code, ACLs, keys</div></div>
+    </div>
+    <div class="cap">Higher abstraction → AWS owns more patching; you still own identity and data.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="matrix">
+  <h2><span class="section-num">02</span> Exam matrix: who does what</h2>
+  <p class="takeaway">Memorize a few sharp splits — they appear as “who is responsible for…” distractors.</p>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>Concern</th><th>EC2</th><th>RDS</th><th>Lambda / S3</th></tr></thead>
+    <tbody>
+      <tr><td>Hypervisor / facilities</td><td>AWS</td><td>AWS</td><td>AWS</td></tr>
+      <tr><td>Guest OS patching</td><td><b>Customer</b></td><td>AWS</td><td>AWS</td></tr>
+      <tr><td>Network controls (VPC/SG)</td><td>Customer</td><td>Customer</td><td>Customer (config)</td></tr>
+      <tr><td>Data classification &amp; encryption choices</td><td>Customer</td><td>Customer</td><td>Customer</td></tr>
+      <tr><td>IAM policies / Identity Center</td><td>Customer</td><td>Customer</td><td>Customer</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>“AWS encrypts everything for me”</b> is incomplete. Many services offer encryption defaults or easy toggles (S3 SSE, EBS, RDS), but <em>you</em> choose CMKs vs AWS-managed keys, key policies, and whether client-side encryption is required. Misconfigured bucket policies remain <em>your</em> incident.</p></div></div>
+
+  <p>Deep IAM and secrets patterns: <a href="../../devops-guide/aws/iam-storage-data.html">DevOps IAM · storage · data</a>.</p>
+</section>
+
+<section class="section reveal" id="modern">
+  <h2><span class="section-num">03</span> Modern identity defaults</h2>
+  <p class="takeaway">Prefer <b>IAM roles</b> and <b>IAM Identity Center</b> over long-lived access keys. Prefer instance/task/Lambda roles and OIDC federation from CI.</p>
+
+  <dl class="kv">
+    <dt>Humans</dt><dd>Identity Center (SSO) → short-lived roles into accounts; MFA enforced.</dd>
+    <dt>Workloads</dt><dd>EC2 instance profiles, ECS task roles, Lambda execution roles, EKS Pod Identity / IRSA.</dd>
+    <dt>Automation</dt><dd>GitHub Actions / GitLab OIDC assume-role — no static keys in secrets if avoidable.</dd>
+  </dl>
+
+  <div class="quiz" data-quiz>
+    <p class="q">On Amazon RDS for PostgreSQL, who is responsible for applying database engine patches?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>AWS applies engine patches (within your maintenance window / autos); you still manage schema, users, and parameter groups.</button>
+      <button class="quiz-opt"><span class="mark"></span>You must SSH to the host and run <code>yum update</code>.</button>
+      <button class="quiz-opt"><span class="mark"></span>Neither — RDS never receives patches.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> RDS is managed: AWS patches the engine/host. You don’t SSH the underlying OS. You still own DB users, data, and network access.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">State shared responsibility in one sentence.</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>AWS secures the cloud infrastructure; customers secure what they put in it — identities, configurations, applications, and data — with the customer share shrinking as the service becomes more managed.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"AWS protects the cloud; I protect my configs, identities, and data inside it."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">EC2 vs Lambda — what do you still patch?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>On EC2 you patch the guest OS and apps. On Lambda, AWS patches the execution environment; you still secure your code, dependencies, IAM role, and any VPC/network settings.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"EC2: I own the OS. Lambda: AWS owns the runtime host; I still own code and IAM."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Is encryption “AWS’s job” or yours?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Both: AWS provides the mechanisms (KMS, SSE, TLS endpoints); you decide when encryption is required, which keys, key policies, and that clients enforce TLS. Leaving a bucket unencrypted or world-readable is on you.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"AWS gives me KMS and SSE; I choose keys and policies so data is actually protected."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

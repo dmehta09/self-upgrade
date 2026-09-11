@@ -1,6 +1,6 @@
 # Enhancement audit · 2026-09-11
 
-**Scope:** [`lld-guide`](lld-guide/) · [`sysdesign-guide`](sysdesign-guide/) · [`devops-guide`](devops-guide/) · [`observability-guide`](observability-guide/) · [`go-guide`](go-guide/)  
+**Scope:** [`lld-guide`](lld-guide/) · [`sysdesign-guide`](sysdesign-guide/) · [`devops-guide`](devops-guide/) · [`observability-guide`](observability-guide/) · [`go-guide`](go-guide/) · [`aws-saa-guide`](aws-saa-guide/)  
 **Lens:** mid-senior curriculum depth and currency — **not** interview-day prep  
 **Rules:** engines first where they already exist · concept modules over more Q-banks · sibling handoffs get real `href`s  
 **Serve from repo root:** `python3 -m http.server` in `self-upgrade/`
@@ -14,10 +14,11 @@
 | **lld-guide** | 8/10 applied LLD | Machine-coding + patterns | Strong engines/drills; finish GoF + orphan drills + engine thin pages |
 | **sysdesign-guide** | 8.5/10 HLD curriculum | Foundations + 25 cases | Expert SaaS cases excellent; mid-senior **theory modules** thin (consistency, CQRS, multi-region, cost/security) |
 | **devops-guide** | 7.5/10 delivery primer | AWS-first DevOps | Great mental models; thin on **platform eng, K8s packaging/security, CI productization**, clickable obs handoffs |
+| **aws-saa-guide** | 8.5/10 SAA-C03 | Solutions Architect Associate exam | New Sep 2026 Tier-A guide: zero-AWS → four domains, Mermaid, scenarios, timed mock; cross-linked from devops AWS pages |
 | **observability-guide** | 8/10 L/M/T + SLO | Classic obs stack | Core stack current; 2026 gaps: **Profiles, GenAI telemetry, exemplars/OpenMetrics, alert design** |
 | **go-guide** | 8.5/10 language curriculum | Go 1.26-era | Content largely complete; fix **meta (wrong README)**, tip-only modern APIs (`omitzero`, synctest, modules depth) |
 
-**Overall:** All five are shippable field guides. Enhancement is close curriculum holes and currency — not rewrites.
+**Overall:** Field guides are shippable. Enhancement closes curriculum holes — SAA exam track is now a dedicated sibling, not stuffed into devops.
 
 ---
 

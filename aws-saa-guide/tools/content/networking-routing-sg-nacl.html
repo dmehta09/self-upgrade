@@ -1,0 +1,108 @@
+<section class="hero reveal">
+  <span class="eyebrow">Networking · routing · SG · NACL</span>
+  <span class="domain-chip">Domain 1 · Secure</span>
+  <h1>Routes decide reachability; firewalls decide permission.</h1>
+  <p class="lead">Route tables answer “where does this packet go?” Security groups and NACLs answer “is it allowed?” Master stateful vs stateless — it’s one of the highest-frequency SAA networking discriminators.</p>
+</section>
+
+<section class="section reveal" id="routes">
+  <h2><span class="section-num">01</span> Route tables that matter</h2>
+  <p class="takeaway">Each subnet associates with one route table. Longest-prefix match wins. Default local route keeps VPC-internal traffic private; you add IGW, NAT, endpoints, peering, TGW, or VPN targets.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>The route table is the campus map: “to leave campus, use Gate A.” Security groups are bouncers at each building door who remember who they let out. NACLs are the perimeter fence checklist — they don’t remember conversations, so you must list both directions.</p></div></div>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  pkt[Packet] --> rt{Route_table}
+  rt -->|0.0.0.0_0_IGW| igw[Internet_via_IGW]
+  rt -->|0.0.0.0_0_NAT| nat[Egress_via_NAT]
+  rt -->|pl_prefix| vpce[VPC_endpoint]
+  rt -->|local| vpc[Stay_in_VPC]
+</pre></div>
+
+  <dl class="kv">
+    <dt>Local route</dt><dd>Implicit; covers the VPC CIDR(s). You don’t delete it.</dd>
+    <dt>IGW route</dt><dd>Makes a subnet public for internet-bound traffic.</dd>
+    <dt>NAT route</dt><dd>Private subnet egress to the internet.</dd>
+    <dt>More specific routes</dt><dd>Endpoint prefix lists, peering CIDRs, TGW — often preferred over default for AWS/on-prem paths.</dd>
+  </dl>
+</section>
+
+<section class="section reveal" id="sg-nacl">
+  <h2><span class="section-num">02</span> Security groups vs NACLs</h2>
+  <p class="takeaway"><b>Security groups</b> attach to ENIs: stateful, allow-only, evaluated as a set. <b>NACLs</b> attach to subnets: stateless, numbered allow/deny, first match wins.</p>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th></th><th>Security group</th><th>NACL</th></tr></thead>
+    <tbody>
+      <tr><td>Scope</td><td>ENI / instance / LB / RDS</td><td>Subnet</td></tr>
+      <tr><td>State</td><td><b>Stateful</b></td><td><b>Stateless</b></td></tr>
+      <tr><td>Rules</td><td>Allow only</td><td>Allow and deny</td></tr>
+      <tr><td>Default</td><td>Deny all inbound; allow all outbound (customizable)</td><td>Custom NACLs deny all until you add rules</td></tr>
+      <tr><td>Everyday use</td><td>Primary micro-segmentation</td><td>Coarse guardrails / explicit subnet deny</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p><b>Ephemeral ports on NACLs.</b> Because NACLs are stateless, allowing inbound 443 isn’t enough for return traffic — you must allow outbound ephemeral ranges (and vice versa). Security groups don’t need this for established connections. Also: reference <em>other security groups</em> as sources, not wide <code>0.0.0.0/0</code>, for tier-to-tier traffic.</p></div></div>
+</section>
+
+<section class="section reveal" id="patterns">
+  <h2><span class="section-num">03</span> Tier patterns that pass the exam</h2>
+  <p class="takeaway">ALB SG allows 443 from the world (or CloudFront prefix). App SG allows only from ALB SG. DB SG allows only from app SG. NACLs stay permissive unless you need an explicit deny.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Loose</div>
+      <ul>
+        <li>App SG: inbound <code>0.0.0.0/0</code> on 8080</li>
+        <li>DB SG: inbound from whole VPC CIDR</li>
+        <li>Rely on NACL alone for app isolation</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Tight</div>
+      <ul>
+        <li>App SG: inbound from <code>sg-alb</code> only</li>
+        <li>DB SG: inbound from <code>sg-app</code> on 5432</li>
+        <li>SG as primary; NACL for subnet-wide deny if required</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Traffic is allowed by the security group but still fails. You recently added a custom NACL. What’s the likely cause?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>The NACL is missing a matching rule for the return path (stateless) or has an earlier deny.</button>
+      <button class="quiz-opt"><span class="mark"></span>Security groups always override NACLs, so NACLs can’t be the problem.</button>
+      <button class="quiz-opt"><span class="mark"></span>You must reboot the instance after any NACL change.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Packets must pass both NACL and SG. Stateless NACLs often break return traffic; both layers apply — neither “overrides” the other.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Exam rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Stateful vs stateless — say it cleanly.</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Security groups are stateful: allow outbound and the response is automatically allowed. NACLs are stateless: every direction needs an explicit rule.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"SG remembers the conversation; NACL makes you allow both directions yourself."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When would you use a NACL deny?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>When you need an explicit subnet-wide block (e.g., block a bad actor CIDR at the perimeter) that security groups can’t express as a deny. Day-to-day allow rules still live in SGs.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"NACLs for coarse allow/deny at the subnet; security groups for the real workload policy."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Route exists, SG allows — still unreachable. What else?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Check NACLs, public IP/EIP presence, IGW attachment, NACLs on both subnets, OS firewall, and whether the target is in a different VPC without peering/PrivateLink/TGW. Also DNS: wrong private hosted zone or unresolved name.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"I verify route, NACL both ways, SG, and that the instance actually has the IP path I think it does."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

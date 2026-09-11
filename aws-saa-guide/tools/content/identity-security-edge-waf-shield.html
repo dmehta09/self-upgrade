@@ -1,0 +1,109 @@
+<section class="hero reveal">
+  <span class="domain-chip">Domain 1 · Secure Architectures</span>
+  <span class="eyebrow">Identity &amp; Security · edge</span>
+  <h1>WAF, Shield &amp; edge protection.</h1>
+  <p class="lead">Stop volumetric and application-layer attacks before they hit your origin. Pair <b>CloudFront / ALB / API Gateway</b> with <b>AWS WAF</b>, and know when <b>Shield Standard vs Advanced</b> matters.</p>
+</section>
+
+<section class="section reveal" id="layers">
+  <h2><span class="section-num">01</span> Edge protection stack</h2>
+  <p class="takeaway">Defense in depth at the edge: DNS (Route&nbsp;53) → CDN (CloudFront) → WAF rules → Shield DDoS → origin (ALB/S3/custom) locked to the edge.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p><b>Shield</b> is the riot police for floods of traffic (DDoS). <b>WAF</b> is the bouncer reading IDs and bag checks — SQL injection payloads, bad bots, geo blocks. CloudFront is the vestibule so attackers hammer the lobby, not your kitchen (origin).</p></div></div>
+
+  <div class="diagram"><div class="dg-title">Request path</div>
+    <div class="flow">
+      <div class="flow-node"><div class="fn-k">DNS</div><div class="fn-t">Route 53</div><div class="fn-d">health + routing</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">edge</div><div class="fn-t">CloudFront</div><div class="fn-d">cache + TLS</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">filter</div><div class="fn-t">WAF + Shield</div><div class="fn-d">L7 rules · DDoS</div></div>
+      <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="flow-node"><div class="fn-k">origin</div><div class="fn-t">ALB / S3 / API</div><div class="fn-d">only from edge</div></div>
+    </div>
+    <div class="cap">Put WAF on CloudFront when global; on ALB/API Gateway when Regional-only. Origins should not be publicly browsable if the CDN is the front door.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="waf">
+  <h2><span class="section-num">02</span> AWS WAF essentials</h2>
+  <dl class="kv">
+    <dt>Web ACL</dt><dd>Collection of rules attached to CloudFront, ALB, API Gateway, or AppSync.</dd>
+    <dt>Managed rule groups</dt><dd>AWS / marketplace packs for SQLi, XSS, known bad inputs — start here on the exam.</dd>
+    <dt>Rate-based rules</dt><dd>Throttle abusive IPs (login scraping, credential stuffing).</dd>
+    <dt>Geo / IP sets</dt><dd>Allowlist partners or denylist regions; combine with labels and custom responses.</dd>
+    <dt>Bot Control</dt><dd>Optional managed capability for sophisticated bots (costlier — know it exists).</dd>
+  </dl>
+
+  <div class="versus">
+    <div class="vs-col vs-good"><div class="vs-h">WAF association</div>
+      <ul>
+        <li><b>CloudFront</b> — global apps, static+dynamic</li>
+        <li><b>ALB</b> — Regional HTTP apps without CDN</li>
+        <li><b>API Gateway</b> — HTTP APIs / REST APIs</li>
+      </ul>
+    </div>
+    <div class="vs-col vs-bad"><div class="vs-h">Not WAF’s job</div>
+      <ul>
+        <li>Pure L3/L4 volumetric floods → Shield</li>
+        <li>AuthZ inside the app → IAM / Cognito / JWT</li>
+        <li>Encrypting disks → KMS</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Attaching WAF to CloudFront while leaving the <b>ALB/S3 origin open to the world</b> lets attackers bypass the edge. Lock origins with CloudFront prefix lists / custom headers / OAC (S3) / private connectivity patterns.</p></div></div>
+</section>
+
+<section class="section reveal" id="shield">
+  <h2><span class="section-num">03</span> Shield Standard vs Advanced</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th></th><th>Shield Standard</th><th>Shield Advanced</th></tr></thead>
+    <tbody>
+      <tr><td><b>Cost</b></td><td>Included with AWS</td><td>Subscription + data transfer</td></tr>
+      <tr><td><b>Coverage</b></td><td>Common L3/L4 network DDoS on many services</td><td>Enhanced detection, tighter mitigations, cost protection, SRT access</td></tr>
+      <tr><td><b>Integrations</b></td><td>Baseline</td><td>WAF credits, Route&nbsp;53 Application Recovery Controller hooks, detailed visibility</td></tr>
+      <tr><td><b>Exam cue</b></td><td>Default protection</td><td>“Mission-critical,” “24/7 SRT,” “DDoS cost protection,” advanced metrics</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="quiz" data-quiz>
+    <p class="q">A global marketing site faces SQLi probes and needs caching. Which design fits?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>CloudFront + AWS WAF managed rule groups; restrict origin access to CloudFront.</button>
+      <button class="quiz-opt"><span class="mark"></span>Only Security Groups on EC2 — open 0.0.0.0/0 on port 80.</button>
+      <button class="quiz-opt"><span class="mark"></span>KMS CMK on the ALB listener certificates.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Application-layer attacks → WAF at the edge; CloudFront for global cache. SGs alone don’t parse HTTP payloads; KMS isn’t for TLS cert “SQLi defense.”</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">WAF vs Shield — one sentence each?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>WAF</b> filters HTTP(S) requests with rules (SQLi, XSS, rate, geo). <b>Shield</b> mitigates DDoS at the network/transport layers (and Advanced adds operational support and extra protections). Often used together in front of CloudFront or ALB.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"WAF is the L7 bouncer; Shield is DDoS protection. Standard is free baseline; Advanced is for critical apps that need SRT and cost protection."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Where do you attach a Web ACL?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>To <b>CloudFront distributions</b>, <b>Application Load Balancers</b>, <b>API Gateway</b> stages, or AppSync. Pick CloudFront for global edge filtering; ALB/API GW for Regional apps.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Web ACL on CloudFront for global, on ALB or API Gateway when the app is Regional-only."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you stop origin bypass?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Don’t leave the origin world-open. Use <b>Origin Access Control</b> for S3, require a secret header checked by the ALB/app, or restrict SG/NACL to CloudFront managed prefix lists so only the CDN can reach the origin.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"WAF on CloudFront is useless if the ALB is still public — lock the origin so only the edge can talk to it."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

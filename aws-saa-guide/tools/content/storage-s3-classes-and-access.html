@@ -1,0 +1,106 @@
+<section class="hero reveal">
+  <span class="domain-chip">Domain 3 · High-performing · Domain 4 · Cost</span>
+  <span class="eyebrow">Storage · object</span>
+  <h1>S3 storage classes &amp; access.</h1>
+  <p class="lead">Object storage for durable blobs, data lakes, and static assets. The exam asks which class fits the access pattern — and how you lock the bucket down. As of 2026, treat <b>Intelligent-Tiering</b> as the default when access is unknown or changing.</p>
+</section>
+
+<section class="section reveal" id="classes">
+  <h2><span class="section-num">01</span> Storage classes — pick by access</h2>
+  <p class="takeaway">S3 is a <b>Regional</b> object store (99.999999999% durability design target). You choose a <b>storage class</b> per object (or let lifecycle / Intelligent-Tiering move it). Cheaper classes trade retrieval cost, latency, or availability.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p>Think of a warehouse with climate-controlled floors. <b>Standard</b> is the front aisle — instant grab, highest rent. <b>Intelligent-Tiering</b> is a smart forklift that moves pallets to cheaper floors when nobody touches them, then brings them back when someone asks — no retrieval fee for the automated moves. <b>Glacier Deep Archive</b> is the off-site vault: pennies to store, hours and a fee to open.</p></div></div>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>Class</th><th>When</th><th>Watch for</th></tr></thead>
+    <tbody>
+      <tr><td><b>Standard</b></td><td>Hot, frequent access</td><td>Default for new uploads if you don't choose otherwise</td></tr>
+      <tr><td><b>Intelligent-Tiering</b></td><td>Unknown / changing access</td><td><b>2026 default for “we don't know”</b>; monitoring fee per object; no retrieval charges for auto-tier moves</td></tr>
+      <tr><td><b>Standard-IA / One Zone-IA</b></td><td>Infrequent but minutes matter</td><td>Retrieval fee + min storage duration; One Zone = single AZ risk</td></tr>
+      <tr><td><b>Glacier Instant / Flexible / Deep Archive</b></td><td>Archive</td><td>Instant = ms; Flexible/Deep = minutes–hours + retrieval cost</td></tr>
+      <tr><td><b>Express One Zone</b></td><td>Latency-sensitive single-AZ workloads</td><td>Not multi-AZ; different access model</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  upload[ObjectUploaded] --> known{AccessPatternKnown}
+  known -->|hot| std[Standard]
+  known -->|unknownOrChanging| intel[IntelligentTiering]
+  known -->|rareButFast| ia[StandardIA]
+  known -->|archive| glacier[GlacierFamily]
+  intel --> autoMove[AutoTierByAccess]
+</pre></div>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Do not dump everything into Glacier “to save money” if the question needs <b>millisecond</b> reads — pick Instant Retrieval or keep hot/IA. Also: <b>One Zone-IA</b> is cheaper but dies with that AZ; exam scenarios that mention “must survive AZ failure” rule it out.</p></div></div>
+</section>
+
+<section class="section reveal" id="lifecycle">
+  <h2><span class="section-num">02</span> Lifecycle, versioning &amp; replication</h2>
+  <dl class="kv">
+    <dt>Lifecycle rules</dt><dd>Transition classes or expire objects/versions after N days. Pair with Intelligent-Tiering or explicit IA/Glacier transitions.</dd>
+    <dt>Versioning</dt><dd>Keeps prior object versions; protects against overwrite/delete. Enables MFA Delete and Object Lock patterns.</dd>
+    <dt>CRR / SRR</dt><dd>Cross-Region or Same-Region Replication for DR, latency, or compliance. Needs versioning on.</dd>
+    <dt>Object Lock</dt><dd>WORM retention (compliance / governance mode) — exam favorite for “cannot be deleted by anyone.”</dd>
+  </dl>
+  <p>Interview depth on IAM + bucket policy lives in the sibling <a href="../../devops-guide/aws/iam-storage-data.html">DevOps AWS · IAM, storage &amp; data</a> page — here we stay on SAA design choices.</p>
+</section>
+
+<section class="section reveal" id="access">
+  <h2><span class="section-num">03</span> Access control &amp; private paths</h2>
+  <p class="takeaway"><b>Block Public Access</b> on (account + bucket). Prefer <b>bucket policies</b> + IAM roles over ACLs. Public websites go through <b>CloudFront</b> (OAC), not an open bucket.</p>
+
+  <div class="versus">
+    <div class="vs-col vs-bad"><div class="vs-h">Anti-pattern</div>
+      <ul><li>Public bucket for “simple static site”</li><li>Long-lived access keys in the app</li><li>ACLs as the primary control plane</li></ul>
+    </div>
+    <div class="vs-col vs-good"><div class="vs-h">Exam-default</div>
+      <ul><li>Block Public Access + CloudFront OAC</li><li>Instance/task/role credentials</li><li>VPC gateway/interface endpoints for private access</li></ul>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>Presigned URLs</dt><dd>Time-boxed GET/PUT for a specific object without opening the bucket.</dd>
+    <dt>Access Points / Multi-Region Access Points</dt><dd>Scoped policy endpoints; MRAP for global anycast-style access.</dd>
+    <dt>Encryption</dt><dd>SSE-S3, SSE-KMS, or client-side. KMS when you need key policy audit/control.</dd>
+  </dl>
+
+  <div class="quiz" data-quiz>
+    <p class="q">Logs arrive with unpredictable access after 30 days. Compliance needs AZ resilience. Best storage approach?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>Store in S3 with Intelligent-Tiering (or lifecycle into IA/Glacier) — avoid One Zone-IA because of AZ loss.</button>
+      <button class="quiz-opt"><span class="mark"></span>Put everything in One Zone-IA immediately to minimize cost.</button>
+      <button class="quiz-opt"><span class="mark"></span>Use EBS gp3 snapshots only — S3 is for websites.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Unknown/changing access → Intelligent-Tiering (2026 default). AZ resilience rules out One Zone. EBS is block storage for instances, not the object archive pattern.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">When do you choose Intelligent-Tiering vs Standard vs Glacier?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>Standard</b> for hot, predictable frequent access. <b>Intelligent-Tiering</b> when access is unknown or changes over time — it auto-moves between tiers without retrieval fees for those moves (you pay a small monitoring fee). <b>Glacier</b> family for true archive: Instant if you still need ms reads; Flexible/Deep when hours and lowest storage cost are OK.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Hot and known → Standard. Unknown or changing → Intelligent-Tiering. True cold archive → Glacier, Instant if I still need milliseconds."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">How do you serve public content without a public bucket?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>Keep <b>Block Public Access</b> on. Put objects in a private bucket and put <b>CloudFront</b> in front with <b>Origin Access Control</b> so only the distribution can read. Users hit the CDN edge, never the bucket URL.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Private bucket, Block Public Access on, CloudFront with OAC — the CDN is the only reader."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Versioning vs Object Lock — what's the difference?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>Versioning</b> keeps prior versions so overwrites/deletes are recoverable. <b>Object Lock</b> adds WORM retention so even privileged users cannot delete or overwrite until the retention period ends (compliance or governance mode). Often used together for regulated archives.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Versioning is undo; Object Lock is WORM — nobody deletes until the clock expires."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

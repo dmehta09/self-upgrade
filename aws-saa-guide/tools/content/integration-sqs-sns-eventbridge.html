@@ -1,0 +1,95 @@
+<section class="hero reveal">
+  <span class="domain-chip">Domain 2 · Resilient · Domain 3 · High-performing</span>
+  <span class="eyebrow">Integration · messaging</span>
+  <h1>SQS, SNS &amp; EventBridge.</h1>
+  <p class="lead">Decouple producers and consumers. Queues buffer work, topics fan out notifications, and the event bus routes events by rule. As of 2026, treat <b>EventBridge as the default</b> for application and SaaS events (not “raw CloudWatch Events” as the mental model).</p>
+</section>
+
+<section class="section reveal" id="choose">
+  <h2><span class="section-num">01</span> Which primitive?</h2>
+  <p class="takeaway"><b>SQS</b> = pull queue (buffer, retry, DLQ). <b>SNS</b> = push fan-out to many subscribers. <b>EventBridge</b> = content-based routing across buses, SaaS partners, and schedules.</p>
+
+  <div class="callout analogy"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg></span><div class="co-body"><div class="co-title">In plain English <span class="tag">analogy</span></div><p><b>SQS</b> is a ticket spike at a deli — workers pull the next order when free. <b>SNS</b> is the PA system announcing “order 42” to every station at once. <b>EventBridge</b> is the smart mailroom that reads the envelope and routes only matching packages to the right floors (and can schedule nightly sweeps).</p></div></div>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>Service</th><th>Pattern</th><th>Exam cue</th></tr></thead>
+    <tbody>
+      <tr><td><b>SQS</b></td><td>Point-to-point / competing consumers</td><td>Buffer spikes, decouple, DLQ</td></tr>
+      <tr><td><b>SNS</b></td><td>Pub/sub fan-out</td><td>One event → email + Lambda + SQS</td></tr>
+      <tr><td><b>EventBridge</b></td><td>Event bus + rules</td><td>Default for events, SaaS, schedules, filtering</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  producer[Producer] --> decide{Need}
+  decide -->|bufferWork| sqs[SQS]
+  decide -->|fanOutPush| sns[SNS]
+  decide -->|routeByContent| eb[EventBridge]
+  sns --> sqs
+  eb --> targets[LambdaSQSStepFunctions]
+</pre></div>
+</section>
+
+<section class="section reveal" id="sqs-sns">
+  <h2><span class="section-num">02</span> SQS &amp; SNS details</h2>
+  <dl class="kv">
+    <dt>Standard vs FIFO SQS</dt><dd>Standard = best-effort ordering, nearly unlimited throughput. FIFO = exactly-once processing within a group + ordered — use when the stem demands order.</dd>
+    <dt>Visibility timeout</dt><dd>Hide in-flight messages while processing; set ≥ worst-case work time.</dd>
+    <dt>DLQ</dt><dd>After maxReceiveCount failures, poison messages land here for inspection.</dd>
+    <dt>SNS + SQS</dt><dd>Classic fan-out: one SNS topic, many SQS queues (durable subscribers).</dd>
+  </dl>
+
+  <div class="callout gotcha"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div class="co-body"><div class="co-title">Common trap <span class="tag">gotcha</span></div><p>Don't use SQS when you need <b>instant push to many heterogeneous targets with filtering</b> — that's SNS or EventBridge. Don't use EventBridge as a long durable work queue — put durable work in SQS (EventBridge can target SQS).</p></div></div>
+</section>
+
+<section class="section reveal" id="eventbridge">
+  <h2><span class="section-num">03</span> EventBridge as the 2026 default</h2>
+  <p class="takeaway">Prefer <b>EventBridge</b> for application events, AWS service events, partner SaaS events, and <b>Scheduler</b> one-offs/crons. Rules filter on content; targets include Lambda, SQS, SNS, Step Functions, API destinations.</p>
+  <ul>
+    <li><b>Default bus</b> for AWS events; <b>custom buses</b> for your domain events; <b>partner buses</b> for SaaS.</li>
+    <li>Archive + replay for debugging and recovery.</li>
+    <li>Schema Registry helps discover event shapes.</li>
+  </ul>
+
+  <p>Serverless consumers often sit on Lambda — see <a href="../../devops-guide/aws/containers-and-serverless.html">DevOps · Containers &amp; serverless</a>.</p>
+
+  <div class="quiz" data-quiz>
+    <p class="q">OrderPlaced must trigger inventory, email, and analytics only when total &gt; 100, with optional SaaS source later. Best default?</p>
+    <div class="quiz-opts">
+      <button class="quiz-opt" data-correct="true"><span class="mark"></span>EventBridge custom bus + rules filtering on amount, targeting Lambda/SQS/etc.</button>
+      <button class="quiz-opt"><span class="mark"></span>One giant SQS queue that every service polls and ignores irrelevant messages.</button>
+      <button class="quiz-opt"><span class="mark"></span>Hard-code synchronous HTTPS calls from the order API to each system.</button>
+    </div>
+    <div class="quiz-explain"><b>Right.</b> Content-based routing + future SaaS → EventBridge. A shared queue dumps filtering on consumers; sync fan-out couples failure domains.</div>
+  </div>
+</section>
+
+<section class="section reveal" id="interview">
+  <h2><span class="section-num">04</span> Interview rapid-fire</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">SQS vs SNS vs EventBridge?</span><span class="pm-chip diff-core">core</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>SQS</b> buffers work for competing consumers with retries/DLQ. <b>SNS</b> push-fan-outs one message to many subscribers. <b>EventBridge</b> routes events with rules — the 2026 default for app/SaaS/AWS events and schedules. Combine them: EventBridge/SNS → SQS for durable processing.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"SQS queues work, SNS fans out, EventBridge routes events — default to EventBridge for event-driven designs."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Standard vs FIFO SQS?</span><span class="pm-chip diff-warm">warm-up</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p><b>Standard</b> maximizes throughput with at-least-once and best-effort order. <b>FIFO</b> preserves order per message group and supports exactly-once processing — use when the business requires sequence.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"Need order or exactly-once → FIFO; otherwise Standard for scale."</p></div></div>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Why EventBridge over “just SNS” for domain events?</span><span class="pm-chip diff-stretch">stretch</span></summary>
+      <div class="qa-body">
+        <h5>Model answer</h5>
+        <p>EventBridge adds <b>content filtering</b>, multiple buses, SaaS partners, archive/replay, schemas, and Scheduler — SNS is simpler fan-out. For evolving event-driven architectures, EventBridge is the default bus.</p>
+        <div class="callout tip qa-say"><span class="co-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg></span><div class="co-body"><div class="co-title">Say it out loud <span class="tag">say it</span></div><p>"EventBridge filters and routes across buses and partners; SNS is the blunt fan-out tool."</p></div></div>
+      </div>
+    </details>
+  </div>
+</section>

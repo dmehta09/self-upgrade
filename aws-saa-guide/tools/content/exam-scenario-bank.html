@@ -1,0 +1,243 @@
+<section class="hero reveal">
+  <span class="eyebrow">Exam prep · scenario bank</span>
+  <h1>Architecture scenarios, SAA style.</h1>
+  <p class="lead">Twenty design stems across <b>Secure · Resilient · High-performing · Cost</b>. Expand each card: best answer, why, and the domain chip. Reason out loud before you open.</p>
+</section>
+
+<section class="section reveal" id="secure">
+  <h2><span class="section-num">01</span> Secure architectures</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">App on EC2 must call S3 without long-lived keys on the instance.</span><span class="domain-chip">Secure</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p>Attach an <b>IAM role</b> to the instance (instance profile) with least-privilege S3 permissions; use the AWS SDK default credential chain.</p>
+        <h5>Why</h5>
+        <p>Roles issue temporary credentials via IMDS. Access keys in files/userdata are an anti-pattern the exam punishes.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Private EC2 must reach S3 without internet / NAT.</span><span class="domain-chip">Secure</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>Gateway VPC endpoint</b> for S3 (or Interface endpoint) + endpoint policy; keep the bucket private.</p>
+        <h5>Why</h5>
+        <p>Traffic stays on the AWS network. NAT works but adds cost and public path — wrong when "no internet" is stated.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Enforce encryption on all new S3 buckets org-wide.</span><span class="domain-chip">Secure</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>SCP</b> (and/or Config Rules + remediation) denying <code>s3:CreateBucket</code> / Put without encryption; prefer SSE-S3 or SSE-KMS defaults.</p>
+        <h5>Why</h5>
+        <p>Account-level IAM alone doesn't govern every member account — Organizations SCPs set a floor.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Web app needs protection from common Layer-7 exploits and volumetric DDoS.</span><span class="domain-chip">Secure</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>CloudFront + AWS WAF</b> (+ Shield Standard included; Shield Advanced if the stem demands premium DDoS features/cost tradeoff).</p>
+        <h5>Why</h5>
+        <p>WAF filters HTTP rules; Shield absorbs volumetric attacks at the edge. SG alone is L3/L4 and insufficient for SQLi/XSS stems.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">DB credentials must not live in code or AMI; rotate automatically.</span><span class="domain-chip">Secure</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>Secrets Manager</b> (or Parameter Store SecureString + rotation Lambda) with IAM auth to fetch at runtime; KMS encryption.</p>
+        <h5>Why</h5>
+        <p>Secrets Manager natively rotates RDS/Aurora credentials. Hardcoded secrets fail both security and operations stems.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<section class="section reveal" id="resilient">
+  <h2><span class="section-num">02</span> Resilient architectures</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Survive AZ failure for a three-tier web app with RDS.</span><span class="domain-chip">Resilient</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p>ALB + ASG across ≥2 AZs; <b>RDS Multi-AZ</b>; subnets in multiple AZs.</p>
+        <h5>Why</h5>
+        <p>Multi-AZ is the default HA pattern. Multi-Region is overkill if only AZ failure is in scope.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">RTO &lt; 1 hour, RPO near-zero, tolerate Region loss, control cost.</span><span class="domain-chip">Resilient</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>Pilot light or warm standby</b> in a second Region with continuous DB replication (Aurora Global / cross-Region replica) + Route 53 failover.</p>
+        <h5>Why</h5>
+        <p>Cold daily backups miss RPO/RTO; full active-active overspends when "control cost" appears.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Order API must accept requests even if fulfillment is slow/down.</span><span class="domain-chip">Resilient</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p>API writes to <b>SQS</b>; workers consume asynchronously; DLQ for poison messages.</p>
+        <h5>Why</h5>
+        <p>Decoupling turns dependency failure into backlog instead of 5xx for users.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Notify email, Lambda, and a queue from one business event.</span><span class="domain-chip">Resilient</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>SNS topic</b> with those subscriptions (SQS subscription for durability), or EventBridge rules to multiple targets.</p>
+        <h5>Why</h5>
+        <p>Pub/sub fan-out; SQS alone is 1:1 pull, not multi-protocol fan-out.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Need point-in-time restore for DynamoDB tables.</span><span class="domain-chip">Resilient</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p>Enable <b>DynamoDB PITR</b> (continuous backups) and/or on-demand backups; AWS Backup for centralized policy.</p>
+        <h5>Why</h5>
+        <p>PITR covers fine-grained RPO; EBS snapshots don't apply to DynamoDB.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<section class="section reveal" id="perf">
+  <h2><span class="section-num">03</span> High-performing architectures</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Global users, mostly static assets, lowest latency.</span><span class="domain-chip">High-performing</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>S3 origin + CloudFront</b> (optional OAC); cache at edge.</p>
+        <h5>Why</h5>
+        <p>Edge caches cut origin load and RTT. Multi-Region active app stacks are overkill for static.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Read-heavy relational DB; writes are modest.</span><span class="domain-chip">High-performing</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>Aurora/RDS read replicas</b> (or Aurora readers) + connection routing; cache hot keys in ElastiCache if needed.</p>
+        <h5>Why</h5>
+        <p>Scale reads horizontally; Multi-AZ standby is not a read replica for classic RDS.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Millions of key-value lookups with single-digit ms latency.</span><span class="domain-chip">High-performing</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>DynamoDB</b> (DAX if microsecond cache) or <b>ElastiCache</b> in front of a DB — pick based on whether Dynamo is already the system of record.</p>
+        <h5>Why</h5>
+        <p>Single-node RDS won't meet that scale/latency; design for access patterns.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">TCP/UDP ultra-low latency load balancing to game servers.</span><span class="domain-chip">High-performing</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>Network Load Balancer (NLB)</b> — L4, preserves source IP, extreme performance.</p>
+        <h5>Why</h5>
+        <p>ALB is L7 HTTP/HTTPS. Classic CLB is legacy. NLB fits non-HTTP and latency-sensitive.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Shared POSIX file system for many EC2 across AZs.</span><span class="domain-chip">High-performing</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>EFS</b> (Regional, Multi-AZ). FSx when Windows/Lustre/NetApp features are required.</p>
+        <h5>Why</h5>
+        <p>EBS is single-AZ. S3 is object, not POSIX. Instance store is ephemeral and local.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<section class="section reveal" id="cost">
+  <h2><span class="section-num">04</span> Cost-optimized architectures</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Steady 24×7 EC2/Fargate fleet; maximize savings with flexibility.</span><span class="domain-chip">Cost</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>Compute Savings Plans</b> (after right-sizing); prefer Graviton where possible.</p>
+        <h5>Why</h5>
+        <p>Steady → commit. Compute SP beats rigid RI when families may change.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Fault-tolerant nightly analytics jobs; minimize compute cost.</span><span class="domain-chip">Cost</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>Spot</b> (EMR/ASG/Batch with diversified pools); checkpoint progress.</p>
+        <h5>Why</h5>
+        <p>Interruptible + cheap. On-Demand Savings Plans waste money on batch that can die.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Petabytes in S3; rarely accessed after 90 days.</span><span class="domain-chip">Cost</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>Lifecycle rules</b> to IA / Glacier Instant / Deep Archive — or Intelligent-Tiering if access is unpredictable.</p>
+        <h5>Why</h5>
+        <p>Storage class is the cost lever; replication alone doesn't reduce $/GB.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Spiky API, idle most of the night; minimize idle cost.</span><span class="domain-chip">Cost</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>API Gateway + Lambda</b> (or Aurora Serverless v2 / Fargate scale-to/near-zero patterns as fit).</p>
+        <h5>Why</h5>
+        <p>Pay per use beats always-on ASG for sparse traffic.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Finance wants alerts before monthly spend blows the budget.</span><span class="domain-chip">Cost</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>AWS Budgets</b> with SNS notifications (and Cost Explorer / Anomaly Detection for investigation).</p>
+        <h5>Why</h5>
+        <p>Budgets are the threshold tool; CloudWatch CPU alarms don't watch dollars.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<section class="section reveal" id="mixed">
+  <h2><span class="section-num">05</span> Mixed / trick stems</h2>
+  <div class="qa-set">
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Secure + resilient: public web, private app/DB, Multi-AZ.</span><span class="domain-chip">Secure</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p>Public subnets: ALB only. Private: app ASG. DB: private Multi-AZ RDS; SG least privilege; no bastion keys if SSM Session Manager fits.</p>
+        <h5>Why</h5>
+        <p>Classic three-tier VPC — security groups as primary firewall, Multi-AZ for resilience.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Perf + cost: cache session data for a fleet of web servers.</span><span class="domain-chip">High-performing</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>ElastiCache (Redis)</b> shared across instances — not sticky sessions alone on one node.</p>
+        <h5>Why</h5>
+        <p>Externalized sessions enable scale-out and survive instance replace; cheaper than oversized sticky singles.</p>
+      </div>
+    </details>
+    <details class="qa">
+      <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg><span class="qa-q">Who changed a security group last Tuesday?</span><span class="domain-chip">Secure</span></summary>
+      <div class="qa-body">
+        <h5>Best answer</h5>
+        <p><b>CloudTrail</b> (optionally Config for before/after config).</p>
+        <h5>Why</h5>
+        <p>API attribution is Trail; Config answers compliance history, not identity by itself.</p>
+      </div>
+    </details>
+  </div>
+  <p class="takeaway">More practice: <a href="mock-exam.html">timed mock</a> · <a href="flashcards.html">flashcards</a>.</p>
+</section>
