@@ -1,7 +1,7 @@
           <section class="hero reveal">
             <span class="eyebrow">Domain · d07</span>
             <h1>Redis, Caching &amp; Rate Limiting</h1>
-            <p class="lead">Redis is for hot paths: cache-aside, counters, locks, and rate limits — not a second source of truth. Design for stampede, hot keys, and TTL freshness, and always plan what happens when Redis dies so PostgreSQL does not avalanche. Atomicity comes from INCR, MULTI/EXEC, or Lua — not from get-modify-set in application code.</p>
+            <p class="lead">Redis is for hot paths: cache-aside, counters, locks, and rate limits — not a second source of truth. Design for stampede, hot keys, and TTL freshness, and always plan what happens when Redis dies so PostgreSQL does not avalanche. Atomicity comes from single-command ops (INCR/INCRBY) or Lua for conditional multi-step RMW; bare MULTI/EXEC alone is not peer to Lua for check-and-set (use WATCH+MULTI or Lua) — never get-modify-set in application code.</p>
           </section>
 
           <section class="section reveal" id="primer">
@@ -26,20 +26,30 @@
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">When the same read is hot, tolerates slight staleness, and DB cost or latency dominates — not for every query by default.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Use Redis for high-QPS reads with stable keys (session, product config, permission bitsets, feed fragments) where TTL/staleness is acceptable.</li>
-<li>Keep PostgreSQL as source of truth for durable, transactional, strongly consistent writes and complex queries.</li>
-<li>Cache after measuring: p95 DB time, QPS, and hit-rate potential — don't cache unique one-off queries.</li>
-<li>Prefer cache-aside with explicit invalidation/TTL; avoid dual-writing critical money state only to Redis.</li>
-<li>Also use Redis for ephemeral coordination: rate limits, locks, short-lived idempotency keys.</li></ol>
-    
-    
+    <ol class="steps"><li>Clarify the job: Redis earns its place when the same key is read at high QPS, the payload is cheap to serialize, and the business tolerates TTL-bounded staleness — not because 'we should cache everything.'</li>
+<li>Hypothesis before adding Redis: p95/p99 DB time, rows scanned, and estimated hit rate on stable keys (session, product config, permission bitsets, feed fragments) justify the ops cost.</li>
+<li>Evidence path: measure origin QPS and latency with and without cache on a canary; only keep Redis when hit rate and p95 delta clear a documented bar.</li>
+<li>Tradeoff vs read replicas: replicas help complex/ad-hoc SQL and stronger freshness; Redis wins on microsecond hot-path lookups and ephemeral coordination — because replicas still pay SQL planning and connection cost.</li>
+<li>Failure mode: caching unique one-off queries or money ledgers creates low hit rate, stale balances, and a second source of truth that diverges under failover.</li>
+<li>Fix: keep PostgreSQL as system of record for durable transactional writes; use cache-aside with explicit TTL/invalidation, never dual-write critical balances only to Redis.</li>
+<li>Also use Redis where it is the right primitive: rate limits, distributed locks, short-lived idempotency keys — coordination, not durable ledger.</li>
+<li>Prevent/ops: track cache hit rate, origin QPS after rollout, and p95 latency SLO; alert when hit rate collapses or DB QPS rises as if the cache were bypassed.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  HotRead[Hot repeatable read] --&gt;|hit rate + p95 win| Redis
+  ComplexSQL[Ad-hoc / strong freshness] --&gt; Replica[PG replica]
+  Money[Transactional ledger] --&gt; PG[Postgres primary]
+  Coord[Rate limit / lock / idempotency] --&gt; Redis</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text"># Decision sketch (cache-aside only after measurement)
+# if qps_key &gt; threshold and stale_ok and hit_rate_est &gt; 0.8: use Redis
+# elif needs_sql_flexibility: use read replica
+# else: query primary/replica directly</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Inject a cache port in Nest providers so services don't scatter raw Redis calls.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Redis for hot, slightly stale reads and coordination. Postgres for truth and transactions — I cache when the hit rate and latency win are proven.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I put Redis on hot, repeatable reads that tolerate slight staleness after the hit-rate and latency win are proven — not by default. Postgres stays the system of record for durable transactions; Redis also owns ephemeral coordination like rate limits and locks. If hit rate or freshness SLOs cannot clear a bar, I use replicas or stay on Postgres.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Caching everything including low-hit unique keys</li>
-<li>Treating Redis as the system of record for balances</li>
-<li>No TTL and no invalidation plan</li></ul>
+    <ul class="sac-traps"><li>Caching everything including low-hit unique keys — burns memory and ops complexity with no p95 win</li>
+<li>Treating Redis as the system of record for balances — durability and failover semantics are weaker than Postgres for money</li>
+<li>No TTL and no invalidation plan — silent staleness that only shows up as customer-facing wrong data</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>What hit rate justifies the complexity?</li>
 <li>When would you use read replicas instead of Redis?</li></ul>
@@ -53,20 +63,37 @@
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Fail fast on Redis with timeouts, then either serve stale/local data, skip non-critical cache, or shed load — never unbounded synchronous fallback to the DB.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Short connect/command timeouts and circuit breaker around Redis so threads don't pile up.</li>
-<li>Decide policy per feature: fail-open (skip cache, hit DB with cap) vs fail-closed (rate limiter denies / feature disables).</li>
-<li>Protect PostgreSQL with concurrency limits, cached-in-process soft state, and load shedding on non-critical endpoints.</li>
-<li>Optionally serve last-known-good from local/memory cache with longer TTL during outage.</li>
-<li>Alert on Redis health and DB QPS spike; rehearse the degradation in game days.</li></ol>
-    
-    
+    <ol class="steps"><li>Clarify: Redis unavailable is an expected failure mode, not a surprise — the question is which features fail open vs closed and how hard Postgres gets hit.</li>
+<li>Evidence first: short connect/command timeouts and a circuit breaker around Redis so request threads do not pile up waiting on a dead pool.</li>
+<li>Per-feature policy: cache reads may fail-open to DB with a concurrency cap; rate limiting and auth abuse paths usually fail-closed — because open limits during outage invite floods.</li>
+<li>Tradeoff: serving last-known-good from process-local soft state buys availability vs freshness; skipping non-critical endpoints sheds load vs trying to preserve every feature.</li>
+<li>Failure mode: uncapped synchronous DB fallback turns a Redis blip into a Postgres avalanche and a wider outage.</li>
+<li>Fix: bulkhead fallback with a semaphore, load-shed optional routes, and optionally longer L1 TTL while Redis is open-circuit.</li>
+<li>Warm carefully on recovery: controlled refill or lazy population so reconnect does not stampede both Redis and DB.</li>
+<li>Prevent/ops: alert on Redis health, breaker open rate, and DB QPS spike during fallback; rehearse degradation in game days with pass/fail on DB ceiling.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  Req[Request] --&gt; RedisCheck{Redis OK?}
+  RedisCheck --&gt;|yes| Cache[Cache / limit path]
+  RedisCheck --&gt;|no| Breaker[Open circuit]
+  Breaker --&gt; Policy{Feature policy}
+  Policy --&gt;|cache| Cap[DB fallback + semaphore]
+  Policy --&gt;|rate limit| Closed[Fail closed / shed]
+  Cap --&gt; DB[(Postgres)]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python"># Pseudocode degradation
+try:
+    return redis.get(key)  # timeouts + breaker around client
+except RedisDown:
+    if feature == 'rate_limit':
+        raise RateLimited()  # fail closed
+    with db_fallback_semaphore:
+        return db.fetch()    # bounded fail-open</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Separate Redis modules (cache vs rate-limit) so one policy doesn't blindly apply to both.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Redis down: timeout fast, degrade by feature, and cap DB fallback — an uncapped fallback is an outage multiplier.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>When Redis dies I timeout fast, apply a written fail-open or fail-closed policy per feature, and cap every DB fallback. An uncapped 'just query Postgres' path multiplies the outage. I alert on breaker state and DB QPS, then rehearse warm-up so recovery does not create a second stampede.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Infinite retries to Redis on the request path</li>
-<li>Failing open on rate limiting (abuse flood)</li>
-<li>No circuit breaker → thread pool exhaustion</li></ul>
+    <ul class="sac-traps"><li>Infinite retries to Redis on the request path — exhausts thread pools and turns a blip into latency death</li>
+<li>Failing open on rate limiting — abuse traffic floods auth and writes while Redis is down</li>
+<li>No circuit breaker → thread pool exhaustion — every request waits on Redis connect timeout</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>Should rate limiting fail open or closed?</li>
 <li>How do you warm the cache after Redis recovers?</li></ul>
@@ -80,33 +107,48 @@
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Read Redis by key; on miss load Postgres, SET with TTL, return. Invalidate or overwrite on writes. Add stampede protection for hot keys.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Key design: versioned, namespaced keys including tenant/id (e.g. prod:user:{id}:profile:v2).</li>
-<li>Read path: GET → hit return; miss → DB → SET EX ttl → return.</li>
-<li>Write path: update DB then DEL/SET the key (invalidate or write-through); accept brief race windows consciously.</li>
-<li>Add jittered TTLs; singleflight/lock on miss for popular keys.</li>
-<li>Metrics: hit rate, miss latency, DB load on misses; negative-cache empty results carefully.</li></ol>
+    <ol class="steps"><li>Clarify cache-aside: the app owns population — GET Redis; on miss load Postgres, SET with TTL, return — Postgres remains source of truth, Redis is a disposable acceleration layer.</li>
+<li>Key design: namespaced, versioned keys including tenant/id (e.g. prod:user:{id}:profile:v2) so schema changes and multi-tenant bleed cannot share a key accidentally.</li>
+<li>Read path steps: GET → hit return; miss → singleflight/lock for hot keys → DB → SET EX ttl (+ jitter) → return; negative-cache empty/not-found with a short TTL so hot 404s do not hammer the DB.</li>
+<li>Write path and consistency window: COMMIT in Postgres, then DEL or SET the key; accept a brief race where concurrent readers can refill stale data until TTL or a second invalidation — because Redis and Postgres are not one transaction.</li>
+<li>Invalidation graph: map every derived key (profile, list membership, permission bitset); forgetting secondary keys is the usual 'we invalidated but still stale' failure — tags help but can be expensive at scale.</li>
+<li>Stampede vs ordinary miss: popular keys need NX lock or in-process singleflight on miss; jitter alone is not enough when one celebrity key expires.</li>
+<li>Tradeoff vs write-through: write-through shrinks some races but couples write latency to Redis; cache-aside keeps writes on the DB critical path and accepts invalidate races with TTL as backstop.</li>
+<li>Prevent/ops: metrics for hit rate, miss latency, DB QPS on misses, null-cache hit rate, and stampede lock wait; alert when miss rate or origin QPS spikes after deploys.</li></ol>
     <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">sequenceDiagram
   Client-&gt;&gt;API: GET
   API-&gt;&gt;Redis: GET key
   alt hit
     Redis--&gt;&gt;API: value
   else miss
+    API-&gt;&gt;API: singleflight / NX lock
     API-&gt;&gt;Postgres: SELECT
-    API-&gt;&gt;Redis: SET EX
+    API-&gt;&gt;Redis: SET EX ttl (+jitter)
   end
-  API--&gt;&gt;Client: response</pre></div>
+  Note over API,Redis: write: COMMIT then DEL/SET; race until TTL</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">val = redis.get(key)
 if val is None:
-    val = db.fetch()
-    redis.setex(key, ttl, serialize(val))
-return val</code></pre></div>
+    # stampede: only one loader for hot keys
+    if redis.set(f'lock:{key}', '1', nx=True, ex=5):
+        try:
+            val = db.fetch()  # may be None
+            # null-cache misses briefly to protect DB
+            redis.setex(key, ttl if val is not None else short_neg_ttl, serialize(val))
+        finally:
+            redis.delete(f'lock:{key}')
+    else:
+        time.sleep(0.05)
+        val = redis.get(key) or db.fetch()
+return val
+# after COMMIT: redis.delete(key)  # invalidate graph of derived keys too</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Serialize JSON/msgpack consistently; include schema version in the key or payload.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Cache-aside: GET, miss to DB, SET with TTL; invalidate on write; singleflight so misses don't herd.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Cache-aside is GET, miss to Postgres, SET with TTL, and invalidate after commit — with an explicit consistency window and an invalidation graph for derived keys. I null-cache short, singleflight hot misses, and watch hit rate plus origin QPS so a broken invalidation shows up as metrics, not only as user reports.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Caching without TTL</li>
-<li>Updating DB but forgetting invalidation</li>
-<li>Caching personalized responses under a shared key</li></ul>
+    <ul class="sac-traps"><li>Caching without TTL — missed invalidations become permanent wrong answers</li>
+<li>Updating DB but forgetting invalidation — consistency window becomes unbounded until someone notices</li>
+<li>Caching personalized responses under a shared key — cross-tenant data leaks and wrong UX</li>
+<li>No null-cache on hot not-found — repeated misses amplify DB load on the worst keys</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>Write-through vs cache-aside trade-offs?</li>
 <li>How do you handle null / not-found caching?</li></ul>
@@ -120,22 +162,35 @@ return val</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Invalidate or overwrite the cache key in the same request after a successful DB commit — and accept TTL as a backstop for missed invalidations.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>After COMMIT, DELETE the affected keys (or SET the fresh value). Prefer explicit invalidation for correctness-sensitive data.</li>
-<li>Keep TTLs short enough that missed invalidations self-heal; use key versioning when payload shape changes.</li>
-<li>For multi-key entities, maintain a key inventory or hierarchical tags (careful: tag systems can be expensive).</li>
-<li>If using replicas, beware read-your-writes: invalidate then read primary, or version stamp the payload.</li>
-<li>Measure stale-read complaints; for strong freshness, skip cache on that path.</li></ol>
-    
+    <ol class="steps"><li>Clarify: after a successful Postgres COMMIT, the cache is wrong until you DEL/SET or TTL expires — treat that as a designed window, not an accident.</li>
+<li>Preferred fix: in the request (or post-commit hook), DELETE affected keys or SET the fresh value only after commit succeeds — invalidating before commit leaves holes on rollback.</li>
+<li>Evidence of completeness: maintain an invalidation graph or key inventory for the entity (detail, lists, aggregates); hierarchical tags help but add write amplification.</li>
+<li>Tradeoff: short TTL heals missed deletes quickly vs higher miss rate; long TTL needs reliable invalidation or you ship stale reads for hours.</li>
+<li>Replica failure mode: invalidate then read-your-writes from a lagging replica can refill the cache with old data — version-stamp payloads or read primary after write.</li>
+<li>For schema changes, bump key version (v2) so old payloads cannot be deserialized as new shape.</li>
+<li>When freshness is a hard SLO, skip cache on that path rather than pretending TTL equals strong consistency.</li>
+<li>Prevent/ops: measure stale-read complaints, post-write cache hit of old version, and invalidation error rate; alert when DEL fails or refill-from-replica races spike.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">sequenceDiagram
+  API-&gt;&gt;Postgres: BEGIN update COMMIT
+  API-&gt;&gt;Redis: DEL keys (after commit)
+  Note over API,Redis: if invalidate before commit, rollback leaves hole
+  par concurrent reader
+    Reader-&gt;&gt;Redis: miss
+    Reader-&gt;&gt;Postgres: SELECT (beware replica lag)
+    Reader-&gt;&gt;Redis: SET stale refill risk
+  end</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">async with db.transaction():
     await db.update(...)
-await redis.delete(cache_key)  # after commit</code></pre></div>
+# only after commit succeeds
+await redis.delete(*cache_keys_for(entity))  # invalidation graph
+# optional: await redis.setex(primary_key, ttl, fresh)</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Hook invalidation in the repository/unit-of-work after commit callbacks.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Commit first, then invalidate or SET the new value. TTL is the safety net for races and missed deletes.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I commit Postgres first, then invalidate or overwrite every key in the entity's invalidation graph, with TTL as the safety net for races and missed deletes. Replica lag can refill stale values, so I version payloads or read primary after write when freshness matters. Metrics on stale reads and failed DELs catch silent invalidation bugs.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Invalidating before commit (rollback leaves hole or race)</li>
-<li>Infinite TTL with best-effort invalidation only</li>
-<li>Forgetting secondary keys derived from the entity</li></ul>
+    <ul class="sac-traps"><li>Invalidating before commit — rollback leaves a hole or concurrent readers cache pre-image forever until TTL</li>
+<li>Infinite TTL with best-effort invalidation only — one missed DEL becomes permanent staleness</li>
+<li>Forgetting secondary keys derived from the entity — detail is fresh while list/search stays stale</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do you invalidate lists that contain the entity?</li>
 <li>Would CDC/outbox-driven invalidation help?</li></ul>
@@ -149,27 +204,44 @@ await redis.delete(cache_key)  # after commit</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Stampede is many requests missing the same key at once and all hitting the DB. Prevent with singleflight, a lock, probabilistic early refresh, or serving stale while one refreshes.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Scenario: hot key TTL expires (or cold start) → N concurrent misses → N identical DB queries.</li>
-<li>Singleflight / request coalescing in-process: one loader, others wait.</li>
-<li>Distributed: SET lock key NX EX; winner loads DB and fills cache; losers wait/retry or serve stale.</li>
-<li>Probabilistic early expiration / soft TTL: refresh before hard expiry under load.</li>
-<li>Jitter TTLs so many keys don't expire in the same second; monitor miss spikes.</li></ol>
-    
-    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">ok = redis.set(f'lock:{key}', '1', nx=True, ex=5)
+    <ol class="steps"><li>Clarify stampede: hot key TTL expires or cold start → N concurrent misses → N identical origin queries — a thundering herd on Postgres, not Redis CPU saturation alone.</li>
+<li>Distinguish hot-key: a hot key that always hits still hammers one Redis shard/CPU; stampede is synchronized miss → origin overload. Fixes differ (L1/shard vs singleflight/lock/SWR).</li>
+<li>In-process singleflight: coalesce loaders on one instance; losers wait on the same future — cheap but insufficient across many app instances.</li>
+<li>Distributed lock: SET lock:{key} NX EX <ttl>; winner loads DB and fills cache; waiters retry GET with a bounded waiter timeout — lock TTL must outlive worst refresh but expire if the winner dies (no deadlock).</li>
+<li>Stale-while-revalidate: keep soft TTL / stale payload; serve stale to waiters while one refresher runs — availability over freshness when the business allows.</li>
+<li>Tradeoff: probabilistic early refresh reduces synchronized expiry vs extra origin load; jitter helps many keys but will not save one celebrity key.</li>
+<li>Failure modes: lock without TTL (deadlock), waiters with infinite retry (latency storm), treating stampede as 'add Redis nodes' (miss still hits DB).</li>
+<li>Prevent/ops: monitor miss spikes, lock acquire fail rate, waiter timeouts, and origin QPS on expiry boundaries; game-day expire a hot key and verify single-origin refresh.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  Miss[N concurrent GET miss] --&gt; Lock{SET lock NX EX}
+  Lock --&gt;|winner| Load[DB fetch + SET cache]
+  Lock --&gt;|losers| Wait[waiter timeout / GET retry]
+  Wait --&gt;|SWR| Stale[serve soft-TTL stale]
+  Load --&gt; Unlock[DEL lock]
+  Note1[Hot-key hit path: L1 or shard — not this diagram]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">ok = redis.set(f'lock:{key}', '1', nx=True, ex=5)  # lock TTL &gt; refresh p99
 if ok:
-    val = db.fetch()
-    redis.setex(key, ttl, val)
-    redis.delete(f'lock:{key}')
+    try:
+        val = db.fetch()
+        redis.setex(key, ttl, val)
+    finally:
+        redis.delete(f'lock:{key}')
 else:
-    # wait briefly and GET again, or serve stale
-    ...</code></pre></div>
+    # bounded waiter — do not spin forever
+    for _ in range(20):
+        time.sleep(0.025)
+        val = redis.get(key)
+        if val is not None:
+            return val
+    return serve_stale_or_db_with_shed()  # SWR / degrade</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> In multi-instance Node, in-process singleflight alone is not enough — need Redis NX lock or similar.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Stampede = thundering herd on miss. One refresher via lock or singleflight; others wait or get stale.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Stampede is a synchronized miss herd on the origin; hot-key is sustained traffic on one Redis slot — different problems. I use singleflight plus an NX lock with TTL, bounded waiter timeout, and stale-while-revalidate when freshness allows. Lock TTL and waiter budgets are part of the design, and I watch miss spikes at expiry.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Only jittering TTL but not locking the hottest key</li>
-<li>Lock without TTL (deadlock if refresher dies)</li>
-<li>Retry loops without backoff while lock held</li></ul>
+    <ul class="sac-traps"><li>Only jittering TTL but not locking the hottest key — celebrity keys still stampede on expiry</li>
+<li>Lock without TTL — refresher crash deadlocks the key until manual intervention</li>
+<li>Retry loops without backoff/waiter timeout while lock held — turns stampede into a latency storm</li>
+<li>Confusing stampede with hot-key CPU saturation — scaling Redis nodes does not fix synchronized DB misses</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How does 'serve stale-while-revalidate' work with Redis?</li>
 <li>What's the difference between stampede and hot-key CPU saturation?</li></ul>
@@ -183,22 +255,32 @@ else:
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">A hot key saturates one shard/CPU. I'd add a local in-process cache, or split the keyspace across N sibling keys and aggregate.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Confirm with Redis hot-key metrics / proxy stats / latency on one cluster node.</li>
-<li>L1 local cache (with short TTL) on app instances to absorb read QPS.</li>
-<li>Shard the key: value replicated on key:0..N-1 randomly read; for counters, INCR random shard and SUM on read (approximate or exact merge).</li>
-<li>Reconsider storing a huge value; compress or split fields.</li>
-<li>If Cluster mode, note hash-tag pinning can concentrate load — avoid accidental hot hash slots.</li></ol>
-    
-    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python"># read sharding for a hot blob
+    <ol class="steps"><li>Clarify: a hot key concentrates GET/INCR traffic on one cluster hash slot/CPU — horizontal shard count does not help if one key owns one slot.</li>
+<li>Evidence: Redis hot-key metrics, proxy stats, elevated latency on one node, and CPU skew across the cluster — confirm before redesigning keys.</li>
+<li>First mitigation: L1 in-process cache with short TTL on app instances to absorb read QPS without changing the data model.</li>
+<li>Shard the keyspace: replicate a read-mostly blob onto key:0..N-1 and pick randomly; for counters, INCR a random shard and SUM on read (approximate or exact merge tradeoff).</li>
+<li>Tradeoff: L1 is simple and loses cross-instance coherence quickly; sharding increases write fan-out and read merge cost vs single-key simplicity.</li>
+<li>Failure modes: hash tags that pin many hot entities onto one slot; storing a huge value that amplifies network CPU; global locks on every hot-key read.</li>
+<li>Fix size/shape: compress, split fields, or move rarely changing config to local files/feature flags when Redis is the wrong store.</li>
+<li>Prevent/ops: dashboards for per-node CPU and hot-key reports; alert on slot imbalance; revisit key design when a celebrity entity appears in top-N.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  Clients --&gt; L1[App L1 cache]
+  L1 --&gt;|miss| Shard{pick key:i}
+  Shard --&gt; R0[key:0]
+  Shard --&gt; R1[key:1]
+  Shard --&gt; RN[key:N-1]
+  Note1[One logical hot key → N Redis keys / slots]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python"># read sharding for a hot blob (writes fan out to all shards)
 shard = random.randint(0, N - 1)
-return redis.get(f'config:{shard}')</code></pre></div>
+return redis.get(f'config:{shard}')
+# counter: redis.incr(f'hits:{random.randrange(N)}'); read sums hits:0..N-1</code></pre></div>
     
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Hot keys need L1 caching or key sharding — scaling the cluster alone won't help if one key owns one slot.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Hot keys need L1 caching or deliberate key sharding — adding Redis nodes alone will not split one key's hash slot. I confirm with hot-key and per-node CPU metrics, then absorb reads in-process or fan out to sibling keys with an explicit merge story. Hash tags and oversized values are common ways we accidentally create the hotspot.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Adding Redis nodes without splitting the key</li>
-<li>Hash tags that force many hot keys onto one slot</li>
-<li>Global locks on the hot key for every read</li></ul>
+    <ul class="sac-traps"><li>Adding Redis nodes without splitting the key — the hot slot moves hosts but stays hot</li>
+<li>Hash tags that force many hot keys onto one slot — Cluster mode concentrates load by design of the tag</li>
+<li>Global locks on the hot key for every read — serializes the hottest path and worsens latency</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do you shard a hot counter accurately?</li>
 <li>When is client-side caching (TRACKING) appropriate?</li></ul>
@@ -212,20 +294,25 @@ return redis.get(f'config:{shard}')</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">TTL follows the business freshness SLO: seconds for volatile counters, minutes for profiles, hours for rare config — always with jitter and an invalidation story for critical updates.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Classify data: strict freshness (skip cache or TTL seconds + invalidate), eventual (minutes), static (hours/days).</li>
-<li>Set TTL slightly above typical update interval; use explicit DEL on writes for stricter paths.</li>
-<li>Add random jitter (±10–20%) to prevent synchronized expiry stampedes.</li>
-<li>Negative caching: short TTL for misses to avoid DB hammering on hot 404s.</li>
-<li>Review TTLs with hit-rate and stale-read metrics; document per-key-family policy.</li></ol>
+    <ol class="steps"><li>Clarify: TTL is a freshness SLA expressed as time — classify data by how wrong a stale read can be before it is a bug.</li>
+<li>Buckets: strict freshness (skip cache or seconds + hard invalidate), eventual (minutes), near-static (hours/days); document per key-family policy.</li>
+<li>Set TTL slightly above typical update interval; use explicit DEL on writes when the SLO is tighter than TTL alone can guarantee.</li>
+<li>Always add random jitter (±10–20%) so millions of keys do not expire in the same second and stampede the origin.</li>
+<li>Negative caching: short TTL for misses/404s — long enough to protect DB, short enough that creates appear quickly.</li>
+<li>Tradeoff vs eviction policy: volatile-LRU still needs TTLs for correctness; allkeys-lru without TTL turns memory pressure into random staleness deletion without a freshness story.</li>
+<li>Failure mode: one global TTL or eternal keys for changing data — either constant stampede risk or unbounded staleness.</li>
+<li>Prevent/ops: review TTLs against hit rate, stale-read rate, and miss spikes at expiry; alert when a key family drifts from its documented freshness SLO.</li></ol>
     
-    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">ttl = base_ttl + random.randint(0, jitter)</code></pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">ttl = base_ttl + random.randint(0, jitter)
+# negative cache example
+redis.setex(key, 30 if value is None else base_ttl + random.randint(0, jitter), serialize(value))</code></pre></div>
     
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>TTL is a freshness SLA. Short + invalidate for volatile data, longer for static, jitter everything, short negative cache for misses.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>TTL is a freshness SLA, not a random constant: short plus invalidate for volatile data, longer for static, jitter everywhere, and short negative cache for hot misses. Eviction policy is memory management, not a substitute for that SLA. I revisit TTLs when hit rate or stale-read metrics say the policy drifted.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>One global TTL for all keys</li>
-<li>No jitter on millions of keys with the same expiry</li>
-<li>Eternal keys for data that does change</li></ul>
+    <ul class="sac-traps"><li>One global TTL for all keys — over-fresh expensive paths and under-fresh critical paths at once</li>
+<li>No jitter on millions of keys with the same expiry — synchronized stampede every TTL boundary</li>
+<li>Eternal keys for data that does change — invalidation bugs become permanent production incidents</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do you expire keys that are too large to scan with KEYS?</li>
 <li>Volatile-LRU vs allkeys-lru eviction — when does TTL still matter?</li></ul>
@@ -239,23 +326,34 @@ return redis.get(f'config:{shard}')</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">I'd use Redis atomic counters or a sliding-window ZSET, with separate keys for userId and IP, evaluated in the gateway/middleware before expensive work.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Fixed window: INCR key; on first INCR set EXPIRE windowSeconds; reject when count > limit (simple, bursty at boundaries).</li>
-<li>Sliding window: ZADD timestamps, ZREMRANGEBYSCORE old, ZCARD — more accurate; often via Lua for atomicity.</li>
-<li>Keys: rl:user:{id}:{bucket}, rl:ip:{ip}:{bucket}; apply both limits (AND).</li>
-<li>Fail-closed or fail-open policy when Redis is down — usually fail-closed for auth abuse paths.</li>
-<li>Return standard headers (remaining/reset); shard hot IP keys if under attack; observe top offenders.</li></ol>
-    
-    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text">-- simplified fixed window
+    <ol class="steps"><li>Clarify goal: enforce per-user and per-IP budgets early (gateway/middleware) before expensive work, with atomic Redis ops so multi-instance counts do not race.</li>
+<li>Fixed window: INCR key; on first INCR set EXPIRE windowSeconds; reject when count > limit — simple, but bursty at window boundaries.</li>
+<li>Sliding window: ZADD timestamps, ZREMRANGEBYSCORE old, ZCARD — smoother; wrap in Lua so the multi-step update is atomic across clients.</li>
+<li>Keys and policy: rl:user:{id}:{bucket} and rl:ip:{ip}:{bucket}; evaluate both (AND) because IP-only fails under NAT and user-only fails pre-auth.</li>
+<li>Tradeoff: fixed window is cheap vs sliding accuracy; token bucket via Lua gives smoother refill when UX needs it.</li>
+<li>Redis-down policy: usually fail-closed on login/abuse paths — fail-open invites credential stuffing during the outage.</li>
+<li>Hot IP under attack: shard or approximate the IP key; return standard remaining/reset headers for clients.</li>
+<li>Prevent/ops: metrics for reject rate, top offenders, Redis latency on RL path, and fail-closed engagements; alert when RL Redis errors spike or reject rate collapses unexpectedly.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  Req[Request] --&gt; MW[Rate-limit middleware]
+  MW --&gt; U[INCR/ZADD rl:user]
+  MW --&gt; I[INCR/ZADD rl:ip]
+  U --&gt; D{both under limit?}
+  I --&gt; D
+  D --&gt;|yes| App[Controller]
+  D --&gt;|no| 429[429 + headers]
+  D --&gt;|Redis down| Policy[fail-closed / fail-open by route]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text">-- simplified fixed window (atomic)
 local c = redis.call('INCR', KEYS[1])
 if c == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
 return c</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Apply in Nest guard/middleware before controllers; don't rely only on per-instance memory limits.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Per-user and per-IP keys with atomic INCR or sliding-window Lua, checked early in the middleware, with an explicit Redis-down policy.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I enforce per-user and per-IP limits with atomic INCR or sliding-window Lua in middleware before expensive work, and I pick fail-closed for abuse-sensitive paths when Redis is down. Fixed windows are fine until boundary bursts hurt; then I pay for sliding/token-bucket accuracy. Reject rate and Redis errors on the limiter path are first-class alerts.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Non-atomic get/set rate counters</li>
-<li>Only IP limits (NAT) or only user limits (pre-auth flood)</li>
-<li>Failing open on login endpoints during Redis outage</li></ul>
+    <ul class="sac-traps"><li>Non-atomic get/set rate counters — concurrent instances under-count and allow floods</li>
+<li>Only IP limits (NAT) or only user limits (pre-auth flood) — attackers route around the single dimension</li>
+<li>Failing open on login endpoints during Redis outage — turns dependency loss into an abuse window</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>Token bucket vs sliding window?</li>
 <li>How do you rate-limit at API gateway vs app?</li></ul>
@@ -269,21 +367,31 @@ return c</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Use Redis atomic primitives — INCR/INCRBY or a Lua script — never GET, add in process, SET.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Prefer INCR/INCRBY/DECR for single counters; they are atomic across clients.</li>
-<li>For multi-key or conditional updates, use Lua (EVAL) or MULTI/EXEC transactions.</li>
-<li>Avoid read-modify-write in app code across instances — classic race.</li>
-<li>If absolute accuracy across Redis failover matters, understand Redis persistence/replication limits or keep durable counters in Postgres.</li>
-<li>Test with concurrent workers; monitor for script errors and key type mismatches.</li></ol>
-    
+    <ol class="steps"><li>Clarify the race: GET → add in app → SET across instances loses updates; safety must live inside Redis's single-threaded command execution.</li>
+<li>Prefer INCR/INCRBY/DECR for a single counter — one round-trip, atomic, correct under concurrency without application locks.</li>
+<li>Conditional multi-step RMW (compare-and-set, multi-key invariants): use Lua EVAL so check+write runs atomically server-side — this is the peer for conditional logic, not bare MULTI/EXEC.</li>
+<li>MULTI/EXEC alone queues commands without optimistic concurrency; for check-then-act you need WATCH+MULTI (retry on conflict) or, more often, Lua — do not teach MULTI/EXEC as equivalent to Lua for conditional RMW.</li>
+<li>Tradeoff: INCR is simplest; Lua adds scripting complexity but expresses multi-key atomicity; WATCH+MULTI works but retry storms under contention are painful vs Lua.</li>
+<li>Money / audit failure mode: Redis AOF/RDB and async replication are not Postgres crash-safe ledger semantics — keep durable financial counters in Postgres and use Redis for approximate or rate metrics.</li>
+<li>Cluster caveat: multi-key Lua requires keys in the same hash slot (hash tags); otherwise the script is rejected.</li>
+<li>Prevent/ops: concurrency tests with multiple workers; monitor script errors, WRONGTYPE, and divergence vs a durable source of truth when the counter matters for billing.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  Bad[GET + add + SET in app] --&gt;|race| Lost[lost updates]
+  Incr[INCR / INCRBY] --&gt; OK1[safe single counter]
+  Lua[Lua check + write] --&gt; OK2[safe conditional RMW]
+  Watch[WATCH + MULTI + EXEC] --&gt; OK3[optimistic; retry on conflict]
+  Multi[bare MULTI/EXEC] -.-&gt;|not conditional| Warn[no compare-and-set]</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">redis.incrby('metrics:signup', 1)
-# or Lua for compare-and-swap style logic</code></pre></div>
+# conditional RMW — Lua, not bare MULTI/EXEC
+# if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('SET', KEYS[1], ARGV[2]) else return 0 end
+# money/audit: UPDATE accounts SET balance = balance + $1 WHERE id = $2; -- Postgres ledger</code></pre></div>
     
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>INCR or Lua — not get-add-set. Redis atomic ops are the concurrency control.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Concurrent counter updates belong to INCR or to Lua for conditional multi-step RMW — never get-add-set in the app. Bare MULTI/EXEC is not the same as Lua for check-and-set; use WATCH+MULTI or Lua when you need conditions. If the number is money, Postgres is the ledger and Redis is at best a cache or approximate metric.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>GET + SET across instances</li>
-<li>Using MULTI without understanding WATCH for optimistic cases</li>
-<li>Storing counters only in Redis when finance needs auditability</li></ul>
+    <ul class="sac-traps"><li>GET + SET across instances — classic lost-update race under concurrency</li>
+<li>Treating bare MULTI/EXEC as peer to Lua for conditional RMW — no compare-and-set without WATCH or Lua</li>
+<li>Storing counters only in Redis when finance needs auditability — persistence/replication limits are not a ledger</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>When do you need Lua vs a single INCR?</li>
 <li>How does Redis Cluster affect multi-key Lua?</li></ul>
@@ -297,20 +405,37 @@ return c</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Treat Redis failure as expected: circuit-break, admit only a bounded number of DB fallbacks, shed non-critical traffic, and keep a small local stale cache.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Timeouts + circuit breaker on Redis so the app fails fast instead of wedging.</li>
-<li>Bulkhead: limit concurrent DB queries on cache-miss/fallback paths (semaphore).</li>
-<li>Serve stale L1 content where safe; disable expensive list endpoints under degradation mode.</li>
-<li>Load shed / adaptive concurrency at the edge when DB saturation rises.</li>
-<li>Game-day: kill Redis in staging and verify DB QPS stays within ceiling; alert on fallback rate.</li></ol>
-    
-    
+    <ol class="steps"><li>Clarify avalanche: Redis down or mass expiry → uncapped miss path → Postgres saturates → cascading API failure — the outage multiplier is unbounded fallback, not Redis itself.</li>
+<li>Fail fast: timeouts + circuit breaker on Redis so the app stops waiting and enters a known degradation mode.</li>
+<li>Bulkhead: semaphore on cache-miss/DB-fallback concurrency — size from Postgres max_connections, pool size, and safe QPS headroom (e.g. admit only N% of normal miss concurrency).</li>
+<li>Shed order: drop optional/expensive list/search first, preserve auth and critical reads, serve stale L1 where safe — ordered shedding beats random 500s.</li>
+<li>Tradeoff: fail-open cache with a tight semaphore preserves partial UX vs fail-closed features that cannot be correct without Redis.</li>
+<li>Coalesce remaining misses (singleflight) during partial outages so 1000 waiters do not become 1000 identical queries.</li>
+<li>Failure mode: retry storms and unlimited fallback recreate the avalanche after you thought you fixed Redis.</li>
+<li>Prevent/ops: game-day kill Redis in staging with pass/fail = DB QPS stays under ceiling and critical SLO holds; alert on fallback rate, semaphore rejects, and origin saturation.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TD
+  Miss[Redis miss / outage] --&gt; CB{circuit breaker}
+  CB --&gt;|open| Deg[degraded mode]
+  Deg --&gt; Sem{fallback semaphore}
+  Sem --&gt;|admit| DB[Postgres]
+  Sem --&gt;|reject| Shed[shed / stale L1 / 503]
+  Deg --&gt; Order[shed order: optional → expensive → critical last]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python"># conceptual bulkhead
+if redis_breaker.open:
+    if not fallback_sem.try_acquire():
+        return serve_stale_or_503()  # shed
+    try:
+        return db.fetch()
+    finally:
+        fallback_sem.release()</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Feature-flag 'degraded_mode' to flip caches off intentionally during incidents with known DB headroom.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Avalanche prevention is bounded fallback: breakers, semaphores, stale serve, and shedding — not 'just query Postgres.'</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Avalanche prevention is bounded fallback: breakers, a sized semaphore, ordered load shedding, and stale serve — not 'just query Postgres.' I size the bulkhead from DB headroom, coalesce misses, and run a game-day with a clear pass/fail on DB QPS. Fallback rate and semaphore rejects are the metrics that prove the guardrails work.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Silent unlimited DB fallback</li>
-<li>Retry storms compounding load</li>
-<li>No distinction between critical and optional reads</li></ul>
+    <ul class="sac-traps"><li>Silent unlimited DB fallback — converts Redis loss into a full database outage</li>
+<li>Retry storms compounding load — amplify QPS exactly when Postgres has no spare capacity</li>
+<li>No distinction between critical and optional reads — shed order is random and critical paths die first</li>
+<li>Game-day without a DB QPS pass/fail — rehearsal that cannot fail teaches nothing</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do you size the fallback semaphore?</li>
 <li>What's the role of request coalescing during partial outages?</li></ul>

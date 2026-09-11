@@ -26,21 +26,24 @@
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Scale changed the plan or I/O profile — I would capture the slow query, run EXPLAIN (ANALYZE, BUFFERS) on production-like data, and check whether we flipped to seq scan, nested loop explosion, or bad cardinality estimates.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Reproduce with realistic data volume and the same parameters; compare EXPLAIN plans at 1M vs 100M.</li>
-<li>Look for seq scans on large tables, nested loops with huge inner rows, hash/sort spills to disk, and misestimated rows (ANALYZE / extended stats).</li>
-<li>Check indexes: missing composite indexes matching WHERE/JOIN/ORDER BY, unused indexes, and whether the planner can use an index-only scan (visibility map).</li>
-<li>Inspect table/index bloat, vacuum/autovacuum lag, and shared_buffers / OS cache hit ratio from BUFFERS.</li>
-<li>Fix with the right index or rewrite (avoid SELECT *), update statistics, partition if appropriate, then re-measure latency and I/O.</li></ol>
+    <ol class="steps"><li>Hypothesis: at 100M the planner flipped (seq scan / nested-loop blow-up) or the working set outgrew cache — not 'Postgres suddenly got slow.' Capture the exact SQL + bind params from production logs first.</li>
+<li>Reproduce on a restore or clone with realistic volume and the same parameters; run EXPLAIN (ANALYZE, BUFFERS) at 1M vs 100M and diff the plan trees side by side.</li>
+<li>Evidence to hunt: Seq Scan on large tables, Nested Loop with huge inner rows, Hash/Sort Method: external, and estimated vs actual rows off by orders of magnitude (stale ANALYZE or correlated predicates).</li>
+<li>Index angle: missing composite matching WHERE/JOIN/ORDER BY, wrong column order, or index-only scan blocked by an unclean visibility map — because a usable index at 1M can lose to seq scan when selectivity estimates change.</li>
+<li>Failure modes: table/index bloat after heavy UPDATE/DELETE, autovacuum lag, and cold shared_buffers so BUFFERS shows shared read ≫ hit even when the plan shape looks fine.</li>
+<li>Tradeoff: add the right index or rewrite (sargable predicates, avoid SELECT *) vs partition by time/tenant when most queries are range-scoped — partitioning helps prune; it does not fix a missing filter index.</li>
+<li>Fix loop: CREATE INDEX CONCURRENTLY / rewrite / ANALYZE (and extended stats if correlated), then re-EXPLAIN until actual time and I/O drop on the hot path.</li>
+<li>Prevent/ops: alert on p95 of this query class, track seq_scan vs idx_scan in pg_stat_user_tables, and game-day a 2× data restore so plan flips are caught before traffic finds them.</li></ol>
     
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
 SELECT …;</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Log slow queries via ORM/query logger with bind params; never tune against empty staging tables.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>At 100M the plan or cache behavior changed. EXPLAIN ANALYZE with BUFFERS tells me if it's a bad join, missing index, or I/O — I fix the plan before throwing hardware at it.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>At 100M the plan or cache behavior usually changed, not the hardware baseline. I compare EXPLAIN ANALYZE with BUFFERS at both scales, fix estimate skew or missing indexes, and only then talk about partitioning or bigger boxes — with metrics so the next growth cliff is visible early.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Adding random indexes without reading the plan</li>
-<li>Assuming 'it worked at 1M' means the same plan still applies</li>
-<li>Tuning only on EXPLAIN without ANALYZE (estimates lie)</li></ul>
+    <ul class="sac-traps"><li>Adding random indexes without reading the plan — write amplification rises while the real node stays hot</li>
+<li>Assuming 'it worked at 1M' means the same plan still applies — cardinality cliffs flip joins silently</li>
+<li>Tuning only on EXPLAIN without ANALYZE — estimates lie and you optimize a fantasy plan</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>When would you partition vs just index?</li>
 <li>How do you tell bloat from a genuinely expensive join?</li></ul>
@@ -54,11 +57,14 @@ SELECT …;</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">EXPLAIN shows the planned tree; EXPLAIN ANALYZE runs it and shows actual time and rows. I always want BUFFERS so I can separate CPU from disk.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Start with EXPLAIN (ANALYZE, BUFFERS) on a safe replica or low-traffic window; use FORMAT TEXT for readability.</li>
-<li>Read bottom-up: find the node with the largest actual time; compare estimated vs actual rows — large skew means bad stats or correlated predicates.</li>
-<li>Flag seq scans on big tables, nested loops with huge inner loops, and sorts/hashes that spill (temp files).</li>
-<li>Use BUFFERS: high 'read' vs 'hit' means cold cache or working set larger than memory; high 'hit' with high time means CPU/CPU-bound plan shape.</li>
-<li>Iterate: add/adjust indexes, rewrite predicates to be sargable, ANALYZE, or break the query — re-run until actual time drops.</li></ol>
+    <ol class="steps"><li>Clarify: EXPLAIN is the planner's guess; EXPLAIN ANALYZE executes and reports actual time/rows — always add BUFFERS so you separate CPU-bound plan shape from disk I/O.</li>
+<li>Run EXPLAIN (ANALYZE, BUFFERS) on a safe replica or low-traffic window; FORMAT TEXT for readability; wrap mutating statements in a TX you ROLLBACK.</li>
+<li>Read bottom-up: find the node with the largest actual time; compare estimated vs actual rows — large skew means bad stats, missing extended statistics, or non-sargable predicates.</li>
+<li>Flag Seq Scan on big tables, Nested Loop with huge inner loops, and Hash/Sort that spill to temp files — because those are the usual latency amplifiers under concurrency.</li>
+<li>BUFFERS read: high shared read vs hit means cold cache or working set larger than memory; high hit with high time means CPU/plan shape (bad join order, function-per-row).</li>
+<li>Tradeoff: fix with index/rewrite vs raise work_mem for one session — bumping work_mem globally can OOM under parallel load, so prefer plan fixes first.</li>
+<li>Iterate: make predicates sargable, add/adjust indexes, ANALYZE, or break the query into stages; re-run until the hottest node's actual time collapses.</li>
+<li>Prevent/ops: sample plans from pg_stat_statements outliers into a runbook, alert when a known query's mean_exec_time regresses after deploy, and never ship index changes without a before/after ANALYZE capture.</li></ol>
     
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">EXPLAIN (ANALYZE, BUFFERS)
 SELECT o.id
@@ -68,11 +74,11 @@ WHERE o.created_at &gt;= now() - interval '7 days'
   AND c.tier = 'gold';</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Wrap debug in a transaction you ROLLBACK if the statement mutates; prefer a replica for heavy ANALYZE.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I run EXPLAIN ANALYZE with BUFFERS, find the hottest node, and fix estimate skew or I/O — not guesswork indexes.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I run EXPLAIN ANALYZE with BUFFERS, find the hottest node and estimate skew, then fix the plan or I/O story — not guesswork indexes. The interview answer is the loop: measure, change one thing, re-measure, and keep the artifact for the next regression.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Using EXPLAIN alone and trusting estimates</li>
-<li>Ignoring BUFFERS and blaming 'CPU' when it's disk</li>
-<li>Running ANALYZE on the primary at peak without thinking about load</li></ul>
+    <ul class="sac-traps"><li>Using EXPLAIN alone and trusting estimates — you optimize a plan that never ran</li>
+<li>Ignoring BUFFERS and blaming CPU when shared read dominates — you miss cache/I/O</li>
+<li>Running ANALYZE on the primary at peak without thinking about load — you can amplify the outage</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>What is an index-only scan and when does it fail?</li>
 <li>How do you capture a plan from a prepared statement / ORM?</li></ul>
@@ -86,23 +92,33 @@ WHERE o.created_at &gt;= now() - interval '7 days'
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">This is a concurrency invariant: stock must never go negative. I would make the decrement atomic under a row lock or a single conditional UPDATE, not read-modify-write in the app.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Model inventory as a row (or SKU row) and update stock in one statement: UPDATE … SET stock = stock - 1 WHERE id = $1 AND stock >= 1 RETURNING *.</li>
-<li>If zero rows returned, treat as sold out — no separate check-then-update race.</li>
-<li>Alternatively: BEGIN; SELECT … FOR UPDATE; check stock; UPDATE; COMMIT — pessimistic lock serializes buyers on that row.</li>
-<li>Keep the transaction short; never hold FOR UPDATE across external payment calls — reserve/hold pattern with TTL if payment is slow.</li>
-<li>Add a CHECK (stock >= 0) as a last line of defense and monitor constraint violations.</li></ol>
-    
+    <ol class="steps"><li>Hypothesis: classic check-then-act race — both sessions read stock=1 and both write stock=0. App-memory RMW cannot enforce the invariant.</li>
+<li>Preferred fix: one atomic statement — UPDATE inventory SET stock = stock - 1 WHERE sku = $1 AND stock >= 1 RETURNING *; zero rows means sold out, no separate SELECT race.</li>
+<li>Alternative: BEGIN; SELECT … FOR UPDATE; check; UPDATE; COMMIT — pessimistic serialization on that SKU row when you need multi-statement business logic in the same TX.</li>
+<li>Tradeoff: conditional UPDATE is simplest and shortest; FOR UPDATE is clearer when you also insert order lines under the same lock — but both beat raising isolation alone for this single-row invariant.</li>
+<li>Failure mode: holding FOR UPDATE across Stripe/payment HTTP — lock duration explodes, checkout queues, deadlocks rise. Use a short reserve/hold with TTL, then confirm/release.</li>
+<li>Defense in depth: CHECK (stock >= 0) so a buggy path still fails closed; unique reservation tokens if you model holds as rows.</li>
+<li>Idempotency: key the purchase on (order_id) or client token so retries after timeout do not double-decrement when the first TX actually committed.</li>
+<li>Prevent/ops: metric sold_out_conflict_rate and lock wait time on inventory; alert on CHECK violations; load-test two-buyer last-unit scenarios in CI/game-day.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">sequenceDiagram
+  participant A as BuyerA
+  participant B as BuyerB
+  participant DB as Postgres
+  A-&gt;&gt;DB: UPDATE stock-1 WHERE stock&gt;=1
+  B-&gt;&gt;DB: UPDATE stock-1 WHERE stock&gt;=1
+  DB--&gt;&gt;A: 1 row (ok)
+  DB--&gt;&gt;B: 0 rows (sold out)</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">UPDATE inventory
 SET stock = stock - 1
 WHERE sku = $1 AND stock &gt;= 1
 RETURNING stock;</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> In Nest/TypeORM use a transactional repository method; do not load entity, mutate, save without version/lock.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I never trust check-then-update in app memory. One conditional UPDATE or SELECT FOR UPDATE on the stock row, short transaction, sold-out if zero rows.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I never trust check-then-update in app memory for the last unit. One conditional UPDATE or a short SELECT FOR UPDATE on the stock row, never hold that lock across payment I/O, and treat zero rows as sold-out with idempotent retries so the inventory invariant survives concurrency and flaky networks.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Read stock in app, decrement, write back without locking</li>
-<li>Holding FOR UPDATE while calling Stripe</li>
-<li>Relying only on unique constraints that don't model quantity</li></ul>
+    <ul class="sac-traps"><li>Read stock in app, decrement, write back without locking — silent oversell under concurrency</li>
+<li>Holding FOR UPDATE while calling Stripe — checkout latency becomes lock wait for everyone</li>
+<li>Relying only on unique constraints that don't model quantity — uniqueness ≠ non-negative stock</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do soft holds / reservations differ from hard decrements?</li>
 <li>Would SERIALIZABLE alone be enough here?</li></ul>
@@ -116,11 +132,14 @@ RETURNING stock;</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Optimistic: version column, retry on conflict — best when conflicts are rare. Pessimistic: SELECT FOR UPDATE — best when contention is expected and you must serialize.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Optimistic: add version (or updated_at) column; UPDATE … WHERE id = $1 AND version = $2; if 0 rows, conflict → reload/retry or fail to client.</li>
-<li>Use optimistic for user-edited documents, admin forms, and low-contention aggregates where most writes do not collide.</li>
-<li>Pessimistic: SELECT … FOR UPDATE (or FOR NO KEY UPDATE) inside a short transaction when you expect races (inventory, seats, wallet balance).</li>
-<li>Avoid long-lived pessimistic locks; they increase wait time and deadlock risk.</li>
-<li>Hybrid: optimistic by default; escalate to row locks for hot money paths.</li></ol>
+    <ol class="steps"><li>Clarify: both prevent lost updates; they differ in when they serialize — optimistic detects conflict at write time; pessimistic blocks readers/writers early with a row lock.</li>
+<li>Optimistic: version (or updated_at) column; UPDATE … WHERE id = $1 AND version = $2; 0 rows ⇒ conflict → reload/retry or 409 to client. Cheap when collisions are rare.</li>
+<li>Use optimistic for user-edited documents, admin forms, and low-contention aggregates where most writes do not collide and UX can absorb a retry.</li>
+<li>Pessimistic: SELECT … FOR UPDATE (or FOR NO KEY UPDATE) inside a short transaction when races are expected — inventory, seats, wallet balance — because waiting is cheaper than spinning retries.</li>
+<li>Tradeoff: optimistic scales better under low conflict but thrashes under hot rows; pessimistic guarantees order but increases wait time and deadlock risk if locks span too much work.</li>
+<li>Failure modes: silent overwrite when app ignores 0-row updates; pessimistic locks held across HTTP; confusing MVCC snapshots with mutual exclusion (reads don't lock unless FOR UPDATE).</li>
+<li>Hybrid: optimistic by default in the domain model; escalate to row locks on hot money paths; FOR UPDATE SKIP LOCKED for worker queues that should skip busy jobs.</li>
+<li>Prevent/ops: metric optimistic_conflict_rate and lock_wait_ms; alert when conflicts spike after a feature launch; load-test the hot SKU before choosing only optimistic.</li></ol>
     
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">UPDATE accounts
 SET balance = balance - $1, version = version + 1
@@ -128,11 +147,11 @@ WHERE id = $2 AND version = $3
 RETURNING version;</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> @Version() in TypeORM / Prisma version fields map to optimistic updates; still use raw SQL for tight inventory paths.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Optimistic version columns when collisions are rare; FOR UPDATE when I know two writers will fight over the same row and must serialize.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I pick optimistic version columns when collisions are rare and the client can retry, and SELECT FOR UPDATE when I already know writers will fight over the same row and must serialize. The staff answer names the failure modes — ignored 0-row updates and locks held across I/O — and backs the choice with conflict and wait metrics.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Optimistic locking with silent overwrite on 0-row updates</li>
-<li>Pessimistic locks held across HTTP round-trips</li>
-<li>Confusing MVCC snapshots with mutual exclusion</li></ul>
+    <ul class="sac-traps"><li>Optimistic locking with silent overwrite on 0-row updates — clients think they saved; data lied</li>
+<li>Pessimistic locks held across HTTP round-trips — queues and deadlocks under load</li>
+<li>Confusing MVCC snapshots with mutual exclusion — READ COMMITTED does not serialize writers</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>What is FOR UPDATE SKIP LOCKED used for?</li>
 <li>How do you backoff retries under optimistic conflicts?</li></ul>
@@ -146,22 +165,25 @@ RETURNING version;</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Lost update means two transactions read the same version and both write — last write wins. I redesign to a single atomic UPDATE or add a version check.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Eliminate read-modify-write in application memory where possible: push the delta into SQL (SET counter = counter + $1).</li>
-<li>If business logic needs the old value, SELECT FOR UPDATE then update in the same short transaction.</li>
-<li>Or use optimistic concurrency: WHERE version = :read_version and bump version; surface 409 on conflict.</li>
-<li>Raise isolation only if needed — SERIALIZABLE can detect write skew, but app-level versioning is clearer for lost updates.</li>
-<li>Add tests that run concurrent workers and assert final state; monitor conflict/retry rates.</li></ol>
+    <ol class="steps"><li>Clarify the bug: T1 and T2 both read balance=100; both compute 90; both write 90 — one debit vanished. READ COMMITTED does not prevent this app-level RMW pattern.</li>
+<li>First redesign: push the delta into SQL — SET counter = counter + $1 / balance = balance - $1 — so the engine serializes the row update without a separate read in app memory.</li>
+<li>If business logic needs the old value: SELECT … FOR UPDATE then update in the same short transaction, or optimistic WHERE version = :read_version and bump version (surface 409).</li>
+<li>Tradeoff: atomic SQL is clearest for counters; versioning is better when the new value is a complex merge; SERIALIZABLE can catch some anomalies but is heavier and still needs retry — app-level versioning is usually clearer for classic lost updates.</li>
+<li>Write skew note: lost update is same-row clobber; write skew is multi-row invariant failure under snapshot isolation — different fix (locks or SERIALIZABLE SSI), don't conflate them in the interview.</li>
+<li>Failure modes: retrying blindly without re-reading; UNIQUE constraints that don't encode numeric invariants; ORM save() after find() that reintroduces RMW.</li>
+<li>API design: expose incrementBalance()/applyDelta() in the service layer so callers cannot accidentally get+set; make handlers idempotent with a request key.</li>
+<li>Prevent/ops: concurrent worker tests that assert final state; monitor conflict/retry rates and balance reconciliation jobs; alert on invariant violations from nightly checksums.</li></ol>
     
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">-- Bad: SELECT balance; …; UPDATE balance = $new
 -- Good:
 UPDATE wallets SET balance = balance + $1 WHERE id = $2;</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Service layer should expose incrementBalance(), not get+set, to prevent accidental RMW.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Lost updates are a smell of check-then-act. I make the write atomic or version it so concurrent writers cannot silently clobber each other.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Lost updates are a smell of check-then-act in application memory. I make the write atomic or version it so concurrent writers cannot silently clobber each other, keep retries re-entrant, and prove the invariant with concurrent tests and conflict metrics — not by hoping READ COMMITTED is enough.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Assuming READ COMMITTED prevents lost updates (it doesn't for this pattern)</li>
-<li>Retrying blindly without re-reading state</li>
-<li>Using UNIQUE constraints as a substitute for numeric invariants</li></ul>
+    <ul class="sac-traps"><li>Assuming READ COMMITTED prevents lost updates (it doesn't for this pattern) — last writer still wins</li>
+<li>Retrying blindly without re-reading state — you re-apply a stale computation</li>
+<li>Using UNIQUE constraints as a substitute for numeric invariants — uniqueness ≠ correct totals</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How does write skew differ from lost update?</li>
 <li>Would Redis INCR be appropriate for this counter?</li></ul>
@@ -175,22 +197,33 @@ UPDATE wallets SET balance = balance + $1 WHERE id = $2;</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Default READ COMMITTED for most OLTP. REPEATABLE READ when a transaction needs a stable snapshot. SERIALIZABLE when multi-row invariants must look as if transactions ran one at a time.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>READ COMMITTED (Postgres default): each statement sees latest committed rows; fine for simple CRUD; watch non-repeatable reads and lost-update patterns.</li>
-<li>REPEATABLE READ: transaction-wide snapshot — good for consistent reports, multi-step reads, and some compare-and-set designs; may get serialization failures on conflicts.</li>
-<li>SERIALIZABLE: strongest; Postgres SSI aborts transactions that would violate serializability (write skew). Use for complex invariants across rows.</li>
-<li>Prefer explicit locks or atomic SQL for hot paths instead of raising isolation globally — cheaper and clearer.</li>
-<li>Always handle retry on serialization_failure (40001) when using RR/SERIALIZABLE.</li></ol>
-    
+    <ol class="steps"><li>Clarify Postgres reality: default is READ COMMITTED. Isolation is a per-transaction choice for anomalies you refuse to handle in app locks/SQL — not a global 'make it safe' dial.</li>
+<li>READ COMMITTED: each statement sees the latest committed rows; fine for simple CRUD. Still allows non-repeatable reads, phantoms across statements, and classic lost-update RMW unless you lock or version.</li>
+<li>REPEATABLE READ in Postgres: one snapshot for the whole transaction (good for consistent multi-step reads/reports). It does NOT generally abort with serialization_failure like SSI — and it still allows write skew (two TXs read overlapping sets, each writes a different row, both commit, invariant breaks).</li>
+<li>SERIALIZABLE (SSI): strongest; Postgres tracks read/write dependencies and aborts with SQLSTATE 40001 (serialization_failure) when a commit would violate serializability — including many write-skew cases RR would allow.</li>
+<li>Tradeoff: prefer atomic SQL / SELECT FOR UPDATE / optimistic versions on hot single-row paths because they are cheaper and clearer than raising isolation globally; use SERIALIZABLE when the invariant truly spans multiple rows and locks would be awkward.</li>
+<li>Failure modes: raising isolation 'to be safe' without retry on 40001; assuming MySQL RR anomaly semantics; using SERIALIZABLE as a substitute for idempotency keys; long SSI transactions that abort under load.</li>
+<li>Operational pattern: set isolation only on the unit-of-work that needs it; keep TX short; on 40001 retry with backoff and a fresh read — RR rarely needs 40001 handling in PG unless you also hit rare serialization edges from concurrent updates to the same rows under snapshot rules.</li>
+<li>Prevent/ops: metric serialization_failure_count (40001) and retry success rate; alert when abort rate rises after a feature; game-day a write-skew scenario (two doctors on-call style) under RR vs SERIALIZABLE to prove which level you actually need.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TB
+  RC[READ COMMITTED default]
+  RR[REPEATABLE READ snapshot]
+  S[SERIALIZABLE SSI]
+  RC --&gt;|simple CRUD| App
+  RR --&gt;|multi-step consistent reads| App
+  S --&gt;|multi-row invariants + retry on 40001| App
+  RR -.-&gt;|write skew still possible| Skew[Invariant break]
+  S --&gt;|abort 40001| Retry[Retry TX]</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">BEGIN ISOLATION LEVEL SERIALIZABLE;
--- critical multi-row invariant
+-- critical multi-row invariant; catch 40001 and retry
 COMMIT;</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Set isolation per transaction in the unit-of-work, not as a global Nest middleware default.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I stay on READ COMMITTED unless the business needs a snapshot or true serializability — and I design for retries when I raise isolation.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I stay on READ COMMITTED unless the business needs a stable snapshot or true serializability across rows. In Postgres, REPEATABLE READ gives a snapshot but still allows write skew and does not behave like SSI abort-heavy isolation; SERIALIZABLE is what aborts with 40001 to protect multi-row invariants — and I only raise isolation with an explicit retry path and metrics.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Raising isolation 'to be safe' without retry logic</li>
-<li>Thinking RR in Postgres matches MySQL RR anomaly set exactly</li>
-<li>Using SERIALIZABLE as a substitute for application idempotency</li></ul>
+    <ul class="sac-traps"><li>Raising isolation 'to be safe' without retry logic — SERIALIZABLE aborts become user-facing 500s</li>
+<li>Thinking RR in Postgres matches MySQL RR or throws serialization_failure like SSI — you mis-design for write skew</li>
+<li>Using SERIALIZABLE as a substitute for application idempotency — retries without keys double side effects</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>What anomalies does READ COMMITTED still allow?</li>
 <li>How do you test for write skew?</li></ul>
@@ -204,21 +237,28 @@ COMMIT;</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Postgres detects deadlocks and aborts one transaction. I pull the deadlock detail from logs, map the lock order, and make all code paths acquire locks in a consistent order.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Enable/inspect deadlock logs (log_lock_waits, deadlock details): which relations, PIDs, and lock modes.</li>
-<li>Reproduce with the same statement order; identify cycles (A locks row1 waits row2; B locks row2 waits row1).</li>
-<li>Fix by canonical lock ordering (e.g. always lock account ids sorted), shorter transactions, and fewer multi-row updates in one TX.</li>
-<li>Prefer single-statement updates; use SKIP LOCKED for worker queues; avoid lock escalation patterns from ORM batch saves.</li>
-<li>Add metrics/alerts on deadlock count; retry the aborted transaction safely if idempotent.</li></ol>
-    
+    <ol class="steps"><li>Hypothesis: lock-order cycle (A holds row1 waits row2; B holds row2 waits row1). Postgres aborts one TX with deadlock_detected — treat that as a signal, not a rare fluke.</li>
+<li>Evidence: enable/inspect deadlock logs (log_lock_waits, deadlock details): relations, PIDs, lock modes, and the statements involved; correlate with app request ids if logged.</li>
+<li>Reproduce with the same statement order under concurrency; draw the wait-for graph until the cycle is obvious — usually multi-row money moves or ORM batch saves in different orders.</li>
+<li>Fix: canonical lock ordering (e.g. always lock account ids sorted), shorter transactions, and fewer multi-row updates in one TX; prefer single-statement updates where possible.</li>
+<li>Tradeoff: SKIP LOCKED for worker queues (skip busy rows) vs FOR UPDATE (wait) — queues should not deadlock each other over job rows; money paths need strict order, not skip.</li>
+<li>Failure modes: retrying forever without backoff/idempotency; holding locks while doing HTTP I/O; blaming Postgres instead of inconsistent lock order across services.</li>
+<li>Code hygiene: centralize transfer/money-move in one method so all call sites share lock order; avoid interleaved locks from nested service calls.</li>
+<li>Prevent/ops: metric/alert on deadlock count; safe idempotent retry of the aborted TX; game-day concurrent transfers crossing the same accounts to verify order stays stable after refactors.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  A[TX_A locks acct1] --&gt; B[waits acct2]
+  C[TX_B locks acct2] --&gt; D[waits acct1]
+  B -.-&gt;|cycle| C
+  D -.-&gt;|deadlock abort| A</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">-- Example: always lock in id order
 SELECT * FROM accounts WHERE id = ANY($1) ORDER BY id FOR UPDATE;</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Centralize money-move in one service method so all call sites share lock order.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Deadlocks are lock-order cycles. I read the log, enforce a global lock order, shrink transactions, and retry the loser idempotently.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Deadlocks are lock-order cycles, not a mysterious Postgres bug. I read the deadlock detail, enforce a global lock order, shrink transactions, and retry the loser idempotently — then watch deadlock rate so the next cross-account feature does not reintroduce the cycle.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Retrying forever without backoff or idempotency</li>
-<li>Blaming 'Postgres is broken' instead of application lock order</li>
-<li>Holding locks while doing HTTP I/O</li></ul>
+    <ul class="sac-traps"><li>Retrying forever without backoff or idempotency — amplify load and double-apply side effects</li>
+<li>Blaming 'Postgres is broken' instead of application lock order — the cycle is in your code paths</li>
+<li>Holding locks while doing HTTP I/O — turns brief row locks into systemic queues</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do advisory locks differ from row locks?</li>
 <li>What does deadlock_timeout control?</li></ul>
@@ -232,23 +272,29 @@ SELECT * FROM accounts WHERE id = ANY($1) ORDER BY id FOR UPDATE;</code></pre></
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">I'd query pg_stat_activity for count by application_name/state, then trace app pools — missing pooling, pool-per-pod explosion, or leaked connections.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Inspect SELECT usename, application_name, state, count(*) FROM pg_stat_activity GROUP BY 1,2,3; look for idle in transaction and connection storms after deploys.</li>
-<li>Map expected max: replicas × workers × pool_size. Cap pool_size; set statement/idle timeouts.</li>
-<li>Introduce PgBouncer (transaction pooling for most apps) so Postgres sees far fewer server connections than client connections.</li>
-<li>Fix leaks: ensure connections return to pool, no long idle-in-transaction, ORM session scoped correctly per request.</li>
-<li>Alert on connection saturation and idle-in-transaction age; load-test pool settings before raising max_connections.</li></ol>
-    
+    <ol class="steps"><li>Hypothesis: pool math (replicas × workers × pool_size) exceeded max_connections, or leaks (idle in transaction) are holding slots — not mysterious client storms alone.</li>
+<li>Evidence: SELECT application_name, state, count(*) FROM pg_stat_activity GROUP BY 1,2; hunt idle in transaction, connection spikes after deploys, and unknown application_name values.</li>
+<li>Map expected max deliberately; cap pool_size per process; set statement_timeout and idle_in_transaction_session_timeout so stuck sessions release.</li>
+<li>Introduce PgBouncer (transaction pooling for most apps) so Postgres sees far fewer server connections than app clients — because raising max_connections burns RAM and context-switch budget.</li>
+<li>Tradeoff: transaction vs session pooling — session pooling needed for temp tables / session GUCs / some prepared-statement patterns; transaction pooling breaks those, so audit ORM features first.</li>
+<li>Fix leaks: ensure connections return to the pool per request, no long idle-in-transaction, ORM session scoped correctly; one Nest/Node process ≠ one eternal pool if you fork workers.</li>
+<li>Failure modes: raising max_connections instead of pooling; ignoring idle-in-transaction as a holder; deploying more pods without shrinking pool_size.</li>
+<li>Prevent/ops: alert on connection saturation and idle-in-transaction age; load-test pool settings before Black Friday; set application_name for attribution in every service.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  Pods[App pods x pool_size] --&gt; PB[PgBouncer]
+  PB --&gt; PG[Postgres max_connections]
+  Pods -.-&gt;|without PB| Blow[Connection blowup]</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">SELECT application_name, state, count(*)
 FROM pg_stat_activity
 GROUP BY 1, 2
 ORDER BY 3 DESC;</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> One Nest process ≠ one pool forever if you fork workers; configure pool per process deliberately.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Connection storms are usually pool math or leaks. I count pg_stat_activity, fix pool sizing, and put PgBouncer in front so Postgres isn't the connection radiator.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Connection storms are usually pool math or leaks, not a need for a bigger max_connections. I count pg_stat_activity by app and state, fix pool sizing and idle-in-transaction, put PgBouncer in front, and alert before Postgres is the connection radiator for the whole fleet.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Raising max_connections instead of pooling</li>
-<li>Session pooling features incompatible with transaction pooling (temp tables, prepared stmts) without checking</li>
-<li>Ignoring idle in transaction as a connection holder</li></ul>
+    <ul class="sac-traps"><li>Raising max_connections instead of pooling — RAM and latency degrade while the leak continues</li>
+<li>Session features with transaction pooling (temp tables, prepared stmts) without checking — subtle production breakage</li>
+<li>Ignoring idle in transaction as a connection holder — slots stay busy with no useful work</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>Transaction vs session pooling in PgBouncer — when does each break?</li>
 <li>How do you set application_name for attribution?</li></ul>
@@ -262,21 +308,24 @@ ORDER BY 3 DESC;</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Avoid ACCESS EXCLUSIVE locks that block writes for long periods. Use CREATE INDEX CONCURRENTLY, additive migrations, and batch backfills.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Prefer additive changes: nullable new columns, new tables, new indexes — avoid rewriting the whole table in one transaction.</li>
-<li>CREATE INDEX CONCURRENTLY (and DROP INDEX CONCURRENTLY); monitor for invalid indexes and REINDEX CONCURRENTLY if needed.</li>
-<li>For column backfills: batched UPDATEs with primary-key ranges, throttling, and progress table; never UPDATE entire table in one TX.</li>
-<li>Use tools (pt-like patterns / gh-ost style thinking) or Postgres-native expand techniques; schedule heavy work off-peak.</li>
-<li>Validate with locks query (pg_locks / pg_stat_progress_create_index) and a rollback plan.</li></ol>
+    <ol class="steps"><li>Hypothesis: long ACCESS EXCLUSIVE locks (plain CREATE INDEX / table rewrite) are what cause 'migration downtime' — not the DDL keyword itself.</li>
+<li>Prefer additive changes: nullable new columns, new tables, new indexes — avoid rewriting the whole table in one transaction when old and new app versions must coexist.</li>
+<li>Indexes: CREATE INDEX CONCURRENTLY (and DROP INDEX CONCURRENTLY); never wrap CONCURRENTLY in an explicit transaction; monitor for INVALID indexes and REINDEX CONCURRENTLY if a build fails.</li>
+<li>Backfills: batched UPDATEs by primary-key ranges with throttling and a progress table — because one UPDATE of every row bloats the heap and holds locks/WAL pressure for hours.</li>
+<li>Tradeoff: CONCURRENTLY is slower and takes more total work vs blocking CREATE INDEX — pick CONCURRENTLY on hot tables; off-peak blocking only for cold/small tables.</li>
+<li>Observe: pg_stat_progress_create_index, pg_locks, replication lag, and write latency SLO during the change; pause/throttle if lag or p95 writes breach budget.</li>
+<li>Modern Postgres note: many ADD COLUMN … DEFAULT cases are metadata-only now, but verify version-specific behavior before assuming zero rewrite — validate on a clone first.</li>
+<li>Prevent/ops: migration runbook with rollback (drop new index, leave additive columns), alert on INVALID indexes, and game-day the concurrent build on a restored large table before prod.</li></ol>
     
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">CREATE INDEX CONCURRENTLY IF NOT EXISTS orders_created_at_idx
   ON orders (created_at);</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Run concurrent index builds from a migration job that can retry; do not wrap CONCURRENTLY in an explicit transaction block.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>No big-bang locks on hot tables. CONCURRENTLY for indexes, batched backfills for data, additive schema first.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>No big-bang locks on hot tables. I use CONCURRENTLY for indexes, batched backfills for data, and additive schema first — watching lag and lock progress so the migration stays inside write-latency SLO instead of becoming an accidental outage.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Running CREATE INDEX (non-concurrent) on a 100M-row hot table</li>
-<li>Wrapping CONCURRENTLY inside a transaction (fails)</li>
-<li>Single UPDATE that rewrites every row and bloats the table</li></ul>
+    <ul class="sac-traps"><li>Running CREATE INDEX (non-concurrent) on a 100M-row hot table — writers block for the whole build</li>
+<li>Wrapping CONCURRENTLY inside a transaction (fails) — migration aborts and leaves confusion</li>
+<li>Single UPDATE that rewrites every row and bloats the table — WAL/autovacuum storm after 'success'</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>What locks does ALTER TABLE ADD COLUMN with default take on modern Postgres?</li>
 <li>How do you detect an INVALID index after a failed concurrent build?</li></ul>
@@ -290,26 +339,30 @@ ORDER BY 3 DESC;</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Expand-contract: ship schema both versions understand, dual-write or backfill, switch reads, then remove the old shape after old pods are gone.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Expand: add new columns/tables/indexes compatible with old code (old code ignores new fields).</li>
-<li>Deploy code that writes both old and new shapes (or writes new and backfills asynchronously).</li>
-<li>Backfill historical rows in batches; verify with checksums/counts.</li>
-<li>Switch reads to the new shape; deploy code that only needs the new schema.</li>
-<li>Contract: drop old columns/tables only after all instances and jobs no longer reference them; keep migrations reversible where practical.</li></ol>
+    <ol class="steps"><li>Clarify the constraint: rolling deploys mean N and N+1 app versions hit the DB together — any rename/drop in the same deploy as code that needs it breaks old pods mid-rollout.</li>
+<li>Expand: add new columns/tables/indexes compatible with old code (old code ignores new fields). Prefer additive, nullable, or defaulted shapes that both versions can tolerate.</li>
+<li>Dual-write or dual-read: deploy code that writes both old and new shapes (or writes new and backfills asynchronously); feature-flag the read path so you can flip without another schema deploy.</li>
+<li>Backfill historical rows in idempotent batches with a resume cursor; verify with checksums/counts/sampled equality before trusting the cutover.</li>
+<li>Switch: flip reads to the new shape under the flag; deploy code that only needs the new schema once the fleet and backfill are healthy.</li>
+<li>Contract: drop old columns/tables only after all instances, jobs, and replicas no longer reference them — because early DROP is the classic zero-downtime failure mode.</li>
+<li>Tradeoff/failure modes: dual-write inconsistency if one path fails; blue/green does not license breaking old readers; long dual-write windows increase bug surface — keep the window short with progress metrics.</li>
+<li>Prevent/ops: migration checklist in CI (expand vs contract PRs separated), alert on dual-write error rate and backfill lag, and game-day a mixed-version traffic test before contracting.</li></ol>
     <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
   A[Expand schema] --&gt; B[Dual-write / backfill]
   B --&gt; C[Switch reads]
-  C --&gt; D[Contract old shape]</pre></div>
+  C --&gt; D[Contract old shape]
+  B -.-&gt;|verify checksums| C</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">sql</span></div><pre><code data-lang="sql">-- Expand
 ALTER TABLE users ADD COLUMN email_normalized text;
 -- later Contract
 -- ALTER TABLE users DROP COLUMN email_legacy;</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Feature-flag the read path so you can flip without another schema deploy.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Rolling deploys need expand-contract. Schema stays compatible with both versions until the fleet and backfill are done — then contract.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Rolling deploys need expand-contract: schema stays compatible with both versions until the fleet and backfill are done, then you contract. I separate expand and contract into different deploys, dual-write or backfill with verification, and only drop the old shape when metrics say nothing still depends on it.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Renaming/dropping columns in the same deploy that changes app code</li>
-<li>Assuming blue/green means you can break old readers immediately</li>
-<li>Backfill without idempotency or resume cursors</li></ul>
+    <ul class="sac-traps"><li>Renaming/dropping columns in the same deploy that changes app code — old pods 500 mid-rollout</li>
+<li>Assuming blue/green means you can break old readers immediately — traffic overlap still exists</li>
+<li>Backfill without idempotency or resume cursors — crash forces a full restart and dual-write drift</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do you migrate a primary key without downtime?</li>
 <li>What changes are unsafe even with expand-contract?</li></ul>

@@ -26,22 +26,25 @@
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">I would capture the exact filter/sort/projection, run explain('executionStats'), and check whether we still hit an index or started scanning millions of docs.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Confirm the query shape from production logs (filter, sort, collation, hint) — small predicate changes kill index use.</li>
-<li>Run explain('executionStats'): winning plan, IXSCAN vs COLLSCAN, keysExamined / docsExamined / nReturned ratio.</li>
-<li>Check index list and usage (existing indexes, partial/sparse, ESR rule: Equality, Sort, Range).</li>
-<li>Look at working set vs RAM, replication lag, and whether the collection recently grew past cache.</li>
-<li>Fix with a compound index matching the query, covered projection if possible, then re-measure; only then consider schema or shard changes.</li></ol>
+    <ol class="steps"><li>Hypothesis: the query shape changed, selectivity collapsed, or the working set outgrew RAM — not 'Mongo suddenly needs more shards.' Capture the exact filter/sort/collation/projection from production first.</li>
+<li>Run explain('executionStats'): winning plan, IXSCAN vs COLLSCAN, keysExamined / docsExamined / nReturned ratio — docsExamined ≫ nReturned is the smoking gun.</li>
+<li>Check index list against ESR (Equality → Sort → Range): compound order, partial/sparse indexes, and whether a sort forces an in-memory SORT stage.</li>
+<li>Tradeoff: one compound index for the hot query vs many single-field indexes — extras cost write amplification and RAM while still missing the sort key.</li>
+<li>Failure modes: collation mismatch, case-insensitive needs without the right index, and covered-query hopes without projecting only indexed fields.</li>
+<li>Also inspect working set vs WiredTiger cache, replication lag, and whether collection growth recently pushed the hot set out of memory.</li>
+<li>Fix: create the matching compound index (background/rolling), tighten projection, re-explain until examine ratio is near 1; only then consider schema or shard changes.</li>
+<li>Prevent/ops: alert on this query's p95 and COLLSCAN rate; track unused vs missing indexes in a weekly review; game-day explain on a 100M restore after query changes.</li></ol>
     
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text">db.orders.find({ status: 'open', customerId: 42 })
   .sort({ createdAt: -1 })
   .explain('executionStats')</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Log slow queries with filter keys (not necessarily full PII values) from the Mongo driver.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>First explain executionStats. If docsExamined ≫ nReturned, the index or query shape is wrong — I fix that before talking about sharding.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>First explain with executionStats. If docsExamined is far above nReturned, the index or query shape is wrong — I fix that before talking about sharding. The staff move is proving the plan, matching ESR, and putting latency and scan-rate metrics on the hot path so the next regression is obvious.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Adding indexes blindly without explain</li>
-<li>Sorting in memory because the index doesn't include the sort key</li>
-<li>Blaming 'Mongo is slow' when the query is a collection scan</li></ul>
+    <ul class="sac-traps"><li>Adding indexes blindly without explain — writes slow down while the COLLSCAN remains</li>
+<li>Sorting in memory because the index doesn't include the sort key — p95 explodes under concurrency</li>
+<li>Blaming 'Mongo is slow' when the query is a collection scan — you skip the cheap fix</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>What is a covered query?</li>
 <li>How do you find unused indexes safely?</li></ul>
@@ -55,23 +58,31 @@
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Embed when data is read together, has clear ownership, and stays bounded. Reference when shared, independently updated, or unbounded.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Ask access patterns: one read should ideally get what the API needs — embed those fields.</li>
-<li>Embed: address on order, small config blobs, bounded comment previews — atomic updates with the parent.</li>
-<li>Reference: users shared across docs, large media metadata, infinite event histories.</li>
-<li>Hybrid: embed a denormalized snapshot (product name at order time) and keep a reference for the source of truth.</li>
-<li>Revisit when document size, update contention, or fan-out updates become painful.</li></ol>
-    
+    <ol class="steps"><li>Clarify: modeling follows access patterns, not the ER diagram — ask which fields one API read must return atomically, and how often they update independently.</li>
+<li>Embed when data is co-read, clearly owned by the parent, and bounded (line items on an order, address snapshot, small config) — you get single-document atomicity and fewer round-trips.</li>
+<li>Reference when data is shared across parents, independently lifecycle'd, large, or unbounded (users, media metadata, infinite event histories) — because growth and fan-out updates punish embedding.</li>
+<li>Hybrid: embed a denormalized snapshot (product name/price at order time) plus a reference to the source of truth — history stays stable even when the catalog changes.</li>
+<li>Tradeoff: embed = faster reads / harder multi-doc consistency elsewhere; ref = flexible / $lookup cost and eventual consistency for denormalized copies.</li>
+<li>Failure modes: unbounded arrays embedded 'for convenience' hitting 16MB; referencing everything and $lookup-joining like SQL on hot paths; forgetting whether stale denormalized fields are intentional.</li>
+<li>Revisit triggers: document size growth, hot-document update contention, or expensive fan-out updates when a shared field changes — those signal a model flip.</li>
+<li>Prevent/ops: document-size and avg-array-length metrics; alert approaching BSON limit; review new schemas against the top query list in design review / game-day read patterns.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TB
+  Q[Access pattern] --&gt; Co{Co-read + owned + bounded?}
+  Co --&gt;|yes| Emb[Embed in parent]
+  Co --&gt;|no| Ref[Reference / child collection]
+  Emb --&gt; Snap[Optional denormalized snapshot]
+  Ref --&gt; Look[$lookup only if not hot path]</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text">// Embed bounded line items on order
 // { _id, customerId, items: [{ sku, qty, price }] }
 // Reference unbounded events
 // order_events: { orderId, type, at }</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Avoid generic repository patterns that force relational joins via $lookup everywhere.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Modeling follows queries. Embed co-read bounded data; reference shared or unbounded data — and denormalize snapshots when history must not change.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I model from queries: embed co-read bounded owned data for atomic reads, reference shared or unbounded data, and denormalize snapshots when history must not change. The decision is revisited when size, contention, or fan-out updates hurt — with document-size metrics so the 16MB cliff is not a surprise.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Embedding unbounded arrays 'for convenience'</li>
-<li>Referencing everything and $lookup-joining like SQL by default</li>
-<li>Forgetting denormalized snapshots go stale on purpose (or not)</li></ul>
+    <ul class="sac-traps"><li>Embedding unbounded arrays 'for convenience' — document rewrites slow and 16MB failures appear</li>
+<li>Referencing everything and $lookup-joining like SQL by default — hot-path latency multiplies</li>
+<li>Forgetting denormalized snapshots go stale on purpose (or not) — either silent wrong data or costly fan-out</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>When is $lookup acceptable in hot paths?</li>
 <li>How do you update denormalized fields across many documents?</li></ul>
@@ -85,11 +96,14 @@
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">I explain the aggregation, find the stage with the biggest time/docs, and push $match/$sort early with indexes — avoid blowing up with $lookup or unbounded $group.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Run aggregate([...], { explain: true }) / explain('executionStats') and identify costly stages.</li>
-<li>Move selective $match (and $sort+$limit) as early as possible so later stages see fewer docs; ensure indexes support that match/sort.</li>
-<li>Watch $lookup (N+1 style blowups), $unwind on large arrays, and $group spilling to disk.</li>
-<li>Project only needed fields early; avoid returning huge intermediate documents.</li>
-<li>Consider pre-aggregations, materialized collections, or changing the schema if the pipeline is a permanent hot path.</li></ol>
+    <ol class="steps"><li>Hypothesis: a late $match, $lookup blow-up, $unwind on large arrays, or $group spill is dominating — prove it before rewriting the whole pipeline.</li>
+<li>Run aggregate([...], { explain: true }) / executionStats and identify the stage with the biggest time and docs-in/docs-out amplification.</li>
+<li>Push selective $match (and $sort+$limit) as early as possible so later stages see fewer docs; ensure a compound index supports that match/sort (ESR again).</li>
+<li>Suspects: $lookup that fans out like N+1, $unwind exploding arrays, $group spilling to disk — because allowDiskUse as a permanent crutch hides a modeling problem.</li>
+<li>Tradeoff: fix the pipeline vs pre-aggregate into a materialized collection for a permanent dashboard hot path — materialized writes cost space; ad-hoc heavy $group costs CPU every request.</li>
+<li>Project only needed fields early; avoid huge intermediate documents that thrash WT cache between stages.</li>
+<li>Prefer indexed find for simple filters; aggregation is for multi-stage transforms — don't use it as a default ORM escape hatch.</li>
+<li>Prevent/ops: alert on aggregation p95 and allowDiskUse frequency; track stage-level explain in a runbook; game-day the pipeline on production-sized data after schema changes.</li></ol>
     
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text">db.orders.aggregate([
   { $match: { createdAt: { $gte: ISODate('2026-01-01') } } },
@@ -97,11 +111,11 @@
 ], { explain: true })</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Prefer indexed finds for simple queries; aggregation is for multi-stage transforms.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Find the expensive stage, filter early with an index, and treat $lookup/$unwind/$group as suspects until proven cheap.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I find the expensive stage, filter early with an index, and treat $lookup, $unwind, and $group as guilty until proven cheap. If the pipeline is a permanent hot path, I consider a materialized collection rather than living on disk spills — and I keep latency metrics so regressions show up in review, not in an outage.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>$match after $lookup on the full collection</li>
-<li>Using aggregation when a compound index + find would suffice</li>
-<li>Ignoring allowDiskUse as a permanent crutch</li></ul>
+    <ul class="sac-traps"><li>$match after $lookup on the full collection — you pay full scan then throw rows away</li>
+<li>Using aggregation when a compound index + find would suffice — extra stages for no gain</li>
+<li>Ignoring allowDiskUse as a permanent crutch — hides $group/spill problems until disk dies</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do you index for $match + $sort + $limit?</li>
 <li>When would you use a materialized view collection?</li></ul>
@@ -115,21 +129,29 @@
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">I inventory the top queries by frequency and latency, then design compound indexes for those predicates — schema fields alone don't tell me selectivity or sort order.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Collect slow/query logs or APM: filter keys, sort, projection, frequency.</li>
-<li>Apply ESR: Equality fields first, then Sort, then Range — build compound indexes accordingly.</li>
-<li>Prefer one compound index that serves a critical query over many single-field indexes.</li>
-<li>Use partial indexes for hot subsets (e.g. status: 'open') and TTL indexes for expiring data.</li>
-<li>Drop unused indexes after verifying; every index costs write amplification and RAM.</li></ol>
-    
+    <ol class="steps"><li>Clarify: schema fields do not imply selectivity or sort order — indexes follow the workload. Inventory top queries by frequency × latency from slow logs / APM (filter keys, sort, projection).</li>
+<li>Apply ESR: Equality fields first, then Sort, then Range — build compound indexes that let the planner satisfy filter+sort without an in-memory SORT.</li>
+<li>Prefer one compound index that serves a critical query over many single-field indexes — because each index costs write amplification, cache pressure, and longer migrations.</li>
+<li>Use partial indexes for hot subsets (e.g. status: 'open'), TTL for expiring data, and unique indexes that match real uniqueness (often tenant-scoped, not global).</li>
+<li>Tradeoff: covering projections (index-only) vs narrower indexes — covering helps reads but widens keys and write cost; only cover proven hot paths.</li>
+<li>Failure modes: left-prefix mistakes (equality order wrong so the index is unused), collation/case-insensitive mismatch, multikey array indexes exploding key count.</li>
+<li>Drop unused indexes after verifying with $indexStats / planner evidence over a full business cycle — never drop on one quiet afternoon.</li>
+<li>Prevent/ops: PR checklist when a new repository query is added; alert writeLatency vs index count; quarterly index review with unused-index report and game-day explain of top 10 queries.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  Logs[Slow logs / APM] --&gt; Rank[Rank by freq x latency]
+  Rank --&gt; ESR[ESR compound design]
+  ESR --&gt; Create[createIndex]
+  Create --&gt; Explain[explain executionStats]
+  Explain --&gt; Drop[Drop unused after cycle]</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text">// Query: { tenantId, status } sort createdAt
 db.orders.createIndex({ tenantId: 1, status: 1, createdAt: -1 })</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Review indexes in PR checklist whenever a new repository query is added.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Indexes follow the workload. I rank real queries, build compound keys with ESR, and delete indexes that only look good on the schema.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Indexes follow the workload, not the schema diagram. I rank real queries, build compound keys with ESR, prefer one good compound over many singles, and delete indexes that only look tidy — with write-latency and unused-index reviews so the collection stays fast as the query mix shifts.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Indexing every field 'just in case'</li>
-<li>Left-prefix mistakes (index unused because equality order wrong)</li>
-<li>Ignoring collation / case-insensitive needs</li></ul>
+    <ul class="sac-traps"><li>Indexing every field 'just in case' — writes and RAM die under insert load</li>
+<li>Left-prefix mistakes (index unused because equality order wrong) — COLLSCAN with 'we have indexes'</li>
+<li>Ignoring collation / case-insensitive needs — planner skips the index you thought you built</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do multikey indexes on arrays behave?</li>
 <li>What's the cost of too many indexes on a write-heavy collection?</li></ul>
@@ -143,23 +165,31 @@ db.orders.createIndex({ tenantId: 1, status: 1, createdAt: -1 })</code></pre></d
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Unbounded arrays are a modeling smell — I'd move events into a child collection keyed by parent id, or bucket by time, and keep only a bounded recent slice embedded if needed.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Diagnose: document size growth, slow $push/$pull, multikey index bloat, risk of 16MB limit.</li>
-<li>Extract the array into a separate collection: { parentId, …, createdAt } with indexes on parentId + createdAt.</li>
-<li>Optionally keep a bounded embedded preview (last N) for fast reads of the parent.</li>
-<li>For high-volume time series, use bucketing (one doc per day/hour) instead of one mega-array.</li>
-<li>Migrate with batched reads/writes; update queries to page the child collection.</li></ol>
-    
+    <ol class="steps"><li>Diagnose: document size growth, slow $push/$pull rewrites, multikey index bloat, and risk of the 16MB BSON limit — unbounded arrays are a modeling smell, not a query tweak.</li>
+<li>Extract the array into a child collection: { parentId, …, createdAt } with compound index { parentId: 1, createdAt: -1 } so pagination is a targeted find, not a whole-document load.</li>
+<li>Optionally keep a bounded embedded preview (last N via $slice on write or application cap) for the hot parent read without storing lifetime history inline.</li>
+<li>For high-volume time series, prefer bucketing (one doc per hour/day with a capped events array) vs one-doc-per-event when scan patterns are range-heavy — because buckets reduce doc count for range reads.</li>
+<li>Tradeoff: child collection = flexible pagination / extra reads; buckets = fewer docs for ranges / more complex updates; embed-only = fails at unbounded growth.</li>
+<li>Migrate with dual-write or batched copy + checkpoint; update APIs to page the child collection; never $unwind huge arrays on hot aggregations.</li>
+<li>Failure modes: capping with $slice in queries while still storing unbounded data; one document per user accumulating lifetime history; multikey indexes on huge arrays crushing RAM.</li>
+<li>Prevent/ops: metric avg/p99 array length and document size; alert before 16MB; game-day pagination against the child collection SLO after cutover.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TB
+  Bad[Parent.events unbounded] --&gt; Split{Volume pattern}
+  Split --&gt;|per-event queries| Child[events collection parentId+at]
+  Split --&gt;|time ranges| Bucket[bucket docs per hour/day]
+  Child --&gt; Preview[Optional last-N embed on parent]
+  Bucket --&gt; Preview</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text">// Before: { _id, events: [ ...growing ] }
 // After:
 // parent: { _id, lastEvents: [ /* max 20 */ ] }
 // events: { parentId, type, at } indexed { parentId: 1, at: -1 }</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> API pagination should target the events collection, not load the whole parent.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Infinite arrays don't belong in one document. Child collection or time buckets, maybe a small embedded preview for the hot read.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Infinite arrays do not belong in one document. I move history to a child collection or time buckets, keep a small embedded preview for the hot read, migrate with checkpoints, and watch document size and array length so the 16MB cliff never becomes a production incident.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Capping with $slice in queries but still storing unbounded data</li>
-<li>Using $unwind on huge arrays in hot aggregations</li>
-<li>One document per user that accumulates lifetime history</li></ul>
+    <ul class="sac-traps"><li>Capping with $slice in queries but still storing unbounded data — reads look fine until writes hit 16MB</li>
+<li>Using $unwind on huge arrays in hot aggregations — memory and CPU explode</li>
+<li>One document per user that accumulates lifetime history — hot document contention forever</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do you migrate without dual-write races?</li>
 <li>When are bucket patterns better than one-doc-per-event?</li></ul>
@@ -173,21 +203,31 @@ db.orders.createIndex({ tenantId: 1, status: 1, createdAt: -1 })</code></pre></d
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">I need high cardinality and even write distribution so inserts don't hammer one chunk/shard, while still supporting targeted queries with that key.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>List write pattern and top queries that must be targeted (avoid scatter-gather on hot paths).</li>
-<li>Prefer a key with high cardinality and monotonic-write awareness — pure increasing _id/timestamps can hotspot on one shard.</li>
-<li>Common pattern: { tenantId, _id } or hashed field when range queries aren't needed; compound keys for tenant isolation + uniqueness.</li>
-<li>Avoid low-cardinality keys (status, country) that create jumbo hot chunks.</li>
-<li>Load-test distribution; plan for resharding cost if the key is wrong — choosing carefully beats early sharding.</li></ol>
-    
+    <ol class="steps"><li>Clarify goals: high cardinality + even write distribution + support for targeted hot queries — sharding without the query path in mind just creates scatter-gather tax.</li>
+<li>List write pattern and top queries that must be targeted; the shard key must appear in those predicates or you will fan out forever.</li>
+<li>Avoid monotonic-only keys (Date, ObjectId time, auto-inc) that create a right-hand hotspot; avoid low-cardinality keys (status, country) that create jumbo chunks.</li>
+<li>Common patterns: compound { tenantId, _id } for tenant isolation + uniqueness; hashed field when range queries aren't needed; never assume more shards fix a bad key.</li>
+<li>Tradeoff: hashed = even inserts / weak range queries; ranged compound = good tenant locality / risk of whale-tenant skew — isolate whales if needed.</li>
+<li>Failure modes: picking a key that forces scatter-gather on every API read; sharding too early before indexes/query shape are fixed; jumbo chunks that won't split.</li>
+<li>Validate with a load test of write distribution and chunk counts before committing; plan for resharding cost if wrong — choosing carefully beats early sharding.</li>
+<li>Prevent/ops: monitor per-shard ops/sec and chunk imbalance; alert on hotspot skew; include shard-key fields in repository helpers so developers cannot omit them.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TB
+  Key[Candidate shard key] --&gt; Card{High cardinality?}
+  Card --&gt;|no| Reject[Reject: jumbo/hot chunks]
+  Card --&gt;|yes| Mono{Monotonic writes?}
+  Mono --&gt;|yes| HashOrCompound[Hash or compound with entropy]
+  Mono --&gt;|no| Query{Hot queries include key?}
+  Query --&gt;|no| Redesign[Change key or duplicate collection]
+  Query --&gt;|yes| Adopt[Adopt + load-test distribution]</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text">// Example: tenant-scoped compound shard key
 sh.shardCollection('app.orders', { tenantId: 1, _id: 1 })</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Include shard key fields in repository query helpers so developers can't omit them easily.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Shard key = cardinality + even writes + targeted reads. I won't shard on status or plain timestamps that create hot shards.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>A shard key must combine cardinality, even writes, and targeted reads. I will not shard on status or plain timestamps that create hot shards, and I prove distribution under load — because adding shards never fixes a hotspot key, it often multiplies scatter-gather pain.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Sharding on low-cardinality fields</li>
-<li>Assuming more shards fix a hotspot key</li>
-<li>Picking a key that forces scatter-gather on every API read</li></ul>
+    <ul class="sac-traps"><li>Sharding on low-cardinality fields — few fat chunks that will not split usefully</li>
+<li>Assuming more shards fix a hotspot key — you multiply cost without fixing skew</li>
+<li>Picking a key that forces scatter-gather on every API read — latency scales with shard count</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>Hashed vs ranged shard keys — trade-offs?</li>
 <li>What is a jumbo chunk?</li></ul>
@@ -201,20 +241,31 @@ sh.shardCollection('app.orders', { tenantId: 1, _id: 1 })</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Low cardinality, monotonically increasing values, or a popular tenant/key that attracts most writes — all funnel inserts to one chunk or shard.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Monotonic keys (Date, ObjectId time portion, auto-inc) send new writes to the highest chunk — right-hand hotspot.</li>
-<li>Low cardinality (enum status, boolean) creates few fat chunks that can't split usefully.</li>
-<li>Skewed real-world distribution: one celebrity tenantId dominates traffic.</li>
-<li>Hot documents updated constantly on one shard key value.</li>
-<li>Mitigations: hashed keys, compound keys with high-cardinality suffix, isolate whales, or rethink access patterns.</li></ol>
-    
-    
-    
+    <ol class="steps"><li>Clarify: a hotspot means most inserts/updates route to one chunk or shard — unique keys can still hotspot if they are monotonic or traffic-skewed.</li>
+<li>Monotonic keys (Date, ObjectId time portion, auto-inc) send new writes to the highest chunk — classic right-hand insert hotspot as the cluster grows.</li>
+<li>Low cardinality (enum status, boolean, country) creates few fat chunks that cannot split usefully into balanced work units.</li>
+<li>Real-world skew: one celebrity tenantId or viral key dominates traffic even with otherwise good cardinality — tenantId alone is not enough without a high-cardinality suffix or whale isolation.</li>
+<li>Hot documents: constant updates to one shard-key value pin load on one shard regardless of insert distribution elsewhere.</li>
+<li>Tradeoff/mitigations: hashed keys (even writes, weaker ranges), compound keys with high-cardinality suffix, isolate whales to dedicated shards/DBs, or rethink access patterns before resharding.</li>
+<li>Detection: per-shard ops/sec imbalance, jumbo chunks, elevating mongos/shard CPU on one member — 'unique' in explain does not mean 'well distributed.'</li>
+<li>Prevent/ops: alert on shard ops skew and jumbo chunk count; load-test monotonic vs hashed candidates; game-day a whale-tenant surge before locking the key in production.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart LR
+  Mono[Monotonic _id/time] --&gt; RH[Right-hand chunk hotspot]
+  Low[Low cardinality status] --&gt; Jumbo[Jumbo chunks]
+  Whale[Celebrity tenantId] --&gt; Skew[One shard melts]
+  RH --&gt; Fix[Hash / compound entropy]
+  Jumbo --&gt; Fix
+  Skew --&gt; Isolate[Whale isolation / better suffix]</pre></div>
+    <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text">// Hotspot: sharded on createdAt or plain ObjectId time
+// Better entropy: { tenantId: 1, _id: 1 } or hashed(_id)
+// Detect: compare opcounters across shards; watch jumbo chunks</code></pre></div>
+    <div class="sac-nest"><strong>Nest / Node:</strong> Log shard-targeted vs scatter queries in the data access layer when introducing sharding.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Hotspots come from monotonic inserts, low cardinality, or traffic skew. The key must spread writes, not just unique them.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Hotspots come from monotonic inserts, low cardinality, or traffic skew — uniqueness alone does not spread writes. I design keys that distribute, watch per-shard ops for imbalance, and isolate whales or hash when ranges allow — because more shards will not heal a right-hand or celebrity-key hotspot.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Thinking 'unique' equals 'well distributed'</li>
-<li>Hashing away range queries you still need without a plan</li>
-<li>Ignoring one mega-tenant after choosing tenantId alone</li></ul>
+    <ul class="sac-traps"><li>Thinking 'unique' equals 'well distributed' — monotonic unique keys still right-hand hotspot</li>
+<li>Hashing away range queries you still need without a plan — dashboards become full scatter</li>
+<li>Ignoring one mega-tenant after choosing tenantId alone — that tenant melts one shard</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do you detect imbalance across shards in metrics?</li>
 <li>Can you change a shard key later and what does it cost?</li></ul>
@@ -228,22 +279,30 @@ sh.shardCollection('app.orders', { tenantId: 1, _id: 1 })</code></pre></div>
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Scatter-gather means mongos fans the query to many/all shards and merges results — latency and load scale with shard count. I reduce it by including the shard key in queries or redesigning the key/access path.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Confirm in explain: shards touched, sorting/merging on mongos, high cumulative docs examined.</li>
-<li>Add shard-key equality (or selective prefix) to hot queries so they become targeted.</li>
-<li>For pagination/sort without shard key, expect merge cost — prefer targeted queries or precomputed views.</li>
-<li>If the business query can never include the shard key, reconsider shard key or duplicate data into a query-optimized collection.</li>
-<li>Monitor mongos CPU and per-shard ops; scatter-gather under load becomes a cluster-wide amplification bug.</li></ol>
-    
+    <ol class="steps"><li>Clarify: scatter-gather means mongos fans the query to many/all shards and merges results — latency and cluster load scale with shard count, not with one shard's work.</li>
+<li>Confirm in explain: shards touched, sorting/merging on mongos, high cumulative docs examined — secondary indexes do not replace shard-key routing.</li>
+<li>Fix hot paths: add shard-key equality (or selective prefix) so queries become targeted; lint/wrappers that require tenantId (or key fields) in find criteria.</li>
+<li>Tradeoff: for pagination/sort without the shard key, expect merge cost — prefer targeted queries, precomputed views, or a duplicate query-optimized collection.</li>
+<li>If the business query can never include the shard key, reconsider the key or accept scatter only for rare admin/reporting paths with strict limits.</li>
+<li>Failure modes: adding shards to 'fix' scatter-gather (often makes it worse); global sorts without limits; assuming an index makes a query targeted.</li>
+<li>Amplification view: each missing-key read becomes N shard reads + mongos merge — under load this is a cluster-wide amplification bug, not a single-collection issue.</li>
+<li>Prevent/ops: monitor mongos CPU and per-shard ops; alert when hot API routes touch >1 shard; game-day targeted vs scatter explain after deploys that change filters.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TB
+  Q[Query] --&gt; HasKey{Includes shard key?}
+  HasKey --&gt;|yes| T[Targeted: 1 shard]
+  HasKey --&gt;|no| SG[Scatter to all shards]
+  SG --&gt; Merge[mongos merge/sort]
+  Merge --&gt; Cost[Latency scales with shard count]</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text">// Targeted: includes shard key
 db.orders.find({ tenantId: 'acme', _id: orderId })
 // Scatter: missing tenantId on sharded { tenantId: 1, _id: 1 }</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Lint or wrapper: require tenantId in find criteria for sharded tenant collections.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Scatter-gather fans out to every shard. Hot paths must be targeted by shard key — otherwise each read taxes the whole cluster.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Scatter-gather fans out to every shard and merges on mongos, so hot paths must include the shard key. I prove shard touch count in explain, force key fields in the data access layer, and watch mongos CPU — adding shards without fixing targeting usually makes the tax worse, not better.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Assuming secondary indexes make queries targeted (they don't replace shard key routing)</li>
-<li>Adding shards to 'fix' scatter-gather (often makes it worse)</li>
-<li>Sorting globally without limits on scatter queries</li></ul>
+    <ul class="sac-traps"><li>Assuming secondary indexes make queries targeted (they don't replace shard key routing) — still fans out</li>
+<li>Adding shards to 'fix' scatter-gather (often makes it worse) — more merge work per read</li>
+<li>Sorting globally without limits on scatter queries — mongos becomes the bottleneck</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How does mongos merge sorted results?</li>
 <li>When is scatter-gather acceptable?</li></ul>
@@ -257,11 +316,14 @@ db.orders.find({ tenantId: 'acme', _id: orderId })
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Batched bulkWrite by _id ranges with a checkpoint, idempotent updates, rate limits, and metrics — never one multi-update that can't resume.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Design idempotent document transforms (safe to re-run) and a migration version field if needed.</li>
-<li>Iterate with a cursor/_id range; bulkWrite ordered:false in batches (e.g. 500–1000); persist lastProcessedId checkpoint.</li>
-<li>Throttle (sleep/token bucket) to protect WT cache and replication lag; pause when lag or CPU exceeds SLO.</li>
-<li>Observe: documents/sec, errors, lag, percent complete; dead-letter failed _ids.</li>
-<li>Verify with sampling/checksums; support resume after crash from checkpoint.</li></ol>
+    <ol class="steps"><li>Hypothesis: a single updateMany across tens of millions cannot resume cleanly and will thrash WT cache / replication — design a checkpointed loop instead.</li>
+<li>Make transforms idempotent (safe to re-run) and optionally stamp a migration version field so partial progress is detectable.</li>
+<li>Iterate with a cursor/_id range; bulkWrite ordered:false in batches (e.g. 500–1000); persist lastProcessedId checkpoint after each successful batch.</li>
+<li>Throttle (sleep/token bucket) to protect WiredTiger cache and secondary lag; pause automatically when lag or CPU exceeds SLO.</li>
+<li>Tradeoff: slower wall-clock vs online safety — full-speed migrations that page onboarding for lag are failed migrations.</li>
+<li>Observe: documents/sec, error rate, replication lag, percent complete; dead-letter failed _ids for replay; single-migrator lock so two jobs don't double-load.</li>
+<li>Verify with sampling/checksums before declaring done; support crash resume from checkpoint without reprocessing the whole collection.</li>
+<li>Prevent/ops: dashboard the migration SLO (lag budget, docs/sec); alert on lag breach; dry-run on a restore and game-day pause/resume before prod.</li></ol>
     
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">python</span></div><pre><code data-lang="python">let lastId = checkpoint.load();
 while (true) {
@@ -273,11 +335,11 @@ while (true) {
 }</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Run as a worker job with lock so two migrators don't double-load the cluster.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Big migrations are checkpointed bulkWrite loops — idempotent, throttled, observable, and resumable from last _id.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>Big migrations are checkpointed bulkWrite loops — idempotent, throttled, observable, and resumable from the last _id. I never ship a blind updateMany on tens of millions; I watch replication lag and pause against SLO so the migration stays an online job, not an outage.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>updateMany on the whole collection with no resume story</li>
-<li>Unordered bulk without tracking per-doc failures</li>
-<li>Migrating at full speed until secondary lag pages someone</li></ul>
+    <ul class="sac-traps"><li>updateMany on the whole collection with no resume story — crash forces a full restart and unknown partial state</li>
+<li>Unordered bulk without tracking per-doc failures — silent holes in the migration</li>
+<li>Migrating at full speed until secondary lag pages someone — availability debt for speed</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do you dual-write during expand-contract in Mongo?</li>
 <li>When would you use change streams for migration?</li></ul>
@@ -291,21 +353,28 @@ while (true) {
     <div class="sac-label">First 30 seconds</div>
     <div class="sac-first">Choose isolation tier: shared collection with tenantId, database-per-tenant, or cluster-per-tenant for the noisiest/compliance-heavy customers — enforce tenant predicates in every query.</div>
     <div class="sac-label">Model answer</div>
-    <ol class="steps"><li>Default: shared collection(s) with tenantId on every document; compound indexes starting with tenantId; shard key often includes tenantId.</li>
-<li>Enforce isolation in the data access layer (mandatory filter), not only in controllers; consider atlas/server-side validation or wrappers.</li>
-<li>Stronger isolation: separate database per tenant for compliance/noisy neighbors; highest: dedicated cluster.</li>
-<li>Never trust client-supplied tenantId alone — bind from authenticated session.</li>
-<li>Test for cross-tenant leakage; audit queries missing tenantId; watch jumbo tenants for hotspot/shard skew.</li></ol>
-    
+    <ol class="steps"><li>Clarify tiers: shared collection + tenantId (default), database-per-tenant (compliance/noisy neighbors), cluster-per-tenant (strongest) — pick by risk and cost, not fashion.</li>
+<li>Default model: tenantId on every document; compound indexes starting with tenantId; shard key often includes tenantId so hot queries stay targeted.</li>
+<li>Enforce isolation in the data access layer (mandatory filter from auth context), not only in controllers/UI — never trust client-supplied tenantId alone.</li>
+<li>Unique indexes must be tenant-scoped ({ tenantId, email }) or you leak global uniqueness constraints across customers.</li>
+<li>Tradeoff: shared collections are cheapest ops but need discipline; DB/cluster-per-tenant raises ops cost and improves noisy-neighbor and compliance boundaries.</li>
+<li>Failure modes: UI-only filtering; missing tenantId on one repository method; one mega-tenant melting a shared shard (hotspot) — plan whale isolation early.</li>
+<li>Test for cross-tenant leakage with automated query audits; consider schema validation / wrappers that reject filters without tenantId.</li>
+<li>Prevent/ops: alert on queries missing tenantId (if logged), monitor jumbo-tenant shard skew, and game-day a cross-tenant access attempt in staging before every isolation change.</li></ol>
+    <div class="sac-label">Diagram</div><div class="mermaid-wrap"><pre class="mermaid">flowchart TB
+  Auth[Auth session tenantId] --&gt; DAL[Data access layer mandatory filter]
+  DAL --&gt; Shared[Shared collection + indexes]
+  Shared --&gt;|compliance / noise| DBTen[DB per tenant]
+  DBTen --&gt;|strictest| Cluster[Cluster per tenant]</pre></div>
     <div class="sac-label">Code / ops</div><div class="codeblock"><div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="code-file">text</span></div><pre><code data-lang="text">db.orders.createIndex({ tenantId: 1, createdAt: -1 })
 db.orders.find({ tenantId: auth.tenantId, … })</code></pre></div>
     <div class="sac-nest"><strong>Nest / Node:</strong> Nest middleware/CLS can inject tenantId into repositories so handlers can't omit it.</div>
     <div class="sac-label">Say it out loud</div>
-    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>tenantId on every doc and every query, indexes and shard key aligned, auth-bound tenant — escalate to DB- or cluster-per-tenant when compliance or noise demands it.</p></div></div>
+    <div class="callout tip"><div class="co-body"><div class="co-title">Say it <span class="tag">spoken</span></div><p>I put tenantId on every document and every query, align indexes and shard key with it, and bind tenant from the authenticated session — escalating to DB- or cluster-per-tenant when compliance or noise demands it. Isolation fails closed in the data access layer, with audits and skew metrics so a missing filter or whale tenant cannot become a silent breach or hotspot.</p></div></div>
     <div class="sac-label">Traps / weak answers</div>
-    <ul class="sac-traps"><li>Filtering tenant only in the UI</li>
-<li>Unique indexes that aren't tenant-scoped (email global vs per-tenant)</li>
-<li>One mega-tenant melting a shared shard</li></ul>
+    <ul class="sac-traps"><li>Filtering tenant only in the UI — any direct API/repo bug becomes cross-tenant leakage</li>
+<li>Unique indexes that aren't tenant-scoped (email global vs per-tenant) — signup failures and data collisions</li>
+<li>One mega-tenant melting a shared shard — availability incident dressed as 'Mongo scale'</li></ul>
     <div class="sac-label">Follow-ups</div>
     <ul class="sac-follow"><li>How do unique constraints work per tenant?</li>
 <li>When do you move a tenant to its own database?</li></ul>

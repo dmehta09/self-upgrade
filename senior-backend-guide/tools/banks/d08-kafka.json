@@ -56,21 +56,24 @@
       "question": "A Kafka consumer is processing messages slower than producers are publishing them. How would you diagnose and scale it?",
       "first30s": "I'd check consumer group lag by partition, see whether we're CPU-bound in processing or blocked on I/O, then scale partitions/consumers or speed up the handler — lag is the north star.",
       "modelAnswer": [
-        "Measure lag (records/time) per partition and consumer; confirm it's growing, not a transient spike.",
-        "Profile the handler: DB, external HTTP, serialization, batch size, sync vs async commits.",
-        "Scale horizontally: increase partitions (plan carefully) so more consumers in the group can share work; adding consumers beyond partition count doesn't help.",
-        "Optimize: batch writes, pipelining, reduce per-message DB round-trips, parallelize only where ordering allows.",
-        "If one partition lags, suspect key skew; fix keying or processing isolation for whales."
+        "Clarify: backlog is consumer group lag (produced − committed) growing over time — diagnose whether every partition lags or one hot partition does before scaling anything.",
+        "Evidence: describe the group per partition; chart lag age and records; profile handler time (DB, HTTP, serialization, commit sync vs async, batch size).",
+        "Scale horizontally only with headroom: more consumers help only up to partition count; plan partition increases carefully because they change key→partition mapping for new messages.",
+        "Tradeoff: make each message cheaper (batch DB writes, pipeline, fewer round-trips) vs adding partitions/ops complexity — optimize before you re-partition production topics.",
+        "Skew failure mode: one partition lags while others are idle — more consumers cannot share that partition; fix keying or isolate whales.",
+        "Fetch/batch failure mode: huge fetch sizes that look like throughput wins can spike GC and DB pools — measure end-to-end, not only poll rate.",
+        "Fix path: remove per-message chatty I/O, then add partitions if parallelism is the bottleneck, then add consumers to match.",
+        "Prevent/ops: alert on lag SLO (records and age), per-partition imbalance, and handler p95; page when lag age breaches the business freshness budget."
       ],
-      "sayIt": "Lag tells me I'm falling behind. I find whether it's handler time or skew, then add partitions/consumers or make each message cheaper.",
-      "mermaid": "",
-      "code": "# conceptual\nkafka-consumer-groups --describe --group orders-workers",
+      "sayIt": "Lag is the north star: I confirm whether the whole group or one partition is falling behind, then profile the handler before adding capacity. Consumers beyond partition count sit idle, and key skew will not yield to horizontal scale. I alert on lag age against a freshness SLO, not only on CPU.",
+      "mermaid": "flowchart TD\n  Lag[Group lag growing?] --> Scope{all partitions or one?}\n  Scope -->|all| Prof[Profile handler / DB / batch]\n  Scope -->|one| Skew[Key skew / whale]\n  Prof --> Cheap[Cheapen message]\n  Prof --> Parts[Add partitions then consumers]\n  Skew --> Rekey[Re-key / isolate whale]",
+      "code": "# conceptual\nkafka-consumer-groups --describe --group orders-workers\n# watch LAG and LOG-END-OFFSET per partition; correlate with handler p95",
       "codeLang": "bash",
       "nestNote": "Expose lag metrics to Prometheus from the consumer client or burrow-like monitor.",
       "traps": [
-        "Adding consumers without adding partitions",
-        "Auto-scaling consumers blindly on CPU while lag is key-skew",
-        "Raising fetch sizes without measuring GC/DB impact"
+        "Adding consumers without adding partitions — idle consumers and unchanged lag",
+        "Auto-scaling consumers blindly on CPU while lag is key-skew — scales the wrong dimension",
+        "Raising fetch sizes without measuring GC/DB impact — throughput theater that melts pools"
       ],
       "followUps": [
         "How do you choose the initial partition count?",
@@ -84,21 +87,24 @@
       "question": "A consumer processes the same event twice. How should the application handle duplicates?",
       "first30s": "Treat duplicates as normal under at-least-once. Make processing idempotent with a dedupe key stored where the side effect lives.",
       "modelAnswer": [
-        "Assume at-least-once: rebalances, retries, and commit failures cause redelivery.",
-        "Define an idempotency key (event id, orderId+type, producer UUID) unique per business effect.",
-        "Persist processed keys in Postgres (unique constraint) in the same transaction as the side effect.",
-        "For non-DB effects, use Redis SET NX with TTL or upstream idempotent APIs.",
-        "Don't 'fix' duplicates by committing offsets earlier — that risks loss."
+        "Clarify: under at-least-once, rebalances, retries, and commit failures make duplicates normal — design for them, do not treat them as broker bugs.",
+        "Idempotency key: stable event id / orderId+type / producer UUID unique per business effect; never mint a new UUID inside the consumer on each attempt.",
+        "DB side effects (inbox pattern): INSERT processed_events(event_id) with UNIQUE in the same transaction as the business write; ON CONFLICT skip — dedupe and effect commit together.",
+        "Outbox/inbox pairing: producers use outbox for reliable emit; consumers use inbox/dedupe table for reliable apply — both sides need keys when the pipe is at-least-once.",
+        "Non-DB side effects: email, charge, webhook — use provider idempotency keys or Redis SET NX with TTL aligned to retry window; memory-only dedupe dies on restart.",
+        "EOS scope: Kafka transactions / exactly-once reduce duplicates across Kafka←→Kafka or Kafka←→transactional sinks in-scope; they do not magically make arbitrary HTTP side effects exactly-once without app keys.",
+        "Anti-pattern: commit offsets earlier to 'avoid' duplicates — that trades duplicates for silent loss.",
+        "Prevent/ops: metric duplicate_skip_total vs apply_total; alert on sudden duplicate storms after rebalances; retain idempotency keys for the retry/replay window SLO."
       ],
-      "sayIt": "Duplicates are expected. I key every side effect and upsert under a unique constraint so the second delivery is a no-op.",
-      "mermaid": "",
-      "code": "INSERT INTO processed_events (event_id) VALUES ($1)\nON CONFLICT DO NOTHING;\n-- only apply side effects if insert happened",
+      "sayIt": "Duplicates are expected under at-least-once, so every side effect carries a stable idempotency key. DB work uses an inbox unique constraint in the same transaction; non-DB work needs provider keys or durable SET NX. Kafka EOS narrows duplicates inside its scope — it does not replace business idempotency for arbitrary side effects.",
+      "mermaid": "flowchart TD\n  Redeliver[Redelivery] --> Key{idempotency key}\n  Key --> DB[TX: inbox UNIQUE + business write]\n  Key --> Ext[HTTP/email: provider key / Redis NX]\n  DB -->|conflict| Skip[no-op + commit offset]\n  DB -->|insert| Apply[apply + commit offset]\n  Note1[EOS: Kafka-scoped; not a free HTTP exactly-once]",
+      "code": "BEGIN;\nINSERT INTO processed_events (event_id) VALUES ($1)\nON CONFLICT DO NOTHING;\n-- only apply side effects if insert happened (ROW_COUNT = 1)\n-- UPDATE ... / business writes here\nCOMMIT;\n-- then commit Kafka offset\n-- non-DB: stripe_idempotency_key = event_id  OR  SET nx:event_id EX retry_window",
       "codeLang": "sql",
       "nestNote": "",
       "traps": [
-        "Assuming Kafka exactly-once means the business effect is exactly-once without work",
-        "Dedupe in memory only (lost on restart)",
-        "Side effects outside the dedupe transaction"
+        "Assuming Kafka exactly-once means the business effect is exactly-once without work — EOS scope does not cover arbitrary side effects",
+        "Dedupe in memory only — restart or other instances re-apply the effect",
+        "Side effects outside the dedupe transaction — crash between apply and mark-seen double-applies"
       ],
       "followUps": [
         "How does Kafka EOS / transactions change this?",
@@ -112,21 +118,25 @@
       "question": "A consumer updates PostgreSQL and crashes before committing its Kafka offset. What could happen?",
       "first30s": "On restart the message is redelivered. If the DB write already committed, you get a duplicate side effect unless the consumer is idempotent.",
       "modelAnswer": [
-        "Crash after DB commit + before offset commit ⇒ redelivery ⇒ duplicate processing attempt.",
-        "Crash before DB commit ⇒ redelivery replays safely if the first write never landed.",
-        "This is why commit-after-success + idempotent writes is the standard pattern.",
-        "Opposite anti-pattern: commit offset first ⇒ crash ⇒ message skipped ⇒ data loss.",
-        "Operationally: expect rebalances to extend this window; design for it, don't treat it as rare."
+        "Clarify timelines: crash after Postgres COMMIT and before offset commit ⇒ broker still offers the message ⇒ redelivery ⇒ duplicate apply attempt unless idempotent.",
+        "Opposite path: crash before DB commit ⇒ redelivery replays safely if the first write never landed — at-least-once favors reprocessing over loss.",
+        "enable.auto.commit danger: background auto-commit can advance offsets while a batch is still processing — a crash then skips unprocessed records (loss) or creates confusing partial windows; prefer explicit commit after success.",
+        "Partial batch: processing records 1..N in one poll, crash mid-batch — committed offset position decides which subset redelivers; commit only what succeeded, or use per-record commits carefully.",
+        "Revoke/rebalance: partition revoke mid-handler extends the same window — another consumer may start from the last committed offset while your DB write already landed.",
+        "Anti-pattern: commit offset first (or in finally before knowing DB success) ⇒ crash ⇒ message skipped ⇒ data loss.",
+        "Standard fix: commit-after-success + idempotent writes (unique constraints / inbox); optionally store offsets in the DB transaction for a single commit point.",
+        "Prevent/ops: disable risky auto-commit on stateful consumers; metric rebalance rate and duplicate applies; alert when commit lag after DB success grows; test kill -9 mid-batch in staging."
       ],
-      "sayIt": "DB committed, offset not: redelivery. That's at-least-once — idempotency makes it safe; committing early makes loss possible.",
-      "mermaid": "",
-      "code": "",
+      "sayIt": "If Postgres committed and the offset did not, redelivery is guaranteed — that is at-least-once, and idempotency makes it safe. Auto-commit, revoke mid-batch, and partial poll windows widen the hazard; committing early turns the same crash into data loss. I commit after success and rehearse kill-mid-batch.",
+      "mermaid": "sequenceDiagram\n  Consumer->>Postgres: COMMIT business write\n  Note over Consumer: crash / revoke before offset commit\n  Consumer->>Kafka: (offset not committed)\n  Consumer->>Kafka: rebalance / restart\n  Kafka-->>Consumer: redeliver same records\n  Consumer->>Postgres: idempotent apply (inbox UNIQUE)",
+      "code": "# prefer explicit commits\nenable.auto.commit=false\n# for record in batch:\n#   db_tx.apply_idempotent(record)\n# consumer.commit(offsets_up_to=last_success)  # after DB success only\n# on revoke: stop work; do not commit unfinished records",
       "codeLang": "text",
       "nestNote": "Enable graceful shutdown that finishes the current record and commits before exit when possible.",
       "traps": [
-        "Believing 'we commit sync so duplicates can't happen'",
-        "Committing offsets in a finally block before knowing DB success",
-        "No unique constraints on the write path"
+        "Believing 'we commit sync so duplicates can't happen' — sync commit after DB still races with crash between the two",
+        "enable.auto.commit=true on stateful consumers — offsets can advance past in-flight work and lose messages",
+        "Committing offsets in a finally block before knowing DB success — converts crashes into silent skips",
+        "No unique constraints on the write path — redelivery double-applies money or emails"
       ],
       "followUps": [
         "How do store-offset-in-DB patterns work?",
@@ -140,21 +150,24 @@
       "question": "How would you design an idempotent Kafka consumer?",
       "first30s": "Stable event id, transactional side effect + dedupe record, commit offsets only after success, and bounded retries for poison messages.",
       "modelAnswer": [
-        "Require producers to send a unique eventId (or derive a deterministic hash of natural key + revision).",
-        "In one DB transaction: insert dedupe row (unique on eventId) + apply business writes; skip if conflict.",
-        "Keep handlers pure regarding retries: no non-idempotent external calls without their own idempotency keys.",
-        "Commit Kafka offsets only after the transaction succeeds (or write offsets into the DB transaction).",
-        "On repeated failure after N tries, route to DLQ and commit/skip so the partition progresses."
+        "Clarify: idempotent consumer means redelivery is a no-op for the business effect — not that Kafka will never deliver twice.",
+        "Require producers to send a unique eventId (or deterministic hash of natural key + revision); consumers must not generate a new key per attempt.",
+        "In one DB transaction: insert dedupe/inbox row (UNIQUE eventId) + apply business writes; skip cleanly on conflict.",
+        "External calls: only with their own idempotency keys; otherwise move side effects behind an outbox or make them safely retryable.",
+        "Offset policy: commit Kafka offsets only after the transaction succeeds, or write offsets into the same DB transaction — never auto-commit ahead of work.",
+        "Poison path: bounded retries then DLQ + commit/skip so one bad record cannot stall the partition forever.",
+        "Tradeoff: store-offset-in-DB simplifies atomicity vs dual commit points; slightly more ops complexity for the offset table.",
+        "Prevent/ops: metrics for duplicate skips, DLQ depth, handler failures, and lag; alert when poison rate or DLQ backlog breaches SLO."
       ],
-      "sayIt": "Idempotent consumer = unique event id + transactional dedupe with the side effect + offset commit after success + DLQ for poison.",
-      "mermaid": "flowchart TD\n  A[Poll] --> B{eventId seen?}\n  B -->|yes| C[Skip / commit]\n  B -->|no| D[TX: side effect + mark seen]\n  D --> E[Commit offset]",
-      "code": "",
-      "codeLang": "text",
+      "sayIt": "An idempotent consumer pairs a stable event id with a transactional inbox and the business write, then commits offsets only after success. External calls need their own keys, and poison messages get a retry budget then DLQ so the partition keeps moving. Duplicate-skip and DLQ depth metrics prove the design under rebalances.",
+      "mermaid": "flowchart TD\n  A[Poll] --> B{eventId seen?}\n  B -->|yes| C[Skip / commit]\n  B -->|no| D[TX: side effect + mark seen]\n  D --> E[Commit offset]\n  D -->|fail N times| F[DLQ + commit/skip]",
+      "code": "BEGIN;\nINSERT INTO inbox(event_id) VALUES ($1) ON CONFLICT DO NOTHING;\n-- if inserted: apply writes\nCOMMIT;\n-- commit offset only after COMMIT succeeded",
+      "codeLang": "sql",
       "nestNote": "Nest/KafkaJS: disable auto-commit or commit explicitly after business TX.",
       "traps": [
-        "Idempotency key that's not unique across retries (e.g. random UUID generated in consumer)",
-        "External payment call inside handler without provider idempotency key",
-        "Infinite retry blocking the partition"
+        "Idempotency key that's not unique across retries (e.g. random UUID generated in consumer) — every retry looks new",
+        "External payment call inside handler without provider idempotency key — double charge on redelivery",
+        "Infinite retry blocking the partition — one poison message stops all later offsets"
       ],
       "followUps": [
         "How do you idempotently call a third-party API from a consumer?",
@@ -168,21 +181,24 @@
       "question": "How would you choose a Kafka partition key for an order or user domain?",
       "first30s": "Pick a key that preserves the ordering you need and spreads load — usually orderId for order lifecycle, userId for per-user streams — and watch for hot keys.",
       "modelAnswer": [
-        "Ordering is per partition: all events for one orderId on the same partition keep causal order for that order.",
-        "Use orderId when order state machine ordering matters; userId when per-user sequencing matters (feeds, balances).",
-        "Avoid null/empty keys if you need ordering; avoid a single global key that serializes the topic.",
-        "Balance cardinality: enough distinct keys to utilize partitions; monitor hotspot users/orders.",
-        "Document the key so producers stay consistent — mixed keys destroy ordering assumptions."
+        "Clarify: Kafka ordering is per partition only — the key chooses both the ordering scope and the load distribution.",
+        "Use orderId when order state-machine causality matters; userId when per-user sequencing (feeds, balances) matters — document the choice so all producers agree.",
+        "Evidence of fit: enough distinct keys to utilize partitions; cardinality too low (status, country) creates permanent skew.",
+        "Tradeoff: a single global key serializes the topic for total order vs kills throughput; random keys maximize spread vs destroy per-entity order.",
+        "Hot-key failure: celebrity userId/orderId pins load to one partition — plan salting or isolation knowing you sacrifice that key's strict order if you salt.",
+        "Null/empty keys: sticky or round-robin behavior may break ordering assumptions producers thought they had.",
+        "Migration: changing keys mid-stream splits an entity across partitions — needs a cutover plan, not a silent config flip.",
+        "Prevent/ops: monitor produce bytes and lag per partition; alert on imbalance; keep producer guidelines in the schema/contract review."
       ],
-      "sayIt": "Partition key = ordering scope. orderId for order timelines, userId for user timelines — never one key for the whole topic.",
-      "mermaid": "",
-      "code": "producer.send({ topic: 'orders', key: orderId, value: event })",
+      "sayIt": "Partition key equals ordering scope: orderId for order timelines, userId for user timelines — never one key for the whole topic and never a low-cardinality field. I watch per-partition lag for celebrity skew and treat key changes as migrations. Producer agreement on the key is part of the contract.",
+      "mermaid": "flowchart LR\n  E1[order events] -->|key=orderId| P[same partition = order]\n  E2[user feed] -->|key=userId| Q[same partition = user]\n  Bad[key=status] --> Skew[hot partition]",
+      "code": "producer.send({ topic: 'orders', key: orderId, value: event })\n# wrong: key=order.status or key=None when you needed per-order order",
       "codeLang": "python",
       "nestNote": "",
       "traps": [
-        "Random keys when you needed per-entity ordering",
-        "Using a low-cardinality status field as key",
-        "Changing key mid-stream without a migration plan"
+        "Random keys when you needed per-entity ordering — state machines race across partitions",
+        "Using a low-cardinality status field as key — permanent hot partitions and idle ones",
+        "Changing key mid-stream without a migration plan — splits entity history and breaks consumers"
       ],
       "followUps": [
         "How do you order across multiple entity types?",
@@ -196,21 +212,24 @@
       "question": "One Kafka partition is receiving much more traffic than the others. How would you diagnose and fix the imbalance?",
       "first30s": "That's key skew. I'd measure produce rates per partition, find the hot keys, then re-key, split whales, or add processing isolation — more consumers alone won't fix one hot partition.",
       "modelAnswer": [
-        "Confirm with broker/partition metrics: bytes-in, message rate, consumer lag on one partition.",
-        "Sample keys in the hot partition; identify celebrity userId/orderId or bad constant key.",
-        "Fixes: choose a higher-cardinality key; salt hot keys (trade ordering); split entity processing; dedicated topic for whales.",
-        "Increasing partitions helps new keys redistribute but won't split an existing hot key's stream without changing the key.",
-        "Long-term: producer guidelines + dashboards for partition imbalance."
+        "Clarify: imbalance is key skew — one partition's bytes-in/message rate/lag dominates while sibling partitions idle.",
+        "Evidence: broker partition metrics, consumer lag heatmap, and sampled keys from the hot partition to find celebrity userId/orderId or a constant producer key.",
+        "Fix options: higher-cardinality key; salt hot keys (accept lost per-key order); dedicated topic/consumer for whales; split entity processing.",
+        "Tradeoff: salting spreads load vs breaks ordering for that entity; isolation preserves order for the whale on a dedicated path at ops cost.",
+        "Failure mode: adding consumers expecting the hot partition to split — within a group one partition still has one owner.",
+        "Increasing partitions redistributes new keys but will not split an existing hot key's stream without changing the key.",
+        "Producer hygiene: ban constant keys and document sticky partitioning behavior so 'helpful' defaults do not recreate skew.",
+        "Prevent/ops: dashboards for partition imbalance ratio; alert when one partition's lag age diverges; review top keys periodically."
       ],
-      "sayIt": "Hot partition is key skew. Find the key, change keying or isolate the whale — extra consumers can't share one partition.",
-      "mermaid": "",
-      "code": "",
-      "codeLang": "text",
+      "sayIt": "A hot partition is key skew until proven otherwise: find the key, then re-key, salt with eyes open, or isolate the whale. Extra consumers cannot share one partition, and more partitions will not split an existing hot key. Imbalance alerts on produce rate and lag catch it before SLO burn.",
+      "mermaid": "flowchart TD\n  Hot[One partition hot] --> Sample[Sample keys]\n  Sample --> Celeb[Celebrity key / constant key]\n  Celeb --> Fix{fix}\n  Fix --> Rekey[Higher cardinality]\n  Fix --> Salt[Salt — lose per-key order]\n  Fix --> Whale[Dedicated topic]\n  Note1[More consumers ≠ split partition]",
+      "code": "# diagnose: compare partition bytes-in / lag\n# kafka-consumer-groups --describe --group G\n# fix sketch: key = f\"{userId}:{salt}\"  # only if ordering can be sacrificed",
+      "codeLang": "bash",
       "nestNote": "",
       "traps": [
-        "Scaling consumer count expecting the hot partition to split",
-        "Salting keys without accepting lost per-key order",
-        "Ignoring producer-side constant keys"
+        "Scaling consumer count expecting the hot partition to split — one partition still one consumer in the group",
+        "Salting keys without accepting lost per-key order — subtle state-machine races later",
+        "Ignoring producer-side constant keys — root cause stays while you retune consumers"
       ],
       "followUps": [
         "How does sticky partitioning interact with skew?",
@@ -224,21 +243,24 @@
       "question": "How would you design retries without allowing one poison message to block unrelated processing?",
       "first30s": "Bounded retries with backoff, then DLQ — never infinite retry on the same record while holding up the partition.",
       "modelAnswer": [
-        "Classify errors: transient (retry) vs permanent/poison (don't tight-loop).",
-        "Retry with backoff and a max attempts counter (headers or side store).",
-        "After budget: publish to DLQ/retry topic with reason/payload; commit/skip the original so the partition advances.",
-        "Process DLQ asynchronously with alerting and replay tools; don't require on-call to unblock the main topic.",
-        "Where ordering allows, use pause/seek carefully; prefer per-record isolation over stopping the whole consumer."
+        "Clarify: within a partition, processing is sequential for a single consumer — infinite retry on one poison record blocks every later offset.",
+        "Classify errors: transient (timeouts, 429, deadlock) vs permanent (deserialization, schema, bad payload) — only transients enter the retry budget.",
+        "Retry with exponential backoff and max attempts (headers or side store); avoid sleeping the consumer thread so long that heartbeats miss and cause rebalances.",
+        "After budget: publish to DLQ/retry topic with reason/payload/headers; commit/skip the original so the main partition advances.",
+        "Tradeoff: in-place retry preserves order vs can stall; retry topic isolates poison at the cost of ordering across the delay.",
+        "Ops: process DLQ asynchronously with alerts and a documented replay runbook — DLQ without owners is a silent trash can.",
+        "Ordering caveat: skipping poison acknowledges that later messages may apply without the failed one — make that business-visible.",
+        "Prevent/ops: metric retry_count, DLQ depth, poison rate; alert on DLQ backlog SLO; game-day inject a bad payload and verify lag on healthy records stays flat."
       ],
-      "sayIt": "Retry transient errors with a budget, then DLQ and move on — one bad message must not stall the partition.",
-      "mermaid": "",
-      "code": "",
-      "codeLang": "text",
+      "sayIt": "I retry only transient errors with a budget, then DLQ and commit forward so one poison pill cannot stall the partition. Long sleeps that miss heartbeats cause rebalances that make things worse. DLQ depth and a replay runbook are part of the design, not afterthoughts.",
+      "mermaid": "flowchart TD\n  Msg[Record] --> Err{error type}\n  Err -->|transient| Retry[backoff ≤ N]\n  Err -->|permanent| DLQ\n  Retry -->|exhausted| DLQ[DLQ + commit/skip]\n  Retry -->|success| Commit\n  DLQ --> Alert[alert + replay tools]",
+      "code": "# pseudo\nfor attempt in range(MAX):\n    try:\n        handle(record); commit(); break\n    except Transient:\n        sleep(backoff(attempt))  # keep short vs session timeout\n    except Permanent:\n        produce_dlq(record, reason); commit(); break\nelse:\n    produce_dlq(record, 'retries_exhausted'); commit()",
+      "codeLang": "python",
       "nestNote": "KafkaJS eachMessage handlers should not throw endlessly without a DLQ path.",
       "traps": [
-        "Infinite retries on deserialization errors",
-        "Blocking the consumer thread on long sleeps",
-        "DLQ without alerts or replay procedure"
+        "Infinite retries on deserialization errors — partition lag grows forever on undrinkable poison",
+        "Blocking the consumer thread on long sleeps — missed heartbeats → rebalance storms",
+        "DLQ without alerts or replay procedure — failures become invisible data loss"
       ],
       "followUps": [
         "Retry topic vs in-place retry — trade-offs?",
@@ -252,21 +274,24 @@
       "question": "When would you choose Kafka versus SQS, RabbitMQ, or a synchronous API call?",
       "first30s": "Sync API for request/response latency paths. SQS for simple durable queues on AWS. Rabbit for flexible routing/work queues. Kafka for high-throughput event logs, replay, and many independent consumers.",
       "modelAnswer": [
-        "Synchronous HTTP/gRPC when the caller needs an immediate answer and the work is short.",
-        "SQS: managed queue, at-least-once, easy workers, limited fan-out/replay story — great for job queues.",
+        "Clarify the need: immediate answer, simple work queue, flexible routing, or replayable multi-consumer event log — the tool follows the shape of the problem.",
+        "Synchronous HTTP/gRPC when the caller needs a short, immediate response and fan-out is not required.",
+        "SQS: managed at-least-once queue, easy workers, limited fan-out/replay — strong default for AWS job queues without log semantics.",
         "RabbitMQ: routing keys, competing consumers, classic work-queue patterns; not an infinite retained log by default.",
-        "Kafka: durable partitioned log, consumer groups, replay from offsets, high throughput event streaming and fan-out.",
-        "Don't use Kafka as a RPC substitute; don't use sync HTTP for bursty fan-out work that can be async."
+        "Kafka: durable partitioned log, consumer groups, offset replay, high throughput streaming and independent fan-out — justified when those properties matter.",
+        "Tradeoff: Kafka ops and conceptual weight vs SQS simplicity; sync simplicity vs burst absorption and decoupling.",
+        "Failure mode: Kafka-for-every-tiny-job or sync HTTP for multi-minute fan-out workflows — wrong abstraction tax shows up as cost and incidents.",
+        "Prevent/ops: document selection criteria in ADRs; measure whether consumers actually replay/fan-out; revisit if a Kafka topic has one consumer and no retention need."
       ],
-      "sayIt": "Sync for immediate answers, SQS/Rabbit for work queues, Kafka when I need a replayable event log and independent consumer groups at scale.",
-      "mermaid": "",
+      "sayIt": "I use sync APIs when the caller needs an immediate answer, SQS or Rabbit when I need a work queue, and Kafka when I need a replayable partitioned log with independent consumer groups at scale. Kafka is not a default RPC substitute, and SQS is not Kafka's replay model. The ADR should state which property justified the choice.",
+      "mermaid": "flowchart TD\n  Need{need}\n  Need -->|immediate answer| Sync[HTTP/gRPC]\n  Need -->|AWS job queue| SQS\n  Need -->|routing / work queue| Rabbit\n  Need -->|replay + fan-out log| Kafka",
       "code": "",
       "codeLang": "text",
       "nestNote": "",
       "traps": [
-        "Using Kafka for every tiny async job",
-        "Using sync calls for multi-minute workflows",
-        "Assuming SQS gives the same replay model as Kafka"
+        "Using Kafka for every tiny async job — pays cluster and ops cost without replay/fan-out value",
+        "Using sync calls for multi-minute workflows — ties client timeouts to backend batch work",
+        "Assuming SQS gives the same replay model as Kafka — retention and consumer-group semantics differ"
       ],
       "followUps": [
         "When is Kinesis a better AWS-native fit than Kafka?",
@@ -280,21 +305,24 @@
       "question": "How would you evolve an event schema without breaking existing consumers?",
       "first30s": "Prefer additive, backward-compatible changes with a schema registry — consumers must tolerate new fields; removals need a coordinated expand-contract.",
       "modelAnswer": [
-        "Use Avro/Protobuf/JSON Schema with a registry and compatibility mode (BACKWARD/FORWARD/FULL) enforced in CI.",
-        "Safe changes: add optional fields with defaults; avoid renaming/removing/changing types without a version plan.",
-        "Expand-contract: publish both old and new fields, upgrade consumers, then drop old fields.",
-        "Include eventType + schemaVersion in envelopes; don't overload one event name with incompatible meanings.",
-        "Test consumers against new schemas in pipeline; canary producers first."
+        "Clarify: event schemas are contracts across teams — breaking changes without expand-contract strand old consumers on poison payloads.",
+        "Use Avro/Protobuf/JSON Schema with a registry and compatibility mode (BACKWARD/FORWARD/FULL) enforced in CI before produce.",
+        "Safe changes: add optional fields with defaults; avoid rename/remove/type changes without a version plan.",
+        "Expand-contract: publish both old and new fields, upgrade consumers, then drop old fields — never silent deletes.",
+        "Envelope: eventType + schemaVersion; do not overload one event name with incompatible meanings.",
+        "Tradeoff: BACKWARD lets consumers upgrade first vs FORWARD favors producers first — pick from who you can coordinate.",
+        "Failure mode: in-place renames and reused event names cause deserialization poison and DLQ floods.",
+        "Prevent/ops: canary producers; contract tests against new schemas in pipeline; alert on schema-id / deserialization error rate."
       ],
-      "sayIt": "Additive evolution under registry compatibility rules. Breaking changes take expand-contract and versioned event types — never silent field deletes.",
-      "mermaid": "",
-      "code": "",
+      "sayIt": "I evolve events additively under registry compatibility rules, with expand-contract for anything breaking. Field renames and silent deletes are how you poison every consumer at once. CI compatibility checks and deserialization error alerts catch drift before a full rollout.",
+      "mermaid": "flowchart LR\n  Add[Add optional field] --> OK[compatible]\n  Break[Rename/remove] --> EC[expand-contract]\n  EC --> Both[publish old+new]\n  Both --> Up[upgrade consumers]\n  Up --> Drop[drop old]",
+      "code": "# CI gate sketch\n# curl schema-registry compatibility check before merge\n# envelope: { \"eventType\": \"OrderPaid\", \"schemaVersion\": 3, \"payload\": {...} }",
       "codeLang": "text",
       "nestNote": "",
       "traps": [
-        "Renaming fields in place",
-        "No compatibility checks in CI",
-        "Reusing event names for different semantics"
+        "Renaming fields in place — old consumers fail deserialization and stall or DLQ",
+        "No compatibility checks in CI — breakages discovered in production by lag and errors",
+        "Reusing event names for different semantics — subscribers apply the wrong business meaning"
       ],
       "followUps": [
         "FORWARD vs BACKWARD compatibility — who upgrades first?",
@@ -308,21 +336,24 @@
       "question": "How would you use the outbox pattern to keep database state and published events consistent?",
       "first30s": "In the same Postgres transaction as the business write, insert an outbox row; a separate publisher drains the outbox to Kafka so you never dual-write across two systems unsafely.",
       "modelAnswer": [
-        "Problem: commit DB then fail to publish (or vice versa) ⇒ inconsistency.",
-        "Solution: BEGIN; business rows + INSERT outbox(event); COMMIT.",
-        "Publisher polls outbox (or CDC) and produces to Kafka; mark published / delete with idempotent produce.",
-        "Consumers remain idempotent; outbox publisher must handle retries without dup chaos (idempotent produce keys).",
-        "Observe lag between outbox insert and Kafka publish; alert on stuck rows."
+        "Clarify the dual-write timeline: commit DB then fail to publish (or publish then fail to commit) leaves state and events permanently diverged — hope is not a protocol.",
+        "Outbox fix: BEGIN; business rows + INSERT outbox(id, topic, payload, headers); COMMIT — one atomic commit point in Postgres.",
+        "Publisher drains via poll (SELECT … FOR UPDATE SKIP LOCKED) or CDC (Debezium); produce to Kafka; mark published only after broker ack.",
+        "Tradeoff: CDC lowers poll lag and load vs more infra; polling is simpler to operate vs higher publish latency under load.",
+        "Idempotent produce: use stable Kafka key + idempotent producer (and/or outbox row id as key) so publisher retries do not create unbounded logical dup chaos for consumers.",
+        "Consumers stay idempotent anyway — outbox reduces dual-write loss/duplication at the source but does not remove at-least-once on the consume side.",
+        "Failure mode: delete outbox rows before Kafka ack, or publish from the HTTP request without outbox — recreates the dual-write race.",
+        "Prevent/ops: lag SLO from outbox inserted_at → Kafka produce; alert on outbox depth and oldest unpublished age; dashboard dual-write forbidden in code review."
       ],
-      "sayIt": "Outbox: one DB transaction for state + event row, async relay to Kafka. No dual-write hope.",
-      "mermaid": "sequenceDiagram\n  App->>Postgres: TX business + outbox\n  Publisher->>Postgres: read outbox\n  Publisher->>Kafka: produce\n  Publisher->>Postgres: mark published",
-      "code": "BEGIN;\nUPDATE orders SET status = 'paid' WHERE id = $1;\nINSERT INTO outbox (id, topic, payload) VALUES ($2, 'orders', $3);\nCOMMIT;",
+      "sayIt": "Outbox keeps state and events aligned by writing both in one Postgres transaction, then relaying asynchronously with idempotent produce keys. CDC versus poll is an ops tradeoff on lag and complexity, not a different consistency story. I alert on outbox depth and publish lag SLO so a stuck publisher is visible before consumers starve.",
+      "mermaid": "sequenceDiagram\n  App->>Postgres: TX business + outbox INSERT\n  Note over App,Postgres: dual-write avoided here\n  Publisher->>Postgres: poll/CDC outbox\n  Publisher->>Kafka: produce idempotent key=outbox.id\n  Publisher->>Postgres: mark published after ack\n  Note over Publisher,Kafka: lag SLO: inserted_at → produce",
+      "code": "BEGIN;\nUPDATE orders SET status = 'paid' WHERE id = $1;\nINSERT INTO outbox (id, topic, payload) VALUES ($2, 'orders', $3);\nCOMMIT;\n-- publisher: produce(key=outbox.id) then mark published AFTER ack\n-- never DELETE outbox before Kafka ack",
       "codeLang": "sql",
       "nestNote": "Implement outbox publisher as a Nest worker; keep HTTP handlers free of Kafka produce retries.",
       "traps": [
-        "Publishing to Kafka inside the request without an outbox",
-        "Deleting outbox rows before Kafka ack",
-        "No metrics on outbox depth"
+        "Publishing to Kafka inside the request without an outbox — classic dual-write race on crash",
+        "Deleting outbox rows before Kafka ack — crash loses the event after DB commit",
+        "No metrics on outbox depth / publish lag — stuck relay looks like 'Kafka is fine' while events never leave"
       ],
       "followUps": [
         "Polling vs Debezium CDC for outbox?",
